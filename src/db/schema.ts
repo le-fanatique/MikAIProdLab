@@ -5,6 +5,7 @@ export const projects = sqliteTable("projects", {
   id: int("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   pitch: text("pitch"),
+  story: text("story"),
   description: text("description"),
   status: text("status", { enum: ["draft", "active", "archived"] })
     .notNull()
@@ -39,6 +40,7 @@ export const shots = sqliteTable("shots", {
   sequenceId: int("sequence_id")
     .notNull()
     .references(() => sequences.id, { onDelete: "cascade" }),
+  shotCode: text("shot_code"),
   title: text("title").notNull(),
   description: text("description"),
   durationSeconds: real("duration_seconds"),

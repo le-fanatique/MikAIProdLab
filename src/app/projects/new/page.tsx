@@ -19,15 +19,22 @@ export default function NewProjectPage() {
           label="Pitch"
           name="pitch"
           type="textarea"
-          rows={3}
+          rows={2}
           placeholder="One-line or short concept pitch"
         />
         <FormField
-          label="Description"
+          label="Story"
+          name="story"
+          type="textarea"
+          rows={8}
+          placeholder="Full narrative — this text will later help generate sequences and shots"
+        />
+        <FormField
+          label="Notes"
           name="description"
           type="textarea"
-          rows={5}
-          placeholder="Longer description, notes, context..."
+          rows={3}
+          placeholder="Production notes, context, references..."
         />
         <FormField
           label="Status"

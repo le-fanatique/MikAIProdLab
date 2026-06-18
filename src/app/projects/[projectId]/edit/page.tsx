@@ -39,14 +39,21 @@ export default async function EditProjectPage({ params }: Props) {
           label="Pitch"
           name="pitch"
           type="textarea"
-          rows={3}
+          rows={2}
           defaultValue={project.pitch}
         />
         <FormField
-          label="Description"
+          label="Story"
+          name="story"
+          type="textarea"
+          rows={8}
+          defaultValue={project.story}
+        />
+        <FormField
+          label="Notes"
           name="description"
           type="textarea"
-          rows={5}
+          rows={3}
           defaultValue={project.description}
         />
         <FormField

@@ -10,6 +10,7 @@ export async function createShot(
   projectId: number,
   formData: FormData
 ) {
+  const shotCode = (formData.get("shot_code") as string) || null;
   const title = formData.get("title") as string;
   const description = (formData.get("description") as string) || null;
   const durationRaw = formData.get("duration_seconds") as string;
@@ -29,6 +30,7 @@ export async function createShot(
 
   await db.insert(shots).values({
     sequenceId,
+    shotCode,
     title: title.trim(),
     description,
     durationSeconds,
@@ -47,6 +49,7 @@ export async function updateShot(
   projectId: number,
   formData: FormData
 ) {
+  const shotCode = (formData.get("shot_code") as string) || null;
   const title = formData.get("title") as string;
   const description = (formData.get("description") as string) || null;
   const durationRaw = formData.get("duration_seconds") as string;
@@ -60,6 +63,7 @@ export async function updateShot(
   await db
     .update(shots)
     .set({
+      shotCode,
       title: title.trim(),
       description,
       durationSeconds,

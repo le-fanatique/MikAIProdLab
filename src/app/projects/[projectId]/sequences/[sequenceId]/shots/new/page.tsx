@@ -34,7 +34,12 @@ export default async function NewShotPage({ params }: Props) {
       <h1 className="text-2xl font-semibold tracking-tight mb-8">New Shot</h1>
 
       <form action={createAction} className="max-w-xl flex flex-col gap-5">
-        <FormField label="Title" name="title" required placeholder="Shot title (e.g. SQ01_SH010)" />
+        <FormField
+          label="Shot Code"
+          name="shot_code"
+          placeholder="e.g. SQ01_SH010"
+        />
+        <FormField label="Title" name="title" required placeholder="Descriptive title for this shot" />
         <FormField
           label="Description"
           name="description"

@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 export async function createProject(formData: FormData) {
   const name = formData.get("name") as string;
   const pitch = (formData.get("pitch") as string) || null;
+  const story = (formData.get("story") as string) || null;
   const description = (formData.get("description") as string) || null;
   const status = (formData.get("status") as string) || "draft";
 
@@ -15,7 +16,7 @@ export async function createProject(formData: FormData) {
 
   const [project] = await db
     .insert(projects)
-    .values({ name: name.trim(), pitch, description, status: status as "draft" | "active" | "archived" })
+    .values({ name: name.trim(), pitch, story, description, status: status as "draft" | "active" | "archived" })
     .returning({ id: projects.id });
 
   redirect(`/projects/${project.id}`);
@@ -24,6 +25,7 @@ export async function createProject(formData: FormData) {
 export async function updateProject(id: number, formData: FormData) {
   const name = formData.get("name") as string;
   const pitch = (formData.get("pitch") as string) || null;
+  const story = (formData.get("story") as string) || null;
   const description = (formData.get("description") as string) || null;
   const status = (formData.get("status") as string) || "draft";
 
@@ -34,6 +36,7 @@ export async function updateProject(id: number, formData: FormData) {
     .set({
       name: name.trim(),
       pitch,
+      story,
       description,
       status: status as "draft" | "active" | "archived",
       updatedAt: new Date().toISOString(),

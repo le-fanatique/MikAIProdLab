@@ -40,6 +40,12 @@ export default async function EditShotPage({ params }: Props) {
       <h1 className="text-2xl font-semibold tracking-tight mb-8">Edit Shot</h1>
 
       <form action={updateAction} className="max-w-xl flex flex-col gap-5">
+        <FormField
+          label="Shot Code"
+          name="shot_code"
+          defaultValue={shot.shotCode}
+          placeholder="e.g. SQ01_SH010"
+        />
         <FormField label="Title" name="title" required defaultValue={shot.title} />
         <FormField
           label="Description"

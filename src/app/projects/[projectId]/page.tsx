@@ -36,10 +36,10 @@ export default async function ProjectPage({ params }: Props) {
             <StatusBadge status={project.status} />
           </div>
           {project.pitch && (
-            <p className="text-neutral-400 text-sm mb-1">{project.pitch}</p>
+            <p className="text-neutral-400 text-sm mb-2">{project.pitch}</p>
           )}
           {project.description && (
-            <p className="text-neutral-500 text-sm whitespace-pre-wrap">{project.description}</p>
+            <p className="text-neutral-600 text-xs whitespace-pre-wrap">{project.description}</p>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -57,16 +57,33 @@ export default async function ProjectPage({ params }: Props) {
         </div>
       </div>
 
+      {project.story && (
+        <div className="mb-8">
+          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 mb-2">Story</p>
+          <p className="text-sm text-neutral-400 whitespace-pre-wrap leading-relaxed border-l-2 border-neutral-800 pl-4">
+            {project.story}
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-neutral-500">
           Sequences ({seqs.length})
         </h2>
-        <Link
-          href={`/projects/${id}/sequences/new`}
-          className="rounded bg-neutral-800 text-neutral-200 px-3 py-1.5 text-sm hover:bg-neutral-700 transition-colors"
-        >
-          + Add Sequence
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/projects/${id}/outline`}
+            className="rounded border border-neutral-800 text-neutral-500 px-3 py-1.5 text-sm hover:border-neutral-600 hover:text-neutral-300 transition-colors"
+          >
+            Outline
+          </Link>
+          <Link
+            href={`/projects/${id}/sequences/new`}
+            className="rounded bg-neutral-800 text-neutral-200 px-3 py-1.5 text-sm hover:bg-neutral-700 transition-colors"
+          >
+            + Add Sequence
+          </Link>
+        </div>
       </div>
 
       {seqs.length === 0 ? (

@@ -100,7 +100,7 @@ export default async function SequencePage({ params }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-800 bg-neutral-900/60">
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider w-10">#</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider w-28">Code</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider">Title</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden md:table-cell">Action Pitch</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden lg:table-cell">Camera</th>
@@ -116,8 +116,12 @@ export default async function SequencePage({ params }: Props) {
                     key={shot.id}
                     className="border-b border-neutral-800/60 last:border-0 hover:bg-neutral-800/30 transition-colors"
                   >
-                    <td className="px-4 py-3 text-neutral-600 font-mono text-xs">
-                      {String(i + 1).padStart(2, "0")}
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {shot.shotCode ? (
+                        <span className="text-neutral-300">{shot.shotCode}</span>
+                      ) : (
+                        <span className="text-neutral-700">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-neutral-100 font-medium">{shot.title}</span>
