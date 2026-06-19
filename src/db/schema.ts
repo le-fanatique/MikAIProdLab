@@ -127,6 +127,28 @@ export const sequenceAssets = sqliteTable(
   (table) => [unique("sequence_asset_uniq").on(table.sequenceId, table.assetId)]
 );
 
+export const motionBeats = sqliteTable("motion_beats", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  shotId: int("shot_id")
+    .notNull()
+    .references(() => shots.id, { onDelete: "cascade" }),
+  orderIndex: int("order_index").notNull().default(0),
+  beatType: text("beat_type", {
+    enum: ["action", "camera", "performance", "transition", "continuity", "other"],
+  }).notNull(),
+  label: text("label").notNull(),
+  description: text("description"),
+  timingPosition: text("timing_position", {
+    enum: ["start", "middle", "end"],
+  }),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
@@ -140,3 +162,5 @@ export type ShotAsset = typeof shotAssets.$inferSelect;
 export type NewShotAsset = typeof shotAssets.$inferInsert;
 export type SequenceAsset = typeof sequenceAssets.$inferSelect;
 export type NewSequenceAsset = typeof sequenceAssets.$inferInsert;
+export type MotionBeat = typeof motionBeats.$inferSelect;
+export type NewMotionBeat = typeof motionBeats.$inferInsert;

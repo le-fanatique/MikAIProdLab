@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, motionBeats } from "@/db/schema";
 import { eq, and, notInArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -7,7 +7,9 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import CastingPanel from "@/components/CastingPanel";
+import MotionBeatsPanel from "@/components/MotionBeatsPanel";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
+import { deleteMotionBeat } from "@/actions/motionBeats";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -64,6 +66,22 @@ export default async function ShotDetailPage({ params }: Props) {
           .from(assets)
           .where(eq(assets.projectId, pid))
           .orderBy(asc(assets.orderIndex));
+
+  const beatList = await db
+    .select()
+    .from(motionBeats)
+    .where(eq(motionBeats.shotId, shid))
+    .orderBy(asc(motionBeats.orderIndex));
+
+  const beatRows = beatList.map((beat) => ({
+    id: beat.id,
+    beatType: beat.beatType,
+    label: beat.label,
+    description: beat.description,
+    timingPosition: beat.timingPosition,
+    editHref: `/projects/${pid}/sequences/${sid}/shots/${shid}/beats/${beat.id}/edit`,
+    deleteAction: deleteMotionBeat.bind(null, beat.id, shid, sid, pid),
+  }));
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 
@@ -169,6 +187,13 @@ export default async function ShotDetailPage({ params }: Props) {
           <p className="text-xs text-[#4b5158] mt-3">
             Casting here describes what appears in this specific shot.
           </p>
+        </Card>
+
+        <Card title="Motion Beats">
+          <MotionBeatsPanel
+            beats={beatRows}
+            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/beats/new`}
+          />
         </Card>
       </div>
 
