@@ -82,6 +82,35 @@ export default async function EditShotPage({ params }: Props) {
           rows={2}
           defaultValue={shot.continuityNotes}
         />
+
+        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 pt-2">
+          Production Details
+        </p>
+        <FormField
+          label="Framing"
+          name="framing"
+          defaultValue={shot.framing}
+          placeholder='e.g. "CU", "MS", "WS", "ECU", "OTS"'
+        />
+        <FormField
+          label="Camera Movement"
+          name="camera_movement"
+          defaultValue={shot.cameraMovement}
+          placeholder='e.g. "static", "pan left", "tracking"'
+        />
+        <FormField
+          label="Continuity In"
+          name="continuity_in"
+          defaultValue={shot.continuityIn}
+          placeholder="Incoming edit cut / match"
+        />
+        <FormField
+          label="Continuity Out"
+          name="continuity_out"
+          defaultValue={shot.continuityOut}
+          placeholder="Outgoing edit cut / match"
+        />
+
         <div className="flex gap-3 pt-2">
           <button
             type="submit"

@@ -72,6 +72,12 @@ export default async function ProjectPage({ params }: Props) {
         </h2>
         <div className="flex items-center gap-2">
           <Link
+            href={`/projects/${id}/story`}
+            className="rounded border border-neutral-800 text-neutral-500 px-3 py-1.5 text-sm hover:border-neutral-600 hover:text-neutral-300 transition-colors"
+          >
+            Story
+          </Link>
+          <Link
             href={`/projects/${id}/outline`}
             className="rounded border border-neutral-800 text-neutral-500 px-3 py-1.5 text-sm hover:border-neutral-600 hover:text-neutral-300 transition-colors"
           >

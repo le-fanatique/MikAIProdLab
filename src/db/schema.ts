@@ -26,6 +26,9 @@ export const sequences = sqliteTable("sequences", {
   title: text("title").notNull(),
   summary: text("summary"),
   description: text("description"),
+  narrativePurpose: text("narrative_purpose"),
+  mood: text("mood"),
+  locationHint: text("location_hint"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
@@ -47,6 +50,10 @@ export const shots = sqliteTable("shots", {
   actionPitch: text("action_pitch"),
   cameraPitch: text("camera_pitch"),
   continuityNotes: text("continuity_notes"),
+  framing: text("framing"),
+  cameraMovement: text("camera_movement"),
+  continuityIn: text("continuity_in"),
+  continuityOut: text("continuity_out"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

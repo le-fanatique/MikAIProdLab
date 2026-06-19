@@ -75,6 +75,31 @@ export default async function NewShotPage({ params }: Props) {
           rows={2}
           placeholder="Props, lighting, costume, VFX notes..."
         />
+
+        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 pt-2">
+          Production Details
+        </p>
+        <FormField
+          label="Framing"
+          name="framing"
+          placeholder='e.g. "CU", "MS", "WS", "ECU", "OTS"'
+        />
+        <FormField
+          label="Camera Movement"
+          name="camera_movement"
+          placeholder='e.g. "static", "pan left", "tracking"'
+        />
+        <FormField
+          label="Continuity In"
+          name="continuity_in"
+          placeholder="Incoming edit cut / match"
+        />
+        <FormField
+          label="Continuity Out"
+          name="continuity_out"
+          placeholder="Outgoing edit cut / match"
+        />
+
         <div className="flex gap-3 pt-2">
           <button
             type="submit"

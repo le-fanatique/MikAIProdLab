@@ -44,6 +44,26 @@ export default async function NewSequencePage({ params }: Props) {
           rows={4}
           placeholder="Detailed description, notes..."
         />
+
+        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 pt-2">
+          Narrative Context
+        </p>
+        <FormField
+          label="Narrative Purpose"
+          name="narrative_purpose"
+          placeholder='e.g. "Opening act", "Reveal", "Climax"'
+        />
+        <FormField
+          label="Mood"
+          name="mood"
+          placeholder='e.g. "tense", "serene", "chaotic"'
+        />
+        <FormField
+          label="Location Hint"
+          name="location_hint"
+          placeholder='e.g. "Exterior rooftop / night"'
+        />
+
         <div className="flex gap-3 pt-2">
           <button
             type="submit"

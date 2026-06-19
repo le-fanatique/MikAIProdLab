@@ -49,6 +49,29 @@ export default async function EditSequencePage({ params }: Props) {
           rows={4}
           defaultValue={sequence.description}
         />
+
+        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 pt-2">
+          Narrative Context
+        </p>
+        <FormField
+          label="Narrative Purpose"
+          name="narrative_purpose"
+          defaultValue={sequence.narrativePurpose}
+          placeholder='e.g. "Opening act", "Reveal", "Climax"'
+        />
+        <FormField
+          label="Mood"
+          name="mood"
+          defaultValue={sequence.mood}
+          placeholder='e.g. "tense", "serene", "chaotic"'
+        />
+        <FormField
+          label="Location Hint"
+          name="location_hint"
+          defaultValue={sequence.locationHint}
+          placeholder='e.g. "Exterior rooftop / night"'
+        />
+
         <div className="flex gap-3 pt-2">
           <button
             type="submit"

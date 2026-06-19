@@ -18,6 +18,10 @@ export async function createShot(
   const actionPitch = (formData.get("action_pitch") as string) || null;
   const cameraPitch = (formData.get("camera_pitch") as string) || null;
   const continuityNotes = (formData.get("continuity_notes") as string) || null;
+  const framing = (formData.get("framing") as string) || null;
+  const cameraMovement = (formData.get("camera_movement") as string) || null;
+  const continuityIn = (formData.get("continuity_in") as string) || null;
+  const continuityOut = (formData.get("continuity_out") as string) || null;
 
   if (!title?.trim()) return;
 
@@ -37,6 +41,10 @@ export async function createShot(
     actionPitch,
     cameraPitch,
     continuityNotes,
+    framing,
+    cameraMovement,
+    continuityIn,
+    continuityOut,
     orderIndex,
   });
 
@@ -57,6 +65,10 @@ export async function updateShot(
   const actionPitch = (formData.get("action_pitch") as string) || null;
   const cameraPitch = (formData.get("camera_pitch") as string) || null;
   const continuityNotes = (formData.get("continuity_notes") as string) || null;
+  const framing = (formData.get("framing") as string) || null;
+  const cameraMovement = (formData.get("camera_movement") as string) || null;
+  const continuityIn = (formData.get("continuity_in") as string) || null;
+  const continuityOut = (formData.get("continuity_out") as string) || null;
 
   if (!title?.trim()) return;
 
@@ -70,6 +82,10 @@ export async function updateShot(
       actionPitch,
       cameraPitch,
       continuityNotes,
+      framing,
+      cameraMovement,
+      continuityIn,
+      continuityOut,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(shots.id, id));
