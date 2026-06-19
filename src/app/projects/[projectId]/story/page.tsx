@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatusBadge from "@/components/StatusBadge";
+import LLMActionButton from "@/components/LLMActionButton";
 
 type Props = { params: Promise<{ projectId: string }> };
 
@@ -45,19 +46,23 @@ export default async function StoryPage({ params }: Props) {
       </div>
 
       {/* Pitch */}
-      <div className="mb-8">
+      <div className="mb-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 mb-2">
           Pitch
         </p>
         {project.pitch ? (
-          <p className="text-sm text-neutral-300">{project.pitch}</p>
+          <p className="text-sm text-neutral-300 mb-3">{project.pitch}</p>
         ) : (
-          <p className="text-sm text-neutral-700 italic">No pitch yet.</p>
+          <p className="text-sm text-neutral-700 italic mb-3">No pitch yet.</p>
         )}
+        <LLMActionButton
+          label="Generate Story from Pitch"
+          hint="Requires LLM provider configuration in .env.local"
+        />
       </div>
 
       {/* Story */}
-      <div className="mb-10">
+      <div className="mb-8 mt-8">
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 mb-2">
           Story
         </p>
@@ -72,15 +77,12 @@ export default async function StoryPage({ params }: Props) {
         )}
       </div>
 
-      {/* Generate from story — placeholder */}
+      {/* Generate sequences — placeholder */}
       <div className="mb-10">
-        <button
-          type="button"
-          disabled
-          className="rounded border border-neutral-800 text-neutral-700 px-4 py-2 text-sm opacity-50 cursor-not-allowed"
-        >
-          Generate Sequences from Story — Coming soon
-        </button>
+        <LLMActionButton
+          label="Generate Sequences from Story"
+          hint="Requires LLM provider configuration in .env.local"
+        />
       </div>
 
       {/* Sequences narrative overview */}
@@ -115,13 +117,7 @@ export default async function StoryPage({ params }: Props) {
                       {seq.title}
                     </Link>
                   </div>
-                  <button
-                    type="button"
-                    disabled
-                    className="rounded border border-neutral-800 text-neutral-700 px-3 py-1 text-xs opacity-50 cursor-not-allowed shrink-0"
-                  >
-                    Generate Shots — Coming soon
-                  </button>
+                  <LLMActionButton label="Generate Shots" />
                 </div>
 
                 {seq.summary && (

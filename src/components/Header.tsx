@@ -13,6 +13,9 @@ export default function Header() {
         <Link href="/projects" className="hover:text-neutral-100 transition-colors">
           Projects
         </Link>
+        <Link href="/settings" className="hover:text-neutral-100 transition-colors">
+          Settings
+        </Link>
       </nav>
     </header>
   );
