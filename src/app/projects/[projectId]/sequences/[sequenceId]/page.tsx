@@ -146,6 +146,9 @@ export default async function SequencePage({ params }: Props) {
           projectId={pid}
           assignAction={assignAction}
         />
+        <p className="text-xs text-[#4b5158] mt-3">
+          Assets listed here describe the sequence-level cast. They are not automatically added to individual shots.
+        </p>
       </Card>
 
       {/* Shots header */}

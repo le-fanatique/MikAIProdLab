@@ -63,7 +63,26 @@ export default async function AssetsPage({ params }: Props) {
           }
         />
       ) : (
-        <div className="rounded-lg border border-[#232629] overflow-hidden">
+        <>
+          {(() => {
+            const counts: Record<string, number> = {};
+            for (const a of assetList) counts[a.type] = (counts[a.type] ?? 0) + 1;
+            const LABELS: Record<string, [string, string]> = {
+              character: ["character", "characters"],
+              environment: ["environment", "environments"],
+              prop: ["prop", "props"],
+              vehicle: ["vehicle", "vehicles"],
+              crowd: ["crowd", "crowd"],
+              other: ["other", "other"],
+            };
+            const parts = (["character", "environment", "prop", "vehicle", "crowd", "other"] as const)
+              .filter((t) => counts[t])
+              .map((t) => `${counts[t]} ${counts[t] === 1 ? LABELS[t][0] : LABELS[t][1]}`);
+            return (
+              <p className="text-xs text-[#6e767d] mb-3">{parts.join(" · ")}</p>
+            );
+          })()}
+          <div className="rounded-lg border border-[#232629] overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#232629] bg-[#141618]">
@@ -127,6 +146,7 @@ export default async function AssetsPage({ params }: Props) {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <div className="mt-8 pt-4 border-t border-[#232629]">

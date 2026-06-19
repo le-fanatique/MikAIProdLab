@@ -166,6 +166,9 @@ export default async function ShotDetailPage({ params }: Props) {
             projectId={pid}
             assignAction={assignAction}
           />
+          <p className="text-xs text-[#4b5158] mt-3">
+            Casting here describes what appears in this specific shot.
+          </p>
         </Card>
       </div>
 
