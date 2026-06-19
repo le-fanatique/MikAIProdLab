@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
+import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteSequence } from "@/actions/sequences";
@@ -69,33 +70,35 @@ export default async function SequencePage({ params }: Props) {
 
       {/* Sequence context */}
       {(sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
-        <div className="mb-6 flex flex-col gap-2">
-          {sequence.summary && (
-            <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
-          )}
-          {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
-            <div className="flex flex-wrap gap-4 text-xs">
-              {sequence.narrativePurpose && (
-                <span>
-                  <span className="text-[#4b5158]">Purpose </span>
-                  <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
-                </span>
-              )}
-              {sequence.mood && (
-                <span>
-                  <span className="text-[#4b5158]">Mood </span>
-                  <span className="text-[#6e767d]">{sequence.mood}</span>
-                </span>
-              )}
-              {sequence.locationHint && (
-                <span>
-                  <span className="text-[#4b5158]">Location </span>
-                  <span className="text-[#6e767d]">{sequence.locationHint}</span>
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        <Card className="mb-6">
+          <div className="flex flex-col gap-3">
+            {sequence.summary && (
+              <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
+            )}
+            {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
+              <div className="flex flex-wrap gap-4 text-xs">
+                {sequence.narrativePurpose && (
+                  <span>
+                    <span className="text-[#4b5158]">Purpose </span>
+                    <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
+                  </span>
+                )}
+                {sequence.mood && (
+                  <span>
+                    <span className="text-[#4b5158]">Mood </span>
+                    <span className="text-[#6e767d]">{sequence.mood}</span>
+                  </span>
+                )}
+                {sequence.locationHint && (
+                  <span>
+                    <span className="text-[#4b5158]">Location </span>
+                    <span className="text-[#6e767d]">{sequence.locationHint}</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* Shots header */}
