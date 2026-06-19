@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, motionBeats } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments } from "@/db/schema";
 import { eq, and, notInArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -8,8 +8,14 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import CastingPanel from "@/components/CastingPanel";
 import MotionBeatsPanel from "@/components/MotionBeatsPanel";
+import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteMotionBeat } from "@/actions/motionBeats";
+import {
+  deletePromptSegment,
+  movePromptSegmentUp,
+  movePromptSegmentDown,
+} from "@/actions/promptSegments";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -81,6 +87,29 @@ export default async function ShotDetailPage({ params }: Props) {
     timingPosition: beat.timingPosition,
     editHref: `/projects/${pid}/sequences/${sid}/shots/${shid}/beats/${beat.id}/edit`,
     deleteAction: deleteMotionBeat.bind(null, beat.id, shid, sid, pid),
+  }));
+
+  const segmentList = await db
+    .select()
+    .from(promptSegments)
+    .where(eq(promptSegments.shotId, shid))
+    .orderBy(asc(promptSegments.orderIndex));
+
+  const segmentRows = segmentList.map((seg, idx) => ({
+    id: seg.id,
+    label: seg.label,
+    promptText: seg.promptText,
+    startSeconds: seg.startSeconds,
+    durationSeconds: seg.durationSeconds,
+    segmentType: seg.segmentType,
+    editHref: `/projects/${pid}/sequences/${sid}/shots/${shid}/segments/${seg.id}/edit`,
+    deleteAction: deletePromptSegment.bind(null, seg.id, shid, sid, pid),
+    moveUpAction:
+      idx === 0 ? null : movePromptSegmentUp.bind(null, seg.id, shid, sid, pid),
+    moveDownAction:
+      idx === segmentList.length - 1
+        ? null
+        : movePromptSegmentDown.bind(null, seg.id, shid, sid, pid),
   }));
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
@@ -193,6 +222,13 @@ export default async function ShotDetailPage({ params }: Props) {
           <MotionBeatsPanel
             beats={beatRows}
             addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/beats/new`}
+          />
+        </Card>
+
+        <Card title="Prompt Timeline">
+          <PromptSegmentsPanel
+            segments={segmentRows}
+            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/segments/new`}
           />
         </Card>
       </div>

@@ -149,6 +149,28 @@ export const motionBeats = sqliteTable("motion_beats", {
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
+export const promptSegments = sqliteTable("prompt_segments", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  shotId: int("shot_id")
+    .notNull()
+    .references(() => shots.id, { onDelete: "cascade" }),
+  orderIndex: int("order_index").notNull().default(0),
+  label: text("label").notNull(),
+  promptText: text("prompt_text").notNull(),
+  startSeconds: real("start_seconds"),
+  durationSeconds: real("duration_seconds"),
+  segmentType: text("segment_type", {
+    enum: ["shot", "action", "camera", "transition", "other"],
+  }),
+  notes: text("notes"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
@@ -164,3 +186,5 @@ export type SequenceAsset = typeof sequenceAssets.$inferSelect;
 export type NewSequenceAsset = typeof sequenceAssets.$inferInsert;
 export type MotionBeat = typeof motionBeats.$inferSelect;
 export type NewMotionBeat = typeof motionBeats.$inferInsert;
+export type PromptSegment = typeof promptSegments.$inferSelect;
+export type NewPromptSegment = typeof promptSegments.$inferInsert;

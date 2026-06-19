@@ -57,6 +57,13 @@
       "when": 1781905506684,
       "tag": "0007_dear_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1781910381832,
+      "tag": "0008_amusing_jean_grey",
+      "breakpoints": true
     }
   ]
 }
