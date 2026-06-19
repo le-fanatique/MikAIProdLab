@@ -1,10 +1,12 @@
 import { db } from "@/db";
-import { projects, sequences } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { projects, sequences, shots } from "@/db/schema";
+import { eq, asc, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatusBadge from "@/components/StatusBadge";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteProject } from "@/actions/projects";
 
@@ -23,69 +25,97 @@ export default async function ProjectPage({ params }: Props) {
     .where(eq(sequences.projectId, id))
     .orderBy(asc(sequences.orderIndex));
 
+  const seqIds = seqs.map((s) => s.id);
+  let totalShots = 0;
+  if (seqIds.length > 0) {
+    const shotRows = await db
+      .select({ id: shots.id })
+      .from(shots)
+      .where(inArray(shots.sequenceId, seqIds));
+    totalShots = shotRows.length;
+  }
+
   const deleteAction = deleteProject.bind(null, id);
 
   return (
     <div>
-      <Breadcrumb crumbs={[{ label: "Projects", href: "/projects" }, { label: project.name }]} />
+      <Breadcrumb
+        crumbs={[{ label: "Projects", href: "/projects" }, { label: project.name }]}
+      />
 
-      <div className="flex items-start justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-            <StatusBadge status={project.status} />
-          </div>
-          {project.pitch && (
-            <p className="text-neutral-400 text-sm mb-2">{project.pitch}</p>
-          )}
-          {project.description && (
-            <p className="text-neutral-600 text-xs whitespace-pre-wrap">{project.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href={`/projects/${id}/edit`}
-            className="rounded border border-neutral-700 text-neutral-400 px-3 py-1.5 text-sm hover:border-neutral-500 hover:text-neutral-200 transition-colors"
-          >
-            Edit
-          </Link>
-          <DeleteButton
-            action={deleteAction}
-            confirm="Delete this project and all its sequences/shots?"
-            className="rounded border border-red-900 text-red-500 px-3 py-1.5 text-sm hover:border-red-700 hover:text-red-400 transition-colors"
-          />
-        </div>
-      </div>
+      <PageHeader
+        title={project.name}
+        badge={<StatusBadge status={project.status} />}
+        meta={`${seqs.length} sequence${seqs.length !== 1 ? "s" : ""} · ${totalShots} shot${totalShots !== 1 ? "s" : ""}`}
+        actions={
+          <>
+            <Link
+              href={`/projects/${id}/story`}
+              className="rounded border border-[#2c3035] text-[#6e767d] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors"
+            >
+              Story
+            </Link>
+            <Link
+              href={`/projects/${id}/outline`}
+              className="rounded border border-[#2c3035] text-[#6e767d] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors"
+            >
+              Outline
+            </Link>
+            <Link
+              href={`/projects/${id}/edit`}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Edit
+            </Link>
+            <DeleteButton
+              action={deleteAction}
+              confirm="Delete this project and all its sequences/shots?"
+              className="rounded border border-[#cf7b6b]/30 text-[#cf7b6b] px-3 py-1.5 text-sm hover:border-[#cf7b6b]/60 hover:text-[#e0a194] transition-colors"
+            />
+          </>
+        }
+      />
 
+      {/* Pitch */}
+      {project.pitch && (
+        <p className="text-[#a4abb2] text-sm mb-4 leading-relaxed">{project.pitch}</p>
+      )}
+
+      {/* Story preview */}
       {project.story && (
-        <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 mb-2">Story</p>
-          <p className="text-sm text-neutral-400 whitespace-pre-wrap leading-relaxed border-l-2 border-neutral-800 pl-4">
+        <div className="mb-8 border-l-2 border-[#232629] pl-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
+            Story
+          </p>
+          <p className="text-sm text-[#6e767d] whitespace-pre-wrap leading-relaxed line-clamp-3">
             {project.story}
           </p>
+          <Link
+            href={`/projects/${id}/story`}
+            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors mt-2 inline-block"
+          >
+            View full story →
+          </Link>
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-neutral-500">
-          Sequences ({seqs.length})
-        </h2>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/projects/${id}/story`}
-            className="rounded border border-neutral-800 text-neutral-500 px-3 py-1.5 text-sm hover:border-neutral-600 hover:text-neutral-300 transition-colors"
+      {/* Visual tabs */}
+      <div className="flex items-center gap-0 mb-6 border-b border-[#232629]">
+        <div className="px-4 py-2 text-sm font-medium text-[#e7e9ec] border-b-2 border-[#5b93d6] -mb-px">
+          Sequences
+        </div>
+        {["Assets", "Project Style"].map((tab) => (
+          <div
+            key={tab}
+            className="px-4 py-2 text-sm text-[#4b5158] cursor-not-allowed opacity-50 select-none"
           >
-            Story
-          </Link>
-          <Link
-            href={`/projects/${id}/outline`}
-            className="rounded border border-neutral-800 text-neutral-500 px-3 py-1.5 text-sm hover:border-neutral-600 hover:text-neutral-300 transition-colors"
-          >
-            Outline
-          </Link>
+            {tab}
+          </div>
+        ))}
+        <div className="ml-auto pb-2">
           <Link
             href={`/projects/${id}/sequences/new`}
-            className="rounded bg-neutral-800 text-neutral-200 px-3 py-1.5 text-sm hover:bg-neutral-700 transition-colors"
+            className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
           >
             + Add Sequence
           </Link>
@@ -93,35 +123,55 @@ export default async function ProjectPage({ params }: Props) {
       </div>
 
       {seqs.length === 0 ? (
-        <div className="rounded-lg border border-neutral-800 border-dashed px-6 py-10 text-center text-neutral-600 text-sm">
-          No sequences yet.{" "}
-          <Link
-            href={`/projects/${id}/sequences/new`}
-            className="underline hover:text-neutral-400"
-          >
-            Add the first one.
-          </Link>
-        </div>
+        <EmptyState
+          title="No sequences yet."
+          action={
+            <Link
+              href={`/projects/${id}/sequences/new`}
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Add the first sequence →
+            </Link>
+          }
+        />
       ) : (
         <div className="flex flex-col gap-2">
           {seqs.map((seq, i) => (
             <Link
               key={seq.id}
               href={`/projects/${id}/sequences/${seq.id}`}
-              className="flex items-center gap-4 rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-3.5 hover:border-neutral-700 hover:bg-neutral-800/60 transition-colors group"
+              className="flex items-center gap-4 rounded-lg border border-[#232629] bg-[#1a1d20] px-5 py-3.5 hover:border-[#2c3035] hover:bg-[#212529] transition-colors group"
             >
-              <span className="text-neutral-700 text-sm font-mono w-6 shrink-0">
+              <span className="text-[#4b5158] text-sm font-mono w-6 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </span>
               <div className="min-w-0 flex-1">
-                <span className="font-medium text-neutral-100 group-hover:text-white">
+                <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
                   {seq.title}
                 </span>
                 {seq.summary && (
-                  <p className="text-sm text-neutral-500 truncate mt-0.5">{seq.summary}</p>
+                  <p className="text-xs text-[#6e767d] truncate mt-0.5">{seq.summary}</p>
+                )}
+                {(seq.mood || seq.locationHint) && (
+                  <div className="flex gap-3 mt-1">
+                    {seq.mood && (
+                      <span className="text-[10px] text-[#4b5158]">
+                        <span className="text-[#3a4046]">Mood </span>
+                        {seq.mood}
+                      </span>
+                    )}
+                    {seq.locationHint && (
+                      <span className="text-[10px] text-[#4b5158]">
+                        <span className="text-[#3a4046]">Location </span>
+                        {seq.locationHint}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-              <span className="text-neutral-700 text-sm shrink-0">→</span>
+              <span className="text-[#3a4046] text-sm shrink-0 group-hover:text-[#6e767d] transition-colors">
+                →
+              </span>
             </Link>
           ))}
         </div>

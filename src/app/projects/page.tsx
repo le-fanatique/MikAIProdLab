@@ -1,8 +1,12 @@
 import { db } from "@/db";
-import { projects } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { projects, sequences, shots } from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
+
+export const dynamic = "force-dynamic";
 
 export default async function ProjectsPage() {
   const allProjects = await db
@@ -10,53 +14,106 @@ export default async function ProjectsPage() {
     .from(projects)
     .orderBy(desc(projects.updatedAt));
 
+  const allSequences = await db
+    .select({ id: sequences.id, projectId: sequences.projectId })
+    .from(sequences);
+
+  const allShots = await db
+    .select({ id: shots.id, sequenceId: shots.sequenceId })
+    .from(shots);
+
+  const seqIdToProjectId = new Map(allSequences.map((s) => [s.id, s.projectId]));
+
+  const seqMap = new Map<number, number>();
+  for (const s of allSequences) {
+    seqMap.set(s.projectId, (seqMap.get(s.projectId) ?? 0) + 1);
+  }
+
+  const shotMap = new Map<number, number>();
+  for (const sh of allShots) {
+    const pid = seqIdToProjectId.get(sh.sequenceId);
+    if (pid != null) {
+      shotMap.set(pid, (shotMap.get(pid) ?? 0) + 1);
+    }
+  }
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-        <Link
-          href="/projects/new"
-          className="rounded bg-neutral-100 text-neutral-900 px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
-        >
-          + New Project
-        </Link>
-      </div>
+      <PageHeader
+        title="Projects"
+        actions={
+          <Link
+            href="/projects/new"
+            className="rounded bg-[#e7e9ec] text-[#0d0e10] px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+          >
+            + New Project
+          </Link>
+        }
+      />
 
       {allProjects.length === 0 ? (
-        <div className="text-center py-20 text-neutral-600">
-          <p className="text-lg mb-2">No projects yet.</p>
-          <p className="text-sm">
-            <Link href="/projects/new" className="underline hover:text-neutral-400">
-              Create your first project
-            </Link>
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {allProjects.map((project) => (
+        <EmptyState
+          title="No projects yet."
+          description="Start by creating your first project."
+          action={
             <Link
-              key={project.id}
-              href={`/projects/${project.id}`}
-              className="block rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-4 hover:border-neutral-700 hover:bg-neutral-800/60 transition-colors group"
+              href="/projects/new"
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-medium text-neutral-100 group-hover:text-white truncate">
-                      {project.name}
-                    </span>
-                    <StatusBadge status={project.status} />
-                  </div>
-                  {project.pitch && (
-                    <p className="text-sm text-neutral-500 line-clamp-2">
-                      {project.pitch}
-                    </p>
-                  )}
-                </div>
-                <span className="text-neutral-700 text-sm shrink-0 mt-0.5">→</span>
-              </div>
+              Create your first project →
             </Link>
-          ))}
+          }
+        />
+      ) : (
+        <div className="rounded-lg border border-[#232629] overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#232629] bg-[#141618]">
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                  Project
+                </th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                  Status
+                </th>
+                <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hidden sm:table-cell">
+                  Seq.
+                </th>
+                <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hidden sm:table-cell">
+                  Shots
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {allProjects.map((project) => (
+                <tr
+                  key={project.id}
+                  className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <Link href={`/projects/${project.id}`} className="block group">
+                      <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
+                        {project.name}
+                      </span>
+                      {project.pitch && (
+                        <p className="text-xs text-[#6e767d] mt-0.5 line-clamp-1">
+                          {project.pitch}
+                        </p>
+                      )}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={project.status} />
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-xs text-[#6e767d] hidden sm:table-cell">
+                    {seqMap.get(project.id) ?? 0}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-xs text-[#6e767d] hidden sm:table-cell">
+                    {shotMap.get(project.id) ?? 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -4,6 +4,8 @@ import { eq, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteSequence } from "@/actions/sequences";
 import { deleteShot } from "@/actions/shots";
@@ -41,108 +43,151 @@ export default async function SequencePage({ params }: Props) {
         ]}
       />
 
-      <div className="flex items-start justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">{sequence.title}</h1>
-          {sequence.summary && (
-            <p className="text-neutral-400 text-sm mb-1">{sequence.summary}</p>
-          )}
-          {sequence.description && (
-            <p className="text-neutral-500 text-sm whitespace-pre-wrap">{sequence.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href={`/projects/${pid}/sequences/${sid}/edit`}
-            className="rounded border border-neutral-700 text-neutral-400 px-3 py-1.5 text-sm hover:border-neutral-500 hover:text-neutral-200 transition-colors"
-          >
-            Edit
-          </Link>
-          <DeleteButton
-            action={deleteSeqAction}
-            confirm="Delete this sequence and all its shots?"
-            className="rounded border border-red-900 text-red-500 px-3 py-1.5 text-sm hover:border-red-700 hover:text-red-400 transition-colors"
-          />
-        </div>
-      </div>
+      <PageHeader
+        title={sequence.title}
+        meta={
+          totalDuration > 0
+            ? `${shotList.length} shot${shotList.length !== 1 ? "s" : ""} · ${totalDuration.toFixed(1)}s`
+            : `${shotList.length} shot${shotList.length !== 1 ? "s" : ""}`
+        }
+        actions={
+          <>
+            <Link
+              href={`/projects/${pid}/sequences/${sid}/edit`}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Edit
+            </Link>
+            <DeleteButton
+              action={deleteSeqAction}
+              confirm="Delete this sequence and all its shots?"
+              className="rounded border border-[#cf7b6b]/30 text-[#cf7b6b] px-3 py-1.5 text-sm hover:border-[#cf7b6b]/60 hover:text-[#e0a194] transition-colors"
+            />
+          </>
+        }
+      />
 
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-neutral-500">
-            Shots ({shotList.length})
-          </h2>
-          {totalDuration > 0 && (
-            <span className="text-xs text-neutral-600">
-              Total: {totalDuration.toFixed(1)}s
-            </span>
+      {/* Sequence context */}
+      {(sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
+        <div className="mb-6 flex flex-col gap-2">
+          {sequence.summary && (
+            <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
+          )}
+          {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
+            <div className="flex flex-wrap gap-4 text-xs">
+              {sequence.narrativePurpose && (
+                <span>
+                  <span className="text-[#4b5158]">Purpose </span>
+                  <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
+                </span>
+              )}
+              {sequence.mood && (
+                <span>
+                  <span className="text-[#4b5158]">Mood </span>
+                  <span className="text-[#6e767d]">{sequence.mood}</span>
+                </span>
+              )}
+              {sequence.locationHint && (
+                <span>
+                  <span className="text-[#4b5158]">Location </span>
+                  <span className="text-[#6e767d]">{sequence.locationHint}</span>
+                </span>
+              )}
+            </div>
           )}
         </div>
+      )}
+
+      {/* Shots header */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+          Shots
+        </p>
         <Link
           href={`/projects/${pid}/sequences/${sid}/shots/new`}
-          className="rounded bg-neutral-800 text-neutral-200 px-3 py-1.5 text-sm hover:bg-neutral-700 transition-colors"
+          className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
         >
           + Add Shot
         </Link>
       </div>
 
       {shotList.length === 0 ? (
-        <div className="rounded-lg border border-neutral-800 border-dashed px-6 py-10 text-center text-neutral-600 text-sm">
-          No shots yet.{" "}
-          <Link
-            href={`/projects/${pid}/sequences/${sid}/shots/new`}
-            className="underline hover:text-neutral-400"
-          >
-            Add the first one.
-          </Link>
-        </div>
+        <EmptyState
+          title="No shots yet."
+          action={
+            <Link
+              href={`/projects/${pid}/sequences/${sid}/shots/new`}
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Add the first shot →
+            </Link>
+          }
+        />
       ) : (
-        <div className="rounded-lg border border-neutral-800 overflow-hidden">
+        <div className="rounded-lg border border-[#232629] overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-800 bg-neutral-900/60">
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider w-28">Code</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider">Title</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden md:table-cell">Action Pitch</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider hidden lg:table-cell">Camera</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider w-16">Dur.</th>
-                <th className="px-4 py-3 w-20"></th>
+              <tr className="border-b border-[#232629] bg-[#141618]">
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] w-28">
+                  Code
+                </th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                  Title
+                </th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hidden md:table-cell">
+                  Action Pitch
+                </th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hidden lg:table-cell">
+                  Camera
+                </th>
+                <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] w-16">
+                  Dur.
+                </th>
+                <th className="px-4 py-3 w-24" />
               </tr>
             </thead>
             <tbody>
-              {shotList.map((shot, i) => {
+              {shotList.map((shot) => {
                 const deleteShotAction = deleteShot.bind(null, shot.id, sid, pid);
                 return (
                   <tr
                     key={shot.id}
-                    className="border-b border-neutral-800/60 last:border-0 hover:bg-neutral-800/30 transition-colors"
+                    className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-xs">
                       {shot.shotCode ? (
-                        <span className="text-neutral-300">{shot.shotCode}</span>
+                        <span className="text-[#a4abb2]">{shot.shotCode}</span>
                       ) : (
-                        <span className="text-neutral-700">—</span>
+                        <span className="text-[#3a4046]">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-neutral-100 font-medium">{shot.title}</span>
+                      <Link
+                        href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}`}
+                        className="font-medium text-[#e7e9ec] hover:text-white transition-colors"
+                      >
+                        {shot.title}
+                      </Link>
                       {shot.description && (
-                        <p className="text-neutral-600 text-xs mt-0.5 line-clamp-1">{shot.description}</p>
+                        <p className="text-[#4b5158] text-xs mt-0.5 line-clamp-1">
+                          {shot.description}
+                        </p>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-neutral-500 hidden md:table-cell max-w-xs">
-                      <span className="line-clamp-2">{shot.actionPitch ?? "—"}</span>
+                    <td className="px-4 py-3 text-[#6e767d] hidden md:table-cell max-w-xs">
+                      <span className="line-clamp-2 text-xs">{shot.actionPitch ?? "—"}</span>
                     </td>
-                    <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell max-w-xs">
-                      <span className="line-clamp-2">{shot.cameraPitch ?? "—"}</span>
+                    <td className="px-4 py-3 text-[#6e767d] hidden lg:table-cell max-w-xs">
+                      <span className="line-clamp-2 text-xs">{shot.cameraPitch ?? "—"}</span>
                     </td>
-                    <td className="px-4 py-3 text-right text-neutral-500 font-mono text-xs">
+                    <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
                       {shot.durationSeconds != null ? `${shot.durationSeconds}s` : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-3">
                         <Link
                           href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}/edit`}
-                          className="text-neutral-500 hover:text-neutral-200 transition-colors text-xs"
+                          className="text-[#6e767d] hover:text-[#a4abb2] transition-colors text-xs"
                         >
                           Edit
                         </Link>
@@ -150,7 +195,7 @@ export default async function SequencePage({ params }: Props) {
                           action={deleteShotAction}
                           confirm="Delete this shot?"
                           label="Del"
-                          className="text-red-800 hover:text-red-500 transition-colors text-xs"
+                          className="text-[#cf7b6b]/50 hover:text-[#cf7b6b] transition-colors text-xs"
                         />
                       </div>
                     </td>
@@ -161,6 +206,15 @@ export default async function SequencePage({ params }: Props) {
           </table>
         </div>
       )}
+
+      <div className="mt-8 pt-4 border-t border-[#232629]">
+        <Link
+          href={`/projects/${pid}`}
+          className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+        >
+          ← Back to {project.name}
+        </Link>
+      </div>
     </div>
   );
 }
