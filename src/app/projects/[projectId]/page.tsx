@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, sequences, shots } from "@/db/schema";
+import { projects, sequences, shots, assets } from "@/db/schema";
 import { eq, asc, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -35,6 +35,12 @@ export default async function ProjectPage({ params }: Props) {
     totalShots = shotRows.length;
   }
 
+  const assetRows = await db
+    .select({ id: assets.id })
+    .from(assets)
+    .where(eq(assets.projectId, id));
+  const totalAssets = assetRows.length;
+
   const deleteAction = deleteProject.bind(null, id);
 
   return (
@@ -46,7 +52,7 @@ export default async function ProjectPage({ params }: Props) {
       <PageHeader
         title={project.name}
         badge={<StatusBadge status={project.status} />}
-        meta={`${seqs.length} sequence${seqs.length !== 1 ? "s" : ""} · ${totalShots} shot${totalShots !== 1 ? "s" : ""}`}
+        meta={`${seqs.length} sequence${seqs.length !== 1 ? "s" : ""} · ${totalShots} shot${totalShots !== 1 ? "s" : ""} · ${totalAssets} asset${totalAssets !== 1 ? "s" : ""}`}
         actions={
           <>
             <Link
@@ -104,14 +110,15 @@ export default async function ProjectPage({ params }: Props) {
         <div className="px-4 py-2 text-sm font-medium text-[#e7e9ec] border-b-2 border-[#5b93d6] -mb-px">
           Sequences
         </div>
-        {["Assets", "Project Style"].map((tab) => (
-          <div
-            key={tab}
-            className="px-4 py-2 text-sm text-[#4b5158] cursor-not-allowed opacity-50 select-none"
-          >
-            {tab}
-          </div>
-        ))}
+        <Link
+          href={`/projects/${id}/assets`}
+          className="px-4 py-2 text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+        >
+          Assets
+        </Link>
+        <div className="px-4 py-2 text-sm text-[#4b5158] cursor-not-allowed opacity-50 select-none">
+          Project Style
+        </div>
         <div className="ml-auto pb-2">
           <Link
             href={`/projects/${id}/sequences/new`}

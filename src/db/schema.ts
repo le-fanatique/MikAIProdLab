@@ -71,6 +71,26 @@ export const appSettings = sqliteTable("app_settings", {
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
+export const assets = sqliteTable("assets", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  projectId: int("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: text("type", {
+    enum: ["character", "environment", "prop", "vehicle", "crowd", "other"],
+  }).notNull(),
+  description: text("description"),
+  notes: text("notes"),
+  orderIndex: int("order_index").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
@@ -78,3 +98,5 @@ export type NewSequence = typeof sequences.$inferInsert;
 export type Shot = typeof shots.$inferSelect;
 export type NewShot = typeof shots.$inferInsert;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type Asset = typeof assets.$inferSelect;
+export type NewAsset = typeof assets.$inferInsert;
