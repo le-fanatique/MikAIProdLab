@@ -63,9 +63,18 @@ export const shots = sqliteTable("shots", {
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
 export type NewSequence = typeof sequences.$inferInsert;
 export type Shot = typeof shots.$inferSelect;
 export type NewShot = typeof shots.$inferInsert;
+export type AppSetting = typeof appSettings.$inferSelect;

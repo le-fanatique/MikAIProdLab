@@ -6,6 +6,8 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatusBadge from "@/components/StatusBadge";
 import LLMActionButton from "@/components/LLMActionButton";
+import StoryGenerationPanel from "@/components/StoryGenerationPanel";
+import { getLLMSettings } from "@/lib/settings";
 
 type Props = { params: Promise<{ projectId: string }> };
 
@@ -13,7 +15,11 @@ export default async function StoryPage({ params }: Props) {
   const { projectId } = await params;
   const pid = parseInt(projectId, 10);
 
-  const [project] = await db.select().from(projects).where(eq(projects.id, pid));
+  const [project, llmSettings] = await Promise.all([
+    db.select().from(projects).where(eq(projects.id, pid)).then((r) => r[0]),
+    getLLMSettings(),
+  ]);
+  const isLlmConfigured = llmSettings.isConfigured;
   if (!project) notFound();
 
   const seqs = await db
@@ -55,9 +61,11 @@ export default async function StoryPage({ params }: Props) {
         ) : (
           <p className="text-sm text-neutral-700 italic mb-3">No pitch yet.</p>
         )}
-        <LLMActionButton
-          label="Generate Story from Pitch"
-          hint="Requires LLM provider configuration in .env.local"
+        <StoryGenerationPanel
+          projectId={pid}
+          pitch={project.pitch}
+          existingStory={project.story}
+          isConfigured={isLlmConfigured}
         />
       </div>
 

@@ -1,100 +1,91 @@
 import Breadcrumb from "@/components/Breadcrumb";
+import OllamaSettingsForm from "@/components/OllamaSettingsForm";
+import { getLLMSettings } from "@/lib/settings";
+import { fetchOllamaModelNames } from "@/lib/llm/ollama";
 
-function StatusBadge({ configured }: { configured: boolean }) {
-  return configured ? (
-    <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-900">
-      Configured
-    </span>
-  ) : (
-    <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-neutral-900 text-neutral-600 border border-neutral-800">
-      Not configured
-    </span>
-  );
-}
+export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
-  const provider = process.env.LLM_PROVIDER ?? null;
-  const baseUrl = process.env.LLM_BASE_URL ?? null;
-  const model = process.env.LLM_MODEL ?? null;
-  const apiKeySet = Boolean(process.env.LLM_API_KEY);
-  const timeout = process.env.LLM_TIMEOUT_MS ?? null;
+export default async function SettingsPage() {
+  const settings = await getLLMSettings();
 
-  const settings = [
-    {
-      key: "LLM_PROVIDER",
-      value: provider,
-      description: 'Provider to use. Supported values: "ollama", "openrouter", "openai-compatible".',
-      sensitive: false,
-    },
-    {
-      key: "LLM_BASE_URL",
-      value: baseUrl,
-      description: 'Base URL for the LLM API. e.g. "http://localhost:11434" for Ollama.',
-      sensitive: false,
-    },
-    {
-      key: "LLM_MODEL",
-      value: model,
-      description: 'Model identifier. e.g. "llama3.2", "mistral", "gpt-4o".',
-      sensitive: false,
-    },
-    {
-      key: "LLM_API_KEY",
-      value: null,
-      configured: apiKeySet,
-      description: "API key for the provider. Not required for Ollama. Value never displayed.",
-      sensitive: true,
-    },
-    {
-      key: "LLM_TIMEOUT_MS",
-      value: timeout,
-      description: "Request timeout in milliseconds. Default: 30000.",
-      sensitive: false,
-    },
-  ];
+  let initialModels: string[] = [];
+  let initialModelsError: string | null = null;
+  try {
+    initialModels = await fetchOllamaModelNames(settings.baseUrl);
+  } catch (err) {
+    initialModelsError =
+      err instanceof Error
+        ? err.message
+        : "Could not reach Ollama. Make sure Ollama is running.";
+  }
 
   return (
     <div>
       <Breadcrumb crumbs={[{ label: "Settings" }]} />
-      <h1 className="text-2xl font-semibold tracking-tight mb-2">Settings</h1>
-      <p className="text-sm text-neutral-500 mb-10">
-        Read-only. Configure these values in your <code className="text-neutral-400">.env.local</code> file.
-      </p>
+      <h1 className="text-2xl font-semibold tracking-tight mb-8">Settings</h1>
 
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500 mb-5">
-          LLM Provider
-        </h2>
-        <div className="flex flex-col gap-4">
-          {settings.map((s) => {
-            const configured = s.sensitive ? (s.configured ?? false) : Boolean(s.value);
-            return (
-              <div
-                key={s.key}
-                className="rounded-lg border border-neutral-800 bg-neutral-900/40 px-5 py-4 flex items-start gap-6"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <code className="text-sm text-neutral-300 font-mono">{s.key}</code>
-                    <StatusBadge configured={configured} />
-                  </div>
-                  <p className="text-xs text-neutral-600">{s.description}</p>
-                  {!s.sensitive && s.value && (
-                    <p className="text-xs text-neutral-500 mt-1 font-mono">{s.value}</p>
-                  )}
-                  {s.sensitive && (
-                    <p className="text-xs text-neutral-700 mt-1 italic">Value not displayed for security.</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* Language Model section */}
+      <section className="max-w-lg">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
+            Language Model
+          </h2>
+          <span className="text-xs text-neutral-600 border border-neutral-800 rounded px-2 py-0.5">
+            Active provider: Ollama
+          </span>
         </div>
+
+        <OllamaSettingsForm
+          initialBaseUrl={settings.baseUrl}
+          initialModel={settings.model}
+          initialTimeoutMs={settings.timeoutMs}
+          initialModels={initialModels}
+          initialModelsError={initialModelsError}
+        />
       </section>
 
-      <div className="mt-10 pt-4 border-t border-neutral-900">
+      {/* Quick Setup */}
+      <section className="max-w-lg mt-12 pt-8 border-t border-neutral-900">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500 mb-4">
+          Quick Setup
+        </h2>
+        <ol className="flex flex-col gap-2 text-sm text-neutral-500 list-none">
+          <li className="flex gap-3">
+            <span className="text-neutral-700 font-mono text-xs mt-0.5 shrink-0">1.</span>
+            <span>
+              Install Ollama at{" "}
+              <span className="text-neutral-400 font-mono text-xs">ollama.com</span>
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-neutral-700 font-mono text-xs mt-0.5 shrink-0">2.</span>
+            <span>
+              Start the server:{" "}
+              <code className="text-neutral-400 text-xs">ollama serve</code>
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-neutral-700 font-mono text-xs mt-0.5 shrink-0">3.</span>
+            <span>
+              Pull a model:{" "}
+              <code className="text-neutral-400 text-xs">ollama pull llama3.2</code>
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-neutral-700 font-mono text-xs mt-0.5 shrink-0">4.</span>
+            <span>Select a model from the dropdown above and click Test Connection.</span>
+          </li>
+        </ol>
+      </section>
+
+      {/* Active integrations */}
+      <div className="max-w-lg mt-8 pt-4 border-t border-neutral-900 flex flex-col gap-1">
+        <p className="text-xs text-neutral-500">
+          Active:{" "}
+          <span className="text-neutral-400">Generate Story from Pitch</span>
+        </p>
         <p className="text-xs text-neutral-700">
-          LLM integration is not yet active. Configure these variables now to prepare for V0.4.
+          Coming soon: Generate Sequences from Story · Generate Shots from Sequence
         </p>
       </div>
     </div>
