@@ -1,4 +1,4 @@
-import { int, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { int, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const projects = sqliteTable("projects", {
@@ -91,6 +91,24 @@ export const assets = sqliteTable("assets", {
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
+export const shotAssets = sqliteTable(
+  "shot_assets",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    shotId: int("shot_id")
+      .notNull()
+      .references(() => shots.id, { onDelete: "cascade" }),
+    assetId: int("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    notes: text("notes"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("shot_asset_uniq").on(table.shotId, table.assetId)]
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
@@ -100,3 +118,5 @@ export type NewShot = typeof shots.$inferInsert;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type NewAsset = typeof assets.$inferInsert;
+export type ShotAsset = typeof shotAssets.$inferSelect;
+export type NewShotAsset = typeof shotAssets.$inferInsert;

@@ -1,11 +1,13 @@
 import { db } from "@/db";
-import { projects, sequences, shots } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { projects, sequences, shots, assets, shotAssets } from "@/db/schema";
+import { eq, and, notInArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
+import CastingPanel from "@/components/CastingPanel";
+import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -36,6 +38,41 @@ export default async function ShotDetailPage({ params }: Props) {
 
   const [shot] = await db.select().from(shots).where(eq(shots.id, shid));
   if (!shot || shot.sequenceId !== sid) notFound();
+
+  const assignedRows = await db
+    .select({
+      assignmentId: shotAssets.id,
+      assetId: assets.id,
+      assetName: assets.name,
+      assetType: assets.type,
+    })
+    .from(shotAssets)
+    .innerJoin(assets, eq(shotAssets.assetId, assets.id))
+    .where(eq(shotAssets.shotId, shid));
+
+  const assignedAssetIds = assignedRows.map((r) => r.assetId);
+
+  const availableAssets =
+    assignedAssetIds.length > 0
+      ? await db
+          .select({ id: assets.id, name: assets.name, type: assets.type })
+          .from(assets)
+          .where(and(eq(assets.projectId, pid), notInArray(assets.id, assignedAssetIds)))
+          .orderBy(asc(assets.orderIndex))
+      : await db
+          .select({ id: assets.id, name: assets.name, type: assets.type })
+          .from(assets)
+          .where(eq(assets.projectId, pid))
+          .orderBy(asc(assets.orderIndex));
+
+  const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
+
+  const assignedItems = assignedRows.map((row) => ({
+    assignmentId: row.assignmentId,
+    assetName: row.assetName,
+    assetType: row.assetType,
+    removeAction: removeAssetFromShot.bind(null, row.assignmentId, shid, sid, pid),
+  }));
 
   const hasDetails =
     shot.description || shot.actionPitch || shot.cameraPitch || shot.continuityNotes;
@@ -121,6 +158,15 @@ export default async function ShotDetailPage({ params }: Props) {
             to add them.
           </p>
         )}
+
+        <Card title="Casting">
+          <CastingPanel
+            assignedItems={assignedItems}
+            availableAssets={availableAssets}
+            projectId={pid}
+            assignAction={assignAction}
+          />
+        </Card>
       </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629]">

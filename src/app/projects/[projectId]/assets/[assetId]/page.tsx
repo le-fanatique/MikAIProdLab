@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, assets } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { projects, assets, shotAssets, shots, sequences } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -35,6 +35,20 @@ export default async function AssetDetailPage({ params }: Props) {
 
   const [asset] = await db.select().from(assets).where(eq(assets.id, aid));
   if (!asset || asset.projectId !== pid) notFound();
+
+  const appearances = await db
+    .select({
+      assignmentId: shotAssets.id,
+      shotId: shots.id,
+      shotCode: shots.shotCode,
+      shotTitle: shots.title,
+      sequenceId: sequences.id,
+      sequenceTitle: sequences.title,
+    })
+    .from(shotAssets)
+    .innerJoin(shots, eq(shotAssets.shotId, shots.id))
+    .innerJoin(sequences, eq(shots.sequenceId, sequences.id))
+    .where(and(eq(shotAssets.assetId, aid), eq(sequences.projectId, pid)));
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
 
@@ -91,6 +105,25 @@ export default async function AssetDetailPage({ params }: Props) {
           </Link>{" "}
           to add them.
         </p>
+      )}
+
+      {appearances.length > 0 && (
+        <Card title="Appearances">
+          <div className="flex flex-col gap-2">
+            {appearances.map((a) => (
+              <div key={a.assignmentId} className="flex items-center gap-3">
+                <span className="text-xs text-[#4b5158] shrink-0">{a.sequenceTitle}</span>
+                <span className="text-[#3a4046] text-xs">·</span>
+                <Link
+                  href={`/projects/${pid}/sequences/${a.sequenceId}/shots/${a.shotId}`}
+                  className="text-sm text-[#a4abb2] hover:text-[#e7e9ec] transition-colors"
+                >
+                  {a.shotCode ? `${a.shotCode} — ${a.shotTitle}` : a.shotTitle}
+                </Link>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
