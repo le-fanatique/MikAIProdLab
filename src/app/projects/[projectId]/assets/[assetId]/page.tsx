@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, assets, shotAssets, shots, sequences } from "@/db/schema";
+import { projects, assets, shotAssets, shots, sequences, sequenceAssets } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -36,7 +36,17 @@ export default async function AssetDetailPage({ params }: Props) {
   const [asset] = await db.select().from(assets).where(eq(assets.id, aid));
   if (!asset || asset.projectId !== pid) notFound();
 
-  const appearances = await db
+  const sequenceAppearances = await db
+    .select({
+      assignmentId: sequenceAssets.id,
+      sequenceId: sequences.id,
+      sequenceTitle: sequences.title,
+    })
+    .from(sequenceAssets)
+    .innerJoin(sequences, eq(sequenceAssets.sequenceId, sequences.id))
+    .where(and(eq(sequenceAssets.assetId, aid), eq(sequences.projectId, pid)));
+
+  const shotAppearances = await db
     .select({
       assignmentId: shotAssets.id,
       shotId: shots.id,
@@ -49,6 +59,8 @@ export default async function AssetDetailPage({ params }: Props) {
     .innerJoin(shots, eq(shotAssets.shotId, shots.id))
     .innerJoin(sequences, eq(shots.sequenceId, sequences.id))
     .where(and(eq(shotAssets.assetId, aid), eq(sequences.projectId, pid)));
+
+  const hasAppearances = sequenceAppearances.length > 0 || shotAppearances.length > 0;
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
 
@@ -107,21 +119,45 @@ export default async function AssetDetailPage({ params }: Props) {
         </p>
       )}
 
-      {appearances.length > 0 && (
+      {hasAppearances && (
         <Card title="Appearances">
-          <div className="flex flex-col gap-2">
-            {appearances.map((a) => (
-              <div key={a.assignmentId} className="flex items-center gap-3">
-                <span className="text-xs text-[#4b5158] shrink-0">{a.sequenceTitle}</span>
-                <span className="text-[#3a4046] text-xs">·</span>
-                <Link
-                  href={`/projects/${pid}/sequences/${a.sequenceId}/shots/${a.shotId}`}
-                  className="text-sm text-[#a4abb2] hover:text-[#e7e9ec] transition-colors"
-                >
-                  {a.shotCode ? `${a.shotCode} — ${a.shotTitle}` : a.shotTitle}
-                </Link>
+          <div className="flex flex-col gap-4">
+            {sequenceAppearances.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                  Sequences
+                </p>
+                {sequenceAppearances.map((a) => (
+                  <Link
+                    key={a.assignmentId}
+                    href={`/projects/${pid}/sequences/${a.sequenceId}`}
+                    className="text-sm text-[#a4abb2] hover:text-[#e7e9ec] transition-colors"
+                  >
+                    {a.sequenceTitle}
+                  </Link>
+                ))}
               </div>
-            ))}
+            )}
+
+            {shotAppearances.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                  Shots
+                </p>
+                {shotAppearances.map((a) => (
+                  <div key={a.assignmentId} className="flex items-center gap-3">
+                    <span className="text-xs text-[#4b5158] shrink-0">{a.sequenceTitle}</span>
+                    <span className="text-[#3a4046] text-xs">·</span>
+                    <Link
+                      href={`/projects/${pid}/sequences/${a.sequenceId}/shots/${a.shotId}`}
+                      className="text-sm text-[#a4abb2] hover:text-[#e7e9ec] transition-colors"
+                    >
+                      {a.shotCode ? `${a.shotCode} — ${a.shotTitle}` : a.shotTitle}
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
       )}

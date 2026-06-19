@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, sequences, shots } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { projects, sequences, shots, assets, sequenceAssets } from "@/db/schema";
+import { eq, and, notInArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -8,8 +8,10 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
+import SequenceAssetsPanel from "@/components/SequenceAssetsPanel";
 import { deleteSequence } from "@/actions/sequences";
 import { deleteShot } from "@/actions/shots";
+import { assignAssetToSequence, removeAssetFromSequence } from "@/actions/sequenceAssets";
 
 type Props = { params: Promise<{ projectId: string; sequenceId: string }> };
 
@@ -31,6 +33,41 @@ export default async function SequencePage({ params }: Props) {
     .orderBy(asc(shots.orderIndex));
 
   const totalDuration = shotList.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0);
+
+  const assignedRows = await db
+    .select({
+      assignmentId: sequenceAssets.id,
+      assetId: assets.id,
+      assetName: assets.name,
+      assetType: assets.type,
+    })
+    .from(sequenceAssets)
+    .innerJoin(assets, eq(sequenceAssets.assetId, assets.id))
+    .where(eq(sequenceAssets.sequenceId, sid));
+
+  const assignedAssetIds = assignedRows.map((r) => r.assetId);
+
+  const availableAssets =
+    assignedAssetIds.length > 0
+      ? await db
+          .select({ id: assets.id, name: assets.name, type: assets.type })
+          .from(assets)
+          .where(and(eq(assets.projectId, pid), notInArray(assets.id, assignedAssetIds)))
+          .orderBy(asc(assets.orderIndex))
+      : await db
+          .select({ id: assets.id, name: assets.name, type: assets.type })
+          .from(assets)
+          .where(eq(assets.projectId, pid))
+          .orderBy(asc(assets.orderIndex));
+
+  const assignAction = assignAssetToSequence.bind(null, sid, pid);
+
+  const assignedItems = assignedRows.map((row) => ({
+    assignmentId: row.assignmentId,
+    assetName: row.assetName,
+    assetType: row.assetType,
+    removeAction: removeAssetFromSequence.bind(null, row.assignmentId, sid, pid),
+  }));
 
   const deleteSeqAction = deleteSequence.bind(null, sid, pid);
 
@@ -100,6 +137,16 @@ export default async function SequencePage({ params }: Props) {
           </div>
         </Card>
       )}
+
+      {/* Sequence assets */}
+      <Card title="Assets" className="mb-6">
+        <SequenceAssetsPanel
+          assignedItems={assignedItems}
+          availableAssets={availableAssets}
+          projectId={pid}
+          assignAction={assignAction}
+        />
+      </Card>
 
       {/* Shots header */}
       <div className="flex items-center justify-between mb-4">

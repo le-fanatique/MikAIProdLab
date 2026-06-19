@@ -109,6 +109,24 @@ export const shotAssets = sqliteTable(
   (table) => [unique("shot_asset_uniq").on(table.shotId, table.assetId)]
 );
 
+export const sequenceAssets = sqliteTable(
+  "sequence_assets",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    sequenceId: int("sequence_id")
+      .notNull()
+      .references(() => sequences.id, { onDelete: "cascade" }),
+    assetId: int("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    notes: text("notes"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("sequence_asset_uniq").on(table.sequenceId, table.assetId)]
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
@@ -120,3 +138,5 @@ export type Asset = typeof assets.$inferSelect;
 export type NewAsset = typeof assets.$inferInsert;
 export type ShotAsset = typeof shotAssets.$inferSelect;
 export type NewShotAsset = typeof shotAssets.$inferInsert;
+export type SequenceAsset = typeof sequenceAssets.$inferSelect;
+export type NewSequenceAsset = typeof sequenceAssets.$inferInsert;
