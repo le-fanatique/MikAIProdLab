@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages } from "@/db/schema";
-import { eq, and, notInArray, asc } from "drizzle-orm";
+import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages, assetReferenceImages } from "@/db/schema";
+import { eq, and, notInArray, inArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -11,7 +11,9 @@ import MotionBeatsPanel from "@/components/MotionBeatsPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
+import ShotPromptDraftPanel from "@/components/ShotPromptDraftPanel";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
+import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteMotionBeat } from "@/actions/motionBeats";
 import { deleteShotReferenceImage } from "@/actions/shotReferenceImages";
@@ -57,6 +59,7 @@ export default async function ShotDetailPage({ params }: Props) {
       assetId: assets.id,
       assetName: assets.name,
       assetType: assets.type,
+      assetDescription: assets.description,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -118,6 +121,20 @@ export default async function ShotDetailPage({ params }: Props) {
 
   const compiledPrompt = compilePromptSegments(segmentList);
 
+  const castAssetRefImageRows =
+    assignedAssetIds.length > 0
+      ? await db
+          .select({
+            assetId: assetReferenceImages.assetId,
+            imageRole: assetReferenceImages.imageRole,
+            label: assetReferenceImages.label,
+            sourceFilename: assetReferenceImages.sourceFilename,
+          })
+          .from(assetReferenceImages)
+          .where(inArray(assetReferenceImages.assetId, assignedAssetIds))
+          .orderBy(asc(assetReferenceImages.orderIndex))
+      : [];
+
   const refImages = await db
     .select()
     .from(shotReferenceImages)
@@ -132,6 +149,52 @@ export default async function ShotDetailPage({ params }: Props) {
     assetType: row.assetType,
     removeAction: removeAssetFromShot.bind(null, row.assignmentId, shid, sid, pid),
   }));
+
+  const composedShotPrompt = composeShotPrompt({
+    project: { name: project.name },
+    sequence: {
+      title: sequence.title,
+      mood: sequence.mood,
+      locationHint: sequence.locationHint,
+    },
+    shot: {
+      shotCode: shot.shotCode,
+      title: shot.title,
+      durationSeconds: shot.durationSeconds,
+      description: shot.description,
+      actionPitch: shot.actionPitch,
+      cameraPitch: shot.cameraPitch,
+      framing: shot.framing,
+      cameraMovement: shot.cameraMovement,
+    },
+    castAssets: assignedRows.map((r) => ({
+      name: r.assetName,
+      type: r.assetType,
+      description: r.assetDescription,
+    })),
+    motionBeats: beatList.map((b) => ({
+      beatType: b.beatType,
+      label: b.label,
+      description: b.description,
+      timingPosition: b.timingPosition,
+    })),
+    compiledPrompt,
+    shotRefImages: refImages.map((img) => ({
+      imageRole: img.imageRole,
+      label: img.label,
+      sourceFilename: img.sourceFilename,
+    })),
+    castAssetRefImages: castAssetRefImageRows.map((img) => {
+      const asset = assignedRows.find((r) => r.assetId === img.assetId);
+      return {
+        assetName: asset?.assetName ?? "Unknown",
+        assetType: asset?.assetType ?? "other",
+        imageRole: img.imageRole,
+        label: img.label,
+        sourceFilename: img.sourceFilename,
+      };
+    }),
+  });
 
   const hasDetails =
     shot.description || shot.actionPitch || shot.cameraPitch || shot.continuityNotes;
@@ -259,6 +322,10 @@ export default async function ShotDetailPage({ params }: Props) {
               deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
             }
           />
+        </Card>
+
+        <Card title="Shot Prompt Draft">
+          <ShotPromptDraftPanel composed={composedShotPrompt} />
         </Card>
       </div>
 
