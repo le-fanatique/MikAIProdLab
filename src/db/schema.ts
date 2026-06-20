@@ -254,3 +254,36 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
 
 export type ShotReferenceImage = typeof shotReferenceImages.$inferSelect;
 export type NewShotReferenceImage = typeof shotReferenceImages.$inferInsert;
+
+export const generationJobs = sqliteTable(
+  "generation_jobs",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    shotId: int("shot_id")
+      .notNull()
+      .references(() => shots.id, { onDelete: "cascade" }),
+    workflowId: int("workflow_id")
+      .notNull()
+      .references(() => comfyWorkflows.id),
+    status: text("status", {
+      enum: ["pending", "uploading", "queued", "running", "done", "failed", "timeout"],
+    })
+      .notNull()
+      .default("pending"),
+    promptId: text("prompt_id"),
+    clientId: text("client_id"),
+    outputPath: text("output_path"),
+    errorMessage: text("error_message"),
+    startedAt: text("started_at"),
+    completedAt: text("completed_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  }
+);
+
+export type GenerationJob = typeof generationJobs.$inferSelect;
+export type NewGenerationJob = typeof generationJobs.$inferInsert;

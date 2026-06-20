@@ -59,6 +59,37 @@ export async function fetchOllamaModels(
 }
 
 // ---------------------------------------------------------------------------
+// Save ComfyUI settings to DB
+// ---------------------------------------------------------------------------
+
+const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
+
+export async function saveComfySettings(
+  baseUrl: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const trimmed = baseUrl.trim();
+    const cleaned = trimmed.replace(/\/$/, "");
+    const valid =
+      cleaned.startsWith("http://") || cleaned.startsWith("https://");
+    const finalUrl = cleaned && valid ? cleaned : COMFY_BASE_URL_DEFAULT;
+
+    const now = new Date().toISOString();
+    await db
+      .insert(appSettings)
+      .values({ key: "comfyui_base_url", value: finalUrl, updatedAt: now })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: finalUrl, updatedAt: now },
+      });
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save ComfyUI settings. Please try again." };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Test Ollama connection (server-side only — never called from browser fetch)
 // ---------------------------------------------------------------------------
 

@@ -41,6 +41,19 @@ export async function getLLMSettings(): Promise<OllamaSettings> {
   };
 }
 
+export interface ComfySettings {
+  baseUrl: string;
+}
+
+const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
+
+export async function getComfySettings(): Promise<ComfySettings> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const baseUrl = map.get("comfyui_base_url") ?? COMFY_BASE_URL_DEFAULT;
+  return { baseUrl };
+}
+
 /**
  * Returns a LLMConfig ready for callOllama(), or null if model is not set.
  */

@@ -3,7 +3,8 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import OllamaSettingsForm from "@/components/OllamaSettingsForm";
-import { getLLMSettings } from "@/lib/settings";
+import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
+import { getLLMSettings, getComfySettings } from "@/lib/settings";
 import { fetchOllamaModelNames } from "@/lib/llm/ollama";
 import { db } from "@/db";
 import { comfyWorkflows } from "@/db/schema";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const settings = await getLLMSettings();
+  const comfySettings = await getComfySettings();
   const [{ workflowCount }] = await db
     .select({ workflowCount: sql<number>`count(*)` })
     .from(comfyWorkflows);
@@ -82,6 +84,11 @@ export default async function SettingsPage() {
             <span>Select a model from the dropdown above and click Test Connection.</span>
           </li>
         </ol>
+      </Card>
+
+      {/* ComfyUI */}
+      <Card title="ComfyUI" className="mb-6">
+        <ComfyUISettingsForm initialBaseUrl={comfySettings.baseUrl} />
       </Card>
 
       {/* ComfyUI Workflows */}
