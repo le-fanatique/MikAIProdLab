@@ -26,6 +26,8 @@ import {
   buildRuntimeImageOptions,
   mapWorkflowInputs,
 } from "@/lib/comfy/mapWorkflowInputs";
+import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
+import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +186,11 @@ export default async function WorkflowMappingPage({ params }: Props) {
       ? mapWorkflowInputs(parsed.inputs, composedShotPrompt.text, availableImages)
       : [];
 
+  const payloadPreview =
+    parsed !== null
+      ? patchWorkflowPayload(workflow.workflowJson, mappings)
+      : null;
+
   const shotLabel = shot.shotCode
     ? `${shot.shotCode} — ${shot.title}`
     : shot.title;
@@ -243,6 +250,13 @@ export default async function WorkflowMappingPage({ params }: Props) {
             />
           )}
         </Card>
+
+        {/* Payload preview */}
+        {payloadPreview !== null && (
+          <Card title="Payload Preview">
+            <WorkflowPayloadPreviewPanel result={payloadPreview} />
+          </Card>
+        )}
       </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-6">
