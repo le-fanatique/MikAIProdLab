@@ -13,6 +13,7 @@ import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
 import WorkflowOutputKindBadge from "@/components/WorkflowOutputKindBadge";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { deleteComfyWorkflow } from "@/actions/comfyWorkflows";
+import WorkflowInputPreviewPanel from "@/components/WorkflowInputPreviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -152,6 +153,8 @@ export default async function WorkflowDetailPage({ params }: Props) {
           </div>
         )}
       </Card>
+
+      {parsed !== null && <WorkflowInputPreviewPanel inputs={parsed.inputs} />}
 
       {/* Detected Outputs */}
       <Card title="Detected Outputs" className="mb-6">
