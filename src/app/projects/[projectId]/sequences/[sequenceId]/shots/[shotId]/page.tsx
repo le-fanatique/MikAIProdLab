@@ -10,6 +10,8 @@ import CastingPanel from "@/components/CastingPanel";
 import MotionBeatsPanel from "@/components/MotionBeatsPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
+import CompiledPromptPanel from "@/components/CompiledPromptPanel";
+import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteMotionBeat } from "@/actions/motionBeats";
 import { deleteShotReferenceImage } from "@/actions/shotReferenceImages";
@@ -113,6 +115,8 @@ export default async function ShotDetailPage({ params }: Props) {
         ? null
         : movePromptSegmentDown.bind(null, seg.id, shid, sid, pid),
   }));
+
+  const compiledPrompt = compilePromptSegments(segmentList);
 
   const refImages = await db
     .select()
@@ -238,6 +242,10 @@ export default async function ShotDetailPage({ params }: Props) {
             segments={segmentRows}
             addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/segments/new`}
           />
+        </Card>
+
+        <Card title="Compiled Prompt">
+          <CompiledPromptPanel compiled={compiledPrompt} />
         </Card>
 
         <Card title="Reference Images">
