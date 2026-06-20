@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows } from "@/db/schema";
-import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
+import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs } from "@/db/schema";
+import { eq, and, notInArray, inArray, asc, desc, isNotNull } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -13,6 +13,8 @@ import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
 import ShotPromptDraftPanel from "@/components/ShotPromptDraftPanel";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
+import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
+import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
@@ -152,6 +154,31 @@ export default async function ShotDetailPage({ params }: Props) {
     })
     .from(comfyWorkflows)
     .orderBy(desc(comfyWorkflows.updatedAt));
+
+  const rawGeneratedOutputs = await db
+    .select({
+      id: generationJobs.id,
+      outputPath: generationJobs.outputPath,
+      completedAt: generationJobs.completedAt,
+      createdAt: generationJobs.createdAt,
+      workflowName: comfyWorkflows.name,
+      workflowKind: comfyWorkflows.kind,
+    })
+    .from(generationJobs)
+    .leftJoin(comfyWorkflows, eq(generationJobs.workflowId, comfyWorkflows.id))
+    .where(
+      and(
+        eq(generationJobs.shotId, shid),
+        eq(generationJobs.status, "done"),
+        isNotNull(generationJobs.outputPath)
+      )
+    )
+    .orderBy(desc(generationJobs.completedAt), desc(generationJobs.createdAt))
+    .limit(24);
+
+  const generatedOutputItems: GeneratedOutputItem[] = rawGeneratedOutputs
+    .filter((item) => item.outputPath !== null)
+    .map((item) => ({ ...item, outputPath: item.outputPath! }));
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 
@@ -334,6 +361,10 @@ export default async function ShotDetailPage({ params }: Props) {
               deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
             }
           />
+        </Card>
+
+        <Card title="Generated Outputs">
+          <GeneratedOutputsPanel outputs={generatedOutputItems} />
         </Card>
 
         <Card title="Shot Prompt Draft">
