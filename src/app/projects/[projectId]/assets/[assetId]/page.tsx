@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, assets, shotAssets, shots, sequences, sequenceAssets } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { projects, assets, shotAssets, shots, sequences, sequenceAssets, assetReferenceImages } from "@/db/schema";
+import { eq, and, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -8,7 +8,9 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import DeleteButton from "@/components/DeleteButton";
+import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import { deleteAsset } from "@/actions/assets";
+import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
@@ -61,6 +63,12 @@ export default async function AssetDetailPage({ params }: Props) {
     .where(and(eq(shotAssets.assetId, aid), eq(sequences.projectId, pid)));
 
   const hasAppearances = sequenceAppearances.length > 0 || shotAppearances.length > 0;
+
+  const refImages = await db
+    .select()
+    .from(assetReferenceImages)
+    .where(eq(assetReferenceImages.assetId, aid))
+    .orderBy(asc(assetReferenceImages.orderIndex));
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
 
@@ -161,6 +169,19 @@ export default async function AssetDetailPage({ params }: Props) {
           </div>
         </Card>
       )}
+
+      <Card title="Reference Images" className="mt-4">
+        <ReferenceImagesPanel
+          images={refImages}
+          addHref={`/projects/${pid}/assets/${aid}/reference-images/new`}
+          getEditHref={(imageId) =>
+            `/projects/${pid}/assets/${aid}/reference-images/${imageId}/edit`
+          }
+          getDeleteAction={(imageId) =>
+            deleteAssetReferenceImage.bind(null, imageId, aid, pid)
+          }
+        />
+      </Card>
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages } from "@/db/schema";
 import { eq, and, notInArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -9,8 +9,10 @@ import Card from "@/components/Card";
 import CastingPanel from "@/components/CastingPanel";
 import MotionBeatsPanel from "@/components/MotionBeatsPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
+import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteMotionBeat } from "@/actions/motionBeats";
+import { deleteShotReferenceImage } from "@/actions/shotReferenceImages";
 import {
   deletePromptSegment,
   movePromptSegmentUp,
@@ -111,6 +113,12 @@ export default async function ShotDetailPage({ params }: Props) {
         ? null
         : movePromptSegmentDown.bind(null, seg.id, shid, sid, pid),
   }));
+
+  const refImages = await db
+    .select()
+    .from(shotReferenceImages)
+    .where(eq(shotReferenceImages.shotId, shid))
+    .orderBy(asc(shotReferenceImages.orderIndex));
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 
@@ -229,6 +237,19 @@ export default async function ShotDetailPage({ params }: Props) {
           <PromptSegmentsPanel
             segments={segmentRows}
             addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/segments/new`}
+          />
+        </Card>
+
+        <Card title="Reference Images">
+          <ReferenceImagesPanel
+            images={refImages}
+            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
+            getEditHref={(imageId) =>
+              `/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${imageId}/edit`
+            }
+            getDeleteAction={(imageId) =>
+              deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
+            }
           />
         </Card>
       </div>

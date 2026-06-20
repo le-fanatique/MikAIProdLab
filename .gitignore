@@ -40,6 +40,9 @@ yarn-error.log*
 *.db-shm
 *.db-wal
 
+# user uploads — local only, not committed
+/public/uploads/
+
 # vercel
 .vercel
 

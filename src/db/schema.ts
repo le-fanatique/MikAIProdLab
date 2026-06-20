@@ -206,3 +206,51 @@ export const comfyWorkflows = sqliteTable("comfy_workflows", {
 
 export type ComfyWorkflow = typeof comfyWorkflows.$inferSelect;
 export type NewComfyWorkflow = typeof comfyWorkflows.$inferInsert;
+
+export const assetReferenceImages = sqliteTable("asset_reference_images", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  assetId: int("asset_id")
+    .notNull()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  orderIndex: int("order_index").notNull().default(0),
+  imagePath: text("image_path").notNull(),
+  sourceFilename: text("source_filename"),
+  label: text("label"),
+  imageRole: text("image_role", {
+    enum: ["reference", "keyframe", "style", "lighting", "character", "environment", "other"],
+  }),
+  notes: text("notes"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type AssetReferenceImage = typeof assetReferenceImages.$inferSelect;
+export type NewAssetReferenceImage = typeof assetReferenceImages.$inferInsert;
+
+export const shotReferenceImages = sqliteTable("shot_reference_images", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  shotId: int("shot_id")
+    .notNull()
+    .references(() => shots.id, { onDelete: "cascade" }),
+  orderIndex: int("order_index").notNull().default(0),
+  imagePath: text("image_path").notNull(),
+  sourceFilename: text("source_filename"),
+  label: text("label"),
+  imageRole: text("image_role", {
+    enum: ["reference", "keyframe", "style", "lighting", "character", "environment", "other"],
+  }),
+  notes: text("notes"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type ShotReferenceImage = typeof shotReferenceImages.$inferSelect;
+export type NewShotReferenceImage = typeof shotReferenceImages.$inferInsert;
