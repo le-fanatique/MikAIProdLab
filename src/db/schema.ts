@@ -188,3 +188,21 @@ export type MotionBeat = typeof motionBeats.$inferSelect;
 export type NewMotionBeat = typeof motionBeats.$inferInsert;
 export type PromptSegment = typeof promptSegments.$inferSelect;
 export type NewPromptSegment = typeof promptSegments.$inferInsert;
+
+export const comfyWorkflows = sqliteTable("comfy_workflows", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  kind: text("kind", { enum: ["image", "video"] }).notNull(),
+  description: text("description"),
+  workflowJson: text("workflow_json").notNull(),
+  sourceFilename: text("source_filename"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type ComfyWorkflow = typeof comfyWorkflows.$inferSelect;
+export type NewComfyWorkflow = typeof comfyWorkflows.$inferInsert;

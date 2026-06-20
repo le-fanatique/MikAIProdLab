@@ -38,7 +38,7 @@ export default function Sidebar({ tree }: Props) {
   const activeSequenceId = segments[4] ? parseInt(segments[4]) : null;
   const activeShotId = segments[6] ? parseInt(segments[6]) : null;
 
-  const isSettingsActive = pathname === "/settings";
+  const isSettingsActive = pathname.startsWith("/settings");
 
   return (
     <aside className="w-56 shrink-0 h-screen overflow-y-auto bg-[#141618] border-r border-[#232629] flex flex-col">

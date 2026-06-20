@@ -1,14 +1,21 @@
+import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import { getLLMSettings } from "@/lib/settings";
 import { fetchOllamaModelNames } from "@/lib/llm/ollama";
+import { db } from "@/db";
+import { comfyWorkflows } from "@/db/schema";
+import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const settings = await getLLMSettings();
+  const [{ workflowCount }] = await db
+    .select({ workflowCount: sql<number>`count(*)` })
+    .from(comfyWorkflows);
 
   let initialModels: string[] = [];
   let initialModelsError: string | null = null;
@@ -75,6 +82,22 @@ export default async function SettingsPage() {
             <span>Select a model from the dropdown above and click Test Connection.</span>
           </li>
         </ol>
+      </Card>
+
+      {/* ComfyUI Workflows */}
+      <Card title="ComfyUI Workflows" className="mb-6">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-[#a4abb2]">
+            <span className="text-[#e7e9ec] font-medium">{workflowCount}</span>{" "}
+            {workflowCount === 1 ? "workflow saved" : "workflows saved"}
+          </p>
+          <Link
+            href="/settings/workflows"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Manage Workflows
+          </Link>
+        </div>
       </Card>
 
       {/* Active integrations */}
