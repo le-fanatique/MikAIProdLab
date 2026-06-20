@@ -74,7 +74,7 @@ export default async function NewAssetReferenceImagePage({ params, searchParams 
         </div>
       )}
 
-      <form action={action} className="flex flex-col gap-5 max-w-lg" encType="multipart/form-data">
+      <form action={action} className="flex flex-col gap-5 max-w-lg">
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>
             Image File <span className="text-[#cf7b6b] ml-1">*</span>

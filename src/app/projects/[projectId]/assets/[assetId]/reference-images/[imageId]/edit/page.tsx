@@ -89,7 +89,7 @@ export default async function EditAssetReferenceImagePage({ params, searchParams
         />
       </div>
 
-      <form action={action} className="flex flex-col gap-5 max-w-lg" encType="multipart/form-data">
+      <form action={action} className="flex flex-col gap-5 max-w-lg">
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Replace Image File</label>
           <input
