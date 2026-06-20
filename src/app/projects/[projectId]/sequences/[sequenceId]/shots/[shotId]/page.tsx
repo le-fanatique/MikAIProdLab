@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages, assetReferenceImages } from "@/db/schema";
-import { eq, and, notInArray, inArray, asc } from "drizzle-orm";
+import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows } from "@/db/schema";
+import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -12,6 +12,7 @@ import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
 import ShotPromptDraftPanel from "@/components/ShotPromptDraftPanel";
+import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
@@ -140,6 +141,17 @@ export default async function ShotDetailPage({ params }: Props) {
     .from(shotReferenceImages)
     .where(eq(shotReferenceImages.shotId, shid))
     .orderBy(asc(shotReferenceImages.orderIndex));
+
+  const savedWorkflows = await db
+    .select({
+      id: comfyWorkflows.id,
+      name: comfyWorkflows.name,
+      kind: comfyWorkflows.kind,
+      description: comfyWorkflows.description,
+      updatedAt: comfyWorkflows.updatedAt,
+    })
+    .from(comfyWorkflows)
+    .orderBy(desc(comfyWorkflows.updatedAt));
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 
@@ -326,6 +338,60 @@ export default async function ShotDetailPage({ params }: Props) {
 
         <Card title="Shot Prompt Draft">
           <ShotPromptDraftPanel composed={composedShotPrompt} />
+        </Card>
+
+        <Card title="Workflow Mapping">
+          {savedWorkflows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[#2c3035] px-6 py-10 text-center">
+              <p className="text-[#a4abb2] text-sm font-medium mb-1">No workflows saved.</p>
+              <p className="text-[#6e767d] text-xs mt-1">
+                Upload a ComfyUI API workflow in Settings before mapping shot inputs.
+              </p>
+              <div className="mt-4">
+                <Link
+                  href="/settings/workflows"
+                  className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                >
+                  Manage Workflows
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {savedWorkflows.map((wf) => (
+                <div
+                  key={wf.id}
+                  className="flex items-start justify-between gap-4 border-b border-[#232629] last:border-0 pb-3 last:pb-0"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <WorkflowKindBadge kind={wf.kind} />
+                      <span className="text-sm font-medium text-[#e7e9ec] truncate">
+                        {wf.name}
+                      </span>
+                    </div>
+                    {wf.description && (
+                      <p className="text-xs text-[#a4abb2]">{wf.description}</p>
+                    )}
+                  </div>
+                  <Link
+                    href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map`}
+                    className="shrink-0 text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                  >
+                    Map Inputs
+                  </Link>
+                </div>
+              ))}
+              <div className="pt-1">
+                <Link
+                  href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
+                  className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                >
+                  View All Workflows →
+                </Link>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 
