@@ -96,7 +96,7 @@ export async function queueComfyPrompt(args: {
     prompt: args.workflow,
   });
 
-  const response = await fetch(`${baseUrl}/queue/prompt`, {
+  const response = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
@@ -105,7 +105,7 @@ export async function queueComfyPrompt(args: {
   if (!response.ok) {
     const excerpt = await readResponseText(response);
     throw new Error(
-      `ComfyUI /queue/prompt responded ${response.status}: ${excerpt}`
+      `ComfyUI /prompt responded ${response.status}: ${excerpt}`
     );
   }
 

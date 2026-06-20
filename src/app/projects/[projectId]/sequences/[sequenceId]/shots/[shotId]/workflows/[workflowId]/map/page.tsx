@@ -28,6 +28,8 @@ import {
 } from "@/lib/comfy/mapWorkflowInputs";
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
+import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
+import { runWorkflowGenerationFromForm } from "@/actions/generation";
 
 export const dynamic = "force-dynamic";
 
@@ -38,10 +40,12 @@ type Props = {
     shotId: string;
     workflowId: string;
   }>;
+  searchParams: Promise<{ jobId?: string; generationError?: string }>;
 };
 
-export default async function WorkflowMappingPage({ params }: Props) {
+export default async function WorkflowMappingPage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId, workflowId } = await params;
+  const { jobId: jobIdParam, generationError } = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -195,6 +199,10 @@ export default async function WorkflowMappingPage({ params }: Props) {
     ? `${shot.shotCode} — ${shot.title}`
     : shot.title;
 
+  const returnTo = `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`;
+  const activeJobId =
+    jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
+
   return (
     <div>
       <Breadcrumb
@@ -255,6 +263,45 @@ export default async function WorkflowMappingPage({ params }: Props) {
         {payloadPreview !== null && (
           <Card title="Payload Preview">
             <WorkflowPayloadPreviewPanel result={payloadPreview} />
+          </Card>
+        )}
+
+        {/* Generate */}
+        {payloadPreview !== null && (
+          <Card title="Generate">
+            <div className="flex flex-col gap-4">
+              <p className="text-xs text-[#6e767d]">
+                Queue this workflow in ComfyUI using the payload preview above.
+              </p>
+
+              {generationError && (
+                <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                  <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                    {generationError}
+                  </p>
+                </div>
+              )}
+
+              <form action={runWorkflowGenerationFromForm}>
+                <input type="hidden" name="projectId" value={pid} />
+                <input type="hidden" name="sequenceId" value={sid} />
+                <input type="hidden" name="shotId" value={shid} />
+                <input type="hidden" name="workflowId" value={wid} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <button
+                  type="submit"
+                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                >
+                  Generate
+                </button>
+              </form>
+
+              {activeJobId !== null && (
+                <div className="border-t border-[#232629] pt-4">
+                  <GenerationJobStatusPanel jobId={activeJobId} />
+                </div>
+              )}
+            </div>
           </Card>
         )}
       </div>

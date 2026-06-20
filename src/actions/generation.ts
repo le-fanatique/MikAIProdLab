@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
   generationJobs,
@@ -294,5 +295,39 @@ export async function runWorkflowGeneration(args: {
       err instanceof Error ? err.message : "Unknown error during generation.";
     await markJobFailed(jobId, message);
     return { ok: false, error: message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// runWorkflowGenerationFromForm — form-compatible wrapper with redirect
+// ---------------------------------------------------------------------------
+
+export async function runWorkflowGenerationFromForm(
+  formData: FormData
+): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const shotId = parseInt(formData.get("shotId") as string, 10);
+  const workflowId = parseInt(formData.get("workflowId") as string, 10);
+  const returnTo = (formData.get("returnTo") as string | null) ?? "";
+
+  // Build safe return URL base (never allow empty — fall back to home)
+  const base = returnTo.trim() || "/";
+
+  const result = await runWorkflowGeneration({
+    projectId,
+    sequenceId,
+    shotId,
+    workflowId,
+  });
+
+  if (result.ok) {
+    const sep = base.includes("?") ? "&" : "?";
+    redirect(`${base}${sep}jobId=${result.jobId}`);
+  } else {
+    const sep = base.includes("?") ? "&" : "?";
+    redirect(
+      `${base}${sep}generationError=${encodeURIComponent(result.error)}`
+    );
   }
 }
