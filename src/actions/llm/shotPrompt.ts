@@ -4,8 +4,23 @@ import { db } from "@/db";
 import { projects, sequences, shots, assets, shotAssets, shotReferenceImages } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { callOllama } from "@/lib/llm/ollama";
-import { buildShotPromptFromContextPrompt } from "@/lib/prompts/shot-prompt-from-context";
+import {
+  buildShotPromptFromContextPrompt,
+  type ShotPromptAssistMode,
+} from "@/lib/prompts/shot-prompt-from-context";
 import { getLLMConfig } from "@/lib/settings";
+
+const VALID_MODES: readonly ShotPromptAssistMode[] = [
+  "generate",
+  "enhance",
+  "rewrite",
+  "shorten",
+  "expand",
+];
+
+function isValidMode(value: string): value is ShotPromptAssistMode {
+  return (VALID_MODES as readonly string[]).includes(value);
+}
 
 function extractCodeFence(raw: string): string {
   const fence = raw.trim().match(/```(?:json)?\s*([\s\S]+?)\s*```/);
@@ -42,6 +57,12 @@ export async function generateShotPromptDraft(
       return { ok: false, error: "Invalid request." };
     }
 
+    const rawMode = (formData.get("mode") as string | null) ?? "generate";
+    if (!isValidMode(rawMode)) {
+      return { ok: false, error: "Invalid assist mode." };
+    }
+    const mode: ShotPromptAssistMode = rawMode;
+
     const config = await getLLMConfig();
     if (!config) {
       return { ok: false, error: "LLM not configured. Go to Settings to set up Ollama." };
@@ -58,6 +79,10 @@ export async function generateShotPromptDraft(
     const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
     if (!shot || shot.sequenceId !== sequenceId) {
       return { ok: false, error: "Shot not found." };
+    }
+
+    if (mode !== "generate" && !shot.shotPrompt?.trim()) {
+      return { ok: false, error: "A Shot Prompt is required for this assist mode." };
     }
 
     const castRows = await db
@@ -101,6 +126,7 @@ export async function generateShotPromptDraft(
       currentShotPrompt: shot.shotPrompt,
       castSummary,
       referenceSummary,
+      assistMode: mode,
     });
 
     const raw = await callOllama(llmPrompt, config);

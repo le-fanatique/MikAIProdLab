@@ -70,7 +70,7 @@ export default function ShotPromptForm({
         projectId={projectId}
         sequenceId={sequenceId}
         shotId={shotId}
-        hasExistingPrompt={Boolean(initialShotPrompt?.trim())}
+        currentShotPrompt={initialShotPrompt}
         returnTo={returnTo}
       />
     </div>
