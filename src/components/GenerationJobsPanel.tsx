@@ -1,6 +1,7 @@
 import Link from "next/link";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import EmptyState from "@/components/EmptyState";
+import { retryGenerationJob } from "@/actions/generationJobs";
 
 export type GenerationJobItem = {
   id: number;
@@ -21,6 +22,7 @@ type Props = {
   sequenceId: number;
   shotId: number;
   jobs: GenerationJobItem[];
+  retryError?: string | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -81,11 +83,17 @@ export default function GenerationJobsPanel({
   sequenceId,
   shotId,
   jobs,
+  retryError,
 }: Props) {
   const shotPath = `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`;
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Retry error feedback */}
+      {retryError && (
+        <p className="text-xs text-[#cf7b6b]">{retryError}</p>
+      )}
+
       {/* Refresh link */}
       <div className="flex justify-end">
         <Link
@@ -147,13 +155,35 @@ export default function GenerationJobsPanel({
                     </div>
                   </div>
 
-                  {/* Open Status link */}
-                  <Link
-                    href={statusMapHref}
-                    className="shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors whitespace-nowrap"
-                  >
-                    Open Status ↗
-                  </Link>
+                  {/* Open Status link + Retry */}
+                  <div className="shrink-0 flex flex-col items-end gap-1.5">
+                    <Link
+                      href={statusMapHref}
+                      className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors whitespace-nowrap"
+                    >
+                      Open Status ↗
+                    </Link>
+
+                    {(job.status === "failed" || job.status === "timeout") &&
+                      Number.isFinite(projectId) &&
+                      Number.isFinite(sequenceId) &&
+                      Number.isFinite(shotId) &&
+                      Number.isFinite(job.id) && (
+                      <form action={retryGenerationJob}>
+                        <input type="hidden" name="projectId" value={String(projectId)} />
+                        <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+                        <input type="hidden" name="shotId" value={String(shotId)} />
+                        <input type="hidden" name="jobId" value={String(job.id)} />
+                        <input type="hidden" name="returnTo" value={shotPath} />
+                        <button
+                          type="submit"
+                          className="text-[10px] text-[#a4abb2] hover:text-[#e7e9ec] transition-colors whitespace-nowrap"
+                        >
+                          Retry ↺
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
 
                 {/* Error message */}
@@ -196,6 +226,12 @@ export default function GenerationJobsPanel({
             );
           })}
         </div>
+      )}
+
+      {jobs.some((j) => j.status === "failed" || j.status === "timeout") && (
+        <p className="text-[10px] text-[#4b5158] pt-1">
+          Retry uses the current shot and workflow state.
+        </p>
       )}
     </div>
   );
