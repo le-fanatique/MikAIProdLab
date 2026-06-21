@@ -1,64 +1,76 @@
 import type { LLMPrompt } from "@/types/llm";
 
-interface ShotsFromSequenceContext {
+export type GeneratedSequenceShot = {
   title: string;
-  summary: string | null;
-  description: string | null;
-  narrativePurpose: string | null;
-  mood: string | null;
-  locationHint: string | null;
+  shot_code?: string | null;
+  description?: string | null;
+  duration_seconds?: number | null;
+  action_pitch?: string | null;
+  camera_pitch?: string | null;
+  framing?: string | null;
+  camera_movement?: string | null;
+  shot_prompt?: string | null;
+};
+
+interface BuildShotsFromSequenceInput {
+  project: {
+    name: string;
+    pitch?: string | null;
+    story?: string | null;
+  };
+  sequence: {
+    title: string;
+    summary?: string | null;
+    description?: string | null;
+    narrativePurpose?: string | null;
+    mood?: string | null;
+    locationHint?: string | null;
+  };
   targetCount?: number;
 }
 
-/**
- * Builds the prompt for "Generate Shots from Sequence".
- * Output must conform to GenerateShotsResult: { shots: GeneratedShot[] }
- */
-export function buildShotsFromSequencePrompt(sequence: ShotsFromSequenceContext): LLMPrompt {
-  const count = sequence.targetCount ?? 6;
+export function buildShotsFromSequencePrompt(input: BuildShotsFromSequenceInput): LLMPrompt {
+  const count = input.targetCount ?? 6;
+
+  const projectLines: string[] = [];
+  projectLines.push(`Project: ${input.project.name}`);
+  if (input.project.pitch?.trim()) projectLines.push(`Pitch: ${input.project.pitch}`);
+  if (input.project.story?.trim()) projectLines.push(`Story: ${input.project.story.slice(0, 400)}`);
 
   return {
     system: `You are a professional cinematographer and storyboard supervisor.
-Your task is to break a production sequence into ${count} individual shots.
+Your task is to break a production sequence into exactly ${count} individual shots.
 Each shot is a single uninterrupted camera take.
 Always respond with a valid JSON object matching exactly this schema:
 {
   "shots": [
     {
-      "shot_code": "string or null",
-      "title": "string",
-      "description": "string or null",
-      "duration_seconds": number or null,
-      "action_pitch": "string or null",
-      "camera_pitch": "string or null",
-      "framing": "string or null",
-      "camera_movement": "string or null",
-      "continuity_in": "string or null",
-      "continuity_out": "string or null",
-      "continuity_notes": "string or null",
-      "order_index": number (starting at 0)
+      "title": "string — brief label for the shot",
+      "shot_code": "string or null — production code e.g. SH010, SH020",
+      "description": "string or null — narrative description of the shot",
+      "duration_seconds": number or null — estimated duration 3-8s typical,
+      "action_pitch": "string or null — what happens on screen",
+      "camera_pitch": "string or null — camera angle, lens, position",
+      "framing": "string or null — CU / MCU / MS / WS / ECU / OTS / POV",
+      "camera_movement": "string or null — static / pan / tilt / tracking / dolly / handheld",
+      "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
   ]
 }
 No markdown. No explanation. Only the JSON object.
-Guidelines:
-- "shot_code": production code, e.g. "SQ01_SH010" (null if unknown)
-- "title": brief label for the shot (e.g. "Hero enters frame")
-- "action_pitch": what happens on screen during this shot
-- "camera_pitch": camera angle, lens choice, position notes
-- "framing": standard framing code — CU, MCU, MS, WS, ECU, OTS, POV, etc.
-- "camera_movement": static / pan / tilt / tracking / dolly / handheld / crane / etc.
-- "continuity_in": how this shot connects from the previous one
-- "continuity_out": how this shot connects to the next one
-- "duration_seconds": estimated duration in seconds (null if unknown)`,
+The array must contain exactly ${count} shots.
+shot_prompt must be a dense, cinematic visual description suitable for AI image/video generation. No labels, no scene references — only visual content.
+Respect the narrative arc of the sequence. Do not invent characters not mentioned in the story.`,
 
-    user: `Sequence title: ${sequence.title}
-Summary: ${sequence.summary ?? "Not provided"}
-Description: ${sequence.description ?? "Not provided"}
-Narrative purpose: ${sequence.narrativePurpose ?? "Not provided"}
-Mood: ${sequence.mood ?? "Not provided"}
-Location: ${sequence.locationHint ?? "Not provided"}
+    user: `${projectLines.join("\n")}
 
-Break this sequence into ${count} individual shots.`,
+Sequence: ${input.sequence.title}
+Summary: ${input.sequence.summary ?? "Not provided"}
+Description: ${input.sequence.description ?? "Not provided"}
+Narrative purpose: ${input.sequence.narrativePurpose ?? "Not provided"}
+Mood: ${input.sequence.mood ?? "Not provided"}
+Location: ${input.sequence.locationHint ?? "Not provided"}
+
+Break this sequence into exactly ${count} individual shots. Fill all fields as precisely as possible.`,
   };
 }

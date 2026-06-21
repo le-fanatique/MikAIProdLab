@@ -12,11 +12,16 @@ import SequenceAssetsPanel from "@/components/SequenceAssetsPanel";
 import { deleteSequence } from "@/actions/sequences";
 import { deleteShot } from "@/actions/shots";
 import { assignAssetToSequence, removeAssetFromSequence } from "@/actions/sequenceAssets";
+import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPanel";
 
-type Props = { params: Promise<{ projectId: string; sequenceId: string }> };
+type Props = {
+  params: Promise<{ projectId: string; sequenceId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
-export default async function SequencePage({ params }: Props) {
+export default async function SequencePage({ params, searchParams }: Props) {
   const { projectId, sequenceId } = await params;
+  const resolvedSearchParams = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
 
@@ -59,6 +64,13 @@ export default async function SequencePage({ params }: Props) {
           .from(assets)
           .where(eq(assets.projectId, pid))
           .orderBy(asc(assets.orderIndex));
+
+  const rawCreatedCount = resolvedSearchParams["shotsCreated"];
+  const createdCountStr = typeof rawCreatedCount === "string" ? rawCreatedCount : Array.isArray(rawCreatedCount) ? rawCreatedCount[0] : undefined;
+  const createdCount = createdCountStr ? parseInt(createdCountStr, 10) : null;
+
+  const rawCreateError = resolvedSearchParams["shotsCreateError"];
+  const createError = typeof rawCreateError === "string" ? rawCreateError : Array.isArray(rawCreateError) ? rawCreateError[0] : null;
 
   const assignAction = assignAssetToSequence.bind(null, sid, pid);
 
@@ -149,6 +161,17 @@ export default async function SequencePage({ params }: Props) {
         <p className="text-xs text-[#4b5158] mt-3">
           Assets listed here describe the sequence-level cast. They are not automatically added to individual shots.
         </p>
+      </Card>
+
+      {/* LLM Assist — generate shots */}
+      <Card title="LLM Assist" className="mb-6">
+        <SequenceShotsLLMAssistPanel
+          projectId={pid}
+          sequenceId={sid}
+          returnTo={`/projects/${pid}/sequences/${sid}`}
+          createdCount={Number.isFinite(createdCount) ? createdCount : null}
+          createError={createError ?? null}
+        />
       </Card>
 
       {/* Shots header */}
