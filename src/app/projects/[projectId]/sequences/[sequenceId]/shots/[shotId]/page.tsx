@@ -29,7 +29,7 @@ import {
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
-  searchParams: Promise<{ attachError?: string; attachedReference?: string; retryError?: string }>;
+  searchParams: Promise<{ attachError?: string; attachedReference?: string; retryError?: string; deleteError?: string; deleteSuccess?: string }>;
 };
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -45,7 +45,7 @@ function Field({ label, value }: { label: string; value: string }) {
 
 export default async function ShotDetailPage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId } = await params;
-  const { attachError, attachedReference, retryError } = await searchParams;
+  const { attachError, attachedReference, retryError, deleteError, deleteSuccess } = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -404,6 +404,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             shotId={shid}
             jobs={generationJobRows}
             retryError={retryError ?? null}
+            deleteError={deleteError ?? null}
+            deleteSuccess={deleteSuccess ?? null}
           />
         </Card>
 
