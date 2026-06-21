@@ -7,7 +7,6 @@ import {
   comfyWorkflows,
   shotAssets,
   assets,
-  motionBeats,
   promptSegments,
   shotReferenceImages,
   assetReferenceImages,
@@ -21,7 +20,6 @@ import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
-import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import {
   buildRuntimeImageOptions,
   mapWorkflowInputs,
@@ -30,7 +28,9 @@ import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
+import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
 import { runWorkflowGenerationFromForm } from "@/actions/generation";
+import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 
 export const dynamic = "force-dynamic";
 
@@ -99,13 +99,6 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const assignedAssetIds = assignedRows.map((r) => r.assetId);
 
-  // Motion beats
-  const beatList = await db
-    .select()
-    .from(motionBeats)
-    .where(eq(motionBeats.shotId, shid))
-    .orderBy(asc(motionBeats.orderIndex));
-
   // Prompt segments
   const segmentList = await db
     .select()
@@ -146,51 +139,12 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   // Derived data
   const parsed = parseComfyWorkflow(workflow.workflowJson);
   const compiledPrompt = compilePromptSegments(segmentList);
-
-  const composedShotPrompt = composeShotPrompt({
-    project: { name: project.name },
-    sequence: {
-      title: sequence.title,
-      mood: sequence.mood,
-      locationHint: sequence.locationHint,
-    },
-    shot: {
-      shotCode: shot.shotCode,
-      title: shot.title,
-      durationSeconds: shot.durationSeconds,
-      description: shot.description,
-      actionPitch: shot.actionPitch,
-      cameraPitch: shot.cameraPitch,
-      framing: shot.framing,
-      cameraMovement: shot.cameraMovement,
-    },
-    castAssets: assignedRows.map((r) => ({
-      name: r.assetName,
-      type: r.assetType,
-      description: r.assetDescription,
-    })),
-    motionBeats: beatList.map((b) => ({
-      beatType: b.beatType,
-      label: b.label,
-      description: b.description,
-      timingPosition: b.timingPosition,
-    })),
-    compiledPrompt,
-    shotRefImages: shotRefImages.map((img) => ({
-      imageRole: img.imageRole,
-      label: img.label,
-      sourceFilename: img.sourceFilename,
-    })),
-    castAssetRefImages: castAssetRefImages.map((img) => {
-      const asset = assignedRows.find((r) => r.assetId === img.assetId);
-      return {
-        assetName: asset?.assetName ?? "Unknown",
-        assetType: asset?.assetType ?? "other",
-        imageRole: img.imageRole,
-        label: img.label,
-        sourceFilename: img.sourceFilename,
-      };
-    }),
+  const hasRealPromptSegments = segmentList.length > 0;
+  const compiledShotPrompt = compileShotPrompt({
+    kind: workflow.kind as ShotPromptCompileKind,
+    shotPrompt: shot.shotPrompt,
+    compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
+    hasPromptSegments: hasRealPromptSegments,
   });
 
   const availableImages = buildRuntimeImageOptions(
@@ -205,7 +159,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const mappings =
     parsed !== null
-      ? mapWorkflowInputs(parsed.inputs, shot.shotPrompt ?? "", availableImages)
+      ? mapWorkflowInputs(parsed.inputs, compiledShotPrompt.text, availableImages)
       : [];
 
   const payloadPreview =
@@ -298,21 +252,23 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </Card>
         )}
 
-        {/* Shot Prompt empty warning */}
-        {(!shot.shotPrompt || !shot.shotPrompt.trim()) && (
-          <div className="rounded border border-[#3a2c1a] bg-[#1a150a] px-3 py-2.5 flex flex-col gap-1.5">
-            <p className="text-xs font-medium text-[#b89a5a]">Shot Prompt is empty</p>
-            <p className="text-xs text-[#b89a5a] leading-relaxed">
-              Text Prompt inputs will receive an empty value. Add a Shot Prompt in the shot detail or continue intentionally.
-            </p>
-            <Link
-              href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
-              className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-            >
-              Edit Shot Prompt →
-            </Link>
-          </div>
-        )}
+        {/* Compiled Prompt */}
+        <Card title="Compiled Prompt">
+          <CompiledShotPromptPreviewPanel
+            compiled={compiledShotPrompt}
+            workflowKind={workflow.kind}
+          />
+          {!compiledShotPrompt.hasShotPrompt && (
+            <div className="mt-3 pt-3 border-t border-[#1e2124]">
+              <Link
+                href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+              >
+                Edit Shot Prompt →
+              </Link>
+            </div>
+          )}
+        </Card>
 
         {/* Payload preview */}
         {payloadPreview !== null && (

@@ -13,7 +13,6 @@ import {
   comfyWorkflows,
   assets,
   shotAssets,
-  motionBeats,
   promptSegments,
   shotReferenceImages,
   assetReferenceImages,
@@ -21,7 +20,7 @@ import {
 import { eq, asc, inArray, sql } from "drizzle-orm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
-import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
+import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import {
   buildRuntimeImageOptions,
   mapWorkflowInputs,
@@ -187,12 +186,6 @@ export async function runWorkflowGeneration(args: {
 
   const assignedAssetIds = assignedRows.map((r) => r.assetId);
 
-  const beatList = await db
-    .select()
-    .from(motionBeats)
-    .where(eq(motionBeats.shotId, shotId))
-    .orderBy(asc(motionBeats.orderIndex));
-
   const segmentList = await db
     .select()
     .from(promptSegments)
@@ -232,51 +225,12 @@ export async function runWorkflowGeneration(args: {
 
   // --- 5. Recompute prompt + mappings + payload (mirrors map page) ---
   const compiledPrompt = compilePromptSegments(segmentList);
-
-  const composedShotPrompt = composeShotPrompt({
-    project: { name: project.name },
-    sequence: {
-      title: sequence.title,
-      mood: sequence.mood,
-      locationHint: sequence.locationHint,
-    },
-    shot: {
-      shotCode: shot.shotCode,
-      title: shot.title,
-      durationSeconds: shot.durationSeconds,
-      description: shot.description,
-      actionPitch: shot.actionPitch,
-      cameraPitch: shot.cameraPitch,
-      framing: shot.framing,
-      cameraMovement: shot.cameraMovement,
-    },
-    castAssets: assignedRows.map((r) => ({
-      name: r.assetName,
-      type: r.assetType,
-      description: r.assetDescription,
-    })),
-    motionBeats: beatList.map((b) => ({
-      beatType: b.beatType,
-      label: b.label,
-      description: b.description,
-      timingPosition: b.timingPosition,
-    })),
-    compiledPrompt,
-    shotRefImages: shotRefImages.map((img) => ({
-      imageRole: img.imageRole,
-      label: img.label,
-      sourceFilename: img.sourceFilename,
-    })),
-    castAssetRefImages: castAssetRefImages.map((img) => {
-      const asset = assignedRows.find((r) => r.assetId === img.assetId);
-      return {
-        assetName: asset?.assetName ?? "Unknown",
-        assetType: asset?.assetType ?? "other",
-        imageRole: img.imageRole,
-        label: img.label,
-        sourceFilename: img.sourceFilename,
-      };
-    }),
+  const hasRealPromptSegments = segmentList.length > 0;
+  const compiledShotPrompt = compileShotPrompt({
+    kind: workflow.kind as ShotPromptCompileKind,
+    shotPrompt: shot.shotPrompt,
+    compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
+    hasPromptSegments: hasRealPromptSegments,
   });
 
   const availableImages = buildRuntimeImageOptions(
@@ -291,7 +245,7 @@ export async function runWorkflowGeneration(args: {
 
   const mappings = mapWorkflowInputs(
     parsed.inputs,
-    shot.shotPrompt ?? "",
+    compiledShotPrompt.text,
     availableImages
   );
 
