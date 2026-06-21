@@ -49,6 +49,10 @@ function statusClass(status: string): string {
   return "text-[#6e767d]";
 }
 
+function isTerminalErrorStatus(status: string): boolean {
+  return status === "failed" || status === "timeout";
+}
+
 const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
 const VIDEO_EXTS = new Set(["mp4", "webm", "mov"]);
 
@@ -215,10 +219,19 @@ export default function GenerationJobsPanel({
                   </div>
                 </div>
 
-                {/* Error message */}
-                {job.errorMessage && (
+                {/* Error or warning message */}
+                {job.errorMessage && isTerminalErrorStatus(job.status) && (
                   <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-2.5 py-1.5">
+                    <p className="text-[10px] font-medium text-[#cf7b6b] mb-0.5">Error</p>
                     <p className="text-[10px] text-[#cf7b6b] leading-relaxed">
+                      {job.errorMessage}
+                    </p>
+                  </div>
+                )}
+                {job.errorMessage && !isTerminalErrorStatus(job.status) && (
+                  <div className="rounded border border-[#3a2c1a] bg-[#1a150a] px-2.5 py-1.5">
+                    <p className="text-[10px] font-medium text-[#b89a5a] mb-0.5">ComfyUI warning</p>
+                    <p className="text-[10px] text-[#b89a5a] leading-relaxed">
                       {job.errorMessage}
                     </p>
                   </div>

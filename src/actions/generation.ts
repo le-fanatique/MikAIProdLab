@@ -42,6 +42,61 @@ export type RunWorkflowGenerationResult =
 // Helpers
 // ---------------------------------------------------------------------------
 
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function summarizeComfyNodeErrors(nodeErrors: unknown): string | null {
+  if (nodeErrors === null || nodeErrors === undefined) return null;
+
+  if (typeof nodeErrors === "object" && !Array.isArray(nodeErrors)) {
+    const entries = Object.entries(nodeErrors as Record<string, unknown>);
+    if (entries.length === 0) return null;
+
+    const parts: string[] = [];
+    for (const [nodeId, details] of entries.slice(0, 3)) {
+      if (typeof details === "object" && details !== null && !Array.isArray(details)) {
+        const d = details as Record<string, unknown>;
+        const classType = typeof d["class_type"] === "string" ? d["class_type"] : null;
+        const errors = Array.isArray(d["errors"]) ? d["errors"] : null;
+        const message = typeof d["message"] === "string" ? d["message"] : null;
+
+        if (errors && errors.length > 0) {
+          const firstErr = errors[0] as Record<string, unknown>;
+          const errMsg =
+            typeof firstErr?.["message"] === "string"
+              ? firstErr["message"]
+              : typeof firstErr?.["details"] === "string"
+              ? firstErr["details"]
+              : null;
+          const label = classType ? `${nodeId} (${classType})` : nodeId;
+          parts.push(errMsg ? `${label}: ${errMsg}` : label);
+        } else if (message) {
+          parts.push(classType ? `${nodeId} (${classType}): ${message}` : `${nodeId}: ${message}`);
+        } else {
+          parts.push(`${nodeId}: ${safeStringify(details).slice(0, 120)}`);
+        }
+      } else {
+        parts.push(`${nodeId}: ${safeStringify(details).slice(0, 120)}`);
+      }
+    }
+
+    const extra = entries.length > 3 ? ` (+${entries.length - 3} more)` : "";
+    return `ComfyUI node warnings: ${parts.join("; ")}${extra}`.slice(0, 1000);
+  }
+
+  if (Array.isArray(nodeErrors)) {
+    if (nodeErrors.length === 0) return null;
+    return `ComfyUI node warnings: ${safeStringify(nodeErrors).slice(0, 1000)}`;
+  }
+
+  return `ComfyUI node warnings: ${String(nodeErrors).slice(0, 1000)}`;
+}
+
 async function markJobFailed(
   jobId: number,
   message: string
@@ -286,11 +341,13 @@ export async function runWorkflowGeneration(args: {
     });
 
     // --- 9. Update job → queued ---
+    const nodeErrorSummary = summarizeComfyNodeErrors(queued.node_errors);
     await db
       .update(generationJobs)
       .set({
         status: "queued",
         promptId: queued.prompt_id,
+        errorMessage: nodeErrorSummary,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(generationJobs.id, jobId));
