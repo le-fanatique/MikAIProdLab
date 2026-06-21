@@ -5,16 +5,18 @@ import { saveComfySettings } from "@/actions/settings";
 
 type Props = {
   initialBaseUrl: string;
+  initialApiKey: string;
 };
 
-export default function ComfyUISettingsForm({ initialBaseUrl }: Props) {
+export default function ComfyUISettingsForm({ initialBaseUrl, initialApiKey }: Props) {
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
+  const [apiKey, setApiKey] = useState(initialApiKey);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
     startTransition(async () => {
-      const res = await saveComfySettings(baseUrl);
+      const res = await saveComfySettings(baseUrl, apiKey);
       if (res.ok) {
         setResult({ ok: true, message: "ComfyUI settings saved." });
       } else {
@@ -42,6 +44,26 @@ export default function ComfyUISettingsForm({ initialBaseUrl }: Props) {
         />
         <p className="text-xs text-[#4b5158]">
           Local ComfyUI server used for workflow generation.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-api-key">
+          API Key
+        </label>
+        <input
+          id="comfyui-api-key"
+          type="password"
+          value={apiKey}
+          onChange={(e) => {
+            setApiKey(e.target.value);
+            setResult(null);
+          }}
+          placeholder="Optional ComfyUI API key"
+          className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:border-[#3a4046] focus:outline-none transition-colors"
+        />
+        <p className="text-xs text-[#4b5158]">
+          Optional. Used for ComfyUI API / partner nodes through extra_data.
         </p>
       </div>
 

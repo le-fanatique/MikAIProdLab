@@ -89,12 +89,24 @@ export async function queueComfyPrompt(args: {
   workflow: Record<string, unknown>;
   clientId: string;
 }): Promise<ComfyQueuePromptResponse> {
-  const baseUrl = await getConfiguredComfyBaseUrl();
+  const settings = await getComfySettings();
+  const baseUrl = normalizeComfyBaseUrl(settings.baseUrl);
 
-  const body = JSON.stringify({
+  const payload: {
+    client_id: string;
+    prompt: Record<string, unknown>;
+    extra_data?: { api_key_comfy_org: string };
+  } = {
     client_id: args.clientId,
     prompt: args.workflow,
-  });
+  };
+
+  const apiKey = settings.apiKey.trim();
+  if (apiKey) {
+    payload.extra_data = { api_key_comfy_org: apiKey };
+  }
+
+  const body = JSON.stringify(payload);
 
   const response = await fetch(`${baseUrl}/prompt`, {
     method: "POST",

@@ -65,7 +65,8 @@ export async function fetchOllamaModels(
 const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
 
 export async function saveComfySettings(
-  baseUrl: string
+  baseUrl: string,
+  apiKey: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const trimmed = baseUrl.trim();
@@ -74,14 +75,21 @@ export async function saveComfySettings(
       cleaned.startsWith("http://") || cleaned.startsWith("https://");
     const finalUrl = cleaned && valid ? cleaned : COMFY_BASE_URL_DEFAULT;
 
+    const finalApiKey = apiKey.trim();
+
     const now = new Date().toISOString();
-    await db
-      .insert(appSettings)
-      .values({ key: "comfyui_base_url", value: finalUrl, updatedAt: now })
-      .onConflictDoUpdate({
-        target: appSettings.key,
-        set: { value: finalUrl, updatedAt: now },
-      });
+
+    const upsert = (key: string, value: string) =>
+      db
+        .insert(appSettings)
+        .values({ key, value, updatedAt: now })
+        .onConflictDoUpdate({
+          target: appSettings.key,
+          set: { value, updatedAt: now },
+        });
+
+    await upsert("comfyui_base_url", finalUrl);
+    await upsert("comfyui_api_key", finalApiKey);
 
     return { ok: true };
   } catch {

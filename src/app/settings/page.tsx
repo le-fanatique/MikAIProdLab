@@ -88,7 +88,7 @@ export default async function SettingsPage() {
 
       {/* ComfyUI */}
       <Card title="ComfyUI" className="mb-6">
-        <ComfyUISettingsForm initialBaseUrl={comfySettings.baseUrl} />
+        <ComfyUISettingsForm initialBaseUrl={comfySettings.baseUrl} initialApiKey={comfySettings.apiKey} />
       </Card>
 
       {/* ComfyUI Workflows */}
