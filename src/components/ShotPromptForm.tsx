@@ -1,4 +1,5 @@
 import { updateShotPrompt } from "@/actions/shots";
+import ShotPromptLLMAssistPanel from "@/components/ShotPromptLLMAssistPanel";
 
 type Props = {
   projectId: number;
@@ -64,6 +65,14 @@ export default function ShotPromptForm({
           </button>
         </div>
       </form>
+
+      <ShotPromptLLMAssistPanel
+        projectId={projectId}
+        sequenceId={sequenceId}
+        shotId={shotId}
+        hasExistingPrompt={Boolean(initialShotPrompt?.trim())}
+        returnTo={returnTo}
+      />
     </div>
   );
 }
