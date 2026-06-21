@@ -1,5 +1,8 @@
 "use server";
 
+import fs from "fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
@@ -15,7 +18,7 @@ import {
   shotReferenceImages,
   assetReferenceImages,
 } from "@/db/schema";
-import { eq, asc, inArray } from "drizzle-orm";
+import { eq, asc, inArray, sql } from "drizzle-orm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -330,4 +333,115 @@ export async function runWorkflowGenerationFromForm(
       `${base}${sep}generationError=${encodeURIComponent(result.error)}`
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// attachOutputAsShotReference
+// ---------------------------------------------------------------------------
+
+const ATTACHABLE_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+
+export async function attachOutputAsShotReference(
+  formData: FormData
+): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const shotId = parseInt(formData.get("shotId") as string, 10);
+  const jobId = parseInt(formData.get("jobId") as string, 10);
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() ||
+    `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}attachError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(shotId) || shotId <= 0 ||
+    !Number.isInteger(jobId) || jobId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  // Fetch job
+  const [job] = await db
+    .select()
+    .from(generationJobs)
+    .where(eq(generationJobs.id, jobId));
+
+  if (!job) errRedirect("Output not found.");
+  if (job.shotId !== shotId) errRedirect("Output does not belong to this shot.");
+  if (job.status !== "done") errRedirect("Output is not ready.");
+  if (!job.outputPath) errRedirect("Output path is missing.");
+  if (!job.outputPath.startsWith("outputs/jobs/")) {
+    errRedirect("Output path is not in the expected location.");
+  }
+
+  // Check extension
+  const ext = path.extname(job.outputPath).toLowerCase();
+  if (!ATTACHABLE_IMAGE_EXTS.has(ext)) {
+    errRedirect("Only image outputs can be attached as references.");
+  }
+
+  // Resolve and validate source path
+  const publicRoot = path.join(process.cwd(), "public");
+  const allowedOutputsRoot = path.join(publicRoot, "outputs", "jobs");
+  const sourceAbsolute = path.resolve(publicRoot, job.outputPath);
+
+  if (
+    !sourceAbsolute.startsWith(allowedOutputsRoot + path.sep) &&
+    sourceAbsolute !== allowedOutputsRoot
+  ) {
+    errRedirect("Output path is not in the expected location.");
+  }
+
+  // Verify source file exists
+  try {
+    await fs.access(sourceAbsolute);
+  } catch {
+    errRedirect("Output file not found on disk.");
+  }
+
+  // Prepare destination
+  const uuid = randomUUID();
+  const destFilename = `${uuid}${ext}`;
+  const destSubfolder = `shot-${shotId}`;
+  const destRelative = `uploads/reference-images/${destSubfolder}/${destFilename}`;
+  const destDir = path.join(publicRoot, "uploads", "reference-images", destSubfolder);
+  const destAbsolute = path.join(destDir, destFilename);
+
+  // Copy file
+  try {
+    await fs.mkdir(destDir, { recursive: true });
+    await fs.copyFile(sourceAbsolute, destAbsolute);
+  } catch {
+    errRedirect("Failed to copy output file. Please try again.");
+  }
+
+  // Insert shot_reference_images row
+  try {
+    const [{ maxOrder }] = await db
+      .select({ maxOrder: sql<number>`coalesce(max(${shotReferenceImages.orderIndex}), -1)` })
+      .from(shotReferenceImages)
+      .where(eq(shotReferenceImages.shotId, shotId));
+
+    await db.insert(shotReferenceImages).values({
+      shotId,
+      orderIndex: maxOrder + 1,
+      imagePath: destRelative,
+      sourceFilename: null,
+      label: "Generated Output",
+      imageRole: "keyframe",
+    });
+  } catch {
+    // Best-effort cleanup of copied file
+    try { await fs.unlink(destAbsolute); } catch { /* silent */ }
+    errRedirect("Failed to save reference image. Please try again.");
+  }
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${sep}attachedReference=1`);
 }
