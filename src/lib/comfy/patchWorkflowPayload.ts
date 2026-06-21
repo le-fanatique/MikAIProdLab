@@ -2,6 +2,10 @@ import type { WorkflowInputMapping } from "@/lib/comfy/mapWorkflowInputs";
 
 export type WorkflowPayloadPatchKind = "text" | "image";
 
+export type PatchWorkflowPayloadOptions = {
+  selectedImageByNodeId?: Record<string, string>;
+};
+
 export type WorkflowPayloadPatch = {
   nodeId: string;
   label: string;
@@ -39,7 +43,8 @@ function findTextInputKey(
 
 export function patchWorkflowPayload(
   workflowJsonText: string,
-  mappings: WorkflowInputMapping[]
+  mappings: WorkflowInputMapping[],
+  options: PatchWorkflowPayloadOptions = {}
 ): WorkflowPayloadPatchResult {
   const warnings: string[] = [];
   const patches: WorkflowPayloadPatch[] = [];
@@ -118,7 +123,22 @@ export function patchWorkflowPayload(
         continue;
       }
 
-      const selectedImage = mapping.availableImages[0];
+      const requestedImageId = options.selectedImageByNodeId?.[nodeId];
+      let selectedImage = mapping.availableImages[0];
+      let explicitSelection = false;
+
+      if (requestedImageId) {
+        const found = mapping.availableImages.find((img) => img.id === requestedImageId);
+        if (found) {
+          selectedImage = found;
+          explicitSelection = true;
+        } else {
+          warnings.push(
+            `Selected image '${requestedImageId}' not found for image input '${label}' (node ${nodeId}). Using first available image.`
+          );
+        }
+      }
+
       const previousValue = inputs["image"];
       const nextValue = selectedImage.imagePath;
       inputs["image"] = nextValue;
@@ -134,7 +154,9 @@ export function patchWorkflowPayload(
       });
 
       warnings.push(
-        `Image '${selectedImage.label}' used for preview on node ${nodeId} (first available). Upload to the ComfyUI input folder before running.`
+        explicitSelection
+          ? `Image '${selectedImage.label}' selected for preview on node ${nodeId}. Upload to the ComfyUI input folder before running.`
+          : `Image '${selectedImage.label}' used for preview on node ${nodeId} (first available). Upload to the ComfyUI input folder before running.`
       );
     }
   }
