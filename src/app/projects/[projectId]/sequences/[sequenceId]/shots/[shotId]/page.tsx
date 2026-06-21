@@ -19,6 +19,7 @@ import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import ShotPromptForm from "@/components/ShotPromptForm";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
+import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteMotionBeat } from "@/actions/motionBeats";
 import { deleteShotReferenceImage } from "@/actions/shotReferenceImages";
@@ -259,10 +260,11 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     }),
   });
 
-  const defaultPromptProposal = [shot.description, shot.actionPitch, shot.cameraPitch]
-    .map((v) => v?.trim())
-    .filter((v): v is string => Boolean(v))
-    .join("\n");
+  const defaultPromptProposal = buildDefaultShotPromptProposal({
+    description: shot.description,
+    actionPitch: shot.actionPitch,
+    cameraPitch: shot.cameraPitch,
+  });
 
   const hasDetails =
     shot.description || shot.actionPitch || shot.cameraPitch || shot.continuityNotes;

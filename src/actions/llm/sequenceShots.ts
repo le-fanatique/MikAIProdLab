@@ -10,6 +10,7 @@ import {
   type GeneratedSequenceShot,
 } from "@/lib/prompts/shots-from-sequence";
 import { getLLMConfig } from "@/lib/settings";
+import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 
 function str(value: unknown, maxLen = 1000): string | null {
   if (typeof value !== "string") return null;
@@ -171,6 +172,12 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
 
   for (let i = 0; i < parsedShots!.length; i++) {
     const shot = parsedShots![i];
+    const shotPrompt = resolveShotPromptWithDefault({
+      shotPrompt: shot.shot_prompt,
+      description: shot.description,
+      actionPitch: shot.action_pitch,
+      cameraPitch: shot.camera_pitch,
+    });
     await db.insert(shots).values({
       sequenceId,
       shotCode: shot.shot_code ?? null,
@@ -183,7 +190,7 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
       cameraMovement: shot.camera_movement ?? null,
       continuityIn: shot.continuity_in ?? null,
       continuityOut: shot.continuity_out ?? null,
-      shotPrompt: shot.shot_prompt ?? null,
+      shotPrompt,
       orderIndex: startIndex + i,
     });
   }

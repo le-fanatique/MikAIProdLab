@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { shots, sequences } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 
 export async function createShot(
   sequenceId: number,
@@ -32,6 +33,8 @@ export async function createShot(
 
   const orderIndex = (maxResult?.max ?? -1) + 1;
 
+  const shotPrompt = resolveShotPromptWithDefault({ description, actionPitch, cameraPitch });
+
   await db.insert(shots).values({
     sequenceId,
     shotCode,
@@ -45,6 +48,7 @@ export async function createShot(
     cameraMovement,
     continuityIn,
     continuityOut,
+    shotPrompt,
     orderIndex,
   });
 
@@ -72,6 +76,14 @@ export async function updateShot(
 
   if (!title?.trim()) return;
 
+  const [existing] = await db.select({ shotPrompt: shots.shotPrompt }).from(shots).where(eq(shots.id, id));
+  const resolvedShotPrompt = resolveShotPromptWithDefault({
+    shotPrompt: existing?.shotPrompt,
+    description,
+    actionPitch,
+    cameraPitch,
+  });
+
   await db
     .update(shots)
     .set({
@@ -86,6 +98,7 @@ export async function updateShot(
       cameraMovement,
       continuityIn,
       continuityOut,
+      shotPrompt: resolvedShotPrompt,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(shots.id, id));
