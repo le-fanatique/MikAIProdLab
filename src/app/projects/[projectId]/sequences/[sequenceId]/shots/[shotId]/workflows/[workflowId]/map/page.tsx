@@ -28,6 +28,7 @@ import {
 } from "@/lib/comfy/mapWorkflowInputs";
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
+import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import { runWorkflowGenerationFromForm } from "@/actions/generation";
 
@@ -40,12 +41,29 @@ type Props = {
     shotId: string;
     workflowId: string;
   }>;
-  searchParams: Promise<{ jobId?: string; generationError?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export default async function WorkflowMappingPage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId, workflowId } = await params;
-  const { jobId: jobIdParam, generationError } = await searchParams;
+  const resolvedSearchParams = await searchParams;
+
+  const rawJobId = resolvedSearchParams["jobId"];
+  const jobIdParam = typeof rawJobId === "string" ? rawJobId : Array.isArray(rawJobId) ? rawJobId[0] : undefined;
+
+  const rawGenerationError = resolvedSearchParams["generationError"];
+  const generationError = typeof rawGenerationError === "string" ? rawGenerationError : Array.isArray(rawGenerationError) ? rawGenerationError[0] : undefined;
+
+  const selectedImageByNodeId: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (!key.startsWith("imageNode_")) continue;
+    const nodeId = key.slice("imageNode_".length);
+    if (!nodeId) continue;
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue && strValue.trim()) {
+      selectedImageByNodeId[nodeId] = strValue.trim();
+    }
+  }
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -192,14 +210,24 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const payloadPreview =
     parsed !== null
-      ? patchWorkflowPayload(workflow.workflowJson, mappings)
+      ? patchWorkflowPayload(workflow.workflowJson, mappings, {
+          selectedImageByNodeId,
+        })
       : null;
 
   const shotLabel = shot.shotCode
     ? `${shot.shotCode} — ${shot.title}`
     : shot.title;
 
-  const returnTo = `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`;
+  const basePath = `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`;
+
+  const selectionParams = new URLSearchParams();
+  for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
+    selectionParams.set(`imageNode_${nodeId}`, imageId);
+  }
+  const selectionQuery = selectionParams.toString();
+  const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
+
   const activeJobId =
     jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
 
@@ -258,6 +286,17 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
             />
           )}
         </Card>
+
+        {/* Image input selection */}
+        {mappings.some((m) => m.mappingKind === "image") && (
+          <Card title="Image Inputs">
+            <WorkflowImageSelectionForm
+              basePath={basePath}
+              mappings={mappings}
+              selectedImageByNodeId={selectedImageByNodeId}
+            />
+          </Card>
+        )}
 
         {/* Payload preview */}
         {payloadPreview !== null && (
