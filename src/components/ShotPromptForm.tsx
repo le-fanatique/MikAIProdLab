@@ -9,6 +9,7 @@ type Props = {
   returnTo: string;
   saved?: boolean;
   error?: string | null;
+  defaultPromptProposal?: string | null;
 };
 
 export default function ShotPromptForm({
@@ -19,7 +20,12 @@ export default function ShotPromptForm({
   returnTo,
   saved,
   error,
+  defaultPromptProposal,
 }: Props) {
+  const textareaDefaultValue =
+    initialShotPrompt && initialShotPrompt.trim()
+      ? initialShotPrompt
+      : (defaultPromptProposal ?? "");
   return (
     <div className="flex flex-col gap-3">
       {saved && (
@@ -45,7 +51,7 @@ export default function ShotPromptForm({
           <textarea
             id="shot-prompt-textarea"
             name="shotPrompt"
-            defaultValue={initialShotPrompt ?? ""}
+            defaultValue={textareaDefaultValue}
             placeholder="Describe the shot as a clean generation prompt..."
             rows={5}
             className="w-full rounded border border-[#2c3035] bg-[#141618] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#4b5158] resize-y focus:outline-none focus:border-[#3a4046] leading-relaxed"

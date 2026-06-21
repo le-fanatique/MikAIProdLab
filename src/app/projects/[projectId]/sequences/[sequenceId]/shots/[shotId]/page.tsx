@@ -11,7 +11,7 @@ import MotionBeatsPanel from "@/components/MotionBeatsPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
-import ShotPromptDraftPanel from "@/components/ShotPromptDraftPanel";
+import PromptComposerPanel from "@/components/PromptComposerPanel";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
 import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
@@ -259,6 +259,11 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     }),
   });
 
+  const defaultPromptProposal = [shot.description, shot.actionPitch, shot.cameraPitch]
+    .map((v) => v?.trim())
+    .filter((v): v is string => Boolean(v))
+    .join("\n");
+
   const hasDetails =
     shot.description || shot.actionPitch || shot.cameraPitch || shot.continuityNotes;
   const hasProduction =
@@ -383,6 +388,18 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
             saved={shotPromptSaved === "1"}
             error={shotPromptError ?? null}
+            defaultPromptProposal={defaultPromptProposal || null}
+          />
+        </Card>
+
+        <Card title="Prompt Composer">
+          <PromptComposerPanel
+            composed={composedShotPrompt}
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+            hasExistingShotPrompt={Boolean(shot.shotPrompt?.trim())}
           />
         </Card>
 
@@ -420,10 +437,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             deleteError={deleteError ?? null}
             deleteSuccess={deleteSuccess ?? null}
           />
-        </Card>
-
-        <Card title="Shot Prompt Draft">
-          <ShotPromptDraftPanel composed={composedShotPrompt} />
         </Card>
 
         <Card title="Workflow Mapping">
