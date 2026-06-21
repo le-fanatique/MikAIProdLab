@@ -197,6 +197,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
           returnTo={`/projects/${pid}/sequences/${sid}`}
           createdCount={Number.isFinite(createdCount) ? createdCount : null}
           createError={createError ?? null}
+          hasSequencePrompt={Boolean(sequence.sequencePrompt?.trim())}
         />
       </Card>
 

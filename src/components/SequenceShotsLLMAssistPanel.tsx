@@ -16,6 +16,7 @@ type Props = {
   returnTo: string;
   createdCount?: number | null;
   createError?: string | null;
+  hasSequencePrompt?: boolean;
 };
 
 export default function SequenceShotsLLMAssistPanel({
@@ -24,6 +25,7 @@ export default function SequenceShotsLLMAssistPanel({
   returnTo,
   createdCount,
   createError,
+  hasSequencePrompt,
 }: Props) {
   const [state, setState] = useState<State>({ status: "idle" });
   const [shotCount, setShotCount] = useState(6);
@@ -47,6 +49,16 @@ export default function SequenceShotsLLMAssistPanel({
       <p className="text-xs text-[#6e767d] leading-relaxed">
         Generate a draft shot list from this sequence. Nothing is created until you click Create Shots.
       </p>
+
+      {hasSequencePrompt ? (
+        <p className="text-xs text-[#6b9e72]">
+          The current Sequence Prompt will guide the generated shots.
+        </p>
+      ) : (
+        <p className="text-xs text-[#4b5158]">
+          Add a Sequence Prompt above to guide the generated shots more precisely.
+        </p>
+      )}
 
       {createdCount != null && createdCount > 0 && (
         <p className="text-xs text-[#6b9e72]">Created {createdCount} shot{createdCount !== 1 ? "s" : ""}.</p>
@@ -152,6 +164,22 @@ export default function SequenceShotsLLMAssistPanel({
                       </span>
                     )}
                   </div>
+                  {(shot.continuity_in || shot.continuity_out) && (
+                    <div className="flex flex-col gap-0.5 border-t border-[#1e2124] pt-1.5 mt-0.5">
+                      {shot.continuity_in && (
+                        <p className="text-xs text-[#4b5158]">
+                          <span className="font-medium">Continuity In </span>
+                          <span className="text-[#6e767d]">{shot.continuity_in}</span>
+                        </p>
+                      )}
+                      {shot.continuity_out && (
+                        <p className="text-xs text-[#4b5158]">
+                          <span className="font-medium">Continuity Out </span>
+                          <span className="text-[#6e767d]">{shot.continuity_out}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {shot.shot_prompt && (
                     <p className="text-xs text-[#a4abb2] leading-relaxed border-t border-[#1e2124] pt-1.5 mt-0.5 italic">
                       {shot.shot_prompt}

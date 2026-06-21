@@ -35,10 +35,12 @@ function normalizeShot(raw: unknown): GeneratedSequenceShot | null {
     shot_code: str(r.shot_code, 50),
     description: str(r.description, 500),
     duration_seconds: dur,
+    continuity_in: str(r.continuity_in, 500),
     action_pitch: str(r.action_pitch, 300),
     camera_pitch: str(r.camera_pitch, 200),
     framing: str(r.framing, 50),
     camera_movement: str(r.camera_movement, 50),
+    continuity_out: str(r.continuity_out, 500),
     shot_prompt: str(r.shot_prompt, 1000),
   };
 }
@@ -107,6 +109,7 @@ export async function generateShotsFromSequenceDraft(
         narrativePurpose: sequence.narrativePurpose,
         mood: sequence.mood,
         locationHint: sequence.locationHint,
+        sequencePrompt: sequence.sequencePrompt,
       },
       targetCount: shotCount,
     });
@@ -178,6 +181,8 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
       cameraPitch: shot.camera_pitch ?? null,
       framing: shot.framing ?? null,
       cameraMovement: shot.camera_movement ?? null,
+      continuityIn: shot.continuity_in ?? null,
+      continuityOut: shot.continuity_out ?? null,
       shotPrompt: shot.shot_prompt ?? null,
       orderIndex: startIndex + i,
     });
