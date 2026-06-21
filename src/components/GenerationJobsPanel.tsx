@@ -1,0 +1,202 @@
+import Link from "next/link";
+import WorkflowKindBadge from "@/components/WorkflowKindBadge";
+import EmptyState from "@/components/EmptyState";
+
+export type GenerationJobItem = {
+  id: number;
+  status: string;
+  workflowId: number;
+  outputPath: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  workflowName: string | null;
+  workflowKind: "image" | "video" | string | null;
+};
+
+type Props = {
+  projectId: number;
+  sequenceId: number;
+  shotId: number;
+  jobs: GenerationJobItem[];
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  uploading: "Uploading references",
+  queued: "Queued",
+  running: "Running",
+  done: "Done",
+  failed: "Failed",
+  timeout: "Timed out",
+};
+
+function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status;
+}
+
+function statusClass(status: string): string {
+  if (status === "done") return "text-[#6b9e72]";
+  if (status === "failed" || status === "timeout") return "text-[#cf7b6b]";
+  if (status === "running") return "text-[#5b93d6]";
+  if (status === "queued" || status === "uploading") return "text-[#a4abb2]";
+  return "text-[#6e767d]";
+}
+
+const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+const VIDEO_EXTS = new Set(["mp4", "webm", "mov"]);
+
+function getExt(p: string): string {
+  return p.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso.slice(0, 16);
+  }
+}
+
+function formatDuration(startedAt: string | null, completedAt: string | null): string | null {
+  if (!startedAt || !completedAt) return null;
+  const ms = Date.parse(completedAt) - Date.parse(startedAt);
+  if (isNaN(ms) || ms < 0) return null;
+  const secs = Math.round(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const rem = secs % 60;
+  return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
+}
+
+export default function GenerationJobsPanel({
+  projectId,
+  sequenceId,
+  shotId,
+  jobs,
+}: Props) {
+  const shotPath = `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Refresh link */}
+      <div className="flex justify-end">
+        <Link
+          href={shotPath}
+          className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+        >
+          Refresh ↻
+        </Link>
+      </div>
+
+      {jobs.length === 0 ? (
+        <EmptyState
+          title="No generation jobs yet."
+          description="Run a workflow generation to see job history here."
+        />
+      ) : (
+        <div className="flex flex-col divide-y divide-[#1c1f22]">
+          {jobs.map((job) => {
+            const ext = job.outputPath ? getExt(job.outputPath) : "";
+            const isImage = job.outputPath && IMAGE_EXTS.has(ext);
+            const isVideo = job.outputPath && VIDEO_EXTS.has(ext);
+            const src = job.outputPath ? `/${job.outputPath}` : null;
+            const duration = formatDuration(job.startedAt, job.completedAt);
+            const wfKind =
+              job.workflowKind === "image" || job.workflowKind === "video"
+                ? job.workflowKind
+                : null;
+            const statusMapHref = `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}/workflows/${job.workflowId}/map?jobId=${job.id}`;
+
+            return (
+              <div key={job.id} className="py-3 flex flex-col gap-2">
+                {/* Header row */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    {/* Job id + status */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-mono text-[#4b5158]">
+                        #{job.id}
+                      </span>
+                      <span className={`text-xs font-medium ${statusClass(job.status)}`}>
+                        {statusLabel(job.status)}
+                      </span>
+                      {wfKind && <WorkflowKindBadge kind={wfKind} />}
+                    </div>
+                    {/* Workflow name */}
+                    <p className="text-xs text-[#a4abb2] truncate">
+                      {job.workflowName ?? "Unknown workflow"}
+                    </p>
+                    {/* Dates + duration */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-[#4b5158]">
+                        {formatDate(job.createdAt)}
+                      </span>
+                      {duration && (
+                        <span className="text-[10px] text-[#4b5158]">
+                          · {duration}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Open Status link */}
+                  <Link
+                    href={statusMapHref}
+                    className="shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors whitespace-nowrap"
+                  >
+                    Open Status ↗
+                  </Link>
+                </div>
+
+                {/* Error message */}
+                {job.errorMessage && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-2.5 py-1.5">
+                    <p className="text-[10px] text-[#cf7b6b] leading-relaxed">
+                      {job.errorMessage}
+                    </p>
+                  </div>
+                )}
+
+                {/* Output */}
+                {src && (
+                  <div className="flex items-center gap-2">
+                    {isImage ? (
+                      <img
+                        src={src}
+                        alt="Output"
+                        className="h-12 w-auto rounded border border-[#2c3035] object-cover"
+                      />
+                    ) : isVideo ? (
+                      <video
+                        src={src}
+                        muted
+                        controls
+                        className="h-12 w-auto rounded border border-[#2c3035]"
+                      />
+                    ) : null}
+                    <a
+                      href={src}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    >
+                      Open output ↗
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -15,6 +15,7 @@ import ShotPromptDraftPanel from "@/components/ShotPromptDraftPanel";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
 import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
+import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
@@ -181,6 +182,26 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const generatedOutputItems: GeneratedOutputItem[] = rawGeneratedOutputs
     .filter((item) => item.outputPath !== null)
     .map((item) => ({ ...item, outputPath: item.outputPath! }));
+
+  const generationJobRows = await db
+    .select({
+      id: generationJobs.id,
+      status: generationJobs.status,
+      workflowId: generationJobs.workflowId,
+      outputPath: generationJobs.outputPath,
+      errorMessage: generationJobs.errorMessage,
+      startedAt: generationJobs.startedAt,
+      completedAt: generationJobs.completedAt,
+      createdAt: generationJobs.createdAt,
+      updatedAt: generationJobs.updatedAt,
+      workflowName: comfyWorkflows.name,
+      workflowKind: comfyWorkflows.kind,
+    })
+    .from(generationJobs)
+    .leftJoin(comfyWorkflows, eq(generationJobs.workflowId, comfyWorkflows.id))
+    .where(eq(generationJobs.shotId, shid))
+    .orderBy(desc(generationJobs.createdAt))
+    .limit(24);
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 
@@ -373,6 +394,15 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             outputs={generatedOutputItems}
             attachError={attachError ?? null}
             attachedReference={attachedReference === "1"}
+          />
+        </Card>
+
+        <Card title="Generation Jobs">
+          <GenerationJobsPanel
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            jobs={generationJobRows}
           />
         </Card>
 
