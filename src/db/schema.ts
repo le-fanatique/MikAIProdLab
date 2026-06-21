@@ -29,6 +29,7 @@ export const sequences = sqliteTable("sequences", {
   narrativePurpose: text("narrative_purpose"),
   mood: text("mood"),
   locationHint: text("location_hint"),
+  sequencePrompt: text("sequence_prompt"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

@@ -1,0 +1,1 @@
+ALTER TABLE `sequences` ADD `sequence_prompt` text;

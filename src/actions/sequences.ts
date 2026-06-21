@@ -73,3 +73,40 @@ export async function deleteSequence(id: number, projectId: number) {
   await db.delete(sequences).where(eq(sequences.id, id));
   redirect(`/projects/${projectId}`);
 }
+
+export async function updateSequencePrompt(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const rawPrompt = formData.get("sequencePrompt");
+  const sequencePromptValue = typeof rawPrompt === "string" ? rawPrompt : "";
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() ||
+    `/projects/${projectId}/sequences/${sequenceId}`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}sequencePromptError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) {
+    errRedirect("Sequence not found or does not belong to this project.");
+  }
+
+  const value = sequencePromptValue.trim() === "" ? null : sequencePromptValue;
+
+  await db
+    .update(sequences)
+    .set({ sequencePrompt: value, updatedAt: new Date().toISOString() })
+    .where(eq(sequences.id, sequenceId));
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${sep}sequencePromptSaved=1`);
+}

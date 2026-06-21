@@ -13,6 +13,7 @@ import { deleteSequence } from "@/actions/sequences";
 import { deleteShot } from "@/actions/shots";
 import { assignAssetToSequence, removeAssetFromSequence } from "@/actions/sequenceAssets";
 import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPanel";
+import SequencePromptForm from "@/components/SequencePromptForm";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
@@ -64,6 +65,19 @@ export default async function SequencePage({ params, searchParams }: Props) {
           .from(assets)
           .where(eq(assets.projectId, pid))
           .orderBy(asc(assets.orderIndex));
+
+  const sequenceReturnTo = `/projects/${pid}/sequences/${sid}`;
+
+  const rawSequencePromptSaved = resolvedSearchParams["sequencePromptSaved"];
+  const sequencePromptSaved = rawSequencePromptSaved === "1" || rawSequencePromptSaved === "true";
+
+  const rawSequencePromptError = resolvedSearchParams["sequencePromptError"];
+  const sequencePromptError =
+    typeof rawSequencePromptError === "string"
+      ? rawSequencePromptError
+      : Array.isArray(rawSequencePromptError)
+      ? rawSequencePromptError[0]
+      : null;
 
   const rawCreatedCount = resolvedSearchParams["shotsCreated"];
   const createdCountStr = typeof rawCreatedCount === "string" ? rawCreatedCount : Array.isArray(rawCreatedCount) ? rawCreatedCount[0] : undefined;
@@ -161,6 +175,18 @@ export default async function SequencePage({ params, searchParams }: Props) {
         <p className="text-xs text-[#4b5158] mt-3">
           Assets listed here describe the sequence-level cast. They are not automatically added to individual shots.
         </p>
+      </Card>
+
+      {/* Sequence Prompt */}
+      <Card title="Sequence Prompt" className="mb-6">
+        <SequencePromptForm
+          projectId={pid}
+          sequenceId={sid}
+          initialSequencePrompt={sequence.sequencePrompt ?? null}
+          returnTo={sequenceReturnTo}
+          saved={sequencePromptSaved}
+          error={sequencePromptError}
+        />
       </Card>
 
       {/* LLM Assist — generate shots */}
