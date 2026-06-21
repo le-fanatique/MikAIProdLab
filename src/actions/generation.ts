@@ -67,6 +67,7 @@ export async function runWorkflowGeneration(args: {
   sequenceId: number;
   shotId: number;
   workflowId: number;
+  selectedImageByNodeId?: Record<string, string>;
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, sequenceId, shotId, workflowId } = args;
 
@@ -239,7 +240,9 @@ export async function runWorkflowGeneration(args: {
     availableImages
   );
 
-  const preview = patchWorkflowPayload(workflow.workflowJson, mappings);
+  const preview = patchWorkflowPayload(workflow.workflowJson, mappings, {
+    selectedImageByNodeId: args.selectedImageByNodeId,
+  });
 
   if (!preview.patchedJsonText || Object.keys(preview.patchedJson).length === 0) {
     return {
@@ -317,11 +320,22 @@ export async function runWorkflowGenerationFromForm(
   // Build safe return URL base (never allow empty — fall back to home)
   const base = returnTo.trim() || "/";
 
+  const selectedImageByNodeId: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("imageNode_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("imageNode_".length).trim();
+    const imageId = value.trim();
+    if (!nodeId || !imageId) continue;
+    selectedImageByNodeId[nodeId] = imageId;
+  }
+
   const result = await runWorkflowGeneration({
     projectId,
     sequenceId,
     shotId,
     workflowId,
+    selectedImageByNodeId,
   });
 
   if (result.ok) {

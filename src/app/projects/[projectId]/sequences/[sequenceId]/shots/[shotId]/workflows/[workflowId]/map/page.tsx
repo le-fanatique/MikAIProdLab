@@ -322,11 +322,19 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               )}
 
               <form action={runWorkflowGenerationFromForm}>
-                <input type="hidden" name="projectId" value={pid} />
-                <input type="hidden" name="sequenceId" value={sid} />
-                <input type="hidden" name="shotId" value={shid} />
-                <input type="hidden" name="workflowId" value={wid} />
+                <input type="hidden" name="projectId" value={String(pid)} />
+                <input type="hidden" name="sequenceId" value={String(sid)} />
+                <input type="hidden" name="shotId" value={String(shid)} />
+                <input type="hidden" name="workflowId" value={String(wid)} />
                 <input type="hidden" name="returnTo" value={returnTo} />
+                {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
+                  <input
+                    key={nodeId}
+                    type="hidden"
+                    name={`imageNode_${nodeId}`}
+                    value={String(imageId)}
+                  />
+                ))}
                 <button
                   type="submit"
                   className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
