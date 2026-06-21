@@ -1,0 +1,1 @@
+ALTER TABLE `shots` ADD `shot_prompt` text;

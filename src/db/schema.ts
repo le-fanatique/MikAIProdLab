@@ -54,6 +54,7 @@ export const shots = sqliteTable("shots", {
   cameraMovement: text("camera_movement"),
   continuityIn: text("continuity_in"),
   continuityOut: text("continuity_out"),
+  shotPrompt: text("shot_prompt"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

@@ -16,6 +16,7 @@ import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
 import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
 import GenerationJobsPanel from "@/components/GenerationJobsPanel";
+import ShotPromptForm from "@/components/ShotPromptForm";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
@@ -29,7 +30,7 @@ import {
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
-  searchParams: Promise<{ attachError?: string; attachedReference?: string; retryError?: string; deleteError?: string; deleteSuccess?: string }>;
+  searchParams: Promise<{ attachError?: string; attachedReference?: string; retryError?: string; deleteError?: string; deleteSuccess?: string; shotPromptSaved?: string; shotPromptError?: string }>;
 };
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -45,7 +46,7 @@ function Field({ label, value }: { label: string; value: string }) {
 
 export default async function ShotDetailPage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId } = await params;
-  const { attachError, attachedReference, retryError, deleteError, deleteSuccess } = await searchParams;
+  const { attachError, attachedReference, retryError, deleteError, deleteSuccess, shotPromptSaved, shotPromptError } = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -371,6 +372,18 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
         <Card title="Compiled Prompt">
           <CompiledPromptPanel compiled={compiledPrompt} />
+        </Card>
+
+        <Card title="Shot Prompt">
+          <ShotPromptForm
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            initialShotPrompt={shot.shotPrompt ?? null}
+            returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+            saved={shotPromptSaved === "1"}
+            error={shotPromptError ?? null}
+          />
         </Card>
 
         <Card title="Reference Images">
