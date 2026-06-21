@@ -291,7 +291,7 @@ export async function runWorkflowGeneration(args: {
 
   const mappings = mapWorkflowInputs(
     parsed.inputs,
-    composedShotPrompt.text,
+    shot.shotPrompt ?? "",
     availableImages
   );
 

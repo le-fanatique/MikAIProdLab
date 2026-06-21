@@ -205,7 +205,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const mappings =
     parsed !== null
-      ? mapWorkflowInputs(parsed.inputs, composedShotPrompt.text, availableImages)
+      ? mapWorkflowInputs(parsed.inputs, shot.shotPrompt ?? "", availableImages)
       : [];
 
   const payloadPreview =
@@ -296,6 +296,22 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               selectedImageByNodeId={selectedImageByNodeId}
             />
           </Card>
+        )}
+
+        {/* Shot Prompt empty warning */}
+        {(!shot.shotPrompt || !shot.shotPrompt.trim()) && (
+          <div className="rounded border border-[#3a2c1a] bg-[#1a150a] px-3 py-2.5 flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-[#b89a5a]">Shot Prompt is empty</p>
+            <p className="text-xs text-[#b89a5a] leading-relaxed">
+              Text Prompt inputs will receive an empty value. Add a Shot Prompt in the shot detail or continue intentionally.
+            </p>
+            <Link
+              href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+              className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Edit Shot Prompt →
+            </Link>
+          </div>
         )}
 
         {/* Payload preview */}
