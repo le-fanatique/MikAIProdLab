@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { db } from "@/db";
 import { projects, sequences, shots, assets } from "@/db/schema";
 import { eq, asc, inArray } from "drizzle-orm";
@@ -9,6 +10,17 @@ import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteProject } from "@/actions/projects";
+
+function SectionLabel({ label, action }: { label: string; action?: ReactNode }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4 flex items-center justify-between">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+      {action}
+    </div>
+  );
+}
 
 type Props = { params: Promise<{ projectId: string }> };
 
@@ -62,10 +74,10 @@ export default async function ProjectPage({ params }: Props) {
               Story
             </Link>
             <Link
-              href={`/projects/${id}/outline`}
+              href={`/projects/${id}/assets`}
               className="rounded border border-[#2c3035] text-[#6e767d] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors"
             >
-              Outline
+              Assets
             </Link>
             <Link
               href={`/projects/${id}/edit`}
@@ -82,52 +94,44 @@ export default async function ProjectPage({ params }: Props) {
         }
       />
 
-      {/* Pitch */}
-      {project.pitch && (
-        <p className="text-[#a4abb2] text-sm mb-4 leading-relaxed">{project.pitch}</p>
+      {/* ── Overview ──────────────────────────────────────── */}
+      {(project.pitch || project.story) && (
+        <>
+          <SectionLabel label="Overview" />
+          {project.pitch && (
+            <p className="text-[#a4abb2] text-sm mb-4 leading-relaxed">{project.pitch}</p>
+          )}
+          {project.story && (
+            <div className="border-l-2 border-[#232629] pl-4 mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
+                Story
+              </p>
+              <p className="text-sm text-[#6e767d] whitespace-pre-wrap leading-relaxed line-clamp-3">
+                {project.story}
+              </p>
+              <Link
+                href={`/projects/${id}/story`}
+                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors mt-2 inline-block"
+              >
+                View full story →
+              </Link>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Story preview */}
-      {project.story && (
-        <div className="mb-8 border-l-2 border-[#232629] pl-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
-            Story
-          </p>
-          <p className="text-sm text-[#6e767d] whitespace-pre-wrap leading-relaxed line-clamp-3">
-            {project.story}
-          </p>
-          <Link
-            href={`/projects/${id}/story`}
-            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors mt-2 inline-block"
-          >
-            View full story →
-          </Link>
-        </div>
-      )}
-
-      {/* Visual tabs */}
-      <div className="flex items-center gap-0 mb-6 border-b border-[#232629]">
-        <div className="px-4 py-2 text-sm font-medium text-[#e7e9ec] border-b-2 border-[#5b93d6] -mb-px">
-          Sequences
-        </div>
-        <Link
-          href={`/projects/${id}/assets`}
-          className="px-4 py-2 text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
-        >
-          Assets
-        </Link>
-        <div className="px-4 py-2 text-sm text-[#4b5158] cursor-not-allowed opacity-50 select-none">
-          Project Style
-        </div>
-        <div className="ml-auto pb-2">
+      {/* ── Sequences ─────────────────────────────────────── */}
+      <SectionLabel
+        label="Sequences"
+        action={
           <Link
             href={`/projects/${id}/sequences/new`}
             className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
           >
-            + Add Sequence
+            + New Sequence
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {seqs.length === 0 ? (
         <EmptyState
@@ -183,6 +187,65 @@ export default async function ProjectPage({ params }: Props) {
           ))}
         </div>
       )}
+
+      {/* ── Assets ────────────────────────────────────────── */}
+      <SectionLabel label="Assets" />
+      <div className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4">
+        <div>
+          <p className="text-sm text-[#a4abb2]">
+            {totalAssets === 0
+              ? "No assets yet."
+              : `${totalAssets} asset${totalAssets !== 1 ? "s" : ""}`}
+          </p>
+          {totalAssets === 0 && (
+            <p className="text-xs text-[#4b5158] mt-0.5">
+              Characters, locations, and props for this project.
+            </p>
+          )}
+        </div>
+        <Link
+          href={`/projects/${id}/assets`}
+          className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors shrink-0"
+        >
+          {totalAssets === 0 ? "Add Assets →" : "View Assets →"}
+        </Link>
+      </div>
+
+      {/* ── Production ────────────────────────────────────── */}
+      <SectionLabel label="Production" />
+      <div className="flex flex-col gap-2">
+        <Link
+          href={`/projects/${id}/story`}
+          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+        >
+          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+            Project Story
+          </span>
+          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
+            →
+          </span>
+        </Link>
+        <Link
+          href={`/projects/${id}/outline`}
+          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+        >
+          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+            Outline
+          </span>
+          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
+            →
+          </span>
+        </Link>
+      </div>
+
+      <div className="mt-8 pt-4 border-t border-[#232629]">
+        <Link
+          href="/projects"
+          className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+        >
+          ← All Projects
+        </Link>
+      </div>
     </div>
   );
 }
