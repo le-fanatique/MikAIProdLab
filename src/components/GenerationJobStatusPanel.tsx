@@ -186,11 +186,20 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
                   className="max-w-full rounded border border-[#2c3035]"
                 />
               ) : isVideoPath(job.outputPath) ? (
-                <video
-                  src={`/${job.outputPath}`}
-                  controls
-                  className="max-w-full rounded border border-[#2c3035]"
-                />
+                <div className="flex flex-col gap-2">
+                  <video
+                    src={`/${job.outputPath}`}
+                    controls
+                    className="max-w-full rounded border border-[#2c3035]"
+                  />
+                  <a
+                    href={`/${job.outputPath}`}
+                    download
+                    className="self-start text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                  >
+                    Download video ↓
+                  </a>
+                </div>
               ) : (
                 <a
                   href={`/${job.outputPath}`}

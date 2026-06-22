@@ -231,7 +231,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
             href: `/projects/${pid}/sequences/${sid}/shots/${shid}`,
           },
           {
-            label: "Workflow Input Mapping",
+            label: workflow.kind === "video" ? "Video Workflows" : "Image Workflows",
             href: `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`,
           },
           { label: workflow.name },
@@ -239,7 +239,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       />
 
       <PageHeader
-        title="Workflow Input Mapping"
+        title={workflow.kind === "video" ? "Generate Video" : "Generate Image"}
         meta={shotLabel}
       />
 
@@ -256,6 +256,11 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
             )}
             {workflow.sourceFilename && (
               <p className="text-xs font-mono text-[#6e767d]">{workflow.sourceFilename}</p>
+            )}
+            {workflow.kind === "video" && (
+              <p className="text-[10px] text-[#6e767d] mt-0.5">
+                Uses shot prompt and timeline segments.
+              </p>
             )}
           </div>
         </Card>

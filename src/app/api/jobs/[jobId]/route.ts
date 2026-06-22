@@ -16,7 +16,8 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const JOB_TIMEOUT_MS = 120_000;
+// Video workflows can take several minutes on local/remote GPUs.
+const JOB_TIMEOUT_MS = 600_000;
 
 // ---------------------------------------------------------------------------
 // Types

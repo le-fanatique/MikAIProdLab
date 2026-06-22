@@ -75,7 +75,7 @@ export default async function WorkflowPickerPage({ params }: Props) {
       />
 
       <p className="text-sm text-[#6e767d] mb-6">
-        Choose a saved ComfyUI workflow to preview its suggested shot inputs.
+        Choose a saved ComfyUI workflow to preview its suggested shot inputs and generate an output.
       </p>
 
       {workflows.length === 0 ? (
@@ -109,6 +109,11 @@ export default async function WorkflowPickerPage({ params }: Props) {
                   {wf.sourceFilename && (
                     <p className="text-xs font-mono text-[#6e767d]">{wf.sourceFilename}</p>
                   )}
+                  {wf.kind === "video" && (
+                    <p className="text-[10px] text-[#6e767d] mt-0.5">
+                      Uses shot prompt and timeline segments.
+                    </p>
+                  )}
                   <p className="text-[10px] text-[#4b5158] mt-1">
                     Updated {fmtDate(wf.updatedAt)}
                   </p>
@@ -117,7 +122,7 @@ export default async function WorkflowPickerPage({ params }: Props) {
                   href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map`}
                   className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
                 >
-                  Map Inputs
+                  {wf.kind === "video" ? "Generate Video" : "Generate Image"}
                 </Link>
               </div>
             </Card>
