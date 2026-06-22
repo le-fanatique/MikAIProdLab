@@ -16,6 +16,8 @@ import { assignAssetToSequence, removeAssetFromSequence } from "@/actions/sequen
 import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPanel";
 import SequencePromptForm from "@/components/SequencePromptForm";
 
+const SHOT_PALETTE = ["#5b93d6", "#6aa6a0", "#9bb05a", "#cda24f", "#cf8b6b"];
+
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -51,6 +53,8 @@ export default async function SequencePage({ params, searchParams }: Props) {
     .orderBy(asc(shots.orderIndex));
 
   const totalDuration = shotList.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0);
+  const timedShots = shotList.filter((s) => s.durationSeconds != null && s.durationSeconds > 0);
+  const untimedShots = shotList.filter((s) => s.durationSeconds == null || s.durationSeconds === 0);
 
   const assignedRows = await db
     .select({
@@ -290,6 +294,81 @@ export default async function SequencePage({ params, searchParams }: Props) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* ── Timeline ─────────────────────────────────────────────── */}
+      {shotList.length > 0 && (
+        <>
+          <SectionLabel label="Timeline" />
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-[#6e767d]">
+                {timedShots.length} of {shotList.length} shot{shotList.length !== 1 ? "s" : ""} timed
+                {totalDuration > 0 && (
+                  <> · <span className="font-mono">{totalDuration.toFixed(1)}s</span> total</>
+                )}
+              </span>
+            </div>
+            {totalDuration > 0 ? (
+              <>
+                <div
+                  className="flex rounded overflow-hidden border border-[#1a1d20] bg-[#0d0e10]"
+                  style={{ height: "56px" }}
+                >
+                  {timedShots.map((shot, i) => {
+                    const widthPct = (shot.durationSeconds! / totalDuration) * 100;
+                    const color = SHOT_PALETTE[i % SHOT_PALETTE.length];
+                    return (
+                      <Link
+                        key={shot.id}
+                        href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}`}
+                        style={{ width: `${widthPct}%`, borderLeftColor: color }}
+                        className="relative flex flex-col justify-between px-1.5 py-1.5 border-l-2 border-r border-r-[#1a1d20] last:border-r-0 hover:bg-white/[0.03] transition-colors overflow-hidden"
+                        title={shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title}
+                      >
+                        <span
+                          className="text-[9px] font-mono truncate leading-none"
+                          style={{ color }}
+                        >
+                          {shot.shotCode ?? shot.title}
+                        </span>
+                        <span className="text-[9px] font-mono text-[#4b5158] tabular-nums leading-none">
+                          {shot.durationSeconds!.toFixed(1)}s
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[9px] font-mono text-[#3a4046]">0s</span>
+                  <span className="text-[9px] font-mono text-[#3a4046]">
+                    {totalDuration.toFixed(1)}s
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-[#4b5158]">
+                No shot durations set. Add durations to shots to see the timeline.
+              </p>
+            )}
+            {untimedShots.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-[#1a1d20]">
+                <p className="text-[10px] text-[#4b5158] mb-2">No duration set:</p>
+                <div className="flex flex-wrap gap-2">
+                  {untimedShots.map((shot) => (
+                    <Link
+                      key={shot.id}
+                      href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}`}
+                      className="text-[10px] font-mono text-[#3a4046] hover:text-[#6e767d] border border-[#1a1d20] rounded px-2 py-0.5 transition-colors"
+                    >
+                      {shot.shotCode ?? shot.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        </>
       )}
 
       {/* ── Production ────────────────────────────────────────────── */}
