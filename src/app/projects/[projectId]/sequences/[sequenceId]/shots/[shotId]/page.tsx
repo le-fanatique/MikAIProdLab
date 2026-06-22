@@ -17,6 +17,7 @@ import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
 import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
 import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import ShotPromptForm from "@/components/ShotPromptForm";
+import PromptSegmentsTimeline from "@/components/PromptSegmentsTimeline";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
@@ -138,10 +139,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   }));
 
   const compiledPrompt = compilePromptSegments(segmentList);
-  const coveredSeconds = segmentList.reduce(
-    (sum, s) => sum + (s.durationSeconds ?? 0),
-    0
-  );
 
   const castAssetRefImageRows =
     assignedAssetIds.length > 0
@@ -413,23 +410,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           <p className="text-xs text-[#4b5158] mt-3">
             Prompt segments are used in video workflows alongside the Shot Prompt.
           </p>
-          {shot.durationSeconds != null && segmentList.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-[#1a1d20] flex items-center gap-2">
-              <span className="text-[10px] font-mono text-[#4b5158]">Coverage</span>
-              <span
-                className={`text-[10px] font-mono ${
-                  Math.abs(coveredSeconds - shot.durationSeconds) <= 0.001
-                    ? "text-[#6b9e72]"
-                    : "text-[#cda24f]"
-                }`}
-              >
-                {coveredSeconds.toFixed(1)}s / {shot.durationSeconds.toFixed(1)}s
-              </span>
-              {Math.abs(coveredSeconds - shot.durationSeconds) <= 0.001 && (
-                <span className="text-[9px] text-[#6b9e72]">✓</span>
-              )}
-            </div>
-          )}
+          <PromptSegmentsTimeline
+            segments={segmentList}
+            shotDurationSeconds={shot.durationSeconds}
+          />
         </Card>
 
         <Card title="Compiled Prompt">
