@@ -18,6 +18,37 @@ function resolvePreviewImage(
   return availableImages[0];
 }
 
+function buildAutoLabel(availableImages: RuntimeImageOption[]): string {
+  if (!availableImages.length) return "No images available";
+  const first = availableImages[0];
+  const base = `Auto · ${first.label}`;
+  return first.role ? `${base} · ${first.role}` : base;
+}
+
+function buildOptionLabel(img: RuntimeImageOption): string {
+  return img.role ? `${img.label} · ${img.role}` : img.label;
+}
+
+type AssetGroup = { label: string; images: RuntimeImageOption[] };
+
+function buildAssetGroups(availableImages: RuntimeImageOption[]): AssetGroup[] {
+  const map = new Map<string, AssetGroup>();
+  for (const img of availableImages) {
+    if (img.source !== "asset") continue;
+    const key = img.assetName ? `${img.assetName}__${img.assetType ?? ""}` : "__fallback__";
+    if (!map.has(key)) {
+      const groupLabel = img.assetName
+        ? img.assetType
+          ? `${img.assetName} (${img.assetType})`
+          : img.assetName
+        : "Asset References";
+      map.set(key, { label: groupLabel, images: [] });
+    }
+    map.get(key)!.images.push(img);
+  }
+  return Array.from(map.values());
+}
+
 export default function WorkflowImageSelectionForm({
   basePath,
   mappings,
@@ -43,6 +74,11 @@ export default function WorkflowImageSelectionForm({
               mapping.availableImages,
               selectedId
             );
+
+            const shotImages = mapping.availableImages.filter(
+              (img) => img.source === "shot"
+            );
+            const assetGroups = buildAssetGroups(mapping.availableImages);
 
             return (
               <div key={nodeId} className="flex flex-col gap-2">
@@ -80,14 +116,26 @@ export default function WorkflowImageSelectionForm({
                         defaultValue={selectedId}
                         className="w-full rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
-                        <option value="">First available (auto)</option>
-                        {mapping.availableImages.map((img) => (
-                          <option key={img.id} value={img.id}>
-                            {img.label}
-                            {img.source === "shot"
-                              ? " · Shot reference"
-                              : ` · ${img.assetName ?? ""} / ${img.assetType ?? ""}`}
-                          </option>
+                        <option value="">
+                          {buildAutoLabel(mapping.availableImages)}
+                        </option>
+                        {shotImages.length > 0 && (
+                          <optgroup label="Shot References">
+                            {shotImages.map((img) => (
+                              <option key={img.id} value={img.id}>
+                                {buildOptionLabel(img)}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {assetGroups.map((group) => (
+                          <optgroup key={group.label} label={group.label}>
+                            {group.images.map((img) => (
+                              <option key={img.id} value={img.id}>
+                                {buildOptionLabel(img)}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
                       </select>
                       {previewImage && (
