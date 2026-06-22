@@ -3,6 +3,7 @@ import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
 import ReferenceImageRoleBadge from "@/components/ReferenceImageRoleBadge";
 import EmptyState from "@/components/EmptyState";
 import WorkflowScalarInputsForm from "@/components/WorkflowScalarInputsForm";
+import WorkflowTextOverrideForm from "@/components/WorkflowTextOverrideForm";
 
 const SCALAR_KINDS = new Set(["integer", "float", "boolean", "select", "seed", "string"]);
 
@@ -11,6 +12,7 @@ type Props = {
   workflowKind: "image" | "video";
   timelinePromptText: string;
   scalarValueByNodeId: Record<string, string>;
+  textOverrideByNodeId: Record<string, string>;
   currentSearchParams: Record<string, string>;
   basePath: string;
 };
@@ -20,6 +22,7 @@ export default function WorkflowRuntimeMappingPanel({
   workflowKind,
   timelinePromptText,
   scalarValueByNodeId,
+  textOverrideByNodeId,
   currentSearchParams,
   basePath,
 }: Props) {
@@ -34,6 +37,8 @@ export default function WorkflowRuntimeMappingPanel({
 
   const hasTimeline = workflowKind === "video" && timelinePromptText.trim().length > 0;
   const hasScalars = mappings.some((m) => SCALAR_KINDS.has(m.input.kind));
+  const textMappings = mappings.filter((m) => m.mappingKind === "text");
+  const hasTexts = textMappings.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -56,37 +61,21 @@ export default function WorkflowRuntimeMappingPanel({
               <span className="text-[10px] text-[#4b5158]">· node {mapping.input.nodeId}</span>
             </div>
 
-            {/* Text mapping */}
-            {mapping.mappingKind === "text" && (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-                    Suggested Text
-                  </p>
-                  <textarea
-                    readOnly
-                    value={mapping.suggestedText ?? ""}
-                    rows={10}
-                    className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none cursor-default focus:outline-none leading-relaxed"
-                  />
-                </div>
-
-                {hasTimeline && (
-                  <div className="flex flex-col gap-1">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-                      Timeline Prompt
-                    </p>
-                    <p className="text-[10px] text-[#4b5158]">
-                      Timeline prompt is also available for video workflows.
-                    </p>
-                    <textarea
-                      readOnly
-                      value={timelinePromptText}
-                      rows={5}
-                      className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none cursor-default focus:outline-none leading-relaxed"
-                    />
-                  </div>
-                )}
+            {/* Text mapping — timeline only (editable text is in the Text Inputs section below) */}
+            {mapping.mappingKind === "text" && hasTimeline && (
+              <div className="flex flex-col gap-1">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+                  Timeline Prompt
+                </p>
+                <p className="text-[10px] text-[#4b5158]">
+                  Timeline prompt is also available for video workflows.
+                </p>
+                <textarea
+                  readOnly
+                  value={timelinePromptText}
+                  rows={5}
+                  className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none cursor-default focus:outline-none leading-relaxed"
+                />
               </div>
             )}
 
@@ -146,6 +135,21 @@ export default function WorkflowRuntimeMappingPanel({
           </div>
         );
       })}
+
+      {/* Text inputs section */}
+      {hasTexts && (
+        <div className="flex flex-col gap-3 pt-4 border-t border-[#232629]">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+            Text Inputs
+          </p>
+          <WorkflowTextOverrideForm
+            textMappings={textMappings}
+            textOverrideByNodeId={textOverrideByNodeId}
+            currentSearchParams={currentSearchParams}
+            basePath={basePath}
+          />
+        </div>
+      )}
 
       {/* Scalar inputs section */}
       {hasScalars && (

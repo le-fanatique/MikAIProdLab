@@ -29,6 +29,7 @@ import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPane
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
+import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
 import { runWorkflowGenerationFromForm } from "@/actions/generation";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 
@@ -74,7 +75,16 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     if (strValue !== undefined) scalarValueByNodeId[nodeId] = strValue;
   }
 
-  // Flat snapshot of all current search params for the scalar form passthrough
+  const textOverrideByNodeId: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (!key.startsWith("textNode_")) continue;
+    const nodeId = key.slice("textNode_".length);
+    if (!nodeId) continue;
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue !== undefined) textOverrideByNodeId[nodeId] = strValue;
+  }
+
+  // Flat snapshot of all current search params for the scalar/text form passthrough
   const currentSearchParams: Record<string, string> = {};
   for (const [key, value] of Object.entries(resolvedSearchParams)) {
     const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
@@ -176,7 +186,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const mappings =
     parsed !== null
-      ? mapWorkflowInputs(parsed.inputs, compiledShotPrompt.text, availableImages)
+      ? mapWorkflowInputs(parsed.inputs, compiledShotPrompt.text, availableImages, textOverrideByNodeId)
       : [];
 
   const payloadPreview =
@@ -199,6 +209,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   }
   for (const [nodeId, value] of Object.entries(scalarValueByNodeId)) {
     selectionParams.set(`scalarNode_${nodeId}`, value);
+  }
+  for (const [nodeId, value] of Object.entries(textOverrideByNodeId)) {
+    selectionParams.set(`textNode_${nodeId}`, value);
   }
   const selectionQuery = selectionParams.toString();
   const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
@@ -259,6 +272,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               workflowKind={workflow.kind}
               timelinePromptText={compiledPrompt.text}
               scalarValueByNodeId={scalarValueByNodeId}
+              textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
               basePath={basePath}
             />
@@ -317,7 +331,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                 </div>
               )}
 
-              <form action={runWorkflowGenerationFromForm}>
+              <form action={runWorkflowGenerationFromForm} className="flex flex-col gap-4">
                 <input type="hidden" name="projectId" value={String(pid)} />
                 <input type="hidden" name="sequenceId" value={String(sid)} />
                 <input type="hidden" name="shotId" value={String(shid)} />
@@ -339,12 +353,15 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                     value={value}
                   />
                 ))}
-                <button
-                  type="submit"
-                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                >
-                  Generate
-                </button>
+                <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
+                <div>
+                  <button
+                    type="submit"
+                    className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                  >
+                    Generate
+                  </button>
+                </div>
               </form>
 
               {activeJobId !== null && (

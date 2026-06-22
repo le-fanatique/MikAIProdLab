@@ -74,20 +74,6 @@ export default function WorkflowPayloadPreviewPanel({ result }: Props) {
         </div>
       )}
 
-      {/* JSON */}
-      {result.patchedJsonText.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d] mb-1">
-            Patched JSON
-          </p>
-          <textarea
-            readOnly
-            value={result.patchedJsonText}
-            rows={20}
-            className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none cursor-default focus:outline-none leading-relaxed"
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -95,14 +95,16 @@ export function buildRuntimeImageOptions(
 export function mapWorkflowInputs(
   inputs: WorkflowInput[],
   suggestedText: string,
-  availableImages: RuntimeImageOption[]
+  availableImages: RuntimeImageOption[],
+  textOverrideByNodeId?: Record<string, string>
 ): WorkflowInputMapping[] {
   return inputs.map((input): WorkflowInputMapping => {
     if (input.kind === "text") {
+      const effectiveText = textOverrideByNodeId?.[input.nodeId] ?? suggestedText;
       return {
         input,
         mappingKind: "text",
-        suggestedText,
+        suggestedText: effectiveText,
         availableImages: [],
       };
     }

@@ -12,6 +12,7 @@ import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPane
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
+import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import {
   getRuntimeImageLabel,
@@ -72,6 +73,15 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
     if (strValue !== undefined) scalarValueByNodeId[nodeId] = strValue;
   }
 
+  const textOverrideByNodeId: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (!key.startsWith("textNode_")) continue;
+    const nodeId = key.slice("textNode_".length);
+    if (!nodeId) continue;
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue !== undefined) textOverrideByNodeId[nodeId] = strValue;
+  }
+
   const currentSearchParams: Record<string, string> = {};
   for (const [key, value] of Object.entries(resolvedSearchParams)) {
     const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
@@ -122,7 +132,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
 
   const mappings =
     parsed !== null
-      ? mapWorkflowInputs(parsed.inputs, assetPromptText, availableImages)
+      ? mapWorkflowInputs(parsed.inputs, assetPromptText, availableImages, textOverrideByNodeId)
       : [];
 
   const payloadPreview =
@@ -142,6 +152,9 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
   }
   for (const [nodeId, value] of Object.entries(scalarValueByNodeId)) {
     selectionParams.set(`scalarNode_${nodeId}`, value);
+  }
+  for (const [nodeId, value] of Object.entries(textOverrideByNodeId)) {
+    selectionParams.set(`textNode_${nodeId}`, value);
   }
   const selectionQuery = selectionParams.toString();
   const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
@@ -244,6 +257,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
               workflowKind={workflow.kind}
               timelinePromptText=""
               scalarValueByNodeId={scalarValueByNodeId}
+              textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
               basePath={basePath}
             />
@@ -284,7 +298,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
                 </div>
               )}
 
-              <form action={runAssetGenerationFromForm}>
+              <form action={runAssetGenerationFromForm} className="flex flex-col gap-4">
                 <input type="hidden" name="projectId" value={String(pid)} />
                 <input type="hidden" name="assetId" value={String(aid)} />
                 <input type="hidden" name="workflowId" value={String(wid)} />
@@ -305,12 +319,15 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
                     value={value}
                   />
                 ))}
-                <button
-                  type="submit"
-                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                >
-                  Generate
-                </button>
+                <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
+                <div>
+                  <button
+                    type="submit"
+                    className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                  >
+                    Generate
+                  </button>
+                </div>
               </form>
 
               {activeJobId !== null && (

@@ -125,6 +125,7 @@ export async function runWorkflowGeneration(args: {
   workflowId: number;
   selectedImageByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
+  patchedJsonOverride?: Record<string, unknown>;
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, sequenceId, shotId, workflowId } = args;
 
@@ -257,7 +258,9 @@ export async function runWorkflowGeneration(args: {
     scalarOverrideByNodeId: args.scalarOverrideByNodeId,
   });
 
-  if (!preview.patchedJsonText || Object.keys(preview.patchedJson).length === 0) {
+  const finalPatchedJson: Record<string, unknown> = args.patchedJsonOverride ?? preview.patchedJson;
+
+  if (Object.keys(finalPatchedJson).length === 0) {
     return {
       ok: false,
       error: "No compatible payload could be generated from this workflow and shot.",
@@ -290,7 +293,7 @@ export async function runWorkflowGeneration(args: {
       .set({ status: "uploading", updatedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, jobId));
 
-    const prepared = await prepareComfyPayloadForQueue(preview.patchedJson);
+    const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
 
     // --- 8. Queue prompt ---
     const queued = await queueComfyPrompt({
@@ -354,6 +357,21 @@ export async function runWorkflowGenerationFromForm(
     scalarOverrideByNodeId[nodeId] = value;
   }
 
+  const rawPatchedJsonOverride = (formData.get("patchedJsonOverride") as string | null)?.trim() || null;
+  let patchedJsonOverride: Record<string, unknown> | undefined;
+  if (rawPatchedJsonOverride) {
+    try {
+      const parsed = JSON.parse(rawPatchedJsonOverride) as unknown;
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("Not an object");
+      }
+      patchedJsonOverride = parsed as Record<string, unknown>;
+    } catch {
+      const sep = base.includes("?") ? "&" : "?";
+      redirect(`${base}${sep}generationError=${encodeURIComponent("Invalid patched JSON.")}`);
+    }
+  }
+
   const result = await runWorkflowGeneration({
     projectId,
     sequenceId,
@@ -361,6 +379,7 @@ export async function runWorkflowGenerationFromForm(
     workflowId,
     selectedImageByNodeId,
     scalarOverrideByNodeId,
+    patchedJsonOverride,
   });
 
   if (result.ok) {
@@ -409,6 +428,7 @@ export async function runAssetGeneration(input: {
   workflowId: number;
   selectedImageByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
+  patchedJsonOverride?: Record<string, unknown>;
 }): Promise<{ ok: true; jobId: number } | { ok: false; error: string }> {
   const { projectId, assetId, workflowId } = input;
 
@@ -484,7 +504,9 @@ export async function runAssetGeneration(input: {
     scalarOverrideByNodeId: input.scalarOverrideByNodeId,
   });
 
-  if (!preview.patchedJsonText || Object.keys(preview.patchedJson).length === 0) {
+  const finalPatchedJson: Record<string, unknown> = input.patchedJsonOverride ?? preview.patchedJson;
+
+  if (Object.keys(finalPatchedJson).length === 0) {
     return {
       ok: false,
       error: "No compatible payload could be generated from this workflow and asset.",
@@ -518,7 +540,7 @@ export async function runAssetGeneration(input: {
       .set({ status: "uploading", updatedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, jobId));
 
-    const prepared = await prepareComfyPayloadForQueue(preview.patchedJson);
+    const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
 
     const queued = await queueComfyPrompt({
       workflow: prepared.workflow,
@@ -574,12 +596,29 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     scalarOverrideByNodeId[nodeId] = value;
   }
 
+  const rawPatchedJsonOverride = (formData.get("patchedJsonOverride") as string | null)?.trim() || null;
+  let patchedJsonOverride: Record<string, unknown> | undefined;
+  if (rawPatchedJsonOverride) {
+    try {
+      const parsed = JSON.parse(rawPatchedJsonOverride) as unknown;
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("Not an object");
+      }
+      patchedJsonOverride = parsed as Record<string, unknown>;
+    } catch {
+      redirect(
+        appendSearchParam(returnTo, "generationError", encodeURIComponent("Invalid patched JSON."))
+      );
+    }
+  }
+
   const result = await runAssetGeneration({
     projectId,
     assetId,
     workflowId,
     selectedImageByNodeId,
     scalarOverrideByNodeId,
+    patchedJsonOverride,
   });
 
   if (result.ok) {
