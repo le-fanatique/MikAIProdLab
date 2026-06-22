@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { db } from "@/db";
 import { projects, sequences, shots, assets, sequenceAssets } from "@/db/schema";
 import { eq, and, notInArray, asc } from "drizzle-orm";
@@ -19,6 +20,17 @@ type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+function SectionLabel({ label, action }: { label: string; action?: ReactNode }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4 flex items-center justify-between">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+      {action}
+    </div>
+  );
+}
 
 export default async function SequencePage({ params, searchParams }: Props) {
   const { projectId, sequenceId } = await params;
@@ -97,6 +109,10 @@ export default async function SequencePage({ params, searchParams }: Props) {
 
   const deleteSeqAction = deleteSequence.bind(null, sid, pid);
 
+  const hasContext = Boolean(
+    sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint
+  );
+
   return (
     <div>
       <Breadcrumb
@@ -131,88 +147,54 @@ export default async function SequencePage({ params, searchParams }: Props) {
         }
       />
 
-      {/* Sequence context */}
-      {(sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
-        <Card className="mb-6">
-          <div className="flex flex-col gap-3">
-            {sequence.summary && (
-              <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
-            )}
-            {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
-              <div className="flex flex-wrap gap-4 text-xs">
-                {sequence.narrativePurpose && (
-                  <span>
-                    <span className="text-[#4b5158]">Purpose </span>
-                    <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
-                  </span>
-                )}
-                {sequence.mood && (
-                  <span>
-                    <span className="text-[#4b5158]">Mood </span>
-                    <span className="text-[#6e767d]">{sequence.mood}</span>
-                  </span>
-                )}
-                {sequence.locationHint && (
-                  <span>
-                    <span className="text-[#4b5158]">Location </span>
-                    <span className="text-[#6e767d]">{sequence.locationHint}</span>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </Card>
+      {/* ── Context ───────────────────────────────────────────────── */}
+      {hasContext && (
+        <>
+          <SectionLabel label="Context" />
+          <Card className="mb-6">
+            <div className="flex flex-col gap-3">
+              {sequence.summary && (
+                <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
+              )}
+              {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
+                <div className="flex flex-wrap gap-4 text-xs">
+                  {sequence.narrativePurpose && (
+                    <span>
+                      <span className="text-[#4b5158]">Purpose </span>
+                      <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
+                    </span>
+                  )}
+                  {sequence.mood && (
+                    <span>
+                      <span className="text-[#4b5158]">Mood </span>
+                      <span className="text-[#6e767d]">{sequence.mood}</span>
+                    </span>
+                  )}
+                  {sequence.locationHint && (
+                    <span>
+                      <span className="text-[#4b5158]">Location </span>
+                      <span className="text-[#6e767d]">{sequence.locationHint}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </Card>
+        </>
       )}
 
-      {/* Sequence assets */}
-      <Card title="Assets" className="mb-6">
-        <SequenceAssetsPanel
-          assignedItems={assignedItems}
-          availableAssets={availableAssets}
-          projectId={pid}
-          assignAction={assignAction}
-        />
-        <p className="text-xs text-[#4b5158] mt-3">
-          Assets listed here describe the sequence-level cast. They are not automatically added to individual shots.
-        </p>
-      </Card>
-
-      {/* Sequence Prompt */}
-      <Card title="Sequence Prompt" className="mb-6">
-        <SequencePromptForm
-          projectId={pid}
-          sequenceId={sid}
-          initialSequencePrompt={sequence.sequencePrompt ?? null}
-          returnTo={sequenceReturnTo}
-          saved={sequencePromptSaved}
-          error={sequencePromptError}
-        />
-      </Card>
-
-      {/* LLM Assist — generate shots */}
-      <Card title="LLM Assist" className="mb-6">
-        <SequenceShotsLLMAssistPanel
-          projectId={pid}
-          sequenceId={sid}
-          returnTo={`/projects/${pid}/sequences/${sid}`}
-          createdCount={Number.isFinite(createdCount) ? createdCount : null}
-          createError={createError ?? null}
-          hasSequencePrompt={Boolean(sequence.sequencePrompt?.trim())}
-        />
-      </Card>
-
-      {/* Shots header */}
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
-          Shots
-        </p>
-        <Link
-          href={`/projects/${pid}/sequences/${sid}/shots/new`}
-          className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
-        >
-          + Add Shot
-        </Link>
-      </div>
+      {/* ── Shots ─────────────────────────────────────────────────── */}
+      <SectionLabel
+        label="Shots"
+        action={
+          <Link
+            href={`/projects/${pid}/sequences/${sid}/shots/new`}
+            className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
+          >
+            + Add Shot
+          </Link>
+        }
+      />
 
       {shotList.length === 0 ? (
         <EmptyState
@@ -309,6 +291,43 @@ export default async function SequencePage({ params, searchParams }: Props) {
           </table>
         </div>
       )}
+
+      {/* ── Production ────────────────────────────────────────────── */}
+      <SectionLabel label="Production" />
+
+      <Card title="Assets" className="mb-6">
+        <SequenceAssetsPanel
+          assignedItems={assignedItems}
+          availableAssets={availableAssets}
+          projectId={pid}
+          assignAction={assignAction}
+        />
+        <p className="text-xs text-[#4b5158] mt-3">
+          Assets listed here describe the sequence-level cast. They are not automatically added to individual shots.
+        </p>
+      </Card>
+
+      <Card title="Sequence Prompt" className="mb-6">
+        <SequencePromptForm
+          projectId={pid}
+          sequenceId={sid}
+          initialSequencePrompt={sequence.sequencePrompt ?? null}
+          returnTo={sequenceReturnTo}
+          saved={sequencePromptSaved}
+          error={sequencePromptError}
+        />
+      </Card>
+
+      <Card title="LLM Assist" className="mb-6">
+        <SequenceShotsLLMAssistPanel
+          projectId={pid}
+          sequenceId={sid}
+          returnTo={`/projects/${pid}/sequences/${sid}`}
+          createdCount={Number.isFinite(createdCount) ? createdCount : null}
+          createError={createError ?? null}
+          hasSequencePrompt={Boolean(sequence.sequencePrompt?.trim())}
+        />
+      </Card>
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link
