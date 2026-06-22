@@ -10,6 +10,16 @@ import EmptyState from "@/components/EmptyState";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -66,7 +76,8 @@ export default async function AssetWorkflowListPage({ params }: Props) {
         meta={asset.name}
       />
 
-      <p className="text-sm text-[#6e767d] mb-6">
+      <SectionLabel label="Select Workflow" />
+      <p className="text-xs text-[#6e767d] mb-4">
         Choose an image workflow to generate a reference for{" "}
         <span className="text-[#a4abb2]">{asset.name}</span>.
       </p>
@@ -108,9 +119,9 @@ export default async function AssetWorkflowListPage({ params }: Props) {
                 </div>
                 <Link
                   href={`/projects/${pid}/assets/${aid}/workflows/${wf.id}/generate`}
-                  className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                  className="shrink-0 rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
                 >
-                  Generate
+                  Generate →
                 </Link>
               </div>
             </Card>

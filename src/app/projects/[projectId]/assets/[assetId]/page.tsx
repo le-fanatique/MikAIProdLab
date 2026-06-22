@@ -182,7 +182,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             Generate Image
           </p>
           <p className="text-xs text-[#4b5158] mt-0.5">
-            Run an image workflow with this asset&apos;s references.
+            Select a workflow to generate and attach a new reference image.
           </p>
         </div>
         <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors shrink-0">

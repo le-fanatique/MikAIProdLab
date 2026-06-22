@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 type JobStatus =
   | "pending"
@@ -62,8 +63,10 @@ function isVideoPath(outputPath: string): boolean {
 }
 
 export default function GenerationJobStatusPanel({ jobId }: Props) {
+  const router = useRouter();
   const [job, setJob] = useState<JobData | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const hasRefreshedForTerminalStatus = useRef(false);
 
   const poll = useCallback(async () => {
     try {
@@ -79,6 +82,13 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
 
       setFetchError(null);
       setJob(data.job);
+      if (
+        TERMINAL_STATUSES.includes(data.job.status as JobStatus) &&
+        !hasRefreshedForTerminalStatus.current
+      ) {
+        hasRefreshedForTerminalStatus.current = true;
+        router.refresh();
+      }
       return data.job.status as JobStatus;
     } catch {
       setFetchError("Could not reach the job status endpoint.");
