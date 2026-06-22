@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import TopBar from "@/components/TopBar";
+import ContextStrip from "@/components/ContextStrip";
+import RightPanel from "@/components/RightPanel";
 import { db } from "@/db";
 import { projects, sequences, shots } from "@/db/schema";
 import { asc } from "drizzle-orm";
@@ -69,13 +72,28 @@ export default async function RootLayout({
       lang="en"
       className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}
     >
-      <body className="h-full bg-[#0d0e10] text-[#a4abb2] antialiased flex overflow-hidden">
-        <Sidebar tree={tree} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="px-8 py-8 max-w-4xl">
-            {children}
-          </div>
-        </main>
+      <body className="h-full bg-[#0d0e10] text-[#a4abb2] antialiased flex flex-col overflow-hidden">
+        {/* Top bar — persistent across all routes */}
+        <TopBar tree={tree} />
+
+        {/* Context strip — tabs derived from current route */}
+        <ContextStrip tree={tree} />
+
+        {/* 3-column body */}
+        <div className="flex flex-1 min-h-0">
+          {/* Left nav */}
+          <Sidebar tree={tree} />
+
+          {/* Center editor — primary scrollable area */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="px-6 py-6">
+              {children}
+            </div>
+          </main>
+
+          {/* Right context panel */}
+          <RightPanel tree={tree} />
+        </div>
       </body>
     </html>
   );
