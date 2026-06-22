@@ -10,6 +10,7 @@ import {
   promptSegments,
   shotReferenceImages,
   assetReferenceImages,
+  generationJobs,
 } from "@/db/schema";
 import { eq, asc, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -30,7 +31,7 @@ import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm"
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
 import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
-import { runWorkflowGenerationFromForm } from "@/actions/generation";
+import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 
 function SectionLabel({ label }: { label: string }) {
@@ -229,6 +230,32 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   const activeJobId =
     jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
 
+  const ATTACH_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+  let activeJobOutputPath: string | null = null;
+  let canAttach = false;
+
+  if (activeJobId !== null && workflow.kind === "image") {
+    const [fetchedJob] = await db
+      .select({
+        status: generationJobs.status,
+        outputPath: generationJobs.outputPath,
+        shotId: generationJobs.shotId,
+      })
+      .from(generationJobs)
+      .where(eq(generationJobs.id, activeJobId));
+
+    if (fetchedJob && fetchedJob.shotId === shid) {
+      activeJobOutputPath = fetchedJob.outputPath ?? null;
+      const ext = activeJobOutputPath
+        ? activeJobOutputPath.split(".").pop()?.toLowerCase() ?? ""
+        : "";
+      canAttach =
+        fetchedJob.status === "done" &&
+        activeJobOutputPath !== null &&
+        ATTACH_EXTS.has(`.${ext}`);
+    }
+  }
+
   return (
     <div>
       <Breadcrumb
@@ -241,7 +268,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
             href: `/projects/${pid}/sequences/${sid}/shots/${shid}`,
           },
           {
-            label: workflow.kind === "video" ? "Video Workflows" : "Image Workflows",
+            label: "Shot Workflows",
             href: `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`,
           },
           { label: workflow.name },
@@ -249,7 +276,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       />
 
       <PageHeader
-        title={workflow.kind === "video" ? "Generate Video" : "Generate Image"}
+        title={workflow.kind === "video" ? "Generate Video" : "Generate Keyframe"}
         meta={shotLabel}
       />
 
@@ -279,21 +306,19 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
         {/* ── Inputs ────────────────────────────────────────── */}
         <SectionLabel label="Inputs" />
 
-        <Card title="Compiled Prompt">
+        <Card title="Shot Prompt">
           <CompiledShotPromptPreviewPanel
             compiled={compiledShotPrompt}
             workflowKind={workflow.kind}
           />
-          {!compiledShotPrompt.hasShotPrompt && (
-            <div className="mt-3 pt-3 border-t border-[#1e2124]">
-              <Link
-                href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
-                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-              >
-                Edit Shot Prompt →
-              </Link>
-            </div>
-          )}
+          <div className="mt-3 pt-3 border-t border-[#1e2124]">
+            <Link
+              href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+              className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Edit Shot Prompt →
+            </Link>
+          </div>
         </Card>
 
         <Card title="Suggested Inputs">
@@ -400,7 +425,29 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           <>
             <SectionLabel label="Output" />
             <Card>
-              <GenerationJobStatusPanel jobId={activeJobId} />
+              <div className="flex flex-col gap-4">
+                <GenerationJobStatusPanel jobId={activeJobId} />
+
+                {canAttach && (
+                  <form action={attachOutputAsShotReference}>
+                    <input type="hidden" name="projectId" value={String(pid)} />
+                    <input type="hidden" name="sequenceId" value={String(sid)} />
+                    <input type="hidden" name="shotId" value={String(shid)} />
+                    <input type="hidden" name="jobId" value={String(activeJobId)} />
+                    <input
+                      type="hidden"
+                      name="returnTo"
+                      value={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
+                    >
+                      Attach as Shot Reference
+                    </button>
+                  </form>
+                )}
+              </div>
             </Card>
           </>
         )}

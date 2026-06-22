@@ -9,6 +9,16 @@ import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -70,12 +80,14 @@ export default async function WorkflowPickerPage({ params }: Props) {
       />
 
       <PageHeader
-        title="Workflow Input Mapping"
+        title="Shot Workflows"
         meta={shotLabel}
       />
 
-      <p className="text-sm text-[#6e767d] mb-6">
-        Choose a saved ComfyUI workflow to preview its suggested shot inputs and generate an output.
+      <SectionLabel label="Select Workflow" />
+      <p className="text-xs text-[#6e767d] mb-4">
+        Choose a workflow to generate output for{" "}
+        <span className="text-[#a4abb2]">{shotLabel}</span>.
       </p>
 
       {workflows.length === 0 ? (
@@ -120,9 +132,9 @@ export default async function WorkflowPickerPage({ params }: Props) {
                 </div>
                 <Link
                   href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map`}
-                  className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                  className="shrink-0 rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
                 >
-                  {wf.kind === "video" ? "Generate Video" : "Generate Image"}
+                  {wf.kind === "video" ? "Generate Video →" : "Generate Keyframe →"}
                 </Link>
               </div>
             </Card>

@@ -429,62 +429,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           />
         </Card>
 
-        {/* ── References & Generate ─────────────────────────────────── */}
-        <SectionLabel label="References & Generate" />
-
-        <Card title="Workflow Mapping">
-          {savedWorkflows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[#2c3035] px-6 py-10 text-center">
-              <p className="text-[#a4abb2] text-sm font-medium mb-1">No workflows saved.</p>
-              <p className="text-[#6e767d] text-xs mt-1">
-                Upload a ComfyUI API workflow in Settings before mapping shot inputs.
-              </p>
-              <div className="mt-4">
-                <Link
-                  href="/settings/workflows"
-                  className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                >
-                  Manage Workflows
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {savedWorkflows.map((wf) => (
-                <div
-                  key={wf.id}
-                  className="flex items-start justify-between gap-4 border-b border-[#232629] last:border-0 pb-3 last:pb-0"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <WorkflowKindBadge kind={wf.kind} />
-                      <span className="text-sm font-medium text-[#e7e9ec] truncate">
-                        {wf.name}
-                      </span>
-                    </div>
-                    {wf.description && (
-                      <p className="text-xs text-[#a4abb2]">{wf.description}</p>
-                    )}
-                  </div>
-                  <Link
-                    href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map`}
-                    className="shrink-0 text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                  >
-                    Map Inputs
-                  </Link>
-                </div>
-              ))}
-              <div className="pt-1">
-                <Link
-                  href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
-                  className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
-                >
-                  View All Workflows →
-                </Link>
-              </div>
-            </div>
-          )}
-        </Card>
+        {/* ── References ────────────────────────────────────────────── */}
+        <SectionLabel label="References" />
 
         <Card title="Reference Images">
           <ReferenceImagesPanel
@@ -498,6 +444,25 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             }
           />
         </Card>
+
+        {/* ── Generation ────────────────────────────────────────────── */}
+        <SectionLabel label="Generation" />
+        <Link
+          href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
+          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+        >
+          <div>
+            <p className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+              Generate Keyframe or Video
+            </p>
+            <p className="text-xs text-[#4b5158] mt-0.5">
+              Select a workflow to generate a keyframe or video for this shot.
+            </p>
+          </div>
+          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors shrink-0">
+            →
+          </span>
+        </Link>
 
         {/* ── Outputs ───────────────────────────────────────────────── */}
         <SectionLabel label="Outputs" />
