@@ -122,6 +122,7 @@ export async function runWorkflowGeneration(args: {
   shotId: number;
   workflowId: number;
   selectedImageByNodeId?: Record<string, string>;
+  scalarOverrideByNodeId?: Record<string, string>;
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, sequenceId, shotId, workflowId } = args;
 
@@ -251,6 +252,7 @@ export async function runWorkflowGeneration(args: {
 
   const preview = patchWorkflowPayload(workflow.workflowJson, mappings, {
     selectedImageByNodeId: args.selectedImageByNodeId,
+    scalarOverrideByNodeId: args.scalarOverrideByNodeId,
   });
 
   if (!preview.patchedJsonText || Object.keys(preview.patchedJson).length === 0) {
@@ -341,12 +343,22 @@ export async function runWorkflowGenerationFromForm(
     selectedImageByNodeId[nodeId] = imageId;
   }
 
+  const scalarOverrideByNodeId: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("scalarNode_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("scalarNode_".length).trim();
+    if (!nodeId) continue;
+    scalarOverrideByNodeId[nodeId] = value;
+  }
+
   const result = await runWorkflowGeneration({
     projectId,
     sequenceId,
     shotId,
     workflowId,
     selectedImageByNodeId,
+    scalarOverrideByNodeId,
   });
 
   if (result.ok) {

@@ -64,6 +64,23 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       selectedImageByNodeId[nodeId] = strValue.trim();
     }
   }
+
+  const scalarValueByNodeId: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (!key.startsWith("scalarNode_")) continue;
+    const nodeId = key.slice("scalarNode_".length);
+    if (!nodeId) continue;
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue !== undefined) scalarValueByNodeId[nodeId] = strValue;
+  }
+
+  // Flat snapshot of all current search params for the scalar form passthrough
+  const currentSearchParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue !== undefined) currentSearchParams[key] = strValue;
+  }
+
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -166,6 +183,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     parsed !== null
       ? patchWorkflowPayload(workflow.workflowJson, mappings, {
           selectedImageByNodeId,
+          scalarOverrideByNodeId: scalarValueByNodeId,
         })
       : null;
 
@@ -178,6 +196,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   const selectionParams = new URLSearchParams();
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
     selectionParams.set(`imageNode_${nodeId}`, imageId);
+  }
+  for (const [nodeId, value] of Object.entries(scalarValueByNodeId)) {
+    selectionParams.set(`scalarNode_${nodeId}`, value);
   }
   const selectionQuery = selectionParams.toString();
   const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
@@ -237,6 +258,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               mappings={mappings}
               workflowKind={workflow.kind}
               timelinePromptText={compiledPrompt.text}
+              scalarValueByNodeId={scalarValueByNodeId}
+              currentSearchParams={currentSearchParams}
+              basePath={basePath}
             />
           )}
         </Card>
@@ -305,6 +329,14 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                     type="hidden"
                     name={`imageNode_${nodeId}`}
                     value={String(imageId)}
+                  />
+                ))}
+                {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
+                  <input
+                    key={`scalar-${nodeId}`}
+                    type="hidden"
+                    name={`scalarNode_${nodeId}`}
+                    value={value}
                   />
                 ))}
                 <button

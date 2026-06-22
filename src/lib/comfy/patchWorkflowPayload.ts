@@ -1,9 +1,19 @@
 import type { WorkflowInputMapping } from "@/lib/comfy/mapWorkflowInputs";
+import type { WorkflowInputKind } from "@/lib/comfy/parseWorkflow";
 
-export type WorkflowPayloadPatchKind = "text" | "image";
+export type WorkflowPayloadPatchKind =
+  | "text"
+  | "image"
+  | "integer"
+  | "float"
+  | "boolean"
+  | "select"
+  | "seed"
+  | "string";
 
 export type PatchWorkflowPayloadOptions = {
   selectedImageByNodeId?: Record<string, string>;
+  scalarOverrideByNodeId?: Record<string, string>;
 };
 
 export type WorkflowPayloadPatch = {
@@ -22,6 +32,15 @@ export type WorkflowPayloadPatchResult = {
   warnings: string[];
 };
 
+const SCALAR_KINDS = new Set<WorkflowInputKind>([
+  "integer",
+  "float",
+  "boolean",
+  "select",
+  "seed",
+  "string",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -39,6 +58,52 @@ function findTextInputKey(
   if ("prompt" in inputs) return "prompt";
   if ("string" in inputs) return "string";
   return null;
+}
+
+function findScalarInputKey(inputs: Record<string, unknown>): string | null {
+  for (const key of ["value", "text", "prompt", "string"] as const) {
+    if (key in inputs) return key;
+  }
+  return null;
+}
+
+function coerceScalarValue(
+  kind: WorkflowInputKind,
+  rawValue: string
+): { ok: true; value: string | number | boolean } | { ok: false; reason: string } {
+  const value = rawValue.trim();
+
+  if (value === "") {
+    if (kind === "string" || kind === "select") return { ok: true, value: "" };
+    return { ok: false, reason: `Empty value for ${kind} input — skipped.` };
+  }
+
+  if (kind === "integer" || kind === "seed") {
+    if (!/^-?\d+$/.test(value)) {
+      return { ok: false, reason: "Expected an integer value." };
+    }
+    return { ok: true, value: Number.parseInt(value, 10) };
+  }
+
+  if (kind === "float") {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) {
+      return { ok: false, reason: "Expected a numeric value." };
+    }
+    return { ok: true, value: parsed };
+  }
+
+  if (kind === "boolean") {
+    if (value === "true") return { ok: true, value: true };
+    if (value === "false") return { ok: true, value: false };
+    return { ok: false, reason: "Expected true or false." };
+  }
+
+  if (kind === "select" || kind === "string") {
+    return { ok: true, value };
+  }
+
+  return { ok: false, reason: "Unsupported scalar input kind." };
 }
 
 export function patchWorkflowPayload(
@@ -76,6 +141,55 @@ export function patchWorkflowPayload(
     const { nodeId } = mapping.input;
     const label = getNodeLabel(mapping);
 
+    // Scalar inputs (mappingKind is "unknown" but input.kind is a recognised scalar)
+    if (mapping.mappingKind === "unknown" && SCALAR_KINDS.has(mapping.input.kind)) {
+      const rawOverride = options.scalarOverrideByNodeId?.[nodeId];
+      if (rawOverride === undefined) {
+        // No override — keep the original workflow value unchanged
+        continue;
+      }
+
+      const node = patchedJson[nodeId];
+      if (!isRecord(node)) {
+        warnings.push(`Node ${nodeId} not found in workflow JSON.`);
+        continue;
+      }
+      const inputs = node["inputs"];
+      if (!isRecord(inputs)) {
+        warnings.push(`Node ${nodeId} has no inputs field.`);
+        continue;
+      }
+
+      const inputKey = findScalarInputKey(inputs);
+      if (inputKey === null) {
+        warnings.push(
+          `Scalar input '${label}' (node ${nodeId}): no compatible input field found.`
+        );
+        continue;
+      }
+
+      const coerced = coerceScalarValue(mapping.input.kind, rawOverride);
+      if (!coerced.ok) {
+        warnings.push(`Scalar input '${label}' (node ${nodeId}): ${coerced.reason}`);
+        continue;
+      }
+
+      const previousValue = inputs[inputKey];
+      inputs[inputKey] = coerced.value;
+
+      patches.push({
+        nodeId,
+        label,
+        kind: mapping.input.kind as WorkflowPayloadPatchKind,
+        inputKey,
+        previousValue,
+        nextValue: coerced.value,
+      });
+
+      continue;
+    }
+
+    // Truly unknown — skip
     if (mapping.mappingKind === "unknown") {
       continue;
     }
