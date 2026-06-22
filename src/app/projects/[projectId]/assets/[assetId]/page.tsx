@@ -28,6 +28,16 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default async function AssetDetailPage({ params, searchParams }: Props) {
   const { projectId, assetId } = await params;
   const resolvedSearchParams = await searchParams;
@@ -115,12 +125,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         }
       />
 
-      {attachedReference === "1" && (
-        <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
-          <p className="text-sm text-[#6b9e72]">Reference image attached.</p>
-        </div>
-      )}
-
+      {/* ── Overview ──────────────────────────────────────── */}
+      <SectionLabel label="Overview" />
       {asset.description || asset.notes ? (
         <Card title="Details">
           <div className="flex flex-col gap-4">
@@ -145,8 +151,49 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         </p>
       )}
 
-      {hasAppearances && (
-        <Card title="Appearances">
+      {/* ── References ────────────────────────────────────── */}
+      <SectionLabel label="References" />
+      {attachedReference === "1" && (
+        <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
+          <p className="text-sm text-[#6b9e72]">Reference image attached.</p>
+        </div>
+      )}
+      <Card title="Reference Images">
+        <ReferenceImagesPanel
+          images={refImages}
+          addHref={`/projects/${pid}/assets/${aid}/reference-images/new`}
+          getEditHref={(imageId) =>
+            `/projects/${pid}/assets/${aid}/reference-images/${imageId}/edit`
+          }
+          getDeleteAction={(imageId) =>
+            deleteAssetReferenceImage.bind(null, imageId, aid, pid)
+          }
+        />
+      </Card>
+
+      {/* ── Generation ────────────────────────────────────── */}
+      <SectionLabel label="Generation" />
+      <Link
+        href={`/projects/${pid}/assets/${aid}/workflows`}
+        className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+      >
+        <div>
+          <p className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+            Generate Image
+          </p>
+          <p className="text-xs text-[#4b5158] mt-0.5">
+            Run an image workflow with this asset&apos;s references.
+          </p>
+        </div>
+        <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors shrink-0">
+          →
+        </span>
+      </Link>
+
+      {/* ── Appearances ───────────────────────────────────── */}
+      <SectionLabel label="Appearances" />
+      {hasAppearances ? (
+        <Card title="Cast In">
           <div className="flex flex-col gap-4">
             {sequenceAppearances.length > 0 && (
               <div className="flex flex-col gap-2">
@@ -186,20 +233,11 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             )}
           </div>
         </Card>
+      ) : (
+        <p className="text-sm text-[#6e767d]">
+          Not yet assigned to any sequence or shot.
+        </p>
       )}
-
-      <Card title="Reference Images" className="mt-4">
-        <ReferenceImagesPanel
-          images={refImages}
-          addHref={`/projects/${pid}/assets/${aid}/reference-images/new`}
-          getEditHref={(imageId) =>
-            `/projects/${pid}/assets/${aid}/reference-images/${imageId}/edit`
-          }
-          getDeleteAction={(imageId) =>
-            deleteAssetReferenceImage.bind(null, imageId, aid, pid)
-          }
-        />
-      </Card>
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link
