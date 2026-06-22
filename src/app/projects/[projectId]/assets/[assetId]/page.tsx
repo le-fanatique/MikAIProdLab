@@ -14,6 +14,7 @@ import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -27,8 +28,13 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default async function AssetDetailPage({ params }: Props) {
+export default async function AssetDetailPage({ params, searchParams }: Props) {
   const { projectId, assetId } = await params;
+  const resolvedSearchParams = await searchParams;
+
+  const rawAttached = resolvedSearchParams["attachedReference"];
+  const attachedReference =
+    typeof rawAttached === "string" ? rawAttached : Array.isArray(rawAttached) ? rawAttached[0] : undefined;
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
 
@@ -89,6 +95,12 @@ export default async function AssetDetailPage({ params }: Props) {
         actions={
           <>
             <Link
+              href={`/projects/${pid}/assets/${aid}/workflows`}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Generate Image
+            </Link>
+            <Link
               href={`/projects/${pid}/assets/${aid}/edit`}
               className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
             >
@@ -102,6 +114,12 @@ export default async function AssetDetailPage({ params }: Props) {
           </>
         }
       />
+
+      {attachedReference === "1" && (
+        <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
+          <p className="text-sm text-[#6b9e72]">Reference image attached.</p>
+        </div>
+      )}
 
       {asset.description || asset.notes ? (
         <Card title="Details">

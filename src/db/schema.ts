@@ -262,8 +262,9 @@ export const generationJobs = sqliteTable(
   {
     id: int("id").primaryKey({ autoIncrement: true }),
     shotId: int("shot_id")
-      .notNull()
       .references(() => shots.id, { onDelete: "cascade" }),
+    assetId: int("asset_id")
+      .references(() => assets.id, { onDelete: "cascade" }),
     workflowId: int("workflow_id")
       .notNull()
       .references(() => comfyWorkflows.id),
