@@ -12,6 +12,16 @@ import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default async function SettingsPage() {
   const settings = await getLLMSettings();
   const comfySettings = await getComfySettings();
@@ -35,17 +45,15 @@ export default async function SettingsPage() {
       <Breadcrumb crumbs={[{ label: "Settings" }]} />
       <PageHeader title="Settings" />
 
-      {/* Language Model section */}
-      <Card className="mb-6">
+      {/* ── Language Model ─────────────────────────────────── */}
+      <SectionLabel label="Language Model" />
+
+      <Card title="Language Model" className="mb-6">
         <div className="flex items-center justify-between mb-5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
-            Language Model
-          </p>
           <span className="text-xs text-[#4b5158] border border-[#232629] rounded px-2 py-0.5">
             Active provider: Ollama
           </span>
         </div>
-
         <OllamaSettingsForm
           initialBaseUrl={settings.baseUrl}
           initialModel={settings.model}
@@ -55,7 +63,6 @@ export default async function SettingsPage() {
         />
       </Card>
 
-      {/* Quick Setup */}
       <Card title="Quick Setup" className="mb-6">
         <ol className="flex flex-col gap-2 text-sm text-[#6e767d] list-none">
           <li className="flex gap-3">
@@ -86,29 +93,39 @@ export default async function SettingsPage() {
         </ol>
       </Card>
 
-      {/* ComfyUI */}
-      <Card title="ComfyUI" className="mb-6">
+      {/* ── ComfyUI ────────────────────────────────────────── */}
+      <SectionLabel label="ComfyUI" />
+
+      <Card title="ComfyUI Connection" className="mb-6">
         <ComfyUISettingsForm initialBaseUrl={comfySettings.baseUrl} initialApiKey={comfySettings.apiKey} />
       </Card>
 
-      {/* ComfyUI Workflows */}
-      <Card title="ComfyUI Workflows" className="mb-6">
+      <Card title="Workflow Library" className="mb-6">
         <div className="flex items-center justify-between">
           <p className="text-sm text-[#a4abb2]">
             <span className="text-[#e7e9ec] font-medium">{workflowCount}</span>{" "}
             {workflowCount === 1 ? "workflow saved" : "workflows saved"}
           </p>
-          <Link
-            href="/settings/workflows"
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-          >
-            Manage Workflows
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/settings/workflows/new"
+              className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              + Add Workflow
+            </Link>
+            <Link
+              href="/settings/workflows"
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Manage Workflows →
+            </Link>
+          </div>
         </div>
       </Card>
 
-      {/* Active integrations */}
-      <div className="pt-4 border-t border-[#232629] flex flex-col gap-1">
+      {/* ── Integrations ───────────────────────────────────── */}
+      <SectionLabel label="Integrations" />
+      <div className="flex flex-col gap-1">
         <p className="text-xs text-[#6e767d]">
           Active:{" "}
           <span className="text-[#a4abb2]">Generate Story from Pitch</span>

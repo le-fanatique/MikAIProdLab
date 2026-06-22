@@ -8,6 +8,16 @@ import PageHeader from "@/components/PageHeader";
 import FormField from "@/components/FormField";
 import { updateComfyWorkflow } from "@/actions/comfyWorkflows";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-2 mb-4">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -60,7 +70,7 @@ export default async function EditWorkflowPage({ params, searchParams }: Props) 
         <p className="mb-5 text-sm text-[#cf7b6b]">{errorMessage}</p>
       )}
 
-      <form action={action} className="flex flex-col gap-5 max-w-lg">
+      <form action={action} className="flex flex-col gap-5">
         <FormField
           label="Name"
           name="name"
@@ -85,15 +95,17 @@ export default async function EditWorkflowPage({ params, searchParams }: Props) 
           placeholder="Optional description..."
         />
 
+        <SectionLabel label="Upload" />
+
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+          <label className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">
             Replace Workflow JSON File
           </label>
           <input
             type="file"
             name="workflowFile"
             accept=".json,application/json"
-            className="w-full rounded bg-neutral-800 border border-neutral-700 px-3 py-2 text-sm text-neutral-100 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-neutral-700 file:text-neutral-200 hover:file:bg-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors cursor-pointer"
+            className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-[#1a1d20] file:text-[#a4abb2] hover:file:bg-[#212529] focus:outline-none focus:border-[#3a4046] transition-colors cursor-pointer"
           />
         </div>
 

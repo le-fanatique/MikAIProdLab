@@ -15,6 +15,16 @@ import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { deleteComfyWorkflow } from "@/actions/comfyWorkflows";
 import WorkflowInputPreviewPanel from "@/components/WorkflowInputPreviewPanel";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -61,30 +71,41 @@ export default async function WorkflowDetailPage({ params }: Props) {
         title={workflow.name}
         badge={<WorkflowKindBadge kind={workflow.kind} />}
         actions={
-          <Link
-            href={`/settings/workflows/${wid}/edit`}
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-          >
-            Edit Workflow
-          </Link>
+          <>
+            <Link
+              href={`/settings/workflows/${wid}/edit`}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Edit Workflow
+            </Link>
+            <DeleteButton
+              action={deleteAction}
+              confirm="Delete this workflow?"
+              label="Delete Workflow"
+              className="rounded border border-[#cf7b6b]/30 text-[#cf7b6b] px-3 py-1.5 text-sm hover:border-[#cf7b6b]/60 hover:text-[#e0a194] transition-colors"
+            />
+          </>
         }
       />
 
       {parsed === null && (
-        <p className="mb-4 text-sm text-[#cf7b6b]">
-          This workflow JSON could not be parsed.
-        </p>
+        <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-4 py-3">
+          <p className="text-sm text-[#cf7b6b]">This workflow JSON could not be parsed.</p>
+        </div>
       )}
 
       {kindMismatch && parsed !== null && (
-        <p className="mb-4 text-sm text-[#cda24f]">
-          {workflow.kind === "image"
-            ? "This workflow is marked as Image, but detected outputs suggest Video."
-            : "This workflow is marked as Video, but detected outputs suggest Image."}
-        </p>
+        <div className="mb-4 rounded border border-[#cda24f]/30 bg-[#1a1508] px-4 py-3">
+          <p className="text-sm text-[#cda24f]">
+            {workflow.kind === "image"
+              ? "This workflow is marked as Image, but detected outputs suggest Video."
+              : "This workflow is marked as Video, but detected outputs suggest Image."}
+          </p>
+        </div>
       )}
 
-      {/* Details */}
+      {/* ── Info ──────────────────────────────────────────── */}
+      <SectionLabel label="Info" />
       <Card title="Details" className="mb-4">
         <dl className="flex flex-col gap-2">
           <div className="flex items-start gap-4">
@@ -126,7 +147,8 @@ export default async function WorkflowDetailPage({ params }: Props) {
         </dl>
       </Card>
 
-      {/* Detected Inputs */}
+      {/* ── Inputs ────────────────────────────────────────── */}
+      <SectionLabel label="Inputs" />
       <Card title="Detected Inputs" className="mb-4">
         {parsed === null || parsed.inputs.length === 0 ? (
           <EmptyState title="No inputs detected." />
@@ -156,7 +178,8 @@ export default async function WorkflowDetailPage({ params }: Props) {
 
       {parsed !== null && <WorkflowInputPreviewPanel inputs={parsed.inputs} />}
 
-      {/* Detected Outputs */}
+      {/* ── Outputs ───────────────────────────────────────── */}
+      <SectionLabel label="Outputs" />
       <Card title="Detected Outputs" className="mb-6">
         {parsed === null || parsed.outputs.length === 0 ? (
           <EmptyState title="No outputs detected." />
@@ -184,20 +207,13 @@ export default async function WorkflowDetailPage({ params }: Props) {
         )}
       </Card>
 
-      {/* Footer actions */}
-      <div className="flex items-center justify-between pt-2 border-t border-[#232629]">
+      <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link
           href="/settings/workflows"
           className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
         >
           ← Back to Workflows
         </Link>
-        <DeleteButton
-          action={deleteAction}
-          confirm="Delete this workflow?"
-          label="Delete Workflow"
-          className="text-sm text-[#cf7b6b]/50 hover:text-[#cf7b6b] transition-colors"
-        />
       </div>
     </div>
   );

@@ -56,7 +56,7 @@ export default function OllamaSettingsForm({
     refreshStatus.status === "loading";
 
   const inputClass =
-    "w-full rounded bg-neutral-800 border border-neutral-700 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors font-mono";
+    "w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:outline-none focus:border-[#3a4046] transition-colors font-mono";
 
   const savedModelInList = models.includes(model);
   const hasSavedModel = !!model.trim();
@@ -105,7 +105,7 @@ export default function OllamaSettingsForm({
     <div className="flex flex-col gap-5">
       {/* Base URL */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+        <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
           Ollama Server URL
         </label>
         <input
@@ -121,7 +121,7 @@ export default function OllamaSettingsForm({
       {/* Model selector */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+          <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
             Model
           </label>
           <button
@@ -130,8 +130,8 @@ export default function OllamaSettingsForm({
             disabled={isBusy}
             className={
               isBusy
-                ? "text-xs text-neutral-700 cursor-not-allowed"
-                : "text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                ? "text-xs text-[#4b5158] cursor-not-allowed"
+                : "text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
             }
           >
             {refreshStatus.status === "loading" ? "Refreshing..." : "Refresh Models"}
@@ -155,7 +155,7 @@ export default function OllamaSettingsForm({
             ))}
           </select>
         ) : (
-          <div className={inputClass + " text-neutral-600 cursor-not-allowed select-none"}>
+          <div className={inputClass + " text-[#4b5158] cursor-not-allowed select-none"}>
             {modelsError
               ? "No models loaded — click Refresh Models"
               : "No local models found. Pull one with: ollama pull llama3.2"}
@@ -163,13 +163,13 @@ export default function OllamaSettingsForm({
         )}
 
         {modelsError && (
-          <p className="text-xs text-amber-500">{modelsError}</p>
+          <p className="text-xs text-[#cda24f]">{modelsError}</p>
         )}
       </div>
 
       {/* Timeout */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+        <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
           Timeout (ms)
         </label>
         <input
@@ -190,8 +190,8 @@ export default function OllamaSettingsForm({
           disabled={isBusy}
           className={
             isBusy
-              ? "rounded bg-neutral-700 text-neutral-500 px-4 py-2 text-sm cursor-not-allowed"
-              : "rounded bg-neutral-100 text-neutral-900 px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+              ? "rounded bg-[#1a1d20] text-[#4b5158] px-4 py-2 text-sm cursor-not-allowed"
+              : "rounded bg-[#e7e9ec] text-[#0d0e10] px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
           }
         >
           {saveStatus.status === "saving" ? "Saving..." : "Save Changes"}
@@ -203,8 +203,8 @@ export default function OllamaSettingsForm({
           disabled={isBusy || !model.trim()}
           className={
             isBusy || !model.trim()
-              ? "rounded border border-neutral-800 text-neutral-700 px-4 py-2 text-sm cursor-not-allowed"
-              : "rounded border border-neutral-700 text-neutral-400 px-4 py-2 text-sm hover:border-neutral-500 hover:text-neutral-200 transition-colors"
+              ? "rounded border border-[#232629] text-[#4b5158] px-4 py-2 text-sm cursor-not-allowed"
+              : "rounded border border-[#2c3035] text-[#a4abb2] px-4 py-2 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
           }
         >
           {testStatus.status === "testing" ? "Testing..." : "Test Connection"}
@@ -213,18 +213,18 @@ export default function OllamaSettingsForm({
 
       {/* Save feedback */}
       {saveStatus.status === "saved" && (
-        <p className="text-xs text-emerald-400">Settings saved.</p>
+        <p className="text-xs text-[#6b9e72]">Settings saved.</p>
       )}
       {saveStatus.status === "error" && (
-        <p className="text-xs text-red-400">{saveStatus.message}</p>
+        <p className="text-xs text-[#cf7b6b]">{saveStatus.message}</p>
       )}
 
       {/* Test feedback */}
       {testStatus.status === "ok" && (
-        <p className="text-xs text-emerald-400">✓ {testStatus.message}</p>
+        <p className="text-xs text-[#6b9e72]">✓ {testStatus.message}</p>
       )}
       {testStatus.status === "error" && (
-        <p className="text-xs text-red-400">✗ {testStatus.message}</p>
+        <p className="text-xs text-[#cf7b6b]">✗ {testStatus.message}</p>
       )}
     </div>
   );

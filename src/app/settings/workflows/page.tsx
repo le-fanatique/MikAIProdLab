@@ -52,7 +52,9 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
       />
 
       {error === "not_found" && (
-        <p className="mb-4 text-sm text-[#cf7b6b]">Workflow not found.</p>
+        <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-4 py-3">
+          <p className="text-sm text-[#cf7b6b]">Workflow not found.</p>
+        </div>
       )}
 
       {workflows.length === 0 ? (
@@ -94,7 +96,7 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
                   <div className="flex items-center gap-3 shrink-0">
                     <Link
                       href={`/settings/workflows/${wf.id}`}
-                      className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                      className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
                     >
                       View
                     </Link>
@@ -117,6 +119,15 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
           })}
         </div>
       )}
+
+      <div className="mt-8 pt-4 border-t border-[#232629]">
+        <Link
+          href="/settings"
+          className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+        >
+          ← Back to Settings
+        </Link>
+      </div>
     </div>
   );
 }
