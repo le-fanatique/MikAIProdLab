@@ -385,19 +385,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           />
         </Card>
 
-        {/* ── Prompt ────────────────────────────────────────────────── */}
-        <SectionLabel label="Prompt" />
-
-        <Card title="Prompt Timeline">
-          <PromptSegmentsPanel
-            segments={segmentRows}
-            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/segments/new`}
-          />
-        </Card>
-
-        <Card title="Compiled Prompt">
-          <CompiledPromptPanel compiled={compiledPrompt} />
-        </Card>
+        {/* ── Prompt Workspace ──────────────────────────────────────── */}
+        <SectionLabel label="Prompt Workspace" />
 
         <Card title="Shot Prompt">
           <ShotPromptForm
@@ -410,6 +399,23 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             error={shotPromptError ?? null}
             defaultPromptProposal={defaultPromptProposal || null}
           />
+        </Card>
+
+        <Card title="Prompt Timeline">
+          <PromptSegmentsPanel
+            segments={segmentRows}
+            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/segments/new`}
+          />
+          <p className="text-xs text-[#4b5158] mt-3">
+            Prompt segments are used in video workflows alongside the Shot Prompt.
+          </p>
+        </Card>
+
+        <Card title="Compiled Prompt">
+          <p className="text-xs text-[#4b5158] mb-3">
+            Timeline compilation — combined prompt text used by video workflow text inputs.
+          </p>
+          <CompiledPromptPanel compiled={compiledPrompt} />
         </Card>
 
         <Card title="Prompt Composer">
