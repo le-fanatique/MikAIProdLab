@@ -28,7 +28,7 @@ type Props = {
   tree: SidebarProject[];
 };
 
-const FUTURE_MODULES = ["Assets", "References", "Prompt Packages", "Project Style"] as const;
+const FUTURE_MODULES = ["References", "Prompt Packages", "Project Style"] as const;
 
 export default function Sidebar({ tree }: Props) {
   const pathname = usePathname();
@@ -88,6 +88,23 @@ export default function Sidebar({ tree }: Props) {
                   </span>
                   <span className="truncate font-medium text-xs">{project.name}</span>
                 </Link>
+
+                {/* Assets link — shown when project active */}
+                {isProjectActive && (() => {
+                  const isAssetsActive = pathname.startsWith(`/projects/${project.id}/assets`);
+                  return (
+                    <Link
+                      href={`/projects/${project.id}/assets`}
+                      className={`flex items-center gap-1.5 pl-6 pr-2 py-1 rounded text-xs transition-colors ${
+                        isAssetsActive
+                          ? "text-[#a4abb2] bg-[#1a1d20]"
+                          : "text-[#6e767d] hover:text-[#a4abb2] hover:bg-[#1a1d20]"
+                      }`}
+                    >
+                      Assets
+                    </Link>
+                  );
+                })()}
 
                 {/* Sequences — shown when project active */}
                 {isProjectActive &&
