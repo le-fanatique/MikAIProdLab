@@ -115,6 +115,52 @@ export async function deleteShot(
   redirect(`/projects/${projectId}/sequences/${sequenceId}`);
 }
 
+export async function updateSequenceShotDurations(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0
+  ) {
+    return;
+  }
+
+  const [sequence] = await db
+    .select({ id: sequences.id, projectId: sequences.projectId })
+    .from(sequences)
+    .where(eq(sequences.id, sequenceId));
+
+  if (!sequence || sequence.projectId !== projectId) return;
+
+  const shotList = await db
+    .select({ id: shots.id })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId));
+
+  for (const shot of shotList) {
+    const raw = formData.get(`duration_${shot.id}`);
+    if (raw === null) continue;
+    const rawStr = (raw as string).trim();
+
+    let durationSeconds: number | null;
+    if (rawStr === "") {
+      durationSeconds = null;
+    } else {
+      const parsed = parseFloat(rawStr);
+      if (isNaN(parsed) || parsed < 0) continue;
+      durationSeconds = parsed;
+    }
+
+    await db
+      .update(shots)
+      .set({ durationSeconds, updatedAt: new Date().toISOString() })
+      .where(eq(shots.id, shot.id));
+  }
+
+  redirect(`/projects/${projectId}/sequences/${sequenceId}`);
+}
+
 export async function updateShotPrompt(formData: FormData): Promise<void> {
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
