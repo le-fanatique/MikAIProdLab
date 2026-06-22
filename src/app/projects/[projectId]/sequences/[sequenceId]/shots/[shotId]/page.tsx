@@ -34,6 +34,16 @@ type Props = {
   searchParams: Promise<{ attachError?: string; attachedReference?: string; retryError?: string; deleteError?: string; deleteSuccess?: string; shotPromptSaved?: string; shotPromptError?: string }>;
 };
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-1">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -300,6 +310,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       />
 
       <div className="flex flex-col gap-4">
+
+        {/* ── Core Shot ─────────────────────────────────────────────── */}
         {hasDetails && (
           <Card title="Details">
             <div className="flex flex-col gap-4">
@@ -351,6 +363,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           </p>
         )}
 
+        {/* ── Motion & Casting ──────────────────────────────────────── */}
+        <SectionLabel label="Motion & Casting" />
+
         <Card title="Casting">
           <CastingPanel
             assignedItems={assignedItems}
@@ -369,6 +384,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/beats/new`}
           />
         </Card>
+
+        {/* ── Prompt ────────────────────────────────────────────────── */}
+        <SectionLabel label="Prompt" />
 
         <Card title="Prompt Timeline">
           <PromptSegmentsPanel
@@ -405,41 +423,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           />
         </Card>
 
-        <Card title="Reference Images">
-          <ReferenceImagesPanel
-            images={refImages}
-            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
-            getEditHref={(imageId) =>
-              `/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${imageId}/edit`
-            }
-            getDeleteAction={(imageId) =>
-              deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
-            }
-          />
-        </Card>
-
-        <Card title="Generated Outputs">
-          <GeneratedOutputsPanel
-            projectId={pid}
-            sequenceId={sid}
-            shotId={shid}
-            outputs={generatedOutputItems}
-            attachError={attachError ?? null}
-            attachedReference={attachedReference === "1"}
-          />
-        </Card>
-
-        <Card title="Generation Jobs">
-          <GenerationJobsPanel
-            projectId={pid}
-            sequenceId={sid}
-            shotId={shid}
-            jobs={generationJobRows}
-            retryError={retryError ?? null}
-            deleteError={deleteError ?? null}
-            deleteSuccess={deleteSuccess ?? null}
-          />
-        </Card>
+        {/* ── References & Generate ─────────────────────────────────── */}
+        <SectionLabel label="References & Generate" />
 
         <Card title="Workflow Mapping">
           {savedWorkflows.length === 0 ? (
@@ -494,6 +479,46 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             </div>
           )}
         </Card>
+
+        <Card title="Reference Images">
+          <ReferenceImagesPanel
+            images={refImages}
+            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
+            getEditHref={(imageId) =>
+              `/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${imageId}/edit`
+            }
+            getDeleteAction={(imageId) =>
+              deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
+            }
+          />
+        </Card>
+
+        {/* ── Outputs ───────────────────────────────────────────────── */}
+        <SectionLabel label="Outputs" />
+
+        <Card title="Generated Outputs">
+          <GeneratedOutputsPanel
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            outputs={generatedOutputItems}
+            attachError={attachError ?? null}
+            attachedReference={attachedReference === "1"}
+          />
+        </Card>
+
+        <Card title="Generation Jobs">
+          <GenerationJobsPanel
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            jobs={generationJobRows}
+            retryError={retryError ?? null}
+            deleteError={deleteError ?? null}
+            deleteSuccess={deleteSuccess ?? null}
+          />
+        </Card>
+
       </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
