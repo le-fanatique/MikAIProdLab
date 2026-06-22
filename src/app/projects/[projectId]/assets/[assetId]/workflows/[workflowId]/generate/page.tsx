@@ -22,6 +22,16 @@ import {
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-1">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -213,7 +223,8 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
       />
 
       <div className="flex flex-col gap-4">
-        {/* Workflow info */}
+
+        {/* ── Workflow ──────────────────────────────────────── */}
         <Card title="Workflow">
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
@@ -229,7 +240,9 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           </div>
         </Card>
 
-        {/* Asset prompt */}
+        {/* ── Inputs ────────────────────────────────────────── */}
+        <SectionLabel label="Inputs" />
+
         <Card title="Asset Prompt">
           {assetPromptText ? (
             <textarea
@@ -245,7 +258,6 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           )}
         </Card>
 
-        {/* Suggested inputs + scalar inputs */}
         <Card title="Suggested Inputs">
           {parsed === null ? (
             <p className="text-sm text-[#cf7b6b]">
@@ -264,7 +276,6 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           )}
         </Card>
 
-        {/* Image input selection */}
         {mappings.some((m) => m.mappingKind === "image") && (
           <Card title="Image Inputs">
             <WorkflowImageSelectionForm
@@ -275,94 +286,113 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           </Card>
         )}
 
-        {/* Payload preview */}
+        {/* ── Preview ───────────────────────────────────────── */}
         {payloadPreview !== null && (
-          <Card title="Payload Preview">
-            <WorkflowPayloadPreviewPanel result={payloadPreview} />
-          </Card>
+          <>
+            <SectionLabel label="Preview" />
+            <Card title="Payload Preview">
+              <WorkflowPayloadPreviewPanel result={payloadPreview} />
+            </Card>
+          </>
         )}
 
-        {/* Generate */}
+        {/* ── Generate ──────────────────────────────────────── */}
         {payloadPreview !== null && (
-          <Card title="Generate">
-            <div className="flex flex-col gap-4">
-              <p className="text-xs text-[#6e767d]">
-                Queue this workflow in ComfyUI using the payload preview above.
-              </p>
-
-              {generationError && (
-                <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
-                  <p className="text-xs text-[#cf7b6b] leading-relaxed">
-                    {generationError}
-                  </p>
-                </div>
-              )}
-
-              <form action={runAssetGenerationFromForm} className="flex flex-col gap-4">
-                <input type="hidden" name="projectId" value={String(pid)} />
-                <input type="hidden" name="assetId" value={String(aid)} />
-                <input type="hidden" name="workflowId" value={String(wid)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-                {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
-                  <input
-                    key={nodeId}
-                    type="hidden"
-                    name={`imageNode_${nodeId}`}
-                    value={String(imageId)}
-                  />
-                ))}
-                {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
-                  <input
-                    key={`scalar-${nodeId}`}
-                    type="hidden"
-                    name={`scalarNode_${nodeId}`}
-                    value={value}
-                  />
-                ))}
-                <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
-                <div>
-                  <button
-                    type="submit"
-                    className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </form>
-
-              {activeJobId !== null && (
-                <div className="border-t border-[#232629] pt-4 flex flex-col gap-4">
-                  <GenerationJobStatusPanel jobId={activeJobId} />
-
-                  {canAttach && (
-                    <form action={attachOutputAsAssetReference}>
-                      <input type="hidden" name="projectId" value={String(pid)} />
-                      <input type="hidden" name="assetId" value={String(aid)} />
-                      <input type="hidden" name="jobId" value={String(activeJobId)} />
-                      <input
-                        type="hidden"
-                        name="returnTo"
-                        value={`/projects/${pid}/assets/${aid}`}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
-                      >
-                        Attach as Reference
-                      </button>
-                    </form>
-                  )}
-
-                  {!canAttach && activeJobOutputPath !== null && (
-                    <p className="text-[10px] text-[#4b5158]">
-                      Reload the page after the job completes to attach the output as a reference.
+          <>
+            <SectionLabel label="Generate" />
+            <Card>
+              <div className="flex flex-col gap-4">
+                {generationError && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                    <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                      {generationError}
                     </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </Card>
+                  </div>
+                )}
+
+                <form action={runAssetGenerationFromForm} className="flex flex-col gap-4">
+                  <input type="hidden" name="projectId" value={String(pid)} />
+                  <input type="hidden" name="assetId" value={String(aid)} />
+                  <input type="hidden" name="workflowId" value={String(wid)} />
+                  <input type="hidden" name="returnTo" value={returnTo} />
+                  {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
+                    <input
+                      key={nodeId}
+                      type="hidden"
+                      name={`imageNode_${nodeId}`}
+                      value={String(imageId)}
+                    />
+                  ))}
+                  {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
+                    <input
+                      key={`scalar-${nodeId}`}
+                      type="hidden"
+                      name={`scalarNode_${nodeId}`}
+                      value={value}
+                    />
+                  ))}
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-4 py-2 text-sm font-medium hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+                    >
+                      Generate
+                    </button>
+                    <p className="text-xs text-[#6e767d]">
+                      Queue this workflow in ComfyUI.
+                    </p>
+                  </div>
+
+                  <div className="border-t border-[#232629] pt-4">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-[#4b5158] mb-3">
+                      Advanced — Editable Payload
+                    </p>
+                    <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
+                  </div>
+                </form>
+              </div>
+            </Card>
+          </>
         )}
+
+        {/* ── Output ────────────────────────────────────────── */}
+        {activeJobId !== null && (
+          <>
+            <SectionLabel label="Output" />
+            <Card>
+              <div className="flex flex-col gap-4">
+                <GenerationJobStatusPanel jobId={activeJobId} />
+
+                {canAttach && (
+                  <form action={attachOutputAsAssetReference}>
+                    <input type="hidden" name="projectId" value={String(pid)} />
+                    <input type="hidden" name="assetId" value={String(aid)} />
+                    <input type="hidden" name="jobId" value={String(activeJobId)} />
+                    <input
+                      type="hidden"
+                      name="returnTo"
+                      value={`/projects/${pid}/assets/${aid}`}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
+                    >
+                      Attach as Reference
+                    </button>
+                  </form>
+                )}
+
+                {!canAttach && activeJobOutputPath !== null && (
+                  <p className="text-[10px] text-[#4b5158]">
+                    Reload the page after the job completes to attach the output as a reference.
+                  </p>
+                )}
+              </div>
+            </Card>
+          </>
+        )}
+
       </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-6">

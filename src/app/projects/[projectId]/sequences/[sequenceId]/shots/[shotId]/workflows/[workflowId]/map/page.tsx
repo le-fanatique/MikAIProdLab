@@ -33,6 +33,16 @@ import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
 import { runWorkflowGenerationFromForm } from "@/actions/generation";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="border-t border-[#232629] pt-4 mt-6 mb-1">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -244,7 +254,8 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       />
 
       <div className="flex flex-col gap-4">
-        {/* Workflow info */}
+
+        {/* ── Workflow ──────────────────────────────────────── */}
         <Card title="Workflow">
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
@@ -265,7 +276,26 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </div>
         </Card>
 
-        {/* Suggested inputs */}
+        {/* ── Inputs ────────────────────────────────────────── */}
+        <SectionLabel label="Inputs" />
+
+        <Card title="Compiled Prompt">
+          <CompiledShotPromptPreviewPanel
+            compiled={compiledShotPrompt}
+            workflowKind={workflow.kind}
+          />
+          {!compiledShotPrompt.hasShotPrompt && (
+            <div className="mt-3 pt-3 border-t border-[#1e2124]">
+              <Link
+                href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+              >
+                Edit Shot Prompt →
+              </Link>
+            </div>
+          )}
+        </Card>
+
         <Card title="Suggested Inputs">
           {parsed === null ? (
             <p className="text-sm text-[#cf7b6b]">
@@ -284,7 +314,6 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           )}
         </Card>
 
-        {/* Image input selection */}
         {mappings.some((m) => m.mappingKind === "image") && (
           <Card title="Image Inputs">
             <WorkflowImageSelectionForm
@@ -295,88 +324,87 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </Card>
         )}
 
-        {/* Compiled Prompt */}
-        <Card title="Compiled Prompt">
-          <CompiledShotPromptPreviewPanel
-            compiled={compiledShotPrompt}
-            workflowKind={workflow.kind}
-          />
-          {!compiledShotPrompt.hasShotPrompt && (
-            <div className="mt-3 pt-3 border-t border-[#1e2124]">
-              <Link
-                href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
-                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-              >
-                Edit Shot Prompt →
-              </Link>
-            </div>
-          )}
-        </Card>
-
-        {/* Payload preview */}
+        {/* ── Preview ───────────────────────────────────────── */}
         {payloadPreview !== null && (
-          <Card title="Payload Preview">
-            <WorkflowPayloadPreviewPanel result={payloadPreview} />
-          </Card>
+          <>
+            <SectionLabel label="Preview" />
+            <Card title="Payload Preview">
+              <WorkflowPayloadPreviewPanel result={payloadPreview} />
+            </Card>
+          </>
         )}
 
-        {/* Generate */}
+        {/* ── Generate ──────────────────────────────────────── */}
         {payloadPreview !== null && (
-          <Card title="Generate">
-            <div className="flex flex-col gap-4">
-              <p className="text-xs text-[#6e767d]">
-                Queue this workflow in ComfyUI using the payload preview above.
-              </p>
+          <>
+            <SectionLabel label="Generate" />
+            <Card>
+              <div className="flex flex-col gap-4">
+                {generationError && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                    <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                      {generationError}
+                    </p>
+                  </div>
+                )}
 
-              {generationError && (
-                <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
-                  <p className="text-xs text-[#cf7b6b] leading-relaxed">
-                    {generationError}
-                  </p>
-                </div>
-              )}
+                <form action={runWorkflowGenerationFromForm} className="flex flex-col gap-4">
+                  <input type="hidden" name="projectId" value={String(pid)} />
+                  <input type="hidden" name="sequenceId" value={String(sid)} />
+                  <input type="hidden" name="shotId" value={String(shid)} />
+                  <input type="hidden" name="workflowId" value={String(wid)} />
+                  <input type="hidden" name="returnTo" value={returnTo} />
+                  {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
+                    <input
+                      key={nodeId}
+                      type="hidden"
+                      name={`imageNode_${nodeId}`}
+                      value={String(imageId)}
+                    />
+                  ))}
+                  {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
+                    <input
+                      key={`scalar-${nodeId}`}
+                      type="hidden"
+                      name={`scalarNode_${nodeId}`}
+                      value={value}
+                    />
+                  ))}
 
-              <form action={runWorkflowGenerationFromForm} className="flex flex-col gap-4">
-                <input type="hidden" name="projectId" value={String(pid)} />
-                <input type="hidden" name="sequenceId" value={String(sid)} />
-                <input type="hidden" name="shotId" value={String(shid)} />
-                <input type="hidden" name="workflowId" value={String(wid)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-                {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
-                  <input
-                    key={nodeId}
-                    type="hidden"
-                    name={`imageNode_${nodeId}`}
-                    value={String(imageId)}
-                  />
-                ))}
-                {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
-                  <input
-                    key={`scalar-${nodeId}`}
-                    type="hidden"
-                    name={`scalarNode_${nodeId}`}
-                    value={value}
-                  />
-                ))}
-                <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
-                <div>
-                  <button
-                    type="submit"
-                    className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </form>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-4 py-2 text-sm font-medium hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+                    >
+                      Generate
+                    </button>
+                    <p className="text-xs text-[#6e767d]">
+                      Queue this workflow in ComfyUI.
+                    </p>
+                  </div>
 
-              {activeJobId !== null && (
-                <div className="border-t border-[#232629] pt-4">
-                  <GenerationJobStatusPanel jobId={activeJobId} />
-                </div>
-              )}
-            </div>
-          </Card>
+                  <div className="border-t border-[#232629] pt-4">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-[#4b5158] mb-3">
+                      Advanced — Editable Payload
+                    </p>
+                    <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
+                  </div>
+                </form>
+              </div>
+            </Card>
+          </>
         )}
+
+        {/* ── Output ────────────────────────────────────────── */}
+        {activeJobId !== null && (
+          <>
+            <SectionLabel label="Output" />
+            <Card>
+              <GenerationJobStatusPanel jobId={activeJobId} />
+            </Card>
+          </>
+        )}
+
       </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-6">
