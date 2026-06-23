@@ -1,0 +1,1 @@
+ALTER TABLE `shots` ADD `approved_video_path` text;

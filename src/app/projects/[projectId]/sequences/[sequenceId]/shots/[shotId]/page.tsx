@@ -69,6 +69,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
   const attachError = sp("attachError");
   const attachedReference = sp("attachedReference");
+  const approvedVideo = sp("approvedVideo");
+  const approveError = sp("approveError");
   const retryError = sp("retryError");
   const deleteError = sp("deleteError");
   const deleteSuccess = sp("deleteSuccess");
@@ -530,6 +532,39 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           />
         </Card>
 
+        {/* ── Approved Output ───────────────────────────────────────── */}
+        {shot.approvedVideoPath && (
+          <>
+            <SectionLabel label="Approved Output" />
+            <Card title="Approved Output">
+              <div className="flex flex-col gap-3">
+                <video
+                  src={`/${shot.approvedVideoPath}`}
+                  controls
+                  className="w-full rounded border border-[#2c3035]"
+                />
+                <div className="flex items-center gap-4">
+                  <a
+                    href={`/${shot.approvedVideoPath}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                  >
+                    Open ↗
+                  </a>
+                  <a
+                    href={`/${shot.approvedVideoPath}`}
+                    download
+                    className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                  >
+                    Download ↓
+                  </a>
+                </div>
+              </div>
+            </Card>
+          </>
+        )}
+
         {/* ── Generation ────────────────────────────────────────────── */}
         <SectionLabel label="Generation" />
         {generationOpen ? (
@@ -614,6 +649,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               activeJobId={activeJobId}
               attachedReference={attachedReference === "1"}
               attachError={attachError ?? null}
+              approvedVideo={approvedVideo === "1"}
+              approveError={approveError ?? null}
             />
           ) : (
             <WorkflowSelectorPanel

@@ -634,6 +634,90 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
 // attachOutputAsShotReference
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// approveVideoOutput
+// ---------------------------------------------------------------------------
+
+const APPROVABLE_VIDEO_EXTS = new Set([".mp4", ".webm", ".mov"]);
+
+export async function approveVideoOutput(formData: FormData): Promise<void> {
+  const shotId  = parseInt(formData.get("shotId")  as string, 10);
+  const jobId   = parseInt(formData.get("jobId")   as string, 10);
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() || "/";
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}approveError=${encodeURIComponent(msg)}`);
+  }
+
+  if (!Number.isInteger(shotId) || shotId <= 0 || !Number.isInteger(jobId) || jobId <= 0) {
+    errRedirect("Invalid request.");
+  }
+
+  const [job] = await db.select().from(generationJobs).where(eq(generationJobs.id, jobId));
+  if (!job) errRedirect("Output not found.");
+  if (job.shotId !== shotId) errRedirect("Output does not belong to this shot.");
+  if (job.status !== "done") errRedirect("Output is not ready.");
+  if (!job.outputPath) errRedirect("Output path is missing.");
+  if (!job.outputPath.startsWith("outputs/jobs/")) {
+    errRedirect("Output path is not in the expected location.");
+  }
+
+  const ext = path.extname(job.outputPath).toLowerCase();
+  if (!APPROVABLE_VIDEO_EXTS.has(ext)) {
+    errRedirect("Only video outputs (.mp4, .webm, .mov) can be approved as shot output.");
+  }
+
+  const publicRoot = path.join(process.cwd(), "public");
+  const allowedOutputsRoot = path.join(publicRoot, "outputs", "jobs");
+  const sourceAbsolute = path.resolve(publicRoot, job.outputPath);
+
+  if (
+    !sourceAbsolute.startsWith(allowedOutputsRoot + path.sep) &&
+    sourceAbsolute !== allowedOutputsRoot
+  ) {
+    errRedirect("Output path is not in the expected location.");
+  }
+
+  try {
+    await fs.access(sourceAbsolute);
+  } catch {
+    errRedirect("Output file not found on disk.");
+  }
+
+  const uuid = randomUUID();
+  const destFilename = `${uuid}${ext}`;
+  const destSubfolder = `shot-${shotId}`;
+  const destRelative = `uploads/shot-videos/${destSubfolder}/${destFilename}`;
+  const destDir = path.join(publicRoot, "uploads", "shot-videos", destSubfolder);
+  const destAbsolute = path.join(destDir, destFilename);
+
+  try {
+    await fs.mkdir(destDir, { recursive: true });
+    await fs.copyFile(sourceAbsolute, destAbsolute);
+  } catch {
+    errRedirect("Failed to copy video file. Please try again.");
+  }
+
+  // Remove previous approved video file best-effort before updating DB
+  const [existingShot] = await db.select({ approvedVideoPath: shots.approvedVideoPath }).from(shots).where(eq(shots.id, shotId));
+  if (existingShot?.approvedVideoPath) {
+    const oldAbsolute = path.join(publicRoot, existingShot.approvedVideoPath);
+    try { await fs.unlink(oldAbsolute); } catch { /* best-effort */ }
+  }
+
+  try {
+    await db.update(shots).set({ approvedVideoPath: destRelative }).where(eq(shots.id, shotId));
+  } catch {
+    try { await fs.unlink(destAbsolute); } catch { /* best-effort */ }
+    errRedirect("Failed to save approved output. Please try again.");
+  }
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${sep}approvedVideo=1`);
+}
+
 const ATTACHABLE_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 
 export async function attachOutputAsShotReference(

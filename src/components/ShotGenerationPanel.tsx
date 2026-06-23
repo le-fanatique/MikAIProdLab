@@ -32,6 +32,7 @@ import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/com
 import {
   runWorkflowGenerationFromForm,
   attachOutputAsShotReference,
+  approveVideoOutput,
 } from "@/actions/generation";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { uploadShotSourceFromPanel } from "@/actions/panelUpload";
@@ -54,6 +55,8 @@ type Props = {
   activeJobId: number | null;
   attachedReference?: boolean;
   attachError?: string | null;
+  approvedVideo?: boolean;
+  approveError?: string | null;
 };
 
 function buildImageOptionLabel(img: RuntimeImageOption): string {
@@ -281,6 +284,8 @@ export default async function ShotGenerationPanel({
   activeJobId,
   attachedReference,
   attachError,
+  approvedVideo,
+  approveError,
 }: Props) {
   const [shot] = await db.select().from(shots).where(eq(shots.id, shid));
   if (!shot) return null;
@@ -489,9 +494,11 @@ export default async function ShotGenerationPanel({
   const approveReturnTo = `${basePath}?${approveParams.toString()}`;
 
   const ATTACH_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+  const VIDEO_APPROVE_EXTS = new Set([".mp4", ".webm", ".mov"]);
   let canAttach = false;
+  let canApproveVideo = false;
 
-  if (activeJobId !== null && workflow.kind === "image") {
+  if (activeJobId !== null) {
     const [fetchedJob] = await db
       .select({
         status: generationJobs.status,
@@ -501,12 +508,13 @@ export default async function ShotGenerationPanel({
       .from(generationJobs)
       .where(eq(generationJobs.id, activeJobId));
 
-    if (fetchedJob && fetchedJob.shotId === shid) {
-      const ext = fetchedJob.outputPath?.split(".").pop()?.toLowerCase() ?? "";
-      canAttach =
-        fetchedJob.status === "done" &&
-        fetchedJob.outputPath !== null &&
-        ATTACH_EXTS.has(`.${ext}`);
+    if (fetchedJob && fetchedJob.shotId === shid && fetchedJob.status === "done" && fetchedJob.outputPath !== null) {
+      const ext = `.${fetchedJob.outputPath.split(".").pop()?.toLowerCase() ?? ""}`;
+      if (workflow.kind === "image") {
+        canAttach = ATTACH_EXTS.has(ext);
+      } else if (workflow.kind === "video") {
+        canApproveVideo = VIDEO_APPROVE_EXTS.has(ext);
+      }
     }
   }
 
@@ -655,6 +663,7 @@ export default async function ShotGenerationPanel({
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">Output</p>
             <GenerationJobStatusPanel jobId={activeJobId} />
+            {/* Image/keyframe approve — GEN.2.G.1 */}
             {attachError && (
               <p className="text-xs text-[#cf7b6b]">{attachError}</p>
             )}
@@ -664,6 +673,25 @@ export default async function ShotGenerationPanel({
               <form action={attachOutputAsShotReference}>
                 <input type="hidden" name="projectId" value={String(pid)} />
                 <input type="hidden" name="sequenceId" value={String(sid)} />
+                <input type="hidden" name="shotId" value={String(shid)} />
+                <input type="hidden" name="jobId" value={String(activeJobId)} />
+                <input type="hidden" name="returnTo" value={approveReturnTo} />
+                <button
+                  type="submit"
+                  className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
+                >
+                  Approve Output
+                </button>
+              </form>
+            ) : null}
+            {/* Video approve — GEN.2.G.2 */}
+            {approveError && (
+              <p className="text-xs text-[#cf7b6b]">{approveError}</p>
+            )}
+            {approvedVideo ? (
+              <p className="text-xs text-[#6b9e72]">Video approved as shot output.</p>
+            ) : canApproveVideo ? (
+              <form action={approveVideoOutput}>
                 <input type="hidden" name="shotId" value={String(shid)} />
                 <input type="hidden" name="jobId" value={String(activeJobId)} />
                 <input type="hidden" name="returnTo" value={approveReturnTo} />
