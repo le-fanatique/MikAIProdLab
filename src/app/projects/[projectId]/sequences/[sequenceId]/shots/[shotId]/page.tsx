@@ -17,7 +17,7 @@ import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
 import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
 import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import ShotPromptForm from "@/components/ShotPromptForm";
-import PromptSegmentsTimeline from "@/components/PromptSegmentsTimeline";
+import PromptSegmentsTimelineEditor from "@/components/PromptSegmentsTimelineEditor";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
@@ -28,6 +28,7 @@ import {
   deletePromptSegment,
   movePromptSegmentUp,
   movePromptSegmentDown,
+  updateSegmentPromptText,
 } from "@/actions/promptSegments";
 
 type Props = {
@@ -127,7 +128,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     promptText: seg.promptText,
     startSeconds: seg.startSeconds,
     durationSeconds: seg.durationSeconds,
-    segmentType: seg.segmentType,
+    updatePromptTextAction: updateSegmentPromptText.bind(null, seg.id, shid, sid, pid),
     editHref: `/projects/${pid}/sequences/${sid}/shots/${shid}/segments/${seg.id}/edit`,
     deleteAction: deletePromptSegment.bind(null, seg.id, shid, sid, pid),
     moveUpAction:
@@ -410,9 +411,12 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           <p className="text-xs text-[#4b5158] mt-3">
             Prompt segments are used in video workflows alongside the Shot Prompt.
           </p>
-          <PromptSegmentsTimeline
+          <PromptSegmentsTimelineEditor
             segments={segmentList}
             shotDurationSeconds={shot.durationSeconds}
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
           />
         </Card>
 

@@ -46,8 +46,10 @@ async function verifyChain(
 }
 
 function parseFields(formData: FormData) {
-  const label = formData.get("label")?.toString().trim() ?? "";
+  const rawLabel = formData.get("label")?.toString().trim() ?? "";
   const promptText = formData.get("promptText")?.toString().trim() ?? "";
+  const autoLabel = promptText.slice(0, 60).trim() || "Segment";
+  const label = rawLabel || autoLabel;
   const startSeconds = parseOptionalFloat(
     formData.get("startSeconds")?.toString().trim() ?? ""
   );
@@ -73,7 +75,7 @@ export async function createPromptSegment(
 
   const { label, promptText, startSeconds, durationSeconds, segmentType, notes } =
     parseFields(formData);
-  if (!label || !promptText) return;
+  if (!promptText) return;
 
   const result = await db
     .select({ maxOrder: sql<number>`max(${promptSegments.orderIndex})` })
@@ -112,7 +114,7 @@ export async function updatePromptSegment(
 
   const { label, promptText, startSeconds, durationSeconds, segmentType, notes } =
     parseFields(formData);
-  if (!label || !promptText) return;
+  if (!promptText) return;
 
   await db
     .update(promptSegments)
@@ -225,6 +227,114 @@ export async function movePromptSegmentDown(
     .update(promptSegments)
     .set({ orderIndex: current.orderIndex })
     .where(eq(promptSegments.id, next.id));
+
+  redirect(`/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`);
+}
+
+export async function updatePromptSegmentTimings(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const shotId = parseInt(formData.get("shotId") as string, 10);
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(shotId) || shotId <= 0
+  ) {
+    return;
+  }
+
+  if (!(await verifyChain(shotId, sequenceId, projectId))) return;
+
+  const segmentRows = await db
+    .select({ id: promptSegments.id, promptText: promptSegments.promptText })
+    .from(promptSegments)
+    .where(eq(promptSegments.shotId, shotId));
+
+  for (const seg of segmentRows) {
+    const startRaw = (formData.get(`start_${seg.id}`) as string | null) ?? "";
+    const durRaw = (formData.get(`dur_${seg.id}`) as string | null) ?? "";
+    const startSeconds = parseOptionalFloat(startRaw.trim());
+    const durationSeconds = parseOptionalFloat(durRaw.trim());
+
+    const ptRaw = formData.get(`promptText_${seg.id}`) as string | null;
+    const newPromptText =
+      ptRaw !== null && ptRaw.trim() !== "" ? ptRaw.trim() : seg.promptText;
+    const newLabel = newPromptText.slice(0, 60).trim() || "Segment";
+
+    await db
+      .update(promptSegments)
+      .set({
+        startSeconds,
+        durationSeconds,
+        promptText: newPromptText,
+        label: newLabel,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(promptSegments.id, seg.id));
+  }
+
+  const draftCountRaw = formData.get("draftCount");
+  const draftCount =
+    draftCountRaw ? parseInt(draftCountRaw as string, 10) : 0;
+
+  if (Number.isInteger(draftCount) && draftCount > 0) {
+    const [orderRow] = await db
+      .select({ maxOrder: sql<number>`max(${promptSegments.orderIndex})` })
+      .from(promptSegments)
+      .where(eq(promptSegments.shotId, shotId));
+    let nextOrder = (orderRow?.maxOrder ?? -1) + 1;
+
+    for (let i = 0; i < draftCount; i++) {
+      const startRaw = (formData.get(`new_${i}_start`) as string | null) ?? "";
+      const durRaw = (formData.get(`new_${i}_dur`) as string | null) ?? "";
+      const startSeconds = parseOptionalFloat(startRaw.trim());
+      const durationSeconds = parseOptionalFloat(durRaw.trim());
+      if (startSeconds === null || durationSeconds === null || durationSeconds <= 0) continue;
+      const ptDraftRaw =
+        (formData.get(`new_${i}_promptText`) as string | null)?.trim() ?? "";
+      const draftPromptText = ptDraftRaw || "[Add prompt text]";
+      const draftLabel = draftPromptText.slice(0, 60).trim() || "Segment";
+
+      await db.insert(promptSegments).values({
+        shotId,
+        orderIndex: nextOrder++,
+        label: draftLabel,
+        promptText: draftPromptText,
+        startSeconds,
+        durationSeconds,
+        segmentType: null,
+      });
+    }
+  }
+
+  redirect(`/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`);
+}
+
+export async function updateSegmentPromptText(
+  segmentId: number,
+  shotId: number,
+  sequenceId: number,
+  projectId: number,
+  formData: FormData
+) {
+  const [segment] = await db
+    .select({ id: promptSegments.id, shotId: promptSegments.shotId })
+    .from(promptSegments)
+    .where(eq(promptSegments.id, segmentId));
+  if (!segment || segment.shotId !== shotId) return;
+
+  if (!(await verifyChain(shotId, sequenceId, projectId))) return;
+
+  const promptText = formData.get("promptText")?.toString().trim() ?? "";
+  if (!promptText) return;
+
+  const label = promptText.slice(0, 60).trim() || "Segment";
+
+  await db
+    .update(promptSegments)
+    .set({ promptText, label, updatedAt: new Date().toISOString() })
+    .where(eq(promptSegments.id, segmentId));
 
   redirect(`/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { updateSequenceShotDurations } from "@/actions/shots";
 
@@ -19,12 +19,24 @@ type Props = {
   sequenceId: number;
 };
 
+type DragState = {
+  shotId: number;
+  pointerStartX: number;
+  initialDur: number;
+  initialTotalDur: number;
+  trackWidth: number;
+};
+
 function parseRaw(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   const n = parseFloat(trimmed);
   if (isNaN(n) || n < 0) return null;
   return n;
+}
+
+function snap(value: number): number {
+  return parseFloat((Math.round(value / 0.1) * 0.1).toFixed(1));
 }
 
 export default function SequenceTimelineEditor({ shots, projectId, sequenceId }: Props) {
@@ -35,6 +47,9 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId }:
     }
     return map;
   });
+
+  const dragRef = useRef<DragState | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   const parsedDurations = useMemo(() => {
     const map: Record<number, number | null> = {};
@@ -86,6 +101,19 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId }:
     setDurations(map);
   }
 
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const ds = dragRef.current;
+    if (!ds || ds.initialTotalDur <= 0) return;
+    const deltaX = e.clientX - ds.pointerStartX;
+    const deltaDur = (deltaX / ds.trackWidth) * ds.initialTotalDur;
+    const newDur = Math.max(0.1, snap(ds.initialDur + deltaDur));
+    setDurations((prev) => ({ ...prev, [ds.shotId]: newDur.toString() }));
+  }
+
+  function handlePointerUp() {
+    dragRef.current = null;
+  }
+
   return (
     <form action={updateSequenceShotDurations}>
       <input type="hidden" name="projectId" value={String(projectId)} />
@@ -131,31 +159,61 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId }:
       {totalDuration > 0 ? (
         <>
           <div
+            ref={trackRef}
             className="flex rounded overflow-hidden border border-[#1a1d20] bg-[#0d0e10]"
             style={{ height: "56px" }}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
           >
             {timedShots.map((shot) => {
               const d = parsedDurations[shot.id] ?? 0;
               const widthPct = (d / totalDuration) * 100;
               const color = colorMap.get(shot.id) ?? SHOT_PALETTE[0];
               return (
-                <Link
+                <div
                   key={shot.id}
-                  href={`/projects/${projectId}/sequences/${sequenceId}/shots/${shot.id}`}
-                  style={{ width: `${widthPct}%`, borderLeftColor: color }}
-                  className="relative flex flex-col justify-between px-1.5 py-1.5 border-l-2 border-r border-r-[#1a1d20] last:border-r-0 hover:bg-white/[0.03] transition-colors overflow-hidden"
-                  title={shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title}
+                  style={{ width: `${widthPct}%` }}
+                  className="relative flex border-r border-r-[#1a1d20] last:border-r-0 shrink-0"
                 >
-                  <span
-                    className="text-[9px] font-mono truncate leading-none"
-                    style={{ color }}
+                  <Link
+                    href={`/projects/${projectId}/sequences/${sequenceId}/shots/${shot.id}`}
+                    style={{ borderLeftColor: color }}
+                    className="flex-1 min-w-0 flex flex-col justify-between px-1.5 py-1.5 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden h-full"
+                    title={shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title}
                   >
-                    {shot.shotCode ?? shot.title}
-                  </span>
-                  <span className="text-[9px] font-mono text-[#4b5158] tabular-nums leading-none">
-                    {d.toFixed(1)}s
-                  </span>
-                </Link>
+                    <span
+                      className="text-[9px] font-mono truncate leading-none"
+                      style={{ color }}
+                    >
+                      {shot.shotCode ?? shot.title}
+                    </span>
+                    <span className="text-[9px] font-mono text-[#4b5158] tabular-nums leading-none">
+                      {d.toFixed(1)}s
+                    </span>
+                  </Link>
+                  {/* Right drag handle */}
+                  <div
+                    className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10"
+                    style={{ width: "10px" }}
+                    onPointerDown={(e) => {
+                      const dur = parsedDurations[shot.id];
+                      if (dur === null || !trackRef.current) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      dragRef.current = {
+                        shotId: shot.id,
+                        pointerStartX: e.clientX,
+                        initialDur: dur,
+                        initialTotalDur: totalDuration,
+                        trackWidth: trackRef.current.clientWidth,
+                      };
+                    }}
+                  >
+                    <div className="w-0.5 h-4 rounded-full bg-white/25" />
+                  </div>
+                </div>
               );
             })}
           </div>

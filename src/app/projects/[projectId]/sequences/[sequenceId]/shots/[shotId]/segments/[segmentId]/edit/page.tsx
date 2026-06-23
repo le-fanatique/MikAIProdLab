@@ -17,14 +17,6 @@ type Props = {
   }>;
 };
 
-const SEGMENT_TYPE_OPTIONS = [
-  { value: "", label: "None" },
-  { value: "shot", label: "Shot" },
-  { value: "action", label: "Action" },
-  { value: "camera", label: "Camera" },
-  { value: "transition", label: "Transition" },
-  { value: "other", label: "Other" },
-];
 
 export default async function EditPromptSegmentPage({ params }: Props) {
   const { projectId, sequenceId, shotId, segmentId } = await params;
@@ -68,20 +60,6 @@ export default async function EditPromptSegmentPage({ params }: Props) {
       <PageHeader title="Edit Prompt Segment" />
 
       <form action={action} className="flex flex-col gap-5 max-w-lg">
-        <FormField
-          label="Segment Type"
-          name="segmentType"
-          type="select"
-          defaultValue={segment.segmentType ?? ""}
-          options={SEGMENT_TYPE_OPTIONS}
-        />
-        <FormField
-          label="Label"
-          name="label"
-          required
-          defaultValue={segment.label}
-          placeholder="e.g. Establishing shot, Hero charges, Camera pulls back"
-        />
         <FormField
           label="Prompt Text"
           name="promptText"

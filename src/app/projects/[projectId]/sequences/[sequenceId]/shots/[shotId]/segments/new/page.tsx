@@ -12,14 +12,6 @@ type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
 };
 
-const SEGMENT_TYPE_OPTIONS = [
-  { value: "", label: "None" },
-  { value: "shot", label: "Shot" },
-  { value: "action", label: "Action" },
-  { value: "camera", label: "Camera" },
-  { value: "transition", label: "Transition" },
-  { value: "other", label: "Other" },
-];
 
 export default async function NewPromptSegmentPage({ params }: Props) {
   const { projectId, sequenceId, shotId } = await params;
@@ -56,18 +48,6 @@ export default async function NewPromptSegmentPage({ params }: Props) {
       <PageHeader title="Add Prompt Segment" />
 
       <form action={action} className="flex flex-col gap-5 max-w-lg">
-        <FormField
-          label="Segment Type"
-          name="segmentType"
-          type="select"
-          options={SEGMENT_TYPE_OPTIONS}
-        />
-        <FormField
-          label="Label"
-          name="label"
-          required
-          placeholder="e.g. Establishing shot, Hero charges, Camera pulls back"
-        />
         <FormField
           label="Prompt Text"
           name="promptText"

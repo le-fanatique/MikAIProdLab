@@ -1,7 +1,7 @@
 import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
-import SegmentTypeBadge from "@/components/SegmentTypeBadge";
+import SegmentInlinePromptEdit from "@/components/SegmentInlinePromptEdit";
 
 type SegmentRow = {
   id: number;
@@ -9,12 +9,13 @@ type SegmentRow = {
   promptText: string;
   startSeconds: number | null;
   durationSeconds: number | null;
-  segmentType: string | null;
+  updatePromptTextAction: (formData: FormData) => Promise<void>;
   editHref: string;
   deleteAction: () => Promise<void>;
   moveUpAction: (() => Promise<void>) | null;
   moveDownAction: (() => Promise<void>) | null;
 };
+
 
 type Props = {
   segments: SegmentRow[];
@@ -60,16 +61,15 @@ export default function PromptSegmentsPanel({ segments, addHref }: Props) {
               key={seg.id}
               className="border-b border-[#1a1d20] last:border-0 py-2.5 flex items-start gap-3"
             >
-              <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                <span className="text-[11px] font-mono text-[#4b5158] tabular-nums w-4 text-right">
-                  {index + 1}
-                </span>
-                <SegmentTypeBadge type={seg.segmentType} />
-              </div>
+              <span className="text-[11px] font-mono text-[#4b5158] tabular-nums shrink-0 w-4 text-right pt-0.5">
+                {index + 1}
+              </span>
 
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-[#e7e9ec]">{seg.label}</p>
-                <p className="text-xs text-[#6e767d] mt-0.5 truncate">{seg.promptText}</p>
+                <SegmentInlinePromptEdit
+                  promptText={seg.promptText}
+                  action={seg.updatePromptTextAction}
+                />
                 {timing !== null ? (
                   <span className="inline-block mt-1 rounded border border-[#2c3035] px-1.5 py-0.5 text-[10px] font-mono text-[#6e767d]">
                     {timing}
