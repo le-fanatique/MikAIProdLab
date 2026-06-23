@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { appSettings } from "@/db/schema";
 import { fetchOllamaModelNames } from "@/lib/llm/ollama";
+import { redirect } from "next/navigation";
 
 // ---------------------------------------------------------------------------
 // Save Ollama settings to DB
@@ -140,4 +141,27 @@ export async function testOllamaConnection(
     ok: true,
     message: `Connected to Ollama. Model "${cleanModel}" is available.`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Save workflow generation defaults to DB
+// ---------------------------------------------------------------------------
+
+export async function saveWorkflowDefaults(formData: FormData): Promise<void> {
+  const assetImageId = formData.get("assetImageWorkflowId")?.toString().trim() ?? "";
+  const shotImageId = formData.get("shotImageWorkflowId")?.toString().trim() ?? "";
+  const shotVideoId = formData.get("shotVideoWorkflowId")?.toString().trim() ?? "";
+
+  const now = new Date().toISOString();
+  const upsert = (key: string, value: string) =>
+    db
+      .insert(appSettings)
+      .values({ key, value, updatedAt: now })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: now } });
+
+  await upsert("default_workflow_asset_image", assetImageId);
+  await upsert("default_workflow_shot_image", shotImageId);
+  await upsert("default_workflow_shot_video", shotVideoId);
+
+  redirect("/settings?defaultsSaved=1");
 }

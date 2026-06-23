@@ -13,6 +13,7 @@ import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
 import AssetGenerationPanel from "@/components/AssetGenerationPanel";
 import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
+import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
@@ -58,6 +59,10 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
     : Array.isArray(rawWorkflowId)
     ? parseInt(rawWorkflowId[0], 10)
     : null;
+
+  const rawSelector = resolvedSearchParams["selector"];
+  const forceSelector =
+    rawSelector === "1" || (Array.isArray(rawSelector) && rawSelector[0] === "1");
 
   // Parse generation-related search params
   const selectedImageByNodeId: Record<string, string> = {};
@@ -128,9 +133,22 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
 
-  // Fetch workflows for selector only when panel is open and no workflow selected
+  // Resolve effective workflow — apply default if no explicit selection and no forced selector
+  let effectiveWorkflowId: number | null = selectedWorkflowId;
+  if (generationOpen && !selectedWorkflowId && !forceSelector) {
+    const defaults = await getWorkflowDefaults();
+    if (defaults.assetImageId !== null) {
+      const [wf] = await db
+        .select({ id: comfyWorkflows.id })
+        .from(comfyWorkflows)
+        .where(and(eq(comfyWorkflows.id, defaults.assetImageId), eq(comfyWorkflows.kind, "image")));
+      if (wf) effectiveWorkflowId = wf.id;
+    }
+  }
+
+  // Fetch workflows for selector only when panel is open and no effective workflow
   const imageWorkflows =
-    generationOpen && !selectedWorkflowId
+    generationOpen && !effectiveWorkflowId
       ? await db
           .select({
             id: comfyWorkflows.id,
@@ -145,7 +163,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
   const detailBaseUrl = `/projects/${pid}/assets/${aid}`;
   const closeUrl = detailBaseUrl;
-  const selectorUrl = `${detailBaseUrl}?generation=open`;
+  const openPanelUrl = `${detailBaseUrl}?generation=open`;
+  const changePanelUrl = `${detailBaseUrl}?generation=open&selector=1`;
 
   return (
     <div className={generationOpen ? "flex gap-0 items-start" : ""}>
@@ -165,7 +184,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         actions={
           <>
             <Link
-              href={selectorUrl}
+              href={openPanelUrl}
               className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
             >
               Generate Content
@@ -243,7 +262,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       ) : (
         <div className="flex items-center gap-4">
           <Link
-            href={selectorUrl}
+            href={openPanelUrl}
             className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
           >
             Generate Content
@@ -319,13 +338,13 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       {/* ── Generation Panel ──────────────────────────────── */}
       {generationOpen && (
         <div className="w-[460px] shrink-0 border-l border-[#232629] bg-[#141618] -mr-6">
-          {selectedWorkflowId ? (
+          {effectiveWorkflowId ? (
             <AssetGenerationPanel
               projectId={pid}
               assetId={aid}
-              workflowId={selectedWorkflowId}
+              workflowId={effectiveWorkflowId}
               closeUrl={closeUrl}
-              selectorUrl={selectorUrl}
+              selectorUrl={changePanelUrl}
               basePath={detailBaseUrl}
               currentSearchParams={currentSearchParams}
               selectedImageByNodeId={selectedImageByNodeId}
@@ -337,7 +356,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           ) : (
             <WorkflowSelectorPanel
               workflows={imageWorkflows}
-              basePanelUrl={selectorUrl}
+              basePanelUrl={openPanelUrl}
               closeUrl={closeUrl}
               context="asset"
             />

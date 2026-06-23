@@ -9,6 +9,7 @@ import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import { deleteComfyWorkflow } from "@/actions/comfyWorkflows";
+import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,10 @@ function fmtDate(iso: string): string {
 
 export default async function WorkflowsListPage({ searchParams }: Props) {
   const { error } = await searchParams;
-  const workflows = await db
-    .select()
-    .from(comfyWorkflows)
-    .orderBy(desc(comfyWorkflows.id));
+  const [workflows, defaults] = await Promise.all([
+    db.select().from(comfyWorkflows).orderBy(desc(comfyWorkflows.id)),
+    getWorkflowDefaults(),
+  ]);
 
   return (
     <div>
@@ -77,11 +78,26 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
               <Card key={wf.id}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
                       <WorkflowKindBadge kind={wf.kind} />
                       <span className="text-sm font-medium text-[#e7e9ec] truncate">
                         {wf.name}
                       </span>
+                      {defaults.assetImageId === wf.id && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-[#5b93d6]/30 text-[#5b93d6] bg-[#1a2535]">
+                          Asset Default
+                        </span>
+                      )}
+                      {defaults.shotImageId === wf.id && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-[#5b93d6]/30 text-[#5b93d6] bg-[#1a2535]">
+                          Shot Keyframe Default
+                        </span>
+                      )}
+                      {defaults.shotVideoId === wf.id && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-[#5b93d6]/30 text-[#5b93d6] bg-[#1a2535]">
+                          Shot Video Default
+                        </span>
+                      )}
                     </div>
                     {wf.description && (
                       <p className="text-xs text-[#a4abb2] mb-1">{wf.description}</p>

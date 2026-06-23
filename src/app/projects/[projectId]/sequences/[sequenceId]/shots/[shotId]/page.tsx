@@ -30,6 +30,7 @@ import {
 } from "@/actions/promptSegments";
 import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
 import ShotGenerationPanel from "@/components/ShotGenerationPanel";
+import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -85,6 +86,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       : Array.isArray(rawWorkflowId)
       ? parseInt(rawWorkflowId[0], 10)
       : null;
+
+  const forceSelector = sp("selector") === "1";
 
   const selectedImageByNodeId: Record<string, string> = {};
   const scalarValueByNodeId: Record<string, string> = {};
@@ -202,16 +205,41 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     .where(eq(shotReferenceImages.shotId, shid))
     .orderBy(asc(shotReferenceImages.orderIndex));
 
-  const savedWorkflows = await db
-    .select({
-      id: comfyWorkflows.id,
-      name: comfyWorkflows.name,
-      kind: comfyWorkflows.kind,
-      description: comfyWorkflows.description,
-      updatedAt: comfyWorkflows.updatedAt,
-    })
-    .from(comfyWorkflows)
-    .orderBy(desc(comfyWorkflows.updatedAt));
+  // Resolve effective workflow — apply default if no explicit selection and no forced selector
+  let effectiveWorkflowId: number | null = selectedWorkflowId;
+  if (generationOpen && !selectedWorkflowId && !forceSelector) {
+    const defaults = await getWorkflowDefaults();
+    const candidates: Array<{ id: number | null; kind: "image" | "video" }> = [
+      { id: defaults.shotImageId, kind: "image" },
+      { id: defaults.shotVideoId, kind: "video" },
+    ];
+    for (const candidate of candidates) {
+      if (candidate.id === null) continue;
+      const [wf] = await db
+        .select({ id: comfyWorkflows.id })
+        .from(comfyWorkflows)
+        .where(and(eq(comfyWorkflows.id, candidate.id), eq(comfyWorkflows.kind, candidate.kind)));
+      if (wf) {
+        effectiveWorkflowId = wf.id;
+        break;
+      }
+    }
+  }
+
+  // Only load workflow list when the selector needs to be shown
+  const savedWorkflows =
+    generationOpen && !effectiveWorkflowId
+      ? await db
+          .select({
+            id: comfyWorkflows.id,
+            name: comfyWorkflows.name,
+            kind: comfyWorkflows.kind,
+            description: comfyWorkflows.description,
+            updatedAt: comfyWorkflows.updatedAt,
+          })
+          .from(comfyWorkflows)
+          .orderBy(desc(comfyWorkflows.updatedAt))
+      : [];
 
   const rawGeneratedOutputs = await db
     .select({
@@ -325,7 +353,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
   const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const closeUrl = detailBaseUrl;
-  const selectorUrl = `${detailBaseUrl}?generation=open`;
+  const openPanelUrl = `${detailBaseUrl}?generation=open`;
+  const changePanelUrl = `${detailBaseUrl}?generation=open&selector=1`;
 
   return (
     <div className={generationOpen ? "flex gap-0 items-start" : ""}>
@@ -349,7 +378,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         actions={
           <>
             <Link
-              href={selectorUrl}
+              href={openPanelUrl}
               className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
             >
               Generate Content
@@ -513,7 +542,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         ) : (
           <div className="flex items-center gap-4">
             <Link
-              href={selectorUrl}
+              href={openPanelUrl}
               className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
             >
               Generate Content
@@ -568,14 +597,14 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       {/* ── Generation Panel ──────────────────────────────────── */}
       {generationOpen && (
         <div className="w-[460px] shrink-0 border-l border-[#232629] bg-[#141618] -mr-6">
-          {selectedWorkflowId ? (
+          {effectiveWorkflowId ? (
             <ShotGenerationPanel
               projectId={pid}
               sequenceId={sid}
               shotId={shid}
-              workflowId={selectedWorkflowId}
+              workflowId={effectiveWorkflowId}
               closeUrl={closeUrl}
-              selectorUrl={selectorUrl}
+              selectorUrl={changePanelUrl}
               basePath={detailBaseUrl}
               currentSearchParams={currentSearchParams}
               selectedImageByNodeId={selectedImageByNodeId}
@@ -587,7 +616,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           ) : (
             <WorkflowSelectorPanel
               workflows={savedWorkflows}
-              basePanelUrl={selectorUrl}
+              basePanelUrl={openPanelUrl}
               closeUrl={closeUrl}
               context="shot"
             />
