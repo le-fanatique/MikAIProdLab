@@ -12,7 +12,7 @@ import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPane
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
-import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
+import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import {
   getRuntimeImageLabel,
@@ -256,6 +256,14 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
               Asset prompt is empty. Add description or notes to this asset.
             </p>
           )}
+          <div className="mt-3 pt-3 border-t border-[#1e2124]">
+            <Link
+              href={`/projects/${pid}/assets/${aid}/edit`}
+              className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Edit Asset →
+            </Link>
+          </div>
         </Card>
 
         <Card title="Suggested Inputs">
@@ -266,8 +274,6 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           ) : (
             <WorkflowRuntimeMappingPanel
               mappings={mappings}
-              workflowKind={workflow.kind}
-              timelinePromptText=""
               scalarValueByNodeId={scalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
@@ -332,24 +338,10 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
                     />
                   ))}
 
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="submit"
-                      className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-4 py-2 text-sm font-medium hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
-                    >
-                      Generate
-                    </button>
-                    <p className="text-xs text-[#6e767d]">
-                      Queue this workflow in ComfyUI.
-                    </p>
-                  </div>
-
-                  <div className="border-t border-[#232629] pt-4">
-                    <p className="font-mono text-[9px] uppercase tracking-widest text-[#4b5158] mb-3">
-                      Advanced — Editable Payload
-                    </p>
-                    <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
-                  </div>
+                  <WorkflowGenerateActions
+                    initialJsonText={payloadPreview.patchedJsonText}
+                    buttonLabel="Generate Asset Image"
+                  />
                 </form>
               </div>
             </Card>

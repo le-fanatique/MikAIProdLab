@@ -4,28 +4,28 @@ import { useState } from "react";
 
 type Props = {
   initialJsonText: string;
+  onValidityChange?: (isValid: boolean) => void;
 };
 
-export default function EditablePatchedJsonPanel({ initialJsonText }: Props) {
+export default function EditablePatchedJsonPanel({ initialJsonText, onValidityChange }: Props) {
   const [jsonText, setJsonText] = useState(initialJsonText);
   const [isValid, setIsValid] = useState(true);
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value;
     setJsonText(val);
+    let valid = true;
     try {
       JSON.parse(val);
-      setIsValid(true);
     } catch {
-      setIsValid(false);
+      valid = false;
     }
+    setIsValid(valid);
+    onValidityChange?.(valid);
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-        Patched JSON
-      </p>
       <textarea
         name="patchedJsonOverride"
         value={jsonText}

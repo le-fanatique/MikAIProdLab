@@ -70,7 +70,7 @@ export default function WorkflowTextOverrideForm({
                   onChange={(e) =>
                     setValues((prev) => ({ ...prev, [input.nodeId]: e.target.value }))
                   }
-                  rows={10}
+                  rows={5}
                   className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-y focus:outline-none focus:border-[#3a4046] leading-relaxed"
                 />
               </div>

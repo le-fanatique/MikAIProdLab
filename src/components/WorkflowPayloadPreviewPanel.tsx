@@ -66,14 +66,15 @@ export default function WorkflowPayloadPreviewPanel({ result }: Props) {
           <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d] mb-1">
             Warnings
           </p>
-          {result.warnings.map((warning, i) => (
-            <p key={i} className="text-xs text-[#4b5158] leading-relaxed">
-              {warning}
-            </p>
-          ))}
+          <div className="rounded border border-[#5c4a24]/60 bg-[#141008] px-3 py-2.5 flex flex-col gap-1.5">
+            {result.warnings.map((warning, i) => (
+              <p key={i} className="text-xs text-[#b89a5a] leading-relaxed">
+                {warning}
+              </p>
+            ))}
+          </div>
         </div>
       )}
-
     </div>
   );
 }

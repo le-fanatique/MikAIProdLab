@@ -30,7 +30,7 @@ import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPane
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
-import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
+import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 
@@ -329,8 +329,6 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           ) : (
             <WorkflowRuntimeMappingPanel
               mappings={mappings}
-              workflowKind={workflow.kind}
-              timelinePromptText={compiledPrompt.text}
               scalarValueByNodeId={scalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
@@ -396,24 +394,10 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                     />
                   ))}
 
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="submit"
-                      className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-4 py-2 text-sm font-medium hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
-                    >
-                      {workflow.kind === "video" ? "Generate Video" : "Generate"}
-                    </button>
-                    <p className="text-xs text-[#6e767d]">
-                      Queue this workflow in ComfyUI.
-                    </p>
-                  </div>
-
-                  <div className="border-t border-[#232629] pt-4">
-                    <p className="font-mono text-[9px] uppercase tracking-widest text-[#4b5158] mb-3">
-                      Advanced — Editable Payload
-                    </p>
-                    <EditablePatchedJsonPanel initialJsonText={payloadPreview.patchedJsonText} />
-                  </div>
+                  <WorkflowGenerateActions
+                    initialJsonText={payloadPreview.patchedJsonText}
+                    buttonLabel={workflow.kind === "video" ? "Generate Video" : "Generate"}
+                  />
                 </form>
               </div>
             </Card>
