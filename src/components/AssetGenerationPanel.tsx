@@ -33,6 +33,8 @@ type Props = {
   textOverrideByNodeId: Record<string, string>;
   generationError: string | undefined;
   activeJobId: number | null;
+  attachedReference?: boolean;
+  attachError?: string | null;
 };
 
 function buildImageOptionLabel(img: RuntimeImageOption): string {
@@ -231,6 +233,8 @@ export default async function AssetGenerationPanel({
   textOverrideByNodeId,
   generationError,
   activeJobId,
+  attachedReference,
+  attachError,
 }: Props) {
   const [asset] = await db.select().from(assets).where(eq(assets.id, aid));
   if (!asset) return null;
@@ -302,6 +306,13 @@ export default async function AssetGenerationPanel({
     selectionParams.set(`textNode_${nodeId}`, value);
   }
   const returnTo = `${basePath}?${selectionParams.toString()}`;
+
+  // approveReturnTo keeps the panel open with the current jobId visible
+  const approveParams = new URLSearchParams(selectionParams);
+  if (activeJobId !== null) {
+    approveParams.set("jobId", String(activeJobId));
+  }
+  const approveReturnTo = `${basePath}?${approveParams.toString()}`;
 
   const ATTACH_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
   let canAttach = false;
@@ -466,24 +477,25 @@ export default async function AssetGenerationPanel({
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">Output</p>
             <GenerationJobStatusPanel jobId={activeJobId} />
-            {canAttach && (
+            {attachError && (
+              <p className="text-xs text-[#cf7b6b]">{attachError}</p>
+            )}
+            {attachedReference ? (
+              <p className="text-xs text-[#6b9e72]">Output approved as source.</p>
+            ) : canAttach ? (
               <form action={attachOutputAsAssetReference}>
                 <input type="hidden" name="projectId" value={String(pid)} />
                 <input type="hidden" name="assetId" value={String(aid)} />
                 <input type="hidden" name="jobId" value={String(activeJobId)} />
-                <input
-                  type="hidden"
-                  name="returnTo"
-                  value={`/projects/${pid}/assets/${aid}?attachedReference=1`}
-                />
+                <input type="hidden" name="returnTo" value={approveReturnTo} />
                 <button
                   type="submit"
                   className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
                 >
-                  Attach as Reference
+                  Approve Output
                 </button>
               </form>
-            )}
+            ) : null}
           </div>
         )}
 

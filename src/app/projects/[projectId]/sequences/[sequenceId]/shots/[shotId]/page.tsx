@@ -612,6 +612,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               textOverrideByNodeId={textOverrideByNodeId}
               generationError={generationError}
               activeJobId={activeJobId}
+              attachedReference={attachedReference === "1"}
+              attachError={attachError ?? null}
             />
           ) : (
             <WorkflowSelectorPanel

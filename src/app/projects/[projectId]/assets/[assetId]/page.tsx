@@ -49,6 +49,10 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const attachedReference =
     typeof rawAttached === "string" ? rawAttached : Array.isArray(rawAttached) ? rawAttached[0] : undefined;
 
+  const rawAttachError = resolvedSearchParams["attachError"];
+  const attachError =
+    typeof rawAttachError === "string" ? rawAttachError : Array.isArray(rawAttachError) ? rawAttachError[0] : undefined;
+
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
     rawGeneration === "open" || (Array.isArray(rawGeneration) && rawGeneration[0] === "open");
@@ -352,6 +356,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
               textOverrideByNodeId={textOverrideByNodeId}
               generationError={generationError}
               activeJobId={activeJobId}
+              attachedReference={attachedReference === "1"}
+              attachError={attachError ?? null}
             />
           ) : (
             <WorkflowSelectorPanel
