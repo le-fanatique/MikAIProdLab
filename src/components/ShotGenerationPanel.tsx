@@ -284,14 +284,20 @@ export default async function ShotGenerationPanel({
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link
+            href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`}
+            className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+          >
+            Open page ↗
+          </Link>
+          <Link
             href={selectorUrl}
             className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
           >
-            Change
+            Change Workflow
           </Link>
           <Link
             href={closeUrl}
-            className="text-[#4b5158] hover:text-[#a4abb2] transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center"
+            className="text-[#6e767d] hover:text-[#a4abb2] transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center"
             aria-label="Close panel"
           >
             ×
@@ -353,11 +359,11 @@ export default async function ShotGenerationPanel({
           </>
         )}
 
-        {/* Payload Preview */}
+        {/* Preview */}
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-              Payload Preview
+              Preview
             </p>
             <WorkflowPayloadPreviewPanel result={payloadPreview} />
           </div>

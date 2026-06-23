@@ -210,14 +210,20 @@ export default async function AssetGenerationPanel({
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link
+            href={`/projects/${pid}/assets/${aid}/workflows/${wid}/generate`}
+            className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+          >
+            Open page ↗
+          </Link>
+          <Link
             href={selectorUrl}
             className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
           >
-            Change
+            Change Workflow
           </Link>
           <Link
             href={closeUrl}
-            className="text-[#4b5158] hover:text-[#a4abb2] transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center"
+            className="text-[#6e767d] hover:text-[#a4abb2] transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center"
             aria-label="Close panel"
           >
             ×
@@ -228,32 +234,30 @@ export default async function AssetGenerationPanel({
       {/* Body */}
       <div className="px-5 py-4 flex flex-col gap-5">
 
-        {/* Asset Prompt */}
-        <div className="flex flex-col gap-1.5">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-            Asset Prompt
+        {/* Asset Prompt — compact link */}
+        {assetPromptText ? (
+          <p className="text-xs text-[#4b5158]">
+            Asset prompt set.{" "}
+            <Link
+              href={`/projects/${pid}/assets/${aid}/edit`}
+              className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Asset prompt · Edit →
+            </Link>
           </p>
-          {assetPromptText ? (
-            <textarea
-              readOnly
-              value={assetPromptText}
-              rows={4}
-              className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-xs text-[#a4abb2] font-mono resize-none cursor-default focus:outline-none leading-relaxed"
-            />
-          ) : (
-            <div className="rounded border border-[#5c4a24]/60 bg-[#141008] px-3 py-2">
-              <p className="text-xs text-[#b89a5a]">
-                Asset prompt is empty.{" "}
-                <Link
-                  href={`/projects/${pid}/assets/${aid}/edit`}
-                  className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                >
-                  Edit this asset →
-                </Link>
-              </p>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="rounded border border-[#5c4a24]/60 bg-[#141008] px-3 py-2">
+            <p className="text-xs text-[#b89a5a]">
+              No asset prompt yet.{" "}
+              <Link
+                href={`/projects/${pid}/assets/${aid}/edit`}
+                className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+              >
+                Edit Asset →
+              </Link>
+            </p>
+          </div>
+        )}
 
         {/* Suggested Inputs */}
         {parsed === null ? (
@@ -289,11 +293,11 @@ export default async function AssetGenerationPanel({
           </>
         )}
 
-        {/* Payload Preview */}
+        {/* Preview */}
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-              Payload Preview
+              Preview
             </p>
             <WorkflowPayloadPreviewPanel result={payloadPreview} />
           </div>
@@ -320,7 +324,7 @@ export default async function AssetGenerationPanel({
               ))}
               <WorkflowGenerateActions
                 initialJsonText={payloadPreview.patchedJsonText}
-                buttonLabel="Generate Asset Image"
+                buttonLabel="Generate Image"
               />
             </form>
           </div>

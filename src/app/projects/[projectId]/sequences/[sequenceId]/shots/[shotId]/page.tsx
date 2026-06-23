@@ -503,20 +503,29 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
         {/* ── Generation ────────────────────────────────────────────── */}
         <SectionLabel label="Generation" />
-        <div className="flex items-center gap-4">
-          <Link
-            href={selectorUrl}
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-          >
-            Generate Content
-          </Link>
+        {generationOpen ? (
           <Link
             href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
-            className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors"
+            className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
           >
-            Workflow picker →
+            Open full workflow page ↗
           </Link>
-        </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <Link
+              href={selectorUrl}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Generate Content
+            </Link>
+            <Link
+              href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
+              className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+            >
+              Open full workflow page ↗
+            </Link>
+          </div>
+        )}
 
         {/* ── Outputs ───────────────────────────────────────────────── */}
         <SectionLabel label="Outputs" />
@@ -580,6 +589,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               workflows={savedWorkflows}
               basePanelUrl={selectorUrl}
               closeUrl={closeUrl}
+              context="shot"
             />
           )}
         </div>
