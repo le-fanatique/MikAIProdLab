@@ -25,7 +25,7 @@ export default function PromptComposerPanel({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-[#6e767d] leading-relaxed">
-        Use the shot context, continuity, cast, references, motion beats and timeline segments to
+        Use the shot context, continuity, cast, references, and timeline segments to
         compose a draft prompt. Nothing is applied until you choose Apply to Shot Prompt.
       </p>
 
@@ -33,7 +33,7 @@ export default function PromptComposerPanel({
         <div className="rounded border border-dashed border-[#2c3035] px-4 py-6 text-center">
           <p className="text-sm text-[#6e767d]">No shot data to compose a prompt draft.</p>
           <p className="text-xs text-[#4b5158] mt-1">
-            Add casting, prompt segments, motion beats, or references to build a draft.
+            Add casting, prompt segments, or references to build a draft.
           </p>
         </div>
       ) : (
@@ -46,7 +46,7 @@ export default function PromptComposerPanel({
               {proposalText}
             </pre>
             <p className="text-[10px] text-[#4b5158]">
-              Source: Shot context + continuity + motion beats + prompt segments
+              Source: Shot context + continuity + cast + prompt segments
             </p>
           </div>
 

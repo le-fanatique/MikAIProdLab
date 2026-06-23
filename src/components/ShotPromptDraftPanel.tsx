@@ -10,7 +10,7 @@ export default function ShotPromptDraftPanel({ composed }: Props) {
     return (
       <EmptyState
         title="No shot data to compose a prompt draft."
-        description="Add casting, prompt segments, motion beats, or references to build a draft."
+        description="Add casting, prompt segments, or references to build a draft."
       />
     );
   }

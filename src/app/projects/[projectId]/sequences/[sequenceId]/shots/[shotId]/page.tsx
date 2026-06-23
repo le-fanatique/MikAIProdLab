@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, motionBeats, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc, isNotNull } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -7,7 +7,6 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import CastingPanel from "@/components/CastingPanel";
-import MotionBeatsPanel from "@/components/MotionBeatsPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
@@ -22,7 +21,6 @@ import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
-import { deleteMotionBeat } from "@/actions/motionBeats";
 import { deleteShotReferenceImage } from "@/actions/shotReferenceImages";
 import {
   deletePromptSegment,
@@ -99,22 +97,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           .from(assets)
           .where(eq(assets.projectId, pid))
           .orderBy(asc(assets.orderIndex));
-
-  const beatList = await db
-    .select()
-    .from(motionBeats)
-    .where(eq(motionBeats.shotId, shid))
-    .orderBy(asc(motionBeats.orderIndex));
-
-  const beatRows = beatList.map((beat) => ({
-    id: beat.id,
-    beatType: beat.beatType,
-    label: beat.label,
-    description: beat.description,
-    timingPosition: beat.timingPosition,
-    editHref: `/projects/${pid}/sequences/${sid}/shots/${shid}/beats/${beat.id}/edit`,
-    deleteAction: deleteMotionBeat.bind(null, beat.id, shid, sid, pid),
-  }));
 
   const segmentList = await db
     .select()
@@ -248,12 +230,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       type: r.assetType,
       description: r.assetDescription,
     })),
-    motionBeats: beatList.map((b) => ({
-      beatType: b.beatType,
-      label: b.label,
-      description: b.description,
-      timingPosition: b.timingPosition,
-    })),
     compiledPrompt,
     shotRefImages: refImages.map((img) => ({
       imageRole: img.imageRole,
@@ -365,8 +341,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           </p>
         )}
 
-        {/* ── Motion & Casting ──────────────────────────────────────── */}
-        <SectionLabel label="Motion & Casting" />
+        {/* ── Casting ───────────────────────────────────────────────── */}
+        <SectionLabel label="Casting" />
 
         <Card title="Casting">
           <CastingPanel
@@ -378,13 +354,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           <p className="text-xs text-[#4b5158] mt-3">
             Casting here describes what appears in this specific shot.
           </p>
-        </Card>
-
-        <Card title="Motion Beats">
-          <MotionBeatsPanel
-            beats={beatRows}
-            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/beats/new`}
-          />
         </Card>
 
         {/* ── Prompt Workspace ──────────────────────────────────────── */}

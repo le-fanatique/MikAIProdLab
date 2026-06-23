@@ -27,13 +27,6 @@ export type ShotComposerCastAsset = {
   description: string | null;
 };
 
-export type ShotComposerBeat = {
-  beatType: string;
-  label: string;
-  description: string | null;
-  timingPosition: string | null;
-};
-
 export type ShotComposerRefImage = {
   imageRole: string | null;
   label: string | null;
@@ -53,7 +46,6 @@ export type ShotComposerInput = {
   sequence: ShotComposerSequence;
   shot: ShotComposerShot;
   castAssets: ShotComposerCastAsset[];
-  motionBeats: ShotComposerBeat[];
   compiledPrompt: CompiledPrompt;
   shotRefImages: ShotComposerRefImage[];
   castAssetRefImages: ShotComposerAssetRefImage[];
@@ -150,18 +142,6 @@ export function composeShotPrompt(input: ShotComposerInput): ComposedShotPrompt 
         : `[${capitalize(asset.type)}] ${asset.name}`;
     });
     sections.push({ title: "Cast", content: castLines.join("\n") });
-  }
-
-  // Motion Beats
-  if (input.motionBeats.length > 0) {
-    const beatLines = input.motionBeats.map((beat, i) => {
-      const tag = beat.timingPosition
-        ? `[${beat.beatType} / ${beat.timingPosition}]`
-        : `[${beat.beatType}]`;
-      const text = notEmpty(beat.description) ?? beat.label;
-      return `${i + 1}. ${tag} ${text}`;
-    });
-    sections.push({ title: "Motion Beats", content: beatLines.join("\n") });
   }
 
   // Timeline Prompt
