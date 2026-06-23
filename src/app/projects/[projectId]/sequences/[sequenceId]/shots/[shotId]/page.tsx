@@ -78,6 +78,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       assetName: assets.name,
       assetType: assets.type,
       assetDescription: assets.description,
+      assetNotes: assets.notes,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -209,11 +210,16 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   }));
 
   const composedShotPrompt = composeShotPrompt({
-    project: { name: project.name },
+    project: {
+      name: project.name,
+      pitch: project.pitch,
+    },
     sequence: {
       title: sequence.title,
       mood: sequence.mood,
       locationHint: sequence.locationHint,
+      summary: sequence.summary,
+      narrativePurpose: sequence.narrativePurpose,
     },
     shot: {
       shotCode: shot.shotCode,
@@ -229,8 +235,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       name: r.assetName,
       type: r.assetType,
       description: r.assetDescription,
+      notes: r.assetNotes,
     })),
-    compiledPrompt,
     shotRefImages: refImages.map((img) => ({
       imageRole: img.imageRole,
       label: img.label,
@@ -396,7 +402,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           <CompiledPromptPanel compiled={compiledPrompt} />
         </Card>
 
-        <Card title="Prompt Composer">
+        <Card title="Shot Prompt Draft">
           <PromptComposerPanel
             composed={composedShotPrompt}
             projectId={pid}
@@ -404,6 +410,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             shotId={shid}
             returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
             hasExistingShotPrompt={Boolean(shot.shotPrompt?.trim())}
+            segmentCount={segmentList.length}
           />
         </Card>
 

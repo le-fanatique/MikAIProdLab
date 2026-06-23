@@ -1,5 +1,3 @@
-import type { CompiledPrompt } from "@/lib/prompts/compilePromptSegments";
-
 export type ShotComposerShot = {
   shotCode: string | null;
   title: string;
@@ -15,16 +13,20 @@ export type ShotComposerSequence = {
   title: string;
   mood: string | null;
   locationHint: string | null;
+  summary: string | null;
+  narrativePurpose: string | null;
 };
 
 export type ShotComposerProject = {
   name: string;
+  pitch: string | null;
 };
 
 export type ShotComposerCastAsset = {
   name: string;
   type: string;
   description: string | null;
+  notes: string | null;
 };
 
 export type ShotComposerRefImage = {
@@ -46,21 +48,13 @@ export type ShotComposerInput = {
   sequence: ShotComposerSequence;
   shot: ShotComposerShot;
   castAssets: ShotComposerCastAsset[];
-  compiledPrompt: CompiledPrompt;
   shotRefImages: ShotComposerRefImage[];
   castAssetRefImages: ShotComposerAssetRefImage[];
 };
 
-export type ComposedShotPromptSection = {
-  title: string;
-  content: string;
-};
-
 export type ComposedShotPrompt = {
-  sections: ComposedShotPromptSection[];
-  text: string;
+  proposalText: string;
   hasContent: boolean;
-  warnings: string[];
 };
 
 function notEmpty(s: string | null | undefined): string | null {
@@ -68,129 +62,93 @@ function notEmpty(s: string | null | undefined): string | null {
   return t.length > 0 ? t : null;
 }
 
-function imageLabel(
-  label: string | null,
-  sourceFilename: string | null,
-  imageRole: string | null
-): string | null {
-  return notEmpty(label) ?? notEmpty(sourceFilename) ?? notEmpty(imageRole);
-}
-
-function capitalize(s: string): string {
+function cap(s: string): string {
+  if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function low(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+function buildCastDetails(asset: ShotComposerCastAsset): string {
+  const desc = notEmpty(asset.description);
+  const notes = notEmpty(asset.notes);
+  const details = [desc, notes].filter((x): x is string => x !== null);
+  if (details.length === 0) return asset.name;
+  return `${asset.name} (${details.join("; ")})`;
+}
+
 export function composeShotPrompt(input: ShotComposerInput): ComposedShotPrompt {
-  const sections: ComposedShotPromptSection[] = [];
-  const warnings: string[] = [];
+  const sentences: string[] = [];
 
-  // Context — always present
-  const shotLabel = input.shot.shotCode
-    ? `${input.shot.shotCode} — ${input.shot.title}`
-    : input.shot.title;
-  const durationSuffix =
-    input.shot.durationSeconds != null ? ` (${input.shot.durationSeconds}s)` : "";
-  sections.push({
-    title: "Context",
-    content: [
-      `Project: ${input.project.name}`,
-      `Sequence: ${input.sequence.title}`,
-      `Shot: ${shotLabel}${durationSuffix}`,
-    ].join("\n"),
-  });
-
-  // Shot Intent
-  const intentLines: string[] = [];
   const desc = notEmpty(input.shot.description);
   const action = notEmpty(input.shot.actionPitch);
-  const camIntent = notEmpty(input.shot.cameraPitch);
-  if (desc) intentLines.push(`Description: ${desc}`);
-  if (action) intentLines.push(`Action: ${action}`);
-  if (camIntent) intentLines.push(`Camera Intent: ${camIntent}`);
-  if (intentLines.length > 0) {
-    sections.push({ title: "Shot Intent", content: intentLines.join("\n") });
-  }
-
-  // Visual Context
-  const visualLines: string[] = [];
-  const mood = notEmpty(input.sequence.mood);
-  const location = notEmpty(input.sequence.locationHint);
-  if (mood) visualLines.push(`Mood: ${mood}`);
-  if (location) visualLines.push(`Location: ${location}`);
-  if (visualLines.length > 0) {
-    sections.push({ title: "Visual Context", content: visualLines.join("\n") });
-  }
-
-  // Camera
-  const cameraLines: string[] = [];
+  const camPitch = notEmpty(input.shot.cameraPitch);
   const framing = notEmpty(input.shot.framing);
   const movement = notEmpty(input.shot.cameraMovement);
-  if (framing) cameraLines.push(`Framing: ${framing}`);
-  if (movement) cameraLines.push(`Movement: ${movement}`);
-  if (cameraLines.length > 0) {
-    sections.push({ title: "Camera", content: cameraLines.join("\n") });
-  }
+  const location = notEmpty(input.sequence.locationHint);
+  const mood = notEmpty(input.sequence.mood);
+  const summary = notEmpty(input.sequence.summary);
+  const pitch = notEmpty(input.project.pitch);
 
-  // Cast
-  if (input.castAssets.length === 0) {
-    warnings.push("No cast assigned to this shot.");
+  const hasCast = input.castAssets.length > 0;
+
+  // Sentence 1: main subject + action + location
+  if (hasCast) {
+    const castStr = input.castAssets.map(buildCastDetails).join(", ");
+    const subjectParts: string[] = [];
+
+    if (framing) {
+      subjectParts.push(`${cap(framing)} of ${castStr}`);
+    } else {
+      subjectParts.push(castStr);
+    }
+
+    const primaryAction = action ?? desc;
+    if (primaryAction) subjectParts.push(low(primaryAction));
+    if (location) subjectParts.push(`in ${location}`);
+
+    sentences.push(subjectParts.join(", ") + ".");
   } else {
-    const castLines = input.castAssets.map((asset) => {
-      const assetDesc = notEmpty(asset.description);
-      return assetDesc
-        ? `[${capitalize(asset.type)}] ${asset.name} — ${assetDesc}`
-        : `[${capitalize(asset.type)}] ${asset.name}`;
-    });
-    sections.push({ title: "Cast", content: castLines.join("\n") });
-  }
-
-  // Timeline Prompt
-  if (input.compiledPrompt.lines.length === 0) {
-    warnings.push("No prompt segments — timeline section is missing.");
-  } else {
-    sections.push({ title: "Timeline Prompt", content: input.compiledPrompt.text });
-  }
-
-  // Shot Reference Images
-  if (input.shotRefImages.length > 0) {
-    const imgLines = input.shotRefImages
-      .map((img) => {
-        const lbl = imageLabel(img.label, img.sourceFilename, img.imageRole);
-        if (!lbl) return null;
-        const role = notEmpty(img.imageRole);
-        return role ? `[${role}] ${lbl}` : lbl;
-      })
-      .filter((line): line is string => line !== null);
-    if (imgLines.length > 0) {
-      sections.push({ title: "Shot Reference Images", content: imgLines.join("\n") });
+    const subject = desc ?? action;
+    if (subject) {
+      const parts: string[] = [cap(subject)];
+      if (desc && action) parts.push(low(action));
+      if (location) parts.push(`in ${location}`);
+      sentences.push(parts.join(", ") + ".");
+    } else if (location) {
+      sentences.push(`Shot in ${location}.`);
     }
   }
 
-  // Cast Reference Images
-  if (input.castAssetRefImages.length > 0) {
-    const assetImgLines = input.castAssetRefImages
-      .map((img) => {
-        const lbl = imageLabel(img.label, img.sourceFilename, img.imageRole);
-        if (!lbl) return null;
-        const role = notEmpty(img.imageRole);
-        const prefix = role
-          ? `[${img.assetName} / ${img.assetType} / ${role}]`
-          : `[${img.assetName} / ${img.assetType}]`;
-        return `${prefix} ${lbl}`;
-      })
-      .filter((line): line is string => line !== null);
-    if (assetImgLines.length > 0) {
-      sections.push({ title: "Cast Reference Images", content: assetImgLines.join("\n") });
+  // Sentence 2: mood / atmosphere context
+  if (mood) {
+    sentences.push(cap(mood) + ".");
+  } else if (summary && summary.length < 100) {
+    sentences.push(cap(low(summary)) + ".");
+  } else if (pitch && pitch.length < 80) {
+    sentences.push(cap(low(pitch)) + ".");
+  }
+
+  // Sentence 3: camera
+  if (camPitch) {
+    sentences.push(cap(camPitch) + ".");
+  } else {
+    const camParts: string[] = [];
+    if (movement) camParts.push(movement);
+    // Include framing in camera sentence only when cast didn't already use it
+    if (framing && !hasCast) camParts.push(framing);
+    if (camParts.length > 0) {
+      sentences.push(cap(camParts.join(", ")) + ".");
     }
   }
 
-  const bodyParts = sections.map((s) => `${s.title}:\n${s.content}`);
-  const text = `SHOT PROMPT DRAFT\n\n${bodyParts.join("\n\n")}`;
+  const proposalText = sentences.join(" ").trim();
 
   return {
-    sections,
-    text,
-    hasContent: sections.length > 0,
-    warnings,
+    proposalText,
+    hasContent: proposalText.length > 0,
   };
 }

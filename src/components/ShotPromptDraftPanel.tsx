@@ -10,7 +10,7 @@ export default function ShotPromptDraftPanel({ composed }: Props) {
     return (
       <EmptyState
         title="No shot data to compose a prompt draft."
-        description="Add casting, prompt segments, or references to build a draft."
+        description="Add casting, a description, or camera details to build a draft."
       />
     );
   }
@@ -18,17 +18,8 @@ export default function ShotPromptDraftPanel({ composed }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <pre className="whitespace-pre-wrap font-mono text-sm text-[#a4abb2] bg-[#0d0e10] border border-[#2c3035] rounded p-4 leading-relaxed">
-        {composed.text}
+        {composed.proposalText}
       </pre>
-      {composed.warnings.length > 0 && (
-        <div className="flex flex-col gap-1">
-          {composed.warnings.map((warning, i) => (
-            <p key={i} className="text-xs text-[#4b5158]">
-              {warning}
-            </p>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
