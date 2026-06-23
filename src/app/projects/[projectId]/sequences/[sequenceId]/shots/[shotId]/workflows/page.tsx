@@ -75,7 +75,7 @@ export default async function WorkflowPickerPage({ params }: Props) {
             label: shot.shotCode ?? shot.title,
             href: `/projects/${pid}/sequences/${sid}/shots/${shid}`,
           },
-          { label: "Workflow Input Mapping" },
+          { label: "Shot Workflows" },
         ]}
       />
 

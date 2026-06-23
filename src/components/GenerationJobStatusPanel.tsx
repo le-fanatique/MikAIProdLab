@@ -50,6 +50,12 @@ const STATUS_COLORS: Record<JobStatus, string> = {
   timeout: "text-[#cf7b6b]",
 };
 
+function formatElapsed(secs: number): string {
+  const m = Math.floor(secs / 60).toString().padStart(2, "0");
+  const s = (secs % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 function getOutputExt(outputPath: string): string {
   return outputPath.split(".").pop()?.toLowerCase() ?? "";
 }
@@ -67,6 +73,7 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
   const [job, setJob] = useState<JobData | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const hasRefreshedForTerminalStatus = useRef(false);
+  const [elapsedSecs, setElapsedSecs] = useState<number | null>(null);
 
   const poll = useCallback(async () => {
     try {
@@ -121,6 +128,20 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
     };
   }, [poll]);
 
+  useEffect(() => {
+    if (!job || job.status !== "running" || !job.startedAt) {
+      setElapsedSecs(null);
+      return;
+    }
+    const startMs = new Date(job.startedAt).getTime();
+    function update() {
+      setElapsedSecs(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+    }
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [job?.status, job?.startedAt]);
+
   const isTerminal = job ? TERMINAL_STATUSES.includes(job.status) : false;
 
   return (
@@ -155,7 +176,14 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
           {/* Polling indicator */}
           {!isTerminal && (
             <p className="text-xs text-[#4b5158]">
-              Checking job status every 2 seconds…
+              This page updates automatically while the job is running.
+            </p>
+          )}
+
+          {/* Elapsed time during running */}
+          {job.status === "running" && elapsedSecs !== null && (
+            <p className="text-xs font-mono text-[#6e767d] tabular-nums">
+              Running for {formatElapsed(elapsedSecs)}
             </p>
           )}
 

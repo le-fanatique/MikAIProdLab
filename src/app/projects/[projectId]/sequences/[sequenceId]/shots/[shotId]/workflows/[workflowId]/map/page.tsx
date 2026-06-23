@@ -401,7 +401,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                       type="submit"
                       className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-4 py-2 text-sm font-medium hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
                     >
-                      Generate
+                      {workflow.kind === "video" ? "Generate Video" : "Generate"}
                     </button>
                     <p className="text-xs text-[#6e767d]">
                       Queue this workflow in ComfyUI.

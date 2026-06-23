@@ -31,7 +31,10 @@ export default function CompiledShotPromptPreviewPanel({ compiled, workflowKind 
       </pre>
 
       <p className="text-xs text-[#4b5158]">
-        This is the final text sent to Text Prompt inputs for this workflow. Shot Prompt remains the source of truth.
+        This is the final text sent to Text Prompt inputs for this workflow.{" "}
+        {workflowKind === "video"
+          ? "Shot Prompt and timed segments are both used for video generation."
+          : "Shot Prompt remains the source of truth."}
       </p>
     </div>
   );

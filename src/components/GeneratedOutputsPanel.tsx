@@ -143,6 +143,16 @@ export default function GeneratedOutputsPanel({
                     Open ↗
                   </a>
 
+                  {isVideo && (
+                    <a
+                      href={src}
+                      download
+                      className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    >
+                      Download ↓
+                    </a>
+                  )}
+
                   {isImage &&
                     Number.isFinite(projectId) &&
                     Number.isFinite(sequenceId) &&
@@ -164,7 +174,7 @@ export default function GeneratedOutputsPanel({
                   )}
 
                   {isVideo && (
-                    <span className="text-[10px] text-[#3a4046]">
+                    <span className="text-[10px] text-[#4b5158]">
                       Video — cannot attach as reference
                     </span>
                   )}

@@ -31,6 +31,15 @@ export function formatPromptSeconds(value: number): string {
 
 export function compilePromptSegments(segments: PromptSegment[]): CompiledPrompt {
   const sorted = [...segments].sort((a, b) => {
+    const aStart = a.startSeconds;
+    const bStart = b.startSeconds;
+    if (aStart !== null && bStart !== null) {
+      if (aStart !== bStart) return aStart - bStart;
+      if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex;
+      return a.id - b.id;
+    }
+    if (aStart !== null) return -1;
+    if (bStart !== null) return 1;
     if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex;
     return a.id - b.id;
   });
