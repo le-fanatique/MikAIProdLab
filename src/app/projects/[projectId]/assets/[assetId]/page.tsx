@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, assets, shotAssets, shots, sequences, sequenceAssets, assetReferenceImages } from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { projects, assets, shotAssets, shots, sequences, sequenceAssets, assetReferenceImages, comfyWorkflows } from "@/db/schema";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -9,6 +9,8 @@ import Card from "@/components/Card";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import DeleteButton from "@/components/DeleteButton";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
+import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
+import AssetGenerationPanel from "@/components/AssetGenerationPanel";
 import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
 
@@ -45,6 +47,44 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const rawAttached = resolvedSearchParams["attachedReference"];
   const attachedReference =
     typeof rawAttached === "string" ? rawAttached : Array.isArray(rawAttached) ? rawAttached[0] : undefined;
+
+  const rawGeneration = resolvedSearchParams["generation"];
+  const generationOpen =
+    rawGeneration === "open" || (Array.isArray(rawGeneration) && rawGeneration[0] === "open");
+
+  const rawWorkflowId = resolvedSearchParams["workflowId"];
+  const selectedWorkflowId = typeof rawWorkflowId === "string"
+    ? parseInt(rawWorkflowId, 10)
+    : Array.isArray(rawWorkflowId)
+    ? parseInt(rawWorkflowId[0], 10)
+    : null;
+
+  // Parse generation-related search params
+  const selectedImageByNodeId: Record<string, string> = {};
+  const scalarValueByNodeId: Record<string, string> = {};
+  const textOverrideByNodeId: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (!strValue) continue;
+    if (key.startsWith("imageNode_")) selectedImageByNodeId[key.slice("imageNode_".length)] = strValue;
+    else if (key.startsWith("scalarNode_")) scalarValueByNodeId[key.slice("scalarNode_".length)] = strValue;
+    else if (key.startsWith("textNode_")) textOverrideByNodeId[key.slice("textNode_".length)] = strValue;
+  }
+
+  const rawJobId = resolvedSearchParams["jobId"];
+  const jobIdParam = typeof rawJobId === "string" ? rawJobId : Array.isArray(rawJobId) ? rawJobId[0] : undefined;
+  const activeJobId = jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
+
+  const rawGenerationError = resolvedSearchParams["generationError"];
+  const generationError = typeof rawGenerationError === "string" ? rawGenerationError : Array.isArray(rawGenerationError) ? rawGenerationError[0] : undefined;
+
+  const currentSearchParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue !== undefined) currentSearchParams[key] = strValue;
+  }
+
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
 
@@ -88,8 +128,28 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
 
+  // Fetch workflows for selector only when panel is open and no workflow selected
+  const imageWorkflows =
+    generationOpen && !selectedWorkflowId
+      ? await db
+          .select({
+            id: comfyWorkflows.id,
+            name: comfyWorkflows.name,
+            kind: comfyWorkflows.kind,
+            description: comfyWorkflows.description,
+          })
+          .from(comfyWorkflows)
+          .where(eq(comfyWorkflows.kind, "image"))
+          .orderBy(desc(comfyWorkflows.updatedAt))
+      : [];
+
+  const detailBaseUrl = `/projects/${pid}/assets/${aid}`;
+  const closeUrl = detailBaseUrl;
+  const selectorUrl = `${detailBaseUrl}?generation=open`;
+
   return (
-    <div>
+    <div className={generationOpen ? "flex gap-0 items-start" : ""}>
+      <div className={generationOpen ? "flex-1 min-w-0 pr-6" : ""}>
       <Breadcrumb
         crumbs={[
           { label: "Projects", href: "/projects" },
@@ -105,10 +165,10 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         actions={
           <>
             <Link
-              href={`/projects/${pid}/assets/${aid}/workflows`}
+              href={selectorUrl}
               className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
             >
-              Generate Image
+              Generate Content
             </Link>
             <Link
               href={`/projects/${pid}/assets/${aid}/edit`}
@@ -173,22 +233,20 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
       {/* ── Generation ────────────────────────────────────── */}
       <SectionLabel label="Generation" />
-      <Link
-        href={`/projects/${pid}/assets/${aid}/workflows`}
-        className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
-      >
-        <div>
-          <p className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-            Generate Image
-          </p>
-          <p className="text-xs text-[#4b5158] mt-0.5">
-            Select a workflow to generate and attach a new reference image.
-          </p>
-        </div>
-        <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors shrink-0">
-          →
-        </span>
-      </Link>
+      <div className="flex items-center gap-4">
+        <Link
+          href={selectorUrl}
+          className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+        >
+          Generate Content
+        </Link>
+        <Link
+          href={`/projects/${pid}/assets/${aid}/workflows`}
+          className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors"
+        >
+          Workflow picker →
+        </Link>
+      </div>
 
       {/* ── Appearances ───────────────────────────────────── */}
       <SectionLabel label="Appearances" />
@@ -247,6 +305,35 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           ← Back to Assets
         </Link>
       </div>
+      </div>
+
+      {/* ── Generation Panel ──────────────────────────────── */}
+      {generationOpen && (
+        <div className="w-[460px] shrink-0 border-l border-[#232629] bg-[#141618] -mr-6">
+          {selectedWorkflowId ? (
+            <AssetGenerationPanel
+              projectId={pid}
+              assetId={aid}
+              workflowId={selectedWorkflowId}
+              closeUrl={closeUrl}
+              selectorUrl={selectorUrl}
+              basePath={detailBaseUrl}
+              currentSearchParams={currentSearchParams}
+              selectedImageByNodeId={selectedImageByNodeId}
+              scalarValueByNodeId={scalarValueByNodeId}
+              textOverrideByNodeId={textOverrideByNodeId}
+              generationError={generationError}
+              activeJobId={activeJobId}
+            />
+          ) : (
+            <WorkflowSelectorPanel
+              workflows={imageWorkflows}
+              basePanelUrl={selectorUrl}
+              closeUrl={closeUrl}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

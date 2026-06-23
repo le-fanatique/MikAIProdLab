@@ -28,10 +28,12 @@ import {
   movePromptSegmentDown,
   updateSegmentPromptText,
 } from "@/actions/promptSegments";
+import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
+import ShotGenerationPanel from "@/components/ShotGenerationPanel";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
-  searchParams: Promise<{ attachError?: string; attachedReference?: string; retryError?: string; deleteError?: string; deleteSuccess?: string; shotPromptSaved?: string; shotPromptError?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 function SectionLabel({ label }: { label: string }) {
@@ -57,7 +59,63 @@ function Field({ label, value }: { label: string; value: string }) {
 
 export default async function ShotDetailPage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId } = await params;
-  const { attachError, attachedReference, retryError, deleteError, deleteSuccess, shotPromptSaved, shotPromptError } = await searchParams;
+  const resolvedSearchParams = await searchParams;
+
+  function sp(key: string): string | undefined {
+    const v = resolvedSearchParams[key];
+    return typeof v === "string" ? v : Array.isArray(v) ? v[0] : undefined;
+  }
+
+  const attachError = sp("attachError");
+  const attachedReference = sp("attachedReference");
+  const retryError = sp("retryError");
+  const deleteError = sp("deleteError");
+  const deleteSuccess = sp("deleteSuccess");
+  const shotPromptSaved = sp("shotPromptSaved");
+  const shotPromptError = sp("shotPromptError");
+
+  const rawGeneration = resolvedSearchParams["generation"];
+  const generationOpen =
+    rawGeneration === "open" || (Array.isArray(rawGeneration) && rawGeneration[0] === "open");
+
+  const rawWorkflowId = resolvedSearchParams["workflowId"];
+  const selectedWorkflowId =
+    typeof rawWorkflowId === "string"
+      ? parseInt(rawWorkflowId, 10)
+      : Array.isArray(rawWorkflowId)
+      ? parseInt(rawWorkflowId[0], 10)
+      : null;
+
+  const selectedImageByNodeId: Record<string, string> = {};
+  const scalarValueByNodeId: Record<string, string> = {};
+  const textOverrideByNodeId: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (!strValue) continue;
+    if (key.startsWith("imageNode_")) selectedImageByNodeId[key.slice("imageNode_".length)] = strValue;
+    else if (key.startsWith("scalarNode_")) scalarValueByNodeId[key.slice("scalarNode_".length)] = strValue;
+    else if (key.startsWith("textNode_")) textOverrideByNodeId[key.slice("textNode_".length)] = strValue;
+  }
+
+  const rawJobId = resolvedSearchParams["jobId"];
+  const jobIdParam = typeof rawJobId === "string" ? rawJobId : Array.isArray(rawJobId) ? rawJobId[0] : undefined;
+  const activeJobId = jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
+
+  const rawGenerationError = resolvedSearchParams["generationError"];
+  const generationError =
+    typeof rawGenerationError === "string"
+      ? rawGenerationError
+      : Array.isArray(rawGenerationError)
+      ? rawGenerationError[0]
+      : undefined;
+
+  const currentSearchParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue !== undefined) currentSearchParams[key] = strValue;
+  }
+
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -265,8 +323,13 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const hasProduction =
     shot.framing || shot.cameraMovement || shot.continuityIn || shot.continuityOut;
 
+  const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
+  const closeUrl = detailBaseUrl;
+  const selectorUrl = `${detailBaseUrl}?generation=open`;
+
   return (
-    <div>
+    <div className={generationOpen ? "flex gap-0 items-start" : ""}>
+      <div className={generationOpen ? "flex-1 min-w-0 pr-6" : ""}>
       <Breadcrumb
         crumbs={[
           { label: "Projects", href: "/projects" },
@@ -284,12 +347,20 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           shot.durationSeconds != null ? `${shot.durationSeconds}s` : undefined
         }
         actions={
-          <Link
-            href={`/projects/${pid}/sequences/${sid}/shots/${shid}/edit`}
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-          >
-            Edit Shot
-          </Link>
+          <>
+            <Link
+              href={selectorUrl}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Generate Content
+            </Link>
+            <Link
+              href={`/projects/${pid}/sequences/${sid}/shots/${shid}/edit`}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Edit Shot
+            </Link>
+          </>
         }
       />
 
@@ -432,22 +503,20 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
         {/* ── Generation ────────────────────────────────────────────── */}
         <SectionLabel label="Generation" />
-        <Link
-          href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
-          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
-        >
-          <div>
-            <p className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-              Generate Keyframe or Video
-            </p>
-            <p className="text-xs text-[#4b5158] mt-0.5">
-              Select a workflow to generate a keyframe or video for this shot.
-            </p>
-          </div>
-          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors shrink-0">
-            →
-          </span>
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href={selectorUrl}
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Generate Content
+          </Link>
+          <Link
+            href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
+            className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors"
+          >
+            Workflow picker →
+          </Link>
+        </div>
 
         {/* ── Outputs ───────────────────────────────────────────────── */}
         <SectionLabel label="Outputs" />
@@ -485,6 +554,36 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           ← Back to {sequence.title}
         </Link>
       </div>
+      </div>
+
+      {/* ── Generation Panel ──────────────────────────────────── */}
+      {generationOpen && (
+        <div className="w-[460px] shrink-0 border-l border-[#232629] bg-[#141618] -mr-6">
+          {selectedWorkflowId ? (
+            <ShotGenerationPanel
+              projectId={pid}
+              sequenceId={sid}
+              shotId={shid}
+              workflowId={selectedWorkflowId}
+              closeUrl={closeUrl}
+              selectorUrl={selectorUrl}
+              basePath={detailBaseUrl}
+              currentSearchParams={currentSearchParams}
+              selectedImageByNodeId={selectedImageByNodeId}
+              scalarValueByNodeId={scalarValueByNodeId}
+              textOverrideByNodeId={textOverrideByNodeId}
+              generationError={generationError}
+              activeJobId={activeJobId}
+            />
+          ) : (
+            <WorkflowSelectorPanel
+              workflows={savedWorkflows}
+              basePanelUrl={selectorUrl}
+              closeUrl={closeUrl}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
