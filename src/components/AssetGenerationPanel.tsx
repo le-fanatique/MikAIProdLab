@@ -18,6 +18,7 @@ import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { uploadAssetSourceFromPanel } from "@/actions/panelUpload";
+import { type FillSource } from "@/lib/textInputKind";
 
 type Props = {
   projectId: number;
@@ -265,6 +266,16 @@ export default async function AssetGenerationPanel({
     .filter((v): v is string => Boolean(v))
     .join("\n\n");
 
+  const descTrimmed = asset.description?.trim() ?? "";
+  const notesTrimmed = asset.notes?.trim() ?? "";
+  const fillSources: FillSource[] = [
+    descTrimmed ? { id: "description", label: "Asset Description", text: descTrimmed } : null,
+    notesTrimmed ? { id: "notes", label: "Asset Notes", text: notesTrimmed } : null,
+    descTrimmed && notesTrimmed
+      ? { id: "desc_notes", label: "Description + Notes", text: `${descTrimmed}\n${notesTrimmed}` }
+      : null,
+  ].filter((s): s is FillSource => s !== null);
+
   const parsed = parseComfyWorkflow(workflow.workflowJson);
   const mappings =
     parsed !== null
@@ -391,6 +402,7 @@ export default async function AssetGenerationPanel({
                 textOverrideByNodeId={textOverrideByNodeId}
                 currentSearchParams={currentSearchParams}
                 basePath={basePath}
+                fillSources={fillSources}
               />
             </div>
 

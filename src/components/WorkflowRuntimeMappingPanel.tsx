@@ -3,6 +3,7 @@ import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
 import EmptyState from "@/components/EmptyState";
 import WorkflowScalarInputsForm from "@/components/WorkflowScalarInputsForm";
 import WorkflowTextOverrideForm from "@/components/WorkflowTextOverrideForm";
+import type { FillSource } from "@/lib/textInputKind";
 
 const SCALAR_KINDS = new Set(["integer", "float", "boolean", "select", "seed", "string"]);
 
@@ -12,6 +13,7 @@ type Props = {
   textOverrideByNodeId: Record<string, string>;
   currentSearchParams: Record<string, string>;
   basePath: string;
+  fillSources?: FillSource[];
 };
 
 export default function WorkflowRuntimeMappingPanel({
@@ -20,6 +22,7 @@ export default function WorkflowRuntimeMappingPanel({
   textOverrideByNodeId,
   currentSearchParams,
   basePath,
+  fillSources,
 }: Props) {
   if (mappings.length === 0) {
     return (
@@ -95,6 +98,7 @@ export default function WorkflowRuntimeMappingPanel({
             textOverrideByNodeId={textOverrideByNodeId}
             currentSearchParams={currentSearchParams}
             basePath={basePath}
+            fillSources={fillSources}
           />
         </div>
       )}

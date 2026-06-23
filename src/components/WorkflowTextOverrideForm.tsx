@@ -1,14 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { WorkflowInputMapping } from "@/lib/comfy/mapWorkflowInputs";
 import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
+import {
+  detectTextInputKind,
+  type FillSource,
+  type TextInputKind,
+} from "@/lib/textInputKind";
+
+function getCompatibleSources(sources: FillSource[], kind: TextInputKind): FillSource[] {
+  if (kind === "negative") return [];
+  return sources.filter((s) => {
+    if (!s.text.trim()) return false;
+    if (!s.kinds) return kind === "generic" || kind === "positive";
+    return s.kinds.includes(kind);
+  });
+}
 
 type Props = {
   textMappings: WorkflowInputMapping[];
   textOverrideByNodeId: Record<string, string>;
   currentSearchParams: Record<string, string>;
   basePath: string;
+  fillSources?: FillSource[];
 };
 
 export default function WorkflowTextOverrideForm({
@@ -16,6 +31,7 @@ export default function WorkflowTextOverrideForm({
   textOverrideByNodeId,
   currentSearchParams,
   basePath,
+  fillSources = [],
 }: Props) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
@@ -24,6 +40,19 @@ export default function WorkflowTextOverrideForm({
     }
     return initial;
   });
+
+  const [openFillNodeId, setOpenFillNodeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (openFillNodeId === null) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (!(e.target as Element).closest("[data-fill-dropdown]")) {
+        setOpenFillNodeId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [openFillNodeId]);
 
   if (textMappings.length === 0) return null;
 
@@ -47,6 +76,10 @@ export default function WorkflowTextOverrideForm({
             const { input } = mapping;
             const currentValue = values[input.nodeId] ?? "";
             const hasOverride = textOverrideByNodeId[input.nodeId] !== undefined;
+            const kind = detectTextInputKind(input.label || input.title || "");
+            const compatibleSources = getCompatibleSources(fillSources, kind);
+            const showFill = compatibleSources.length > 0;
+            const isOpen = openFillNodeId === input.nodeId;
 
             return (
               <div key={input.nodeId} className="flex flex-col gap-1.5">
@@ -73,6 +106,34 @@ export default function WorkflowTextOverrideForm({
                   rows={5}
                   className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-y focus:outline-none focus:border-[#3a4046] leading-relaxed"
                 />
+                {showFill && (
+                  <div className="relative" data-fill-dropdown>
+                    <button
+                      type="button"
+                      onClick={() => setOpenFillNodeId(isOpen ? null : input.nodeId)}
+                      className="rounded border border-[#2c3035] text-[#6e767d] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors"
+                    >
+                      Fill ▾
+                    </button>
+                    {isOpen && (
+                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[200px] rounded border border-[#2c3035] bg-[#141618] shadow-lg py-1">
+                        {compatibleSources.map((source) => (
+                          <button
+                            key={source.id}
+                            type="button"
+                            onClick={() => {
+                              setValues((prev) => ({ ...prev, [input.nodeId]: source.text }));
+                              setOpenFillNodeId(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-[#a4abb2] hover:bg-[#1a1d20] hover:text-[#e7e9ec] transition-colors"
+                          >
+                            {source.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

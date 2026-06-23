@@ -9,6 +9,8 @@ import {
   shotReferenceImages,
   assetReferenceImages,
   generationJobs,
+  projects,
+  sequences,
 } from "@/db/schema";
 import { eq, asc, inArray } from "drizzle-orm";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
@@ -33,6 +35,8 @@ import {
 } from "@/actions/generation";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { uploadShotSourceFromPanel } from "@/actions/panelUpload";
+import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
+import { type FillSource } from "@/lib/textInputKind";
 
 type Props = {
   projectId: number;
@@ -280,16 +284,36 @@ export default async function ShotGenerationPanel({
   const [workflow] = await db.select().from(comfyWorkflows).where(eq(comfyWorkflows.id, wid));
   if (!workflow) return null;
 
-  const assignedRows = await db
-    .select({
-      assetId: assets.id,
-      assetName: assets.name,
-      assetType: assets.type,
-    })
-    .from(shotAssets)
-    .innerJoin(assets, eq(shotAssets.assetId, assets.id))
-    .where(eq(shotAssets.shotId, shid))
-    .orderBy(asc(assets.name));
+  const [project, sequence, assignedRows] = await Promise.all([
+    db
+      .select({ name: projects.name, pitch: projects.pitch, story: projects.story })
+      .from(projects)
+      .where(eq(projects.id, pid))
+      .then(([r]) => r ?? null),
+    db
+      .select({
+        title: sequences.title,
+        summary: sequences.summary,
+        mood: sequences.mood,
+        locationHint: sequences.locationHint,
+        narrativePurpose: sequences.narrativePurpose,
+      })
+      .from(sequences)
+      .where(eq(sequences.id, sid))
+      .then(([r]) => r ?? null),
+    db
+      .select({
+        assetId: assets.id,
+        assetName: assets.name,
+        assetType: assets.type,
+        assetDescription: assets.description,
+        assetNotes: assets.notes,
+      })
+      .from(shotAssets)
+      .innerJoin(assets, eq(shotAssets.assetId, assets.id))
+      .where(eq(shotAssets.shotId, shid))
+      .orderBy(asc(assets.name)),
+  ]);
 
   const assignedAssetIds = assignedRows.map((r) => r.assetId);
 
@@ -336,6 +360,85 @@ export default async function ShotGenerationPanel({
     compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
     hasPromptSegments: hasRealPromptSegments,
   });
+
+  const composedShotPrompt =
+    project && sequence
+      ? composeShotPrompt({
+          project: { name: project.name, pitch: project.pitch },
+          sequence: {
+            title: sequence.title,
+            mood: sequence.mood,
+            locationHint: sequence.locationHint,
+            summary: sequence.summary,
+            narrativePurpose: sequence.narrativePurpose,
+          },
+          shot: {
+            shotCode: shot.shotCode,
+            title: shot.title,
+            durationSeconds: shot.durationSeconds,
+            description: shot.description,
+            actionPitch: shot.actionPitch,
+            cameraPitch: shot.cameraPitch,
+            framing: shot.framing,
+            cameraMovement: shot.cameraMovement,
+          },
+          castAssets: assignedRows.map((r) => ({
+            name: r.assetName,
+            type: r.assetType,
+            description: r.assetDescription,
+            notes: r.assetNotes,
+          })),
+          shotRefImages: shotRefImages.map((img) => ({
+            imageRole: img.imageRole,
+            label: img.label,
+            sourceFilename: img.sourceFilename,
+          })),
+          castAssetRefImages: castAssetRefImages.map((img) => {
+            const row = assignedRows.find((r) => r.assetId === img.assetId);
+            return {
+              assetName: row?.assetName ?? "",
+              assetType: row?.assetType ?? "",
+              imageRole: img.imageRole,
+              label: img.label,
+              sourceFilename: img.sourceFilename,
+            };
+          }),
+        })
+      : null;
+
+  const actionCamera = [shot.actionPitch, shot.cameraPitch]
+    .filter((v): v is string => Boolean(v?.trim()))
+    .map((v) => v.trim())
+    .join("\n");
+
+  const STYLE_KINDS: FillSource["kinds"] = ["generic", "positive", "style"];
+
+  const fillSources: FillSource[] = [
+    shot.shotPrompt?.trim()
+      ? { id: "shotPrompt", label: "Shot Prompt", text: shot.shotPrompt.trim() }
+      : null,
+    compiledShotPrompt.text.trim()
+      ? { id: "compiledPrompt", label: "Compiled Prompt", text: compiledShotPrompt.text.trim() }
+      : null,
+    hasRealPromptSegments && compiledPrompt.text.trim()
+      ? { id: "segments", label: "Prompt Segments", text: compiledPrompt.text.trim() }
+      : null,
+    shot.description?.trim()
+      ? { id: "description", label: "Shot Description", text: shot.description.trim() }
+      : null,
+    actionCamera
+      ? { id: "actionCamera", label: "Action + Camera", text: actionCamera }
+      : null,
+    composedShotPrompt?.hasContent
+      ? { id: "casting", label: "Casting-aware Prompt", text: composedShotPrompt.proposalText, kinds: STYLE_KINDS }
+      : null,
+    project?.story?.trim()
+      ? { id: "projectStory", label: "Project Story", text: project.story!.trim(), kinds: STYLE_KINDS }
+      : null,
+    sequence?.summary?.trim()
+      ? { id: "sequenceSummary", label: "Sequence Summary", text: sequence.summary!.trim(), kinds: STYLE_KINDS }
+      : null,
+  ].filter((s): s is FillSource => s !== null);
 
   const availableImages = buildRuntimeImageOptions(
     shotRefImages,
@@ -465,6 +568,7 @@ export default async function ShotGenerationPanel({
                 textOverrideByNodeId={textOverrideByNodeId}
                 currentSearchParams={currentSearchParams}
                 basePath={basePath}
+                fillSources={fillSources}
               />
             </div>
 
