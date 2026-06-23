@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { WorkflowInputMapping } from "@/lib/comfy/mapWorkflowInputs";
 import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
 import {
@@ -33,6 +34,8 @@ export default function WorkflowTextOverrideForm({
   basePath,
   fillSources = [],
 }: Props) {
+  const router = useRouter();
+
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const m of textMappings) {
@@ -60,17 +63,27 @@ export default function WorkflowTextOverrideForm({
     ([key]) => !key.startsWith("textNode_")
   );
 
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    for (const [key, value] of passthroughParams) {
+      params.set(key, value);
+    }
+    for (const [nodeId, value] of Object.entries(values)) {
+      if (value.trim()) {
+        params.set(`textNode_${nodeId}`, value);
+      }
+    }
+    router.replace(`${basePath}?${params.toString()}`, { scroll: false });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-[#4b5158]">
         Text values are applied to the payload preview and generation.
       </p>
 
-      <form method="GET" action={basePath} className="flex flex-col gap-5">
-        {passthroughParams.map(([key, value]) => (
-          <input key={key} type="hidden" name={key} value={value} />
-        ))}
-
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="flex flex-col gap-4">
           {textMappings.map((mapping) => {
             const { input } = mapping;

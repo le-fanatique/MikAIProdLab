@@ -2,6 +2,7 @@ import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import ReferenceImageRoleBadge from "@/components/ReferenceImageRoleBadge";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 
 type ReferenceImageItem = {
   id: number;
@@ -44,25 +45,32 @@ export default function ReferenceImagesPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col divide-y divide-[#1a1d20]">
         {images.map((image) => {
           const altText = image.label ?? image.sourceFilename ?? "Reference image";
           const displayName = image.label ?? image.sourceFilename ?? "Reference image";
           return (
-            <div
-              key={image.id}
-              className="rounded border border-[#2c3035] bg-[#141618] overflow-hidden"
-            >
-              <img
+            <div key={image.id} className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
+              {/* Thumbnail — compact, object-contain, no crop */}
+              <ThumbnailHoverPreview
                 src={`/${image.imagePath}`}
                 alt={altText}
-                className="w-full aspect-video object-cover"
-              />
-              <div className="p-2.5 flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs text-[#e7e9ec] leading-snug flex-1 min-w-0 truncate">
-                    {displayName}
-                  </p>
+                previewSize={480}
+                className="shrink-0"
+              >
+                <div className="w-10 h-10 rounded overflow-hidden border border-[#232629] bg-[#141618] flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/${image.imagePath}`}
+                    alt={altText}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </ThumbnailHoverPreview>
+              {/* Info */}
+              <div className="flex-1 min-w-0 flex flex-col gap-1 pt-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs text-[#e7e9ec] truncate">{displayName}</p>
                   <ReferenceImageRoleBadge role={image.imageRole} />
                 </div>
                 {image.notes && (

@@ -7,17 +7,17 @@ import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPane
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
+import AssetPanelImagePreviewForm from "@/components/AssetPanelImagePreviewForm";
+import type { AssetPanelImageNode } from "@/components/AssetPanelImagePreviewForm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import {
   getRuntimeImageLabel,
   mapWorkflowInputs,
   type RuntimeImageOption,
-  type WorkflowInputMapping,
 } from "@/lib/comfy/mapWorkflowInputs";
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
-import { uploadAssetSourceFromPanel } from "@/actions/panelUpload";
 import { type FillSource } from "@/lib/textInputKind";
 
 type Props = {
@@ -36,189 +36,6 @@ type Props = {
   attachedReference?: boolean;
   attachError?: string | null;
 };
-
-function buildImageOptionLabel(img: RuntimeImageOption): string {
-  return img.role ? `${img.label} · ${img.role}` : img.label;
-}
-
-function InlinePanelImageForm({
-  basePath,
-  imageMappings,
-  selectedImageByNodeId,
-  passthroughParams,
-  projectId,
-  assetId,
-}: {
-  basePath: string;
-  imageMappings: WorkflowInputMapping[];
-  selectedImageByNodeId: Record<string, string>;
-  passthroughParams: Record<string, string>;
-  projectId: number;
-  assetId: number;
-}) {
-  if (imageMappings.length === 0) return null;
-
-  // Passthrough for GET preview form: exclude imageNode_* (select fields supply them) and jobId
-  const passthrough = Object.entries(passthroughParams).filter(
-    ([k]) => !k.startsWith("imageNode_") && k !== "jobId"
-  );
-
-  // Deduplicate labels
-  const labelCount: Record<string, number> = {};
-  for (const m of imageMappings) {
-    const l = m.input.label || m.input.title || "Load Image";
-    labelCount[l] = (labelCount[l] ?? 0) + 1;
-  }
-  const labelIndex: Record<string, number> = {};
-
-  // returnTo for upload actions: preserve all params except jobId and the node being uploaded
-  function buildUploadReturnTo(nodeId: string): string {
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(passthroughParams)) {
-      if (k !== "jobId" && k !== `imageNode_${nodeId}`) {
-        params.set(k, v);
-      }
-    }
-    return `${basePath}?${params.toString()}`;
-  }
-
-  // Stable form ID — one panel per page, no collision risk
-  const previewFormId = "asset-panel-preview-form";
-
-  return (
-    <div className="flex flex-col gap-5">
-      {/* Standalone GET form — hidden inputs only, no visible UI.
-          Selects and the submit button are linked via form={previewFormId}. */}
-      <form id={previewFormId} method="GET" action={basePath}>
-        {passthrough.map(([k, v]) => (
-          <input key={k} type="hidden" name={k} value={v} />
-        ))}
-      </form>
-
-      {imageMappings.map((mapping) => {
-        const nodeId = mapping.input.nodeId;
-        const rawLabel = mapping.input.label || mapping.input.title || "Load Image";
-        const isDup = labelCount[rawLabel] > 1;
-        labelIndex[rawLabel] = (labelIndex[rawLabel] ?? 0) + 1;
-        const displayLabel = isDup ? `${rawLabel} ${labelIndex[rawLabel]}` : rawLabel;
-
-        const images = mapping.availableImages;
-        const selectedId = selectedImageByNodeId[nodeId] ?? "";
-        const suggestedId = suggestImageForNode(rawLabel, images);
-        const effectiveId = selectedId !== "" ? selectedId : (suggestedId ?? "");
-        const effectiveImage = effectiveId !== "" ? images.find((img) => img.id === effectiveId) ?? null : null;
-
-        const isSuggestion = selectedId === "" && suggestedId !== null;
-        const uploadReturnTo = buildUploadReturnTo(nodeId);
-
-        return (
-          <div key={nodeId} className="flex flex-col gap-2">
-            {/* Label + badge */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium text-[#e7e9ec]">{displayLabel}</span>
-              {isSuggestion && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a2535] text-[#5b93d6] border border-[#5b93d6]/20">
-                  Suggested
-                </span>
-              )}
-              {isDup && (
-                <span className="text-[10px] font-mono text-[#3a4046]">node {nodeId}</span>
-              )}
-            </div>
-
-            {images.length === 0 ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-[#4b5158]">No sources available.</p>
-                {/* Independent upload form — not nested */}
-                <form action={uploadAssetSourceFromPanel} className="flex items-center gap-2">
-                  <input type="hidden" name="assetId" value={String(assetId)} />
-                  <input type="hidden" name="projectId" value={String(projectId)} />
-                  <input type="hidden" name="nodeId" value={nodeId} />
-                  <input type="hidden" name="returnTo" value={uploadReturnTo} />
-                  <input
-                    type="file"
-                    name="imageFile"
-                    accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
-                    className="flex-1 min-w-0 text-xs text-[#6e767d] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#1a1d20] file:px-2 file:py-1 file:text-xs file:text-[#a4abb2] file:cursor-pointer hover:file:bg-[#232629] file:transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                  >
-                    Upload Source
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {/* Thumbnail + select row */}
-                <div className="flex items-center gap-2">
-                  {effectiveImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`/${effectiveImage.imagePath}`}
-                      alt={effectiveImage.label}
-                      className="w-10 h-10 object-cover rounded border border-[#232629] shrink-0 bg-[#1a1d20]"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded border border-[#232629] bg-[#1a1d20] shrink-0 flex items-center justify-center">
-                      <span className="text-[10px] text-[#3a4046]">—</span>
-                    </div>
-                  )}
-                  {/* form attribute links this select to the preview form above */}
-                  <select
-                    name={`imageNode_${nodeId}`}
-                    defaultValue={effectiveId}
-                    form={previewFormId}
-                    className="flex-1 min-w-0 rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                  >
-                    <option value="">
-                      Auto · {images[0] ? buildImageOptionLabel(images[0]) : "first available"}
-                    </option>
-                    {images.map((img) => (
-                      <option key={img.id} value={img.id}>
-                        {buildImageOptionLabel(img)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Independent upload form — not nested */}
-                <form action={uploadAssetSourceFromPanel} className="flex items-center gap-2">
-                  <input type="hidden" name="assetId" value={String(assetId)} />
-                  <input type="hidden" name="projectId" value={String(projectId)} />
-                  <input type="hidden" name="nodeId" value={nodeId} />
-                  <input type="hidden" name="returnTo" value={uploadReturnTo} />
-                  <input
-                    type="file"
-                    name="imageFile"
-                    accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
-                    className="flex-1 min-w-0 text-xs text-[#6e767d] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#1a1d20] file:px-2 file:py-1 file:text-xs file:text-[#a4abb2] file:cursor-pointer hover:file:bg-[#232629] file:transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                  >
-                    Upload Source
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {/* Submit button linked to the preview form via form attribute */}
-      <button
-        type="submit"
-        form={previewFormId}
-        className="self-start rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-      >
-        Update Preview
-      </button>
-    </div>
-  );
-}
 
 export default async function AssetGenerationPanel({
   projectId: pid,
@@ -294,6 +111,40 @@ export default async function AssetGenerationPanel({
       : null;
 
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
+
+  // Build panelImageNodes for the client image preview component
+  const _labelCount: Record<string, number> = {};
+  for (const m of imageMappings) {
+    const l = m.input.label || m.input.title || "Load Image";
+    _labelCount[l] = (_labelCount[l] ?? 0) + 1;
+  }
+  const _labelIndex: Record<string, number> = {};
+
+  const panelImageNodes: AssetPanelImageNode[] = imageMappings.map((mapping) => {
+    const nodeId = mapping.input.nodeId;
+    const rawLabel = mapping.input.label || mapping.input.title || "Load Image";
+    const isDup = _labelCount[rawLabel] > 1;
+    _labelIndex[rawLabel] = (_labelIndex[rawLabel] ?? 0) + 1;
+    const displayLabel = isDup ? `${rawLabel} ${_labelIndex[rawLabel]}` : rawLabel;
+    const images = mapping.availableImages;
+    const selectedId = selectedImageByNodeId[nodeId] ?? "";
+    const suggestedId = suggestImageForNode(rawLabel, images);
+    const isSuggestion = selectedId === "" && suggestedId !== null;
+    const effectiveId = selectedId !== "" ? selectedId : (suggestedId ?? "");
+    return {
+      nodeId,
+      displayLabel,
+      isDup,
+      initialValue: effectiveId,
+      isSuggestion,
+      images: images.map((img) => ({
+        id: img.id,
+        imagePath: img.imagePath,
+        label: img.label,
+        role: img.role ?? undefined,
+      })),
+    };
+  });
 
   const selectionParams = new URLSearchParams({ generation: "open", workflowId: String(wid) });
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
@@ -422,11 +273,10 @@ export default async function AssetGenerationPanel({
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
                   Image Sources
                 </p>
-                <InlinePanelImageForm
-                  basePath={basePath}
-                  imageMappings={imageMappings}
-                  selectedImageByNodeId={selectedImageByNodeId}
+                <AssetPanelImagePreviewForm
+                  nodes={panelImageNodes}
                   passthroughParams={currentSearchParams}
+                  basePath={basePath}
                   projectId={pid}
                   assetId={aid}
                 />

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs } from "@/db/schema";
-import { eq, and, notInArray, inArray, asc, desc, isNotNull } from "drizzle-orm";
+import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -12,8 +12,6 @@ import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
 import PromptComposerPanel from "@/components/PromptComposerPanel";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
-import GeneratedOutputsPanel from "@/components/GeneratedOutputsPanel";
-import type { GeneratedOutputItem } from "@/components/GeneratedOutputsPanel";
 import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import ShotPromptForm from "@/components/ShotPromptForm";
 import PromptSegmentsTimelineEditor from "@/components/PromptSegmentsTimelineEditor";
@@ -30,6 +28,7 @@ import {
 } from "@/actions/promptSegments";
 import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
 import ShotGenerationPanel from "@/components/ShotGenerationPanel";
+import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 
 type Props = {
@@ -242,31 +241,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           .from(comfyWorkflows)
           .orderBy(desc(comfyWorkflows.updatedAt))
       : [];
-
-  const rawGeneratedOutputs = await db
-    .select({
-      id: generationJobs.id,
-      outputPath: generationJobs.outputPath,
-      completedAt: generationJobs.completedAt,
-      createdAt: generationJobs.createdAt,
-      workflowName: comfyWorkflows.name,
-      workflowKind: comfyWorkflows.kind,
-    })
-    .from(generationJobs)
-    .leftJoin(comfyWorkflows, eq(generationJobs.workflowId, comfyWorkflows.id))
-    .where(
-      and(
-        eq(generationJobs.shotId, shid),
-        eq(generationJobs.status, "done"),
-        isNotNull(generationJobs.outputPath)
-      )
-    )
-    .orderBy(desc(generationJobs.completedAt), desc(generationJobs.createdAt))
-    .limit(24);
-
-  const generatedOutputItems: GeneratedOutputItem[] = rawGeneratedOutputs
-    .filter((item) => item.outputPath !== null)
-    .map((item) => ({ ...item, outputPath: item.outputPath! }));
 
   const generationJobRows = await db
     .select({
@@ -594,17 +568,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         {/* ── Outputs ───────────────────────────────────────────────── */}
         <SectionLabel label="Outputs" />
 
-        <Card title="Generated Outputs">
-          <GeneratedOutputsPanel
-            projectId={pid}
-            sequenceId={sid}
-            shotId={shid}
-            outputs={generatedOutputItems}
-            attachError={attachError ?? null}
-            attachedReference={attachedReference === "1"}
-          />
-        </Card>
-
         <Card title="Generation Jobs">
           <GenerationJobsPanel
             projectId={pid}
@@ -631,7 +594,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
       {/* ── Generation Panel ──────────────────────────────────── */}
       {generationOpen && (
-        <div className="w-[460px] shrink-0 border-l border-[#232629] bg-[#141618] -mr-6">
+        <GenerationPanelShell scrollKey={`shot-${shid}`}>
           {effectiveWorkflowId ? (
             <ShotGenerationPanel
               projectId={pid}
@@ -660,7 +623,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               context="shot"
             />
           )}
-        </div>
+        </GenerationPanelShell>
       )}
     </div>
   );

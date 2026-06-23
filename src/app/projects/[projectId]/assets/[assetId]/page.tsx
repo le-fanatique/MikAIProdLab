@@ -11,6 +11,7 @@ import DeleteButton from "@/components/DeleteButton";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
 import AssetGenerationPanel from "@/components/AssetGenerationPanel";
+import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
@@ -341,7 +342,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
       {/* ── Generation Panel ──────────────────────────────── */}
       {generationOpen && (
-        <div className="w-[460px] shrink-0 border-l border-[#232629] bg-[#141618] -mr-6">
+        <GenerationPanelShell scrollKey={`asset-${aid}`}>
           {effectiveWorkflowId ? (
             <AssetGenerationPanel
               projectId={pid}
@@ -367,7 +368,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
               context="asset"
             />
           )}
-        </div>
+        </GenerationPanelShell>
       )}
     </div>
   );
