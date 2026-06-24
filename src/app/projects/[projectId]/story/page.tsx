@@ -8,7 +8,6 @@ import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
-import LLMActionButton from "@/components/LLMActionButton";
 import StoryGenerationPanel from "@/components/StoryGenerationPanel";
 import { getLLMSettings } from "@/lib/settings";
 
@@ -54,16 +53,53 @@ export default async function StoryPage({ params }: Props) {
         }
       />
 
-      {/* Pitch */}
-      <div className="mb-4">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
-          Pitch
+      {/* ── 1. Story Foundation ── */}
+      <Card title="Story Foundation" className="mb-6">
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-1.5">
+              Pitch
+            </p>
+            {project.pitch ? (
+              <p className="text-sm text-[#a4abb2]">{project.pitch}</p>
+            ) : (
+              <p className="text-sm text-[#4b5158] italic">No pitch yet.</p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-1.5">
+              Story
+            </p>
+            {project.story ? (
+              <p className="text-sm text-[#a4abb2] whitespace-pre-wrap leading-relaxed">
+                {project.story}
+              </p>
+            ) : (
+              <p className="text-sm text-[#4b5158] italic">
+                No story yet — generate one below or edit the project.
+              </p>
+            )}
+          </div>
+
+          {project.description && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-1.5">
+                Notes
+              </p>
+              <p className="text-sm text-[#6e767d] whitespace-pre-wrap leading-relaxed">
+                {project.description}
+              </p>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* ── 2. Story Generation ── */}
+      <div className="mb-8">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-3">
+          Story Generation
         </p>
-        {project.pitch ? (
-          <p className="text-sm text-[#a4abb2] mb-3">{project.pitch}</p>
-        ) : (
-          <p className="text-sm text-[#4b5158] italic mb-3">No pitch yet.</p>
-        )}
         <StoryGenerationPanel
           projectId={pid}
           pitch={project.pitch}
@@ -72,30 +108,28 @@ export default async function StoryPage({ params }: Props) {
         />
       </div>
 
-      {/* Story */}
-      <div className="mb-8 mt-8">
-        <Card title="Story">
-          {project.story ? (
-            <p className="text-sm text-[#a4abb2] whitespace-pre-wrap leading-relaxed">
-              {project.story}
+      {/* ── 3. Outline Preparation ── */}
+      <Card className="mb-8">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+              Outline Preparation
             </p>
-          ) : (
-            <p className="text-sm text-[#4b5158] italic">
-              No story yet — edit the project to add a narrative.
+            <p className="text-sm text-[#6e767d] leading-relaxed">
+              The project outline maps your story into sequences and scenes before production begins.
+              Review and validate the outline as the next step before generating sequences.
             </p>
-          )}
-        </Card>
-      </div>
+          </div>
+          <Link
+            href={`/projects/${pid}/outline`}
+            className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Open Outline
+          </Link>
+        </div>
+      </Card>
 
-      {/* Generate sequences — placeholder */}
-      <div className="mb-10">
-        <LLMActionButton
-          label="Generate Sequences from Story"
-          hint="Requires LLM provider configuration in .env.local"
-        />
-      </div>
-
-      {/* Sequences narrative overview */}
+      {/* ── 4. Existing Sequences ── */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-4">
           Sequences ({seqs.length})
@@ -104,12 +138,13 @@ export default async function StoryPage({ params }: Props) {
         {seqs.length === 0 ? (
           <EmptyState
             title="No sequences yet."
+            description="Build the outline first — sequences will be generated from it."
             action={
               <Link
-                href={`/projects/${pid}/sequences/new`}
+                href={`/projects/${pid}/outline`}
                 className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
               >
-                Add the first one →
+                Open Outline
               </Link>
             }
           />
@@ -117,7 +152,7 @@ export default async function StoryPage({ params }: Props) {
           <div className="flex flex-col gap-4">
             {seqs.map((seq, i) => (
               <Card key={seq.id}>
-                <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="flex items-start justify-between gap-4 mb-2">
                   <div className="flex items-baseline gap-3 min-w-0">
                     <span className="text-[#4b5158] font-mono text-xs shrink-0">
                       {String(i + 1).padStart(2, "0")}
@@ -129,11 +164,18 @@ export default async function StoryPage({ params }: Props) {
                       {seq.title}
                     </Link>
                   </div>
-                  <LLMActionButton label="Generate Shots" />
+                  <Link
+                    href={`/projects/${pid}/sequences/${seq.id}`}
+                    className="shrink-0 text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                  >
+                    View →
+                  </Link>
                 </div>
 
                 {seq.summary && (
-                  <p className="text-sm text-[#6e767d] mb-3 ml-7">{seq.summary}</p>
+                  <p className="text-sm text-[#6e767d] mb-3 ml-7 leading-relaxed">
+                    {seq.summary}
+                  </p>
                 )}
 
                 <div className="flex flex-wrap gap-x-6 gap-y-1 ml-7 text-xs">
@@ -154,9 +196,6 @@ export default async function StoryPage({ params }: Props) {
                       <span className="text-[#4b5158]">Location </span>
                       <span className="text-[#a4abb2]">{seq.locationHint}</span>
                     </span>
-                  )}
-                  {!seq.narrativePurpose && !seq.mood && !seq.locationHint && (
-                    <span className="text-[#4b5158] italic">No narrative context yet.</span>
                   )}
                 </div>
               </Card>
