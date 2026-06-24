@@ -80,6 +80,19 @@ export interface GenerateShotsResult {
   shots: GeneratedShot[];
 }
 
+/** Single casting suggestion in "Suggest Asset Casting from Sequence" output */
+export type GeneratedCastingSuggestion = {
+  targetType: "sequence" | "shot";
+  targetId: number;
+  targetLabel: string;
+  assetId: number;
+  assetName: string;
+  assetType: "character" | "environment" | "prop" | "vehicle" | "crowd" | "other";
+  reason: string | null;
+  confidence: "high" | "medium" | "low";
+  alreadyAssigned: boolean;
+};
+
 /** Single asset candidate in "Extract Assets from Project" output */
 export type GeneratedAssetCandidate = {
   name: string;

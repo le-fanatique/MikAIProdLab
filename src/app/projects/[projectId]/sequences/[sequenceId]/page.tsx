@@ -14,8 +14,10 @@ import { deleteSequence } from "@/actions/sequences";
 import { deleteShot } from "@/actions/shots";
 import { assignAssetToSequence, removeAssetFromSequence } from "@/actions/sequenceAssets";
 import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPanel";
+import CastingSuggestionsPanel from "@/components/CastingSuggestionsPanel";
 import SequencePromptForm from "@/components/SequencePromptForm";
 import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
+import { getLLMSettings } from "@/lib/settings";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
@@ -98,6 +100,15 @@ export default async function SequencePage({ params, searchParams }: Props) {
 
   const rawCreateError = resolvedSearchParams["shotsCreateError"];
   const createError = typeof rawCreateError === "string" ? rawCreateError : Array.isArray(rawCreateError) ? rawCreateError[0] : null;
+
+  const rawCastingsApplied = resolvedSearchParams["castingsApplied"];
+  const castingsAppliedStr = typeof rawCastingsApplied === "string" ? rawCastingsApplied : Array.isArray(rawCastingsApplied) ? rawCastingsApplied[0] : undefined;
+  const castingsApplied = castingsAppliedStr != null ? parseInt(castingsAppliedStr, 10) : null;
+
+  const rawCastingsError = resolvedSearchParams["castingsError"];
+  const castingsError = typeof rawCastingsError === "string" ? rawCastingsError : Array.isArray(rawCastingsError) ? rawCastingsError[0] : null;
+
+  const llmSettings = await getLLMSettings();
 
   const assignAction = assignAssetToSequence.bind(null, sid, pid);
 
@@ -347,6 +358,16 @@ export default async function SequencePage({ params, searchParams }: Props) {
           createError={createError ?? null}
           hasSequencePrompt={Boolean(sequence.sequencePrompt?.trim())}
           existingShotsCount={shotList.length}
+        />
+      </Card>
+
+      <Card title="Casting Suggestions" className="mb-6">
+        <CastingSuggestionsPanel
+          projectId={pid}
+          sequenceId={sid}
+          castingsApplied={Number.isFinite(castingsApplied) ? castingsApplied : null}
+          castingsError={castingsError ?? null}
+          isConfigured={llmSettings.isConfigured}
         />
       </Card>
 
