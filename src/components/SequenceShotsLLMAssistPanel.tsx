@@ -17,6 +17,7 @@ type Props = {
   createdCount?: number | null;
   createError?: string | null;
   hasSequencePrompt?: boolean;
+  existingShotsCount?: number;
 };
 
 export default function SequenceShotsLLMAssistPanel({
@@ -26,9 +27,11 @@ export default function SequenceShotsLLMAssistPanel({
   createdCount,
   createError,
   hasSequencePrompt,
+  existingShotsCount = 0,
 }: Props) {
   const [state, setState] = useState<State>({ status: "idle" });
   const [shotCount, setShotCount] = useState(6);
+  const [isCreating, setIsCreating] = useState(false);
 
   async function handleGenerate() {
     setState({ status: "loading" });
@@ -58,6 +61,14 @@ export default function SequenceShotsLLMAssistPanel({
         <p className="text-xs text-[#4b5158]">
           Add a Sequence Prompt above to guide the generated shots more precisely.
         </p>
+      )}
+
+      {existingShotsCount > 0 && (
+        <div className="rounded border border-amber-800/40 bg-amber-950/20 px-3 py-2">
+          <p className="text-xs text-amber-500 leading-relaxed">
+            This will add new shots after the existing ones. ({existingShotsCount} shot{existingShotsCount !== 1 ? "s" : ""} already exist.)
+          </p>
+        </div>
       )}
 
       {createdCount != null && createdCount > 0 && (
@@ -192,16 +203,26 @@ export default function SequenceShotsLLMAssistPanel({
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <form action={createGeneratedShots}>
+            <form
+              action={async (fd) => {
+                setIsCreating(true);
+                await createGeneratedShots(fd);
+              }}
+            >
               <input type="hidden" name="projectId" value={String(projectId)} />
               <input type="hidden" name="sequenceId" value={String(sequenceId)} />
               <input type="hidden" name="returnTo" value={returnTo} />
               <input type="hidden" name="shotsJson" value={JSON.stringify(state.shots)} />
               <button
                 type="submit"
-                className="rounded bg-[#232629] text-[#e7e9ec] px-3 py-1.5 text-sm hover:bg-[#2c3035] transition-colors"
+                disabled={isCreating}
+                className={
+                  isCreating
+                    ? "rounded bg-[#1a1d20] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed"
+                    : "rounded bg-[#232629] text-[#e7e9ec] px-3 py-1.5 text-sm hover:bg-[#2c3035] transition-colors"
+                }
               >
-                Create Shots
+                {isCreating ? "Creating shots..." : "Create Shots"}
               </button>
             </form>
 

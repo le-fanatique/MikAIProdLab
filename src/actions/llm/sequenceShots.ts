@@ -102,6 +102,7 @@ export async function generateShotsFromSequenceDraft(
         name: project.name,
         pitch: project.pitch,
         story: project.story,
+        outline: project.outline,
       },
       sequence: {
         title: sequence.title,

@@ -19,6 +19,7 @@ interface BuildShotsFromSequenceInput {
     name: string;
     pitch?: string | null;
     story?: string | null;
+    outline?: string | null;
   };
   sequence: {
     title: string;
@@ -83,6 +84,7 @@ export function buildShotsFromSequencePrompt(input: BuildShotsFromSequenceInput)
     const projectBg = [
       input.project.pitch?.trim() ? `Pitch: ${input.project.pitch}` : null,
       input.project.story?.trim() ? `Story: ${input.project.story.slice(0, 300)}` : null,
+      input.project.outline?.trim() ? `Project Outline Background: ${input.project.outline.slice(0, 400)}` : null,
     ].filter(Boolean).join("\n");
 
     return {
@@ -124,6 +126,7 @@ Generate exactly ${count} shots. Every shot must follow the subject, location, v
   projectLines.push(`Project: ${input.project.name}`);
   if (input.project.pitch?.trim()) projectLines.push(`Pitch: ${input.project.pitch}`);
   if (input.project.story?.trim()) projectLines.push(`Story: ${input.project.story.slice(0, 400)}`);
+  if (input.project.outline?.trim()) projectLines.push(`Project Outline Background: ${input.project.outline.slice(0, 400)}`);
 
   return {
     system: `You are a professional cinematographer and storyboard supervisor.
