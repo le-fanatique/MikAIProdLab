@@ -3,8 +3,10 @@ import Link from "next/link";
 
 type AssignedItem = {
   assignmentId: number;
+  assetId?: number;
   assetName: string;
   assetType: string;
+  assetDescription?: string | null;
   removeAction: () => Promise<void>;
 };
 
@@ -43,13 +45,20 @@ export default function CastingPanel({
       {assignedItems.length > 0 && (
         <div className="flex flex-col gap-1">
           {assignedItems.map((item) => (
-            <div key={item.assignmentId} className="flex items-center gap-3 py-1">
+            <div key={item.assignmentId} className="flex items-start gap-3 py-1">
               <AssetTypeBadge type={item.assetType} />
-              <span className="text-sm text-[#a4abb2] flex-1">{item.assetName}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-[#a4abb2]">{item.assetName}</span>
+                {item.assetDescription && (
+                  <p className="mt-0.5 line-clamp-1 text-xs text-[#4b5158]">
+                    {item.assetDescription}
+                  </p>
+                )}
+              </div>
               <form action={item.removeAction}>
                 <button
                   type="submit"
-                  className="text-sm text-[#4b5158] hover:text-[#cf7b6b] transition-colors px-1 leading-none"
+                  className="text-sm text-[#4b5158] hover:text-[#cf7b6b] transition-colors px-1 leading-none shrink-0"
                   aria-label={`Remove ${item.assetName}`}
                 >
                   ×

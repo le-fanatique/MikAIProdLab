@@ -266,8 +266,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
   const assignedItems = assignedRows.map((row) => ({
     assignmentId: row.assignmentId,
+    assetId: row.assetId,
     assetName: row.assetName,
     assetType: row.assetType,
+    assetDescription: row.assetDescription ?? null,
     removeAction: removeAssetFromShot.bind(null, row.assignmentId, shid, sid, pid),
   }));
 
@@ -322,10 +324,12 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     cameraPitch: shot.cameraPitch,
   });
 
-  const hasDetails =
-    shot.description || shot.actionPitch || shot.cameraPitch || shot.continuityNotes;
-  const hasProduction =
-    shot.framing || shot.cameraMovement || shot.continuityIn || shot.continuityOut;
+  const hasNarrativeContext = Boolean(
+    sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint ||
+    shot.description || shot.actionPitch || shot.cameraPitch
+  );
+  const hasContinuity = Boolean(shot.continuityIn || shot.continuityOut || shot.continuityNotes);
+  const hasCamera = Boolean(shot.framing || shot.cameraMovement);
 
   const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const closeUrl = detailBaseUrl;
@@ -371,18 +375,100 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
       <div className="flex flex-col gap-4">
 
-        {/* ── Core Shot ─────────────────────────────────────────────── */}
-        {hasDetails && (
-          <Card title="Details">
+        {/* ── Approved Output ───────────────────────────────────────── */}
+        {shot.approvedVideoPath && (
+          <Card title="Approved Output">
+            <div className="flex flex-col gap-3">
+              <video
+                src={`/${shot.approvedVideoPath}`}
+                controls
+                className="w-full rounded border border-[#2c3035]"
+              />
+              <div className="flex items-center gap-4">
+                <a
+                  href={`/${shot.approvedVideoPath}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                >
+                  Open ↗
+                </a>
+                <a
+                  href={`/${shot.approvedVideoPath}`}
+                  download
+                  className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                >
+                  Download ↓
+                </a>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* ── Narrative Context ─────────────────────────────────────── */}
+        {hasNarrativeContext && (
+          <Card title="Narrative Context">
             <div className="flex flex-col gap-4">
-              {shot.description && (
-                <Field label="Description" value={shot.description} />
+              <div className="flex flex-col gap-2">
+                <Link
+                  href={`/projects/${pid}/sequences/${sid}`}
+                  className="text-xs font-medium text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                >
+                  ↑ {sequence.title}
+                </Link>
+                {sequence.summary && (
+                  <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
+                )}
+                {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    {sequence.narrativePurpose && (
+                      <span>
+                        <span className="text-[#4b5158]">Purpose </span>
+                        <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
+                      </span>
+                    )}
+                    {sequence.mood && (
+                      <span>
+                        <span className="text-[#4b5158]">Mood </span>
+                        <span className="text-[#6e767d]">{sequence.mood}</span>
+                      </span>
+                    )}
+                    {sequence.locationHint && (
+                      <span>
+                        <span className="text-[#4b5158]">Location </span>
+                        <span className="text-[#6e767d]">{sequence.locationHint}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {(shot.description || shot.actionPitch || shot.cameraPitch) && (
+                <>
+                  <div className="border-t border-[#1a1d20]" />
+                  {shot.description && (
+                    <Field label="Description" value={shot.description} />
+                  )}
+                  {shot.actionPitch && (
+                    <Field label="Action Pitch" value={shot.actionPitch} />
+                  )}
+                  {shot.cameraPitch && (
+                    <Field label="Camera Pitch" value={shot.cameraPitch} />
+                  )}
+                </>
               )}
-              {shot.actionPitch && (
-                <Field label="Action Pitch" value={shot.actionPitch} />
+            </div>
+          </Card>
+        )}
+
+        {/* ── Continuity ────────────────────────────────────────────── */}
+        {hasContinuity && (
+          <Card title="Continuity">
+            <div className="flex flex-col gap-4">
+              {shot.continuityIn && (
+                <Field label="Continuity In" value={shot.continuityIn} />
               )}
-              {shot.cameraPitch && (
-                <Field label="Camera Pitch" value={shot.cameraPitch} />
+              {shot.continuityOut && (
+                <Field label="Continuity Out" value={shot.continuityOut} />
               )}
               {shot.continuityNotes && (
                 <Field label="Continuity Notes" value={shot.continuityNotes} />
@@ -391,8 +477,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           </Card>
         )}
 
-        {hasProduction && (
-          <Card title="Production">
+        {/* ── Camera ────────────────────────────────────────────────── */}
+        {hasCamera && (
+          <Card title="Camera">
             <div className="flex flex-col gap-4">
               {shot.framing && (
                 <Field label="Framing" value={shot.framing} />
@@ -400,17 +487,11 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               {shot.cameraMovement && (
                 <Field label="Camera Movement" value={shot.cameraMovement} />
               )}
-              {shot.continuityIn && (
-                <Field label="Continuity In" value={shot.continuityIn} />
-              )}
-              {shot.continuityOut && (
-                <Field label="Continuity Out" value={shot.continuityOut} />
-              )}
             </div>
           </Card>
         )}
 
-        {!hasDetails && !hasProduction && (
+        {!hasNarrativeContext && !hasContinuity && !hasCamera && (
           <p className="text-sm text-[#6e767d]">
             No details recorded yet.{" "}
             <Link
@@ -434,12 +515,24 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             assignAction={assignAction}
           />
           <p className="text-xs text-[#4b5158] mt-3">
-            Casting here describes what appears in this specific shot.
+            Cast assets and their reference images contribute to the Shot Prompt composition and generation.
           </p>
         </Card>
 
         {/* ── Prompt Workspace ──────────────────────────────────────── */}
         <SectionLabel label="Prompt Workspace" />
+
+        <Card title="Prompt Composer">
+          <PromptComposerPanel
+            composed={composedShotPrompt}
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+            hasExistingShotPrompt={Boolean(shot.shotPrompt?.trim())}
+            segmentCount={segmentList.length}
+          />
+        </Card>
 
         <Card title="Shot Prompt">
           <ShotPromptForm
@@ -478,18 +571,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           <CompiledPromptPanel compiled={compiledPrompt} />
         </Card>
 
-        <Card title="Shot Prompt Draft">
-          <PromptComposerPanel
-            composed={composedShotPrompt}
-            projectId={pid}
-            sequenceId={sid}
-            shotId={shid}
-            returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
-            hasExistingShotPrompt={Boolean(shot.shotPrompt?.trim())}
-            segmentCount={segmentList.length}
-          />
-        </Card>
-
         {/* ── References ────────────────────────────────────────────── */}
         <SectionLabel label="References" />
 
@@ -505,39 +586,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             }
           />
         </Card>
-
-        {/* ── Approved Output ───────────────────────────────────────── */}
-        {shot.approvedVideoPath && (
-          <>
-            <SectionLabel label="Approved Output" />
-            <Card title="Approved Output">
-              <div className="flex flex-col gap-3">
-                <video
-                  src={`/${shot.approvedVideoPath}`}
-                  controls
-                  className="w-full rounded border border-[#2c3035]"
-                />
-                <div className="flex items-center gap-4">
-                  <a
-                    href={`/${shot.approvedVideoPath}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                  >
-                    Open ↗
-                  </a>
-                  <a
-                    href={`/${shot.approvedVideoPath}`}
-                    download
-                    className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                  >
-                    Download ↓
-                  </a>
-                </div>
-              </div>
-            </Card>
-          </>
-        )}
 
         {/* ── Generation ────────────────────────────────────────────── */}
         <SectionLabel label="Generation" />
@@ -564,9 +612,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             </Link>
           </div>
         )}
-
-        {/* ── Outputs ───────────────────────────────────────────────── */}
-        <SectionLabel label="Outputs" />
 
         <Card title="Generation Jobs">
           <GenerationJobsPanel
