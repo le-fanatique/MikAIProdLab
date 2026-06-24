@@ -38,6 +38,11 @@ export interface GenerateStoryResult {
   story: string;
 }
 
+/** Output contract for "Generate Outline from Story" */
+export interface GenerateOutlineResult {
+  outline: string;
+}
+
 /** Single sequence entry in "Generate Sequences from Story" output */
 export interface GeneratedSequence {
   title: string;

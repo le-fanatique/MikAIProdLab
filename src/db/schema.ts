@@ -6,6 +6,7 @@ export const projects = sqliteTable("projects", {
   name: text("name").notNull(),
   pitch: text("pitch"),
   story: text("story"),
+  outline: text("outline"),
   description: text("description"),
   status: text("status", { enum: ["draft", "active", "archived"] })
     .notNull()

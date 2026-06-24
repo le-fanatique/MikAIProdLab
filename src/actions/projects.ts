@@ -50,3 +50,19 @@ export async function deleteProject(id: number) {
   await db.delete(projects).where(eq(projects.id, id));
   redirect("/projects");
 }
+
+export async function saveProjectOutline(
+  projectId: number,
+  outline: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const trimmed = outline?.trim() || null;
+    await db
+      .update(projects)
+      .set({ outline: trimmed, updatedAt: new Date().toISOString() })
+      .where(eq(projects.id, projectId));
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save the outline. Please try again." };
+  }
+}
