@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Props = {
   initialJsonText: string;
@@ -10,6 +10,16 @@ type Props = {
 export default function EditablePatchedJsonPanel({ initialJsonText, onValidityChange }: Props) {
   const [jsonText, setJsonText] = useState(initialJsonText);
   const [isValid, setIsValid] = useState(true);
+
+  // Sync state when the server re-renders with a new image selection.
+  // Without this, the textarea retains the stale JSON (with the old image path)
+  // across soft navigations, so the wrong image gets sent to ComfyUI.
+  useEffect(() => {
+    setJsonText(initialJsonText);
+    setIsValid(true);
+    onValidityChange?.(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialJsonText]);
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value;
