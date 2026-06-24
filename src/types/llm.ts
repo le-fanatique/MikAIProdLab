@@ -80,6 +80,17 @@ export interface GenerateShotsResult {
   shots: GeneratedShot[];
 }
 
+/** Single asset candidate in "Extract Assets from Project" output */
+export type GeneratedAssetCandidate = {
+  name: string;
+  assetType: "character" | "environment" | "prop" | "vehicle" | "crowd" | "other";
+  description: string | null;
+  notes: string | null;
+  sourceLevel: "outline" | "sequence" | "shot" | "story";
+  sourceExcerpt: string | null;
+  duplicateWarning: string | null;
+};
+
 // ---------------------------------------------------------------------------
 // Preview state (used by Client Components in V0.4)
 // ---------------------------------------------------------------------------
