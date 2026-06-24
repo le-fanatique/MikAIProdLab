@@ -45,6 +45,7 @@ type Props = {
   createdCount?: number | null;
   createError?: string | null;
   isConfigured: boolean;
+  returnTo?: string;
 };
 
 export default function AssetsLLMExtractPanel({
@@ -53,6 +54,7 @@ export default function AssetsLLMExtractPanel({
   createdCount,
   createError,
   isConfigured,
+  returnTo,
 }: Props) {
   const [state, setState] = useState<State>({ status: "idle" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -296,7 +298,7 @@ export default function AssetsLLMExtractPanel({
               <input
                 type="hidden"
                 name="returnTo"
-                value={`/projects/${projectId}/assets`}
+                value={returnTo ?? `/projects/${projectId}/assets`}
               />
               <button
                 type="submit"

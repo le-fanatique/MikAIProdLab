@@ -51,6 +51,24 @@ export async function deleteProject(id: number) {
   redirect("/projects");
 }
 
+export async function saveProjectStoryFoundation(
+  projectId: number,
+  formData: FormData
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const pitch = (formData.get("pitch") as string | null)?.trim() || null;
+    const story = (formData.get("story") as string | null)?.trim() || null;
+    const description = (formData.get("description") as string | null)?.trim() || null;
+    await db
+      .update(projects)
+      .set({ pitch, story, description, updatedAt: new Date().toISOString() })
+      .where(eq(projects.id, projectId));
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save. Please try again." };
+  }
+}
+
 export async function saveProjectOutline(
   projectId: number,
   outline: string | null

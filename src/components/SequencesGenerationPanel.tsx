@@ -14,6 +14,7 @@ type Props = {
   outline: string | null;
   existingSequencesCount: number;
   isConfigured: boolean;
+  returnTo?: string;
 };
 
 export default function SequencesGenerationPanel({
@@ -23,6 +24,7 @@ export default function SequencesGenerationPanel({
   outline,
   existingSequencesCount,
   isConfigured,
+  returnTo,
 }: Props) {
   const [targetCount, setTargetCount] = useState("");
   const [state, setState] = useState<LLMPreviewState<GenerateSequencesResult>>({
@@ -54,7 +56,7 @@ export default function SequencesGenerationPanel({
     const fd = new FormData();
     fd.set("projectId", String(projectId));
     fd.set("sequencesJson", JSON.stringify(seqs));
-    fd.set("returnTo", `/projects/${projectId}/outline`);
+    fd.set("returnTo", returnTo ?? `/projects/${projectId}/outline`);
     await createGeneratedSequences(fd);
   }
 

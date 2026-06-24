@@ -73,8 +73,8 @@ export default function StoryGenerationPanel({
           disabled={generateDisabled}
           className={
             generateDisabled
-              ? "rounded border border-neutral-800 text-neutral-700 px-4 py-2 text-sm opacity-50 cursor-not-allowed self-start"
-              : "rounded border border-neutral-600 text-neutral-300 px-4 py-2 text-sm hover:border-neutral-400 hover:text-neutral-100 transition-colors self-start"
+              ? "rounded border border-[#2c3035] text-[#4b5158] px-4 py-2 text-sm opacity-50 cursor-not-allowed self-start"
+              : "rounded border border-[#2c3035] text-[#a4abb2] px-4 py-2 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors self-start"
           }
         >
           {isLoading && state.status === "loading" && !("result" in state)
@@ -84,33 +84,33 @@ export default function StoryGenerationPanel({
 
         {/* Inline hints under the button */}
         {notConfigured && (
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-[#4b5158]">
             LLM provider not configured.{" "}
-            <a href="/settings" className="underline hover:text-neutral-400">
+            <a href="/settings" className="underline hover:text-[#a4abb2]">
               See Settings.
             </a>
           </p>
         )}
         {noPitch && (
-          <p className="text-xs text-neutral-600">Add a pitch first.</p>
+          <p className="text-xs text-[#4b5158]">Add a pitch first.</p>
         )}
       </div>
 
       {/* Loading indicator */}
       {state.status === "loading" && (
-        <p className="text-xs text-neutral-500 animate-pulse">
+        <p className="text-xs text-[#6e767d] animate-pulse">
           Generating story — this may take a few seconds...
         </p>
       )}
 
       {/* Error state */}
       {state.status === "error" && (
-        <div className="rounded-lg border border-red-900 bg-red-950/30 px-4 py-3 flex flex-col gap-2">
-          <p className="text-sm text-red-400">{state.message}</p>
+        <div className="rounded-lg border border-[#cf7b6b]/30 bg-[#cf7b6b]/5 px-4 py-3 flex flex-col gap-2">
+          <p className="text-sm text-[#cf7b6b]">{state.message}</p>
           <button
             type="button"
             onClick={handleRetry}
-            className="self-start text-xs text-neutral-500 underline hover:text-neutral-300 transition-colors"
+            className="self-start text-xs text-[#6e767d] underline hover:text-[#a4abb2] transition-colors"
           >
             Try again
           </button>
@@ -121,18 +121,18 @@ export default function StoryGenerationPanel({
       {state.status === "success" && (
         <div className="flex flex-col gap-3">
           {/* Generated preview */}
-          <div className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500 mb-2">
+          <div className="rounded-lg border border-[#2c3035] bg-[#141618] px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
               Generated Story — Preview
             </p>
-            <p className="text-sm text-neutral-300 whitespace-pre-wrap leading-relaxed">
+            <p className="text-sm text-[#a4abb2] whitespace-pre-wrap leading-relaxed">
               {state.result.story}
             </p>
           </div>
 
           {/* Warning if story already exists */}
           {existingStory && (
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-amber-500">
               Applying will replace your existing story.
             </p>
           )}
@@ -142,14 +142,14 @@ export default function StoryGenerationPanel({
             <button
               type="button"
               onClick={handleApply}
-              className="rounded bg-neutral-200 text-neutral-900 px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+              className="rounded bg-[#e7e9ec] text-[#141618] px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
             >
               Apply to Story
             </button>
             <button
               type="button"
               onClick={handleCancel}
-              className="rounded border border-neutral-700 text-neutral-400 px-4 py-2 text-sm hover:border-neutral-500 hover:text-neutral-200 transition-colors"
+              className="rounded border border-[#2c3035] text-[#6e767d] px-4 py-2 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors"
             >
               Cancel
             </button>
