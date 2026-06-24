@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { saveProjectOutline } from "@/actions/projects";
 
@@ -16,6 +16,10 @@ export default function OutlineEditorForm({ projectId, initialOutline }: Props) 
   const [text, setText] = useState(initialOutline ?? "");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setText(initialOutline ?? "");
+  }, [initialOutline]);
 
   const handleSave = useCallback(async () => {
     setSaveState("saving");

@@ -10,6 +10,10 @@ import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import OutlineEditorForm from "@/components/OutlineEditorForm";
 import OutlineGenerationPanel from "@/components/OutlineGenerationPanel";
+import SequencesGenerationPanel from "@/components/SequencesGenerationPanel";
+import SequenceContextEditor from "@/components/SequenceContextEditor";
+import DeleteButton from "@/components/DeleteButton";
+import { deleteSequenceAndReturn } from "@/actions/sequences";
 import { getLLMSettings } from "@/lib/settings";
 
 type Props = { params: Promise<{ projectId: string }> };
@@ -126,12 +130,27 @@ export default async function OutlinePage({ params }: Props) {
         />
       </div>
 
-      {/* ── 4. Sequence Structure ── */}
+      {/* ── 4. Sequence Builder ── */}
+      <div className="mb-8">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-3">
+          Sequence Builder
+        </p>
+        <SequencesGenerationPanel
+          projectId={pid}
+          pitch={project.pitch}
+          story={project.story}
+          outline={project.outline}
+          existingSequencesCount={seqs.length}
+          isConfigured={llmSettings.isConfigured}
+        />
+      </div>
+
+      {/* ── 5. Sequence Structure ── */}
       <Card title="Sequence Structure" className="mb-6">
         {seqs.length === 0 ? (
           <EmptyState
             title="No sequences yet."
-            description="Sequence generation from outline is coming soon."
+            description="Generate sequences using the Sequence Builder above."
           />
         ) : (
           <div className="flex flex-col gap-6">
@@ -139,7 +158,7 @@ export default async function OutlinePage({ params }: Props) {
               const seqShots = shotsBySeq.get(seq.id) ?? [];
               return (
                 <div key={seq.id}>
-                  <div className="flex items-baseline gap-3 mb-2 pb-1.5 border-b border-[#232629]">
+                  <div className="flex items-baseline gap-3 mb-1.5 pb-1.5 border-b border-[#232629]">
                     <span className="text-[#4b5158] font-mono text-xs shrink-0 w-6">
                       {String(seqIndex + 1).padStart(2, "0")}
                     </span>
@@ -149,15 +168,31 @@ export default async function OutlinePage({ params }: Props) {
                     >
                       {seq.title}
                     </Link>
-                    {seq.summary && (
-                      <span className="text-[#4b5158] text-xs truncate flex-1 hidden sm:block">
-                        {seq.summary}
-                      </span>
-                    )}
+                    <span className="flex-1" />
                     <span className="text-xs text-[#4b5158] shrink-0 font-mono">
                       {seqShots.length} shot{seqShots.length !== 1 ? "s" : ""}
                     </span>
+                    <DeleteButton
+                      action={deleteSequenceAndReturn.bind(
+                        null,
+                        seq.id,
+                        `/projects/${pid}/outline`
+                      )}
+                      confirm={`Delete "${seq.title}" and all its shots?`}
+                      label="Delete"
+                      className="text-[10px] text-[#3a4046] hover:text-red-400 transition-colors"
+                    />
                   </div>
+
+                  <SequenceContextEditor
+                    sequenceId={seq.id}
+                    projectId={pid}
+                    summary={seq.summary}
+                    description={seq.description}
+                    narrativePurpose={seq.narrativePurpose}
+                    mood={seq.mood}
+                    locationHint={seq.locationHint}
+                  />
 
                   {seqShots.length > 0 && (
                     <div className="flex flex-col gap-1.5 pl-9">
@@ -185,9 +220,6 @@ export default async function OutlinePage({ params }: Props) {
               );
             })}
 
-            <p className="text-xs text-[#4b5158] italic pt-2 border-t border-[#1a1d20]">
-              Sequence generation from outline is coming soon.
-            </p>
           </div>
         )}
       </Card>

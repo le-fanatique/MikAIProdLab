@@ -74,6 +74,35 @@ export async function deleteSequence(id: number, projectId: number) {
   redirect(`/projects/${projectId}`);
 }
 
+export async function deleteSequenceAndReturn(sequenceId: number, returnTo: string) {
+  await db.delete(sequences).where(eq(sequences.id, sequenceId));
+  redirect(returnTo);
+}
+
+export async function updateSequenceContext(
+  sequenceId: number,
+  projectId: number,
+  data: {
+    summary: string | null;
+    description: string | null;
+    narrativePurpose: string | null;
+    mood: string | null;
+    locationHint: string | null;
+  }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const [seq] = await db.select({ id: sequences.id }).from(sequences).where(eq(sequences.id, sequenceId));
+    if (!seq) return { ok: false, error: "Sequence not found." };
+    await db
+      .update(sequences)
+      .set({ ...data, updatedAt: new Date().toISOString() })
+      .where(eq(sequences.id, sequenceId));
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save. Please try again." };
+  }
+}
+
 export async function updateSequencePrompt(formData: FormData): Promise<void> {
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
