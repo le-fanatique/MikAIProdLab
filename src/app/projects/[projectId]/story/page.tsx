@@ -516,7 +516,6 @@ export default async function StoryPage({ params, searchParams }: Props) {
               projectId={pid}
               assets={batchAssets}
               isConfigured={isLlmConfigured}
-              returnTo={storyReturnTo}
             />
           </details>
         </div>

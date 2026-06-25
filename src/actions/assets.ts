@@ -125,3 +125,142 @@ export async function updateAssetDescriptionField(
   const feedbackParam = field === "description" ? "descriptionUpdated=1" : "notesUpdated=1";
   redirect(`${returnTo}?${feedbackParam}`);
 }
+
+// ── Inline (no redirect) — for batch panel ───────────────────────────────────
+
+export async function updateAssetDescriptionFieldInline(input: {
+  assetId: number;
+  projectId: number;
+  field: "description" | "notes";
+  mode: "replace" | "append";
+  content: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { assetId, projectId, field, mode } = input;
+  const content = input.content.trim();
+
+  if (!(VALID_FIELDS as readonly string[]).includes(field)) {
+    return { ok: false, error: "Invalid field." };
+  }
+  if (!(VALID_MODES as readonly string[]).includes(mode)) {
+    return { ok: false, error: "Invalid mode." };
+  }
+  if (!content) {
+    return { ok: false, error: "Empty content." };
+  }
+
+  const [existing] = await db
+    .select({ description: assets.description, notes: assets.notes, projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, assetId));
+
+  if (!existing || existing.projectId !== projectId) {
+    return { ok: false, error: "Asset not found." };
+  }
+
+  let newValue: string;
+  if (mode === "replace") {
+    newValue = content;
+  } else {
+    const current = (existing[field] ?? "").trim();
+    newValue = current ? `${current}\n\n${content}` : content;
+  }
+
+  await db
+    .update(assets)
+    .set({ [field]: newValue, updatedAt: new Date().toISOString() })
+    .where(eq(assets.id, assetId));
+
+  return { ok: true };
+}
+
+export async function applyBatchAssetDescriptionDraftsInline(input: {
+  projectId: number;
+  mode: "replace" | "append";
+  items: Array<{
+    assetId: number;
+    descriptionDraft: string;
+    notesDraft: string;
+  }>;
+}): Promise<
+  | {
+      ok: true;
+      applied: Array<{ assetId: number; descriptionApplied: boolean; notesApplied: boolean }>;
+      errors: Array<{ assetId: number; error: string }>;
+    }
+  | { ok: false; error: string }
+> {
+  const { projectId, mode, items } = input;
+
+  if (!(VALID_MODES as readonly string[]).includes(mode)) {
+    return { ok: false, error: "Invalid mode." };
+  }
+  if (items.length === 0) {
+    return { ok: false, error: "No items to apply." };
+  }
+  if (items.length > 10) {
+    return { ok: false, error: "Too many items. Limit is 10." };
+  }
+
+  const applied: Array<{ assetId: number; descriptionApplied: boolean; notesApplied: boolean }> = [];
+  const errors: Array<{ assetId: number; error: string }> = [];
+
+  for (const item of items) {
+    try {
+      const descDraft = item.descriptionDraft.trim();
+      const notesDraft = item.notesDraft.trim();
+
+      if (!descDraft && !notesDraft) {
+        errors.push({ assetId: item.assetId, error: "Both drafts are empty." });
+        continue;
+      }
+
+      const [existing] = await db
+        .select({ description: assets.description, notes: assets.notes, projectId: assets.projectId })
+        .from(assets)
+        .where(eq(assets.id, item.assetId));
+
+      if (!existing || existing.projectId !== projectId) {
+        errors.push({ assetId: item.assetId, error: "Asset not found." });
+        continue;
+      }
+
+      const updates: Record<string, string> = {};
+
+      if (descDraft) {
+        if (mode === "replace") {
+          updates.description = descDraft;
+        } else {
+          const current = (existing.description ?? "").trim();
+          updates.description = current ? `${current}\n\n${descDraft}` : descDraft;
+        }
+      }
+
+      if (notesDraft) {
+        if (mode === "replace") {
+          updates.notes = notesDraft;
+        } else {
+          const current = (existing.notes ?? "").trim();
+          updates.notes = current ? `${current}\n\n${notesDraft}` : notesDraft;
+        }
+      }
+
+      await db
+        .update(assets)
+        .set({ ...updates, updatedAt: new Date().toISOString() })
+        .where(eq(assets.id, item.assetId));
+
+      applied.push({
+        assetId: item.assetId,
+        descriptionApplied: Boolean(descDraft),
+        notesApplied: Boolean(notesDraft),
+      });
+    } catch (err) {
+      errors.push({
+        assetId: item.assetId,
+        error: err instanceof Error ? err.message : "Unexpected error.",
+      });
+    }
+  }
+
+  return { ok: true, applied, errors };
+}
