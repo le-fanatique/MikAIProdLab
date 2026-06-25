@@ -69,3 +69,59 @@ export async function deleteAsset(assetId: number, projectId: number) {
   await db.delete(assets).where(eq(assets.id, assetId));
   redirect(`/projects/${projectId}/assets`);
 }
+
+const VALID_FIELDS = ["description", "notes"] as const;
+type DescriptionField = (typeof VALID_FIELDS)[number];
+const VALID_MODES = ["replace", "append"] as const;
+type UpdateMode = (typeof VALID_MODES)[number];
+
+export async function updateAssetDescriptionField(
+  assetId: number,
+  projectId: number,
+  formData: FormData
+): Promise<void> {
+  const rawField = formData.get("field")?.toString() ?? "";
+  const rawMode = formData.get("mode")?.toString() ?? "";
+  const content = formData.get("content")?.toString().trim() ?? "";
+  const returnTo =
+    formData.get("returnTo")?.toString() || `/projects/${projectId}/assets/${assetId}`;
+
+  if (!(VALID_FIELDS as readonly string[]).includes(rawField)) {
+    redirect(`${returnTo}?assetDescriptionError=invalid`);
+  }
+  if (!(VALID_MODES as readonly string[]).includes(rawMode)) {
+    redirect(`${returnTo}?assetDescriptionError=invalid`);
+  }
+
+  const field = rawField as DescriptionField;
+  const mode = rawMode as UpdateMode;
+
+  if (!content) {
+    redirect(`${returnTo}?assetDescriptionError=empty`);
+  }
+
+  const [existing] = await db
+    .select({ description: assets.description, notes: assets.notes, projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, assetId));
+
+  if (!existing || existing.projectId !== projectId) {
+    redirect(`${returnTo}?assetDescriptionError=notfound`);
+  }
+
+  let newValue: string;
+  if (mode === "replace") {
+    newValue = content;
+  } else {
+    const current = (existing[field] ?? "").trim();
+    newValue = current ? `${current}\n\n${content}` : content;
+  }
+
+  await db
+    .update(assets)
+    .set({ [field]: newValue, updatedAt: new Date().toISOString() })
+    .where(eq(assets.id, assetId));
+
+  const feedbackParam = field === "description" ? "descriptionUpdated=1" : "notesUpdated=1";
+  redirect(`${returnTo}?${feedbackParam}`);
+}

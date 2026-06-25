@@ -15,6 +15,8 @@ import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
+import { getLLMSettings } from "@/lib/settings";
+import AssetDescriptionEnhancePanel from "@/components/AssetDescriptionEnhancePanel";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
@@ -95,6 +97,22 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
     if (strValue !== undefined) currentSearchParams[key] = strValue;
   }
 
+  const rawDescUpdated = resolvedSearchParams["descriptionUpdated"];
+  const descriptionUpdated =
+    rawDescUpdated === "1" || (Array.isArray(rawDescUpdated) && rawDescUpdated[0] === "1");
+
+  const rawNotesUpdated = resolvedSearchParams["notesUpdated"];
+  const notesUpdated =
+    rawNotesUpdated === "1" || (Array.isArray(rawNotesUpdated) && rawNotesUpdated[0] === "1");
+
+  const rawAssetDescError = resolvedSearchParams["assetDescriptionError"];
+  const assetDescriptionError =
+    typeof rawAssetDescError === "string"
+      ? rawAssetDescError
+      : Array.isArray(rawAssetDescError)
+      ? rawAssetDescError[0]
+      : undefined;
+
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
 
@@ -135,6 +153,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
     .from(assetReferenceImages)
     .where(eq(assetReferenceImages.assetId, aid))
     .orderBy(asc(assetReferenceImages.orderIndex));
+
+  const llmSettings = await getLLMSettings();
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
 
@@ -238,6 +258,29 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           to add them. Description and notes are used as the text prompt for image generation.
         </p>
       )}
+
+      {/* ── AI Assist ─────────────────────────────────────── */}
+      <SectionLabel label="AI Assist" />
+      <Card title="Enhance Description">
+        {descriptionUpdated && (
+          <p className="mb-3 text-xs text-[#6b9e72]">Description updated.</p>
+        )}
+        {notesUpdated && (
+          <p className="mb-3 text-xs text-[#6b9e72]">Notes updated.</p>
+        )}
+        {assetDescriptionError && (
+          <p className="mb-3 text-xs text-[#c97c7c]">Unable to update asset description.</p>
+        )}
+        <AssetDescriptionEnhancePanel
+          projectId={pid}
+          assetId={aid}
+          returnTo={`/projects/${pid}/assets/${aid}`}
+          hasExistingDescription={Boolean(asset.description?.trim())}
+          hasExistingNotes={Boolean(asset.notes?.trim())}
+          isConfigured={llmSettings.isConfigured}
+          hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
+        />
+      </Card>
 
       {/* ── References ────────────────────────────────────── */}
       <SectionLabel label="References" />

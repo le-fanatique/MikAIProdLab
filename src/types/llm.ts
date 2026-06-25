@@ -104,6 +104,12 @@ export type GeneratedAssetCandidate = {
   duplicateWarning: string | null;
 };
 
+/** Draft output for "Enhance Asset Description" */
+export type GeneratedAssetDescriptionDraft = {
+  descriptionDraft: string;
+  notesDraft: string;
+};
+
 // ---------------------------------------------------------------------------
 // Preview state (used by Client Components in V0.4)
 // ---------------------------------------------------------------------------
