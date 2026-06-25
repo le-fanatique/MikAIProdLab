@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, sequenceAssets } from "@/db/schema";
 import { eq, asc, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import SequencesGenerationPanel from "@/components/SequencesGenerationPanel";
 import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPanel";
 import StoryFoundationEditor from "@/components/StoryFoundationEditor";
 import AssetsLLMExtractPanel from "@/components/AssetsLLMExtractPanel";
+import BatchAssetDescriptionEnhancePanel from "@/components/BatchAssetDescriptionEnhancePanel";
 import { getLLMSettings } from "@/lib/settings";
 
 type Props = {
@@ -61,6 +62,8 @@ export default async function StoryPage({ params, searchParams }: Props) {
   const assetsCreatedRaw = sp(resolvedSP["assetsCreated"]);
   const assetsCreated = assetsCreatedRaw != null ? parseInt(assetsCreatedRaw, 10) : null;
   const assetsCreateError = sp(resolvedSP["assetsCreateError"]);
+  const descriptionUpdated = sp(resolvedSP["descriptionUpdated"]) === "1";
+  const notesUpdated = sp(resolvedSP["notesUpdated"]) === "1";
 
   const [project, llmSettings] = await Promise.all([
     db.select().from(projects).where(eq(projects.id, pid)).then((r) => r[0]),
@@ -93,7 +96,13 @@ export default async function StoryPage({ params, searchParams }: Props) {
       : [];
 
   const assetRows = await db
-    .select({ id: assets.id, name: assets.name, type: assets.type })
+    .select({
+      id: assets.id,
+      name: assets.name,
+      type: assets.type,
+      description: assets.description,
+      notes: assets.notes,
+    })
     .from(assets)
     .where(eq(assets.projectId, pid));
 
@@ -115,6 +124,41 @@ export default async function StoryPage({ params, searchParams }: Props) {
   }
 
   const castedShotIds = new Set(castingRows.map((r) => r.shotId));
+
+  // Per-asset usage counts for BatchAssetDescriptionEnhancePanel
+  const assetIds = assetRows.map((a) => a.id);
+  const [assetSeqRows, assetShotRows] =
+    assetIds.length > 0
+      ? await Promise.all([
+          db
+            .select({ assetId: sequenceAssets.assetId })
+            .from(sequenceAssets)
+            .where(inArray(sequenceAssets.assetId, assetIds)),
+          db
+            .select({ assetId: shotAssets.assetId })
+            .from(shotAssets)
+            .where(inArray(shotAssets.assetId, assetIds)),
+        ])
+      : [[], []];
+
+  const seqCountByAsset = new Map<number, number>();
+  for (const r of assetSeqRows) {
+    seqCountByAsset.set(r.assetId, (seqCountByAsset.get(r.assetId) ?? 0) + 1);
+  }
+  const shotCountByAsset = new Map<number, number>();
+  for (const r of assetShotRows) {
+    shotCountByAsset.set(r.assetId, (shotCountByAsset.get(r.assetId) ?? 0) + 1);
+  }
+
+  const batchAssets = assetRows.map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    description: a.description ?? null,
+    notes: a.notes ?? null,
+    sequenceCount: seqCountByAsset.get(a.id) ?? 0,
+    shotCount: shotCountByAsset.get(a.id) ?? 0,
+  }));
 
   const assetCountByType: Record<string, number> = {};
   for (const a of assetRows) {
@@ -434,6 +478,14 @@ export default async function StoryPage({ params, searchParams }: Props) {
             </Link>
           </div>
 
+          {/* Feedback from apply */}
+          {descriptionUpdated && (
+            <p className="text-xs text-[#6b9e72]">Asset description updated.</p>
+          )}
+          {notesUpdated && (
+            <p className="text-xs text-[#6b9e72]">Asset notes updated.</p>
+          )}
+
           {/* Extract Asset Drafts — collapsible */}
           <details
             className="border-t border-[#1a1d20] pt-3"
@@ -450,6 +502,19 @@ export default async function StoryPage({ params, searchParams }: Props) {
               existingAssetNames={existingAssetNames}
               createdCount={assetsCreated}
               createError={assetsCreateError}
+              isConfigured={isLlmConfigured}
+              returnTo={storyReturnTo}
+            />
+          </details>
+
+          {/* Batch Enhance Asset Descriptions — collapsible */}
+          <details className="border-t border-[#1a1d20] pt-3">
+            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hover:text-[#6e767d] transition-colors select-none list-none mb-2">
+              ▸ Batch Enhance Asset Descriptions
+            </summary>
+            <BatchAssetDescriptionEnhancePanel
+              projectId={pid}
+              assets={batchAssets}
               isConfigured={isLlmConfigured}
               returnTo={storyReturnTo}
             />
