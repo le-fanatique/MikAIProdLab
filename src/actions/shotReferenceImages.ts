@@ -1,6 +1,6 @@
 "use server";
 import { db } from "@/db";
-import { shots, sequences, shotReferenceImages } from "@/db/schema";
+import { shots, sequences, shotReferenceImages, assets, assetReferenceImages } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import {
@@ -184,6 +184,103 @@ export async function updateShotReferenceImage(
   if (hasNewFile) await deleteStoredReferenceImage(existing.imagePath);
 
   redirect(shotDetailPath(projectId, sequenceId, shotId));
+}
+
+export async function captureVideoFrame(input: {
+  projectId: number;
+  sourceShotId: number;
+  sourceSequenceId: number;
+  imageFile: File;
+  frameNumber: number;
+  destination:
+    | { type: "shot"; shotId: number; sequenceId: number }
+    | { type: "asset"; assetId: number };
+}): Promise<
+  | { ok: true; imagePath: string; referenceId: number; destinationLabel: string }
+  | { ok: false; error: string }
+> {
+  const { projectId, sourceShotId, sourceSequenceId, imageFile, frameNumber, destination } = input;
+
+  // Verify source shot belongs to project
+  const sourceValid = await verifyChain(sourceShotId, sourceSequenceId, projectId);
+  if (!sourceValid) return { ok: false, error: "Source shot not found." };
+
+  // Verify destination ownership
+  if (destination.type === "shot") {
+    const targetValid = await verifyChain(destination.shotId, destination.sequenceId, projectId);
+    if (!targetValid) return { ok: false, error: "Target shot not found." };
+  } else {
+    const [targetAsset] = await db
+      .select({ id: assets.id, projectId: assets.projectId })
+      .from(assets)
+      .where(eq(assets.id, destination.assetId));
+    if (!targetAsset || targetAsset.projectId !== projectId) {
+      return { ok: false, error: "Target asset not found." };
+    }
+  }
+
+  // Save image to appropriate subfolder
+  const subfolder =
+    destination.type === "shot"
+      ? `shot-${destination.shotId}`
+      : `asset-${destination.assetId}`;
+
+  let imagePath: string;
+  let sourceFilename: string | null;
+
+  try {
+    const result = await saveReferenceImage(imageFile, subfolder);
+    imagePath = result.imagePath;
+    sourceFilename = result.sourceFilename;
+  } catch (err) {
+    if (err instanceof SaveReferenceImageError) {
+      return { ok: false, error: `Upload failed: ${err.message}` };
+    }
+    return { ok: false, error: "Unable to save captured frame." };
+  }
+
+  // Insert reference into the correct table
+  if (destination.type === "shot") {
+    const [{ maxOrder }] = await db
+      .select({ maxOrder: sql<number>`coalesce(max(${shotReferenceImages.orderIndex}), -1)` })
+      .from(shotReferenceImages)
+      .where(eq(shotReferenceImages.shotId, destination.shotId));
+
+    const [inserted] = await db
+      .insert(shotReferenceImages)
+      .values({
+        shotId: destination.shotId,
+        orderIndex: maxOrder + 1,
+        imagePath,
+        sourceFilename,
+        label: "Captured Frame",
+        imageRole: "keyframe",
+        notes: `Captured from frame ${frameNumber} of approved shot video.`,
+      })
+      .returning({ id: shotReferenceImages.id });
+
+    return { ok: true, imagePath, referenceId: inserted.id, destinationLabel: "Shot Reference" };
+  } else {
+    const [{ maxOrder }] = await db
+      .select({ maxOrder: sql<number>`coalesce(max(${assetReferenceImages.orderIndex}), -1)` })
+      .from(assetReferenceImages)
+      .where(eq(assetReferenceImages.assetId, destination.assetId));
+
+    const [inserted] = await db
+      .insert(assetReferenceImages)
+      .values({
+        assetId: destination.assetId,
+        orderIndex: maxOrder + 1,
+        imagePath,
+        sourceFilename,
+        label: "Captured Frame",
+        imageRole: "keyframe",
+        notes: `Captured from frame ${frameNumber} of shot video.`,
+      })
+      .returning({ id: assetReferenceImages.id });
+
+    return { ok: true, imagePath, referenceId: inserted.id, destinationLabel: "Asset Reference" };
+  }
 }
 
 export async function deleteShotReferenceImage(

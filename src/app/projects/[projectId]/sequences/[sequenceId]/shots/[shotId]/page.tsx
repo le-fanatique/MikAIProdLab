@@ -30,6 +30,7 @@ import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
 import ShotGenerationPanel from "@/components/ShotGenerationPanel";
 import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
+import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -363,6 +364,84 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const hasContinuity = Boolean(shot.continuityIn || shot.continuityOut || shot.continuityNotes);
   const hasCamera = Boolean(shot.framing || shot.cameraMovement);
 
+  // ── Capture destinations ────────────────────────────────────────────────────
+  const approvedVideoExt = shot.approvedVideoPath?.split(".").pop()?.toLowerCase() ?? "";
+  const approvedVideoIsPlayable =
+    shot.approvedVideoPath !== null &&
+    ["mp4", "webm", "mov"].includes(approvedVideoExt);
+
+  let captureDestinations: CaptureDestination[] = [];
+
+  if (approvedVideoIsPlayable) {
+    const allProjectSequences = await db
+      .select({ id: sequences.id, title: sequences.title })
+      .from(sequences)
+      .where(eq(sequences.projectId, pid))
+      .orderBy(asc(sequences.id));
+
+    const allSequenceIds = allProjectSequences.map((s) => s.id);
+
+    const allProjectShots = allSequenceIds.length > 0
+      ? await db
+          .select({
+            id: shots.id,
+            sequenceId: shots.sequenceId,
+            title: shots.title,
+            description: shots.description,
+          })
+          .from(shots)
+          .where(inArray(shots.sequenceId, allSequenceIds))
+          .orderBy(asc(shots.orderIndex))
+      : [];
+
+    const allProjectAssets = await db
+      .select({ id: assets.id, name: assets.name, type: assets.type })
+      .from(assets)
+      .where(eq(assets.projectId, pid))
+      .orderBy(asc(assets.type), asc(assets.name));
+
+    // Current shot first
+    captureDestinations.push({
+      id: `shot:${shid}`,
+      type: "shot",
+      shotId: shid,
+      sequenceId: sid,
+      label: shot.title,
+      subtitle: "Current shot",
+      groupLabel: "Current Shot",
+      isCurrent: true,
+    });
+
+    // Other shots, grouped by sequence order
+    for (const seq of allProjectSequences) {
+      for (const s of allProjectShots.filter(
+        (sh) => sh.sequenceId === seq.id && sh.id !== shid
+      )) {
+        captureDestinations.push({
+          id: `shot:${s.id}`,
+          type: "shot",
+          shotId: s.id,
+          sequenceId: seq.id,
+          label: `${seq.title} / ${s.title}`,
+          subtitle: s.description?.slice(0, 80) ?? undefined,
+          groupLabel: "Other Shots",
+        });
+      }
+    }
+
+    // Assets
+    for (const asset of allProjectAssets) {
+      captureDestinations.push({
+        id: `asset:${asset.id}`,
+        type: "asset",
+        assetId: asset.id,
+        label: asset.name,
+        subtitle: asset.type,
+        groupLabel: "Assets",
+      });
+    }
+  }
+
   const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const closeUrl = detailBaseUrl;
   const openPanelUrl = `${detailBaseUrl}?generation=open`;
@@ -411,11 +490,22 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         {shot.approvedVideoPath && (
           <Card title="Approved Output">
             <div className="flex flex-col gap-3">
-              <video
-                src={`/${shot.approvedVideoPath}`}
-                controls
-                className="w-full rounded border border-[#2c3035]"
-              />
+              {approvedVideoIsPlayable ? (
+                <VideoFrameReviewPlayer
+                  src={`/${shot.approvedVideoPath}`}
+                  projectId={pid}
+                  sequenceId={sid}
+                  shotId={shid}
+                  defaultFps={24}
+                  captureDestinations={captureDestinations}
+                />
+              ) : (
+                <video
+                  src={`/${shot.approvedVideoPath}`}
+                  controls
+                  className="w-full rounded border border-[#2c3035]"
+                />
+              )}
               <div className="flex items-center gap-4">
                 <a
                   href={`/${shot.approvedVideoPath}`}
