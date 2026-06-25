@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
+import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
 import { getLLMSettings, getComfySettings } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
@@ -107,6 +108,16 @@ export default async function SettingsPage({ searchParams }: Props) {
             <span>Select a model from the dropdown above and click Test Connection.</span>
           </li>
         </ol>
+      </Card>
+
+      {/* ── LLM Chat System Prompt Library ───────────────────── */}
+      <SectionLabel label="LLM Chat" />
+
+      <Card title="LLM Chat System Prompt Library" className="mb-6">
+        <p className="text-xs text-[#6e767d] mb-4">
+          Create and manage reusable system prompts for the sidebar LLM chat.
+        </p>
+        <ChatSystemPromptManager />
       </Card>
 
       {/* ── ComfyUI ────────────────────────────────────────── */}

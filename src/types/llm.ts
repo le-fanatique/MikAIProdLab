@@ -30,6 +30,27 @@ export interface LLMPrompt {
 }
 
 // ---------------------------------------------------------------------------
+// Chat message format — OpenAI Chat Completions compatible
+// ---------------------------------------------------------------------------
+
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+// ---------------------------------------------------------------------------
+// System prompt library for sidebar chat
+// ---------------------------------------------------------------------------
+
+export type ChatSystemPrompt = {
+  id: string;
+  name: string;
+  prompt: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+// ---------------------------------------------------------------------------
 // JSON output contracts (snake_case — matches raw LLM JSON output)
 // ---------------------------------------------------------------------------
 

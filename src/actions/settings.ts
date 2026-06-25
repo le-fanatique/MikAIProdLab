@@ -2,8 +2,10 @@
 
 import { db } from "@/db";
 import { appSettings } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { fetchOllamaModelNames } from "@/lib/llm/ollama";
 import { redirect } from "next/navigation";
+import type { ChatSystemPrompt } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // Save Ollama settings to DB
@@ -164,4 +166,81 @@ export async function saveWorkflowDefaults(formData: FormData): Promise<void> {
   await upsert("default_workflow_shot_video", shotVideoId);
 
   redirect("/settings?defaultsSaved=1");
+}
+
+// ---------------------------------------------------------------------------
+// System Prompt Library — stored as JSON in app_settings
+// ---------------------------------------------------------------------------
+
+const SYSTEM_PROMPTS_KEY = "llm_chat_system_prompts";
+const MAX_PROMPT_LENGTH = 8000;
+
+async function readSystemPrompts(): Promise<ChatSystemPrompt[]> {
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, SYSTEM_PROMPTS_KEY));
+  if (rows.length === 0) return [];
+  try {
+    const parsed = JSON.parse(rows[0].value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeSystemPrompts(prompts: ChatSystemPrompt[]): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .insert(appSettings)
+    .values({ key: SYSTEM_PROMPTS_KEY, value: JSON.stringify(prompts), updatedAt: now })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value: JSON.stringify(prompts), updatedAt: now },
+    });
+}
+
+export async function getChatSystemPrompts(): Promise<ChatSystemPrompt[]> {
+  return readSystemPrompts();
+}
+
+export async function saveChatSystemPrompt(input: {
+  id?: string;
+  name: string;
+  prompt: string;
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const name = input.name.trim();
+  const prompt = input.prompt.trim();
+
+  if (!name) return { ok: false, error: "Prompt name is required." };
+  if (!prompt) return { ok: false, error: "System prompt text is required." };
+  if (prompt.length > MAX_PROMPT_LENGTH)
+    return { ok: false, error: `Prompt must be under ${MAX_PROMPT_LENGTH} characters.` };
+
+  const prompts = await readSystemPrompts();
+  const now = new Date().toISOString();
+
+  if (input.id) {
+    // Update existing
+    const idx = prompts.findIndex((p) => p.id === input.id);
+    if (idx === -1) return { ok: false, error: "Prompt not found." };
+    prompts[idx] = { ...prompts[idx], name, prompt, updatedAt: now };
+  } else {
+    // Create new
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    prompts.push({ id, name, prompt, createdAt: now, updatedAt: now });
+  }
+
+  await writeSystemPrompts(prompts);
+  return { ok: true, id: input.id ?? prompts[prompts.length - 1].id };
+}
+
+export async function deleteChatSystemPrompt(input: {
+  id: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const prompts = await readSystemPrompts();
+  const filtered = prompts.filter((p) => p.id !== input.id);
+  if (filtered.length === prompts.length) return { ok: false, error: "Prompt not found." };
+  await writeSystemPrompts(filtered);
+  return { ok: true };
 }

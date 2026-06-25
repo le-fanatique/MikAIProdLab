@@ -1,4 +1,4 @@
-import type { LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 
 /**
  * Calls the Ollama /api/chat endpoint.
@@ -53,6 +53,75 @@ export async function callOllama(
     throw new Error(
       `Ollama returned an error (HTTP ${response.status}).`
     );
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error("Ollama returned a response that could not be parsed.");
+  }
+
+  const content =
+    json &&
+    typeof json === "object" &&
+    "message" in json &&
+    json.message &&
+    typeof json.message === "object" &&
+    "content" in json.message &&
+    typeof (json.message as { content: unknown }).content === "string"
+      ? (json.message as { content: string }).content
+      : null;
+
+  if (content === null) {
+    throw new Error("Ollama returned an unexpected response shape.");
+  }
+
+  return content;
+}
+
+export async function callOllamaChat(
+  messages: ChatMessage[],
+  config: LLMConfig
+): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+
+  const url = `${config.baseUrl}/api/chat`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        `Request timed out after ${config.timeoutMs}ms. The model may be loading or overloaded.`
+      );
+    }
+    throw new Error(
+      `Cannot connect to Ollama at ${config.baseUrl}. Make sure Ollama is running.`
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    if (response.status === 404 && body.includes("model")) {
+      throw new Error(
+        `Model "${config.model}" not found. Run: ollama pull ${config.model}`
+      );
+    }
+    throw new Error(`Ollama returned an error (HTTP ${response.status}).`);
   }
 
   let json: unknown;

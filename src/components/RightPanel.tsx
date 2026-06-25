@@ -2,12 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import SidebarLLMChat from "@/components/SidebarLLMChat";
 
 type SidebarShot = { id: number; shotCode: string | null; title: string; orderIndex: number };
 type SidebarSequence = { id: number; title: string; orderIndex: number; shots: SidebarShot[] };
 type SidebarProject = { id: number; name: string; status: string; sequences: SidebarSequence[] };
 
 type Props = { tree: SidebarProject[] };
+
+function RightPanelShell({ children }: { children: React.ReactNode }) {
+  return (
+    <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+      <div className="min-h-full flex flex-col">
+        <div className="flex-1">{children}</div>
+        <SidebarLLMChat />
+      </div>
+    </aside>
+  );
+}
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -81,7 +93,7 @@ export default function RightPanel({ tree }: Props) {
   // ── Settings context ──────────────────────────────────────────────
   if (isSettings) {
     return (
-      <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+      <RightPanelShell>
         <SectionLabel label="Settings" />
         <QuickLink href="/settings" label="General" />
         <QuickLink href="/settings/workflows" label="Workflow Library" />
@@ -89,7 +101,7 @@ export default function RightPanel({ tree }: Props) {
         <SectionLabel label="Coming later" />
         <QuickLink href="#" label="Export / Muse Studio" disabled />
         <QuickLink href="#" label="Team & Sharing" disabled />
-      </aside>
+      </RightPanelShell>
     );
   }
 
@@ -100,7 +112,7 @@ export default function RightPanel({ tree }: Props) {
     const shotIdx = sequence.shots.findIndex((s) => s.id === shot.id);
 
     return (
-      <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+      <RightPanelShell>
         <SectionLabel label="Shot" />
         <MetaRow label="Code" value={shot.shotCode ?? "—"} />
         <MetaRow label="Title" value={shot.title} />
@@ -138,14 +150,14 @@ export default function RightPanel({ tree }: Props) {
             <span className="truncate">{s.title}</span>
           </Link>
         ))}
-      </aside>
+      </RightPanelShell>
     );
   }
 
   // ── Sequence context (no shot) ─────────────────────────────────────
   if (sequence && project && !shotId) {
     return (
-      <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+      <RightPanelShell>
         <SectionLabel label="Sequence" />
         <MetaRow label="Title" value={sequence.title} />
         <MetaRow
@@ -184,14 +196,14 @@ export default function RightPanel({ tree }: Props) {
             ))}
           </>
         )}
-      </aside>
+      </RightPanelShell>
     );
   }
 
   // ── Assets context ────────────────────────────────────────────────
   if (isAssets && project) {
     return (
-      <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+      <RightPanelShell>
         <SectionLabel label="Assets" />
         <MetaRow label="Project" value={project.name} />
 
@@ -205,7 +217,7 @@ export default function RightPanel({ tree }: Props) {
         <SectionLabel label="Coming later" />
         <QuickLink href="#" label="Asset Library Import" disabled />
         <QuickLink href="#" label="Batch Generate References" disabled />
-      </aside>
+      </RightPanelShell>
     );
   }
 
@@ -214,7 +226,7 @@ export default function RightPanel({ tree }: Props) {
     const totalShots = project.sequences.reduce((n, s) => n + s.shots.length, 0);
 
     return (
-      <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+      <RightPanelShell>
         <SectionLabel label="Project" />
         <MetaRow label="Name" value={project.name} />
         <MetaRow label="Status" value={project.status} />
@@ -249,13 +261,13 @@ export default function RightPanel({ tree }: Props) {
             ))}
           </>
         )}
-      </aside>
+      </RightPanelShell>
     );
   }
 
   // ── Projects list or no context ───────────────────────────────────
   return (
-    <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+    <RightPanelShell>
       <SectionLabel label="Projects" />
       {tree.length === 0 ? (
         <p className="px-3 text-[11px] text-[#4b5158]">No projects yet.</p>
@@ -275,6 +287,6 @@ export default function RightPanel({ tree }: Props) {
       )}
       <div className="border-t border-[#232629] mx-3 my-3" />
       <QuickLink href="/projects/new" label="+ New Project" />
-    </aside>
+    </RightPanelShell>
   );
 }
