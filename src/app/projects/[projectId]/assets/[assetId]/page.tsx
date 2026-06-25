@@ -186,6 +186,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       <PageHeader
         title={asset.name}
         badge={<AssetTypeBadge type={asset.type} />}
+        meta={project.name}
         actions={
           <>
             <Link
@@ -209,8 +210,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         }
       />
 
-      {/* ── Overview ──────────────────────────────────────── */}
-      <SectionLabel label="Overview" />
+      {/* ── Description ───────────────────────────────────── */}
+      <SectionLabel label="Description" />
       {asset.description || asset.notes ? (
         <Card title="Details">
           <div className="flex flex-col gap-4">
@@ -221,17 +222,20 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
               <Field label="Notes" value={asset.notes} />
             )}
           </div>
+          <p className="mt-3 border-t border-[#1e2124] pt-3 text-xs text-[#4b5158]">
+            Description and notes are used as the text prompt for asset image generation.
+          </p>
         </Card>
       ) : (
         <p className="text-sm text-[#6e767d]">
-          No details recorded yet.{" "}
+          No description or notes yet.{" "}
           <Link
             href={`/projects/${pid}/assets/${aid}/edit`}
-            className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            className="text-[#5b93d6] transition-colors hover:text-[#8fbbe8]"
           >
             Edit this asset
           </Link>{" "}
-          to add them.
+          to add them. Description and notes are used as the text prompt for image generation.
         </p>
       )}
 
@@ -325,17 +329,30 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           </div>
         </Card>
       ) : (
-        <p className="text-sm text-[#6e767d]">
-          Not yet assigned to any sequence or shot.
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-[#6e767d]">
+            Not yet assigned to any sequence or shot.
+          </p>
+          {!asset.description && !asset.notes && (
+            <p className="text-xs text-[#4b5158]">
+              Add a description and cast this asset in shots to make it more useful for generation.
+            </p>
+          )}
+        </div>
       )}
 
-      <div className="mt-8 pt-4 border-t border-[#232629]">
+      <div className="mt-8 flex items-center gap-4 border-t border-[#232629] pt-4">
         <Link
           href={`/projects/${pid}/assets`}
-          className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+          className="text-sm text-[#6e767d] transition-colors hover:text-[#a4abb2]"
         >
           ← Back to Assets
+        </Link>
+        <Link
+          href={`/projects/${pid}/story`}
+          className="text-xs text-[#4b5158] transition-colors hover:text-[#6e767d]"
+        >
+          ↑ Story Workspace
         </Link>
       </div>
       </div>
