@@ -17,6 +17,7 @@ import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel from "@/components/AssetDescriptionEnhancePanel";
+import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
@@ -113,6 +114,10 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       ? rawAssetDescError[0]
       : undefined;
 
+  const rawDetailsUpdated = resolvedSearchParams["detailsUpdated"];
+  const detailsUpdated =
+    rawDetailsUpdated === "1" || (Array.isArray(rawDetailsUpdated) && rawDetailsUpdated[0] === "1");
+
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
 
@@ -191,6 +196,27 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const openPanelUrl = `${detailBaseUrl}?generation=open`;
   const changePanelUrl = `${detailBaseUrl}?generation=open&selector=1`;
 
+  // Build returnTo that preserves generation panel state
+  const detailsEditParams = new URLSearchParams();
+  if (generationOpen) {
+    detailsEditParams.set("generation", "open");
+    if (selectedWorkflowId) detailsEditParams.set("workflowId", String(selectedWorkflowId));
+    if (forceSelector) detailsEditParams.set("selector", "1");
+    if (activeJobId) detailsEditParams.set("jobId", String(activeJobId));
+    for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
+      detailsEditParams.set(`imageNode_${nodeId}`, imageId);
+    }
+    for (const [nodeId, value] of Object.entries(scalarValueByNodeId)) {
+      detailsEditParams.set(`scalarNode_${nodeId}`, value);
+    }
+    for (const [nodeId, value] of Object.entries(textOverrideByNodeId)) {
+      detailsEditParams.set(`textNode_${nodeId}`, value);
+    }
+  }
+  const detailsReturnTo = detailsEditParams.toString()
+    ? `${detailBaseUrl}?${detailsEditParams.toString()}`
+    : detailBaseUrl;
+
   return (
     <div className={generationOpen ? "flex gap-0 items-start" : ""}>
       <div className={generationOpen ? "flex-1 min-w-0 pr-6" : ""}>
@@ -231,33 +257,26 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       />
 
       {/* ── Description ───────────────────────────────────── */}
-      <SectionLabel label="Description" />
-      {asset.description || asset.notes ? (
-        <Card title="Details">
-          <div className="flex flex-col gap-4">
-            {asset.description && (
-              <Field label="Description" value={asset.description} />
-            )}
-            {asset.notes && (
-              <Field label="Notes" value={asset.notes} />
-            )}
+      <section id="asset-details">
+        <SectionLabel label="Description" />
+        {detailsUpdated && (
+          <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
+            <p className="text-sm text-[#6b9e72]">Asset details updated.</p>
           </div>
+        )}
+        <Card title="Details">
+          <AssetInlineDetailsForm
+            projectId={pid}
+            assetId={aid}
+            description={asset.description}
+            notes={asset.notes}
+            returnTo={detailsReturnTo}
+          />
           <p className="mt-3 border-t border-[#1e2124] pt-3 text-xs text-[#4b5158]">
             Description and notes are used as the text prompt for asset image generation.
           </p>
         </Card>
-      ) : (
-        <p className="text-sm text-[#6e767d]">
-          No description or notes yet.{" "}
-          <Link
-            href={`/projects/${pid}/assets/${aid}/edit`}
-            className="text-[#5b93d6] transition-colors hover:text-[#8fbbe8]"
-          >
-            Edit this asset
-          </Link>{" "}
-          to add them. Description and notes are used as the text prompt for image generation.
-        </p>
-      )}
+      </section>
 
       {/* ── AI Assist ─────────────────────────────────────── */}
       <SectionLabel label="AI Assist" />

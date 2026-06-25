@@ -158,6 +158,13 @@ export default async function AssetGenerationPanel({
   }
   const returnTo = `${basePath}?${selectionParams.toString()}`;
 
+  // editDetailsHref preserves generation panel + scrolls to asset details section
+  const editDetailsParams = new URLSearchParams(selectionParams);
+  if (activeJobId !== null) {
+    editDetailsParams.set("jobId", String(activeJobId));
+  }
+  const editDetailsHref = `/projects/${pid}/assets/${aid}?${editDetailsParams.toString()}#asset-details`;
+
   // approveReturnTo keeps the panel open with the current jobId visible
   const approveParams = new URLSearchParams(selectionParams);
   if (activeJobId !== null) {
@@ -200,7 +207,11 @@ export default async function AssetGenerationPanel({
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link
-            href={`/projects/${pid}/assets/${aid}/workflows/${wid}/generate`}
+            href={
+              selectionParams.toString()
+                ? `/projects/${pid}/assets/${aid}/workflows/${wid}/generate?${selectionParams.toString()}`
+                : `/projects/${pid}/assets/${aid}/workflows/${wid}/generate`
+            }
             className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
           >
             Open page ↗
@@ -229,7 +240,7 @@ export default async function AssetGenerationPanel({
           <p className="text-xs text-[#4b5158]">
             Asset prompt set.{" "}
             <Link
-              href={`/projects/${pid}/assets/${aid}/edit`}
+              href={editDetailsHref}
               className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
             >
               Asset prompt · Edit →
@@ -240,7 +251,7 @@ export default async function AssetGenerationPanel({
             <p className="text-xs text-[#b89a5a]">
               No asset prompt yet.{" "}
               <Link
-                href={`/projects/${pid}/assets/${aid}/edit`}
+                href={editDetailsHref}
                 className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
               >
                 Edit Asset →
@@ -331,7 +342,7 @@ export default async function AssetGenerationPanel({
               <p className="text-xs text-[#cf7b6b]">{attachError}</p>
             )}
             {attachedReference ? (
-              <p className="text-xs text-[#6b9e72]">Output approved as source.</p>
+              <p className="text-xs text-[#6b9e72]">Reference image attached.</p>
             ) : canAttach ? (
               <form action={attachOutputAsAssetReference}>
                 <input type="hidden" name="projectId" value={String(pid)} />
@@ -342,7 +353,7 @@ export default async function AssetGenerationPanel({
                   type="submit"
                   className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
                 >
-                  Approve Output
+                  Attach as Reference
                 </button>
               </form>
             ) : null}

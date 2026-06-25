@@ -264,3 +264,34 @@ export async function applyBatchAssetDescriptionDraftsInline(input: {
 
   return { ok: true, applied, errors };
 }
+
+// ── Inline asset details update (description + notes together, no redirect) ───
+
+export async function updateAssetDetailsInline(input: {
+  assetId: number;
+  projectId: number;
+  description: string;
+  notes: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { assetId, projectId, description, notes } = input;
+
+  const [existing] = await db
+    .select({ projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, assetId));
+
+  if (!existing || existing.projectId !== projectId) {
+    return { ok: false, error: "Asset not found." };
+  }
+
+  await db
+    .update(assets)
+    .set({
+      description: description.trim() || null,
+      notes: notes.trim() || null,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(assets.id, assetId));
+
+  return { ok: true };
+}

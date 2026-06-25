@@ -21,6 +21,7 @@ import {
 } from "@/lib/comfy/mapWorkflowInputs";
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
+import type { FillSource } from "@/lib/textInputKind";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -63,6 +64,11 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
     typeof rawGenerationError === "string" ? rawGenerationError
     : Array.isArray(rawGenerationError) ? rawGenerationError[0]
     : undefined;
+
+  const rawAttachedReference = resolvedSearchParams["attachedReference"];
+  const attachedReference =
+    rawAttachedReference === "1" ||
+    (Array.isArray(rawAttachedReference) && rawAttachedReference[0] === "1");
 
   // --- imageNode_* / scalarNode_* from URL ---
   const selectedImageByNodeId: Record<string, string> = {};
@@ -138,6 +144,16 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
     .filter((v): v is string => Boolean(v))
     .join("\n\n");
 
+  const descTrimmed = asset.description?.trim() ?? "";
+  const notesTrimmed = asset.notes?.trim() ?? "";
+  const fillSources: FillSource[] = [
+    descTrimmed ? { id: "description", label: "Asset Description", text: descTrimmed } : null,
+    notesTrimmed ? { id: "notes", label: "Asset Notes", text: notesTrimmed } : null,
+    descTrimmed && notesTrimmed
+      ? { id: "desc_notes", label: "Description + Notes", text: `${descTrimmed}\n${notesTrimmed}` }
+      : null,
+  ].filter((source): source is FillSource => source !== null);
+
   const parsed = parseComfyWorkflow(workflow.workflowJson);
 
   const mappings =
@@ -168,6 +184,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
   }
   const selectionQuery = selectionParams.toString();
   const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
+  const approveReturnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
 
   const activeJobId =
     jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
@@ -278,6 +295,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
               textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
               basePath={basePath}
+              fillSources={fillSources}
             />
           )}
         </Card>
@@ -354,6 +372,11 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
             <SectionLabel label="Output" />
             <Card>
               <div className="flex flex-col gap-4">
+                {attachedReference && (
+                  <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
+                    <p className="text-sm text-[#6b9e72]">Reference image attached.</p>
+                  </div>
+                )}
                 <GenerationJobStatusPanel jobId={activeJobId} />
 
                 {canAttach && (
@@ -364,7 +387,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
                     <input
                       type="hidden"
                       name="returnTo"
-                      value={`/projects/${pid}/assets/${aid}`}
+                      value={approveReturnTo}
                     />
                     <button
                       type="submit"
@@ -373,12 +396,6 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
                       Attach as Reference
                     </button>
                   </form>
-                )}
-
-                {!canAttach && activeJobOutputPath !== null && (
-                  <p className="text-[10px] text-[#4b5158]">
-                    Reload the page after the job completes to attach the output as a reference.
-                  </p>
                 )}
               </div>
             </Card>
