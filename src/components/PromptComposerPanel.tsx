@@ -12,6 +12,7 @@ type Props = {
   returnTo: string;
   hasExistingShotPrompt: boolean;
   segmentCount: number;
+  ingredients?: string[];
 };
 
 export default function PromptComposerPanel({
@@ -22,6 +23,7 @@ export default function PromptComposerPanel({
   returnTo,
   hasExistingShotPrompt,
   segmentCount,
+  ingredients,
 }: Props) {
   const [text, setText] = useState(composed.proposalText);
   const isDirty = text !== composed.proposalText;
@@ -29,7 +31,7 @@ export default function PromptComposerPanel({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-[#6e767d] leading-relaxed">
-        A clean visual prompt built from shot context, casting, and references. Edit before applying.
+        A clean visual prompt built from shot context and casting. Edit before applying.
       </p>
 
       {!composed.hasContent ? (
@@ -41,6 +43,20 @@ export default function PromptComposerPanel({
         </div>
       ) : (
         <>
+          {ingredients && ingredients.length > 0 && (
+            <details className="mb-2">
+              <summary className="cursor-pointer select-none text-[10px] font-medium uppercase tracking-wider text-[#4b5158] transition-colors hover:text-[#6e767d]">
+                Sources used
+              </summary>
+              <div className="mt-1.5 flex flex-col gap-0.5 border-l border-[#1a1d20] pl-2">
+                {ingredients.map((item, index) => (
+                  <span key={index} className="text-[10px] text-[#4b5158]">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </details>
+          )}
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">

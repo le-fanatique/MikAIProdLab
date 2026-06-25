@@ -216,7 +216,7 @@ export default async function ShotGenerationPanel({
     shot.shotPrompt?.trim()
       ? { id: "shotPrompt", label: "Shot Prompt", text: shot.shotPrompt.trim() }
       : null,
-    compiledShotPrompt.text.trim()
+    compiledShotPrompt.text.trim() && compiledShotPrompt.text.trim() !== (shot.shotPrompt?.trim() ?? "")
       ? { id: "compiledPrompt", label: "Compiled Prompt", text: compiledShotPrompt.text.trim() }
       : null,
     hasRealPromptSegments && compiledPrompt.text.trim()

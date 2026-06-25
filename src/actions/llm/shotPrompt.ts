@@ -86,12 +86,15 @@ export async function generateShotPromptDraft(
     }
 
     const castRows = await db
-      .select({ name: assets.name, type: assets.type })
+      .select({ name: assets.name, type: assets.type, description: assets.description, notes: assets.notes })
       .from(shotAssets)
       .innerJoin(assets, eq(shotAssets.assetId, assets.id))
       .where(eq(shotAssets.shotId, shotId))
       .orderBy(asc(assets.name));
-    const castSummary = castRows.map((r) => `${r.name} (${r.type})`);
+    const castSummary = castRows.map((r) => {
+      const extras = [r.description?.trim(), r.notes?.trim()].filter(Boolean).join("; ");
+      return extras ? `${r.name} (${r.type}: ${extras})` : `${r.name} (${r.type})`;
+    });
 
     const refRows = await db
       .select({

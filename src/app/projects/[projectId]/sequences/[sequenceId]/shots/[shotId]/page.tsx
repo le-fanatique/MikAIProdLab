@@ -324,6 +324,38 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     cameraPitch: shot.cameraPitch,
   });
 
+  const composerIngredients: string[] = [];
+  if (assignedRows.length > 0) {
+    composerIngredients.push(`Cast: ${assignedRows.map((row) => row.assetName).join(", ")}`);
+  }
+  if (sequence.locationHint) {
+    composerIngredients.push(`Location: ${sequence.locationHint}`);
+  }
+  if (sequence.mood) {
+    composerIngredients.push(`Mood: ${sequence.mood}`);
+  }
+  if (shot.description) {
+    composerIngredients.push(
+      `Description: ${shot.description.slice(0, 60)}${shot.description.length > 60 ? "…" : ""}`
+    );
+  }
+  if (shot.actionPitch) {
+    composerIngredients.push(
+      `Action: ${shot.actionPitch.slice(0, 60)}${shot.actionPitch.length > 60 ? "…" : ""}`
+    );
+  }
+  if (shot.cameraPitch) {
+    composerIngredients.push(
+      `Camera: ${shot.cameraPitch.slice(0, 60)}${shot.cameraPitch.length > 60 ? "…" : ""}`
+    );
+  }
+  if (shot.framing) {
+    composerIngredients.push(`Framing: ${shot.framing}`);
+  }
+  if (shot.cameraMovement) {
+    composerIngredients.push(`Movement: ${shot.cameraMovement}`);
+  }
+
   const hasNarrativeContext = Boolean(
     sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint ||
     shot.description || shot.actionPitch || shot.cameraPitch
@@ -522,6 +554,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         {/* ── Prompt Workspace ──────────────────────────────────────── */}
         <SectionLabel label="Prompt Workspace" />
 
+        <p className="mb-4 text-xs leading-relaxed text-[#4b5158]">
+          Draft from context via Prompt Composer → save as Shot Prompt → optionally build a timed Prompt Timeline for video workflows.
+        </p>
+
         <Card title="Prompt Composer">
           <PromptComposerPanel
             composed={composedShotPrompt}
@@ -531,6 +567,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
             hasExistingShotPrompt={Boolean(shot.shotPrompt?.trim())}
             segmentCount={segmentList.length}
+            ingredients={composerIngredients}
           />
         </Card>
 
@@ -548,13 +585,13 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         </Card>
 
         <Card title="Prompt Timeline">
+          <p className="mb-3 text-xs text-[#4b5158]">
+            Prompt segments are used in video workflows only. For image generation, the Shot Prompt is used directly.
+          </p>
           <PromptSegmentsPanel
             segments={segmentRows}
             addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/segments/new`}
           />
-          <p className="text-xs text-[#4b5158] mt-3">
-            Prompt segments are used in video workflows alongside the Shot Prompt.
-          </p>
           <PromptSegmentsTimelineEditor
             segments={segmentList}
             shotDurationSeconds={shot.durationSeconds}
@@ -564,12 +601,14 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           />
         </Card>
 
-        <Card title="Compiled Prompt">
-          <p className="text-xs text-[#4b5158] mb-3">
-            Timeline compilation — combined prompt text used by video workflow text inputs.
-          </p>
-          <CompiledPromptPanel compiled={compiledPrompt} />
-        </Card>
+        {segmentList.length > 0 && (
+          <Card title="Segment Timeline Preview">
+            <p className="text-xs text-[#4b5158] mb-3">
+              Preview of how your timed segments compile into the timeline text used by video workflows.
+            </p>
+            <CompiledPromptPanel compiled={compiledPrompt} />
+          </Card>
+        )}
 
         {/* ── References ────────────────────────────────────────────── */}
         <SectionLabel label="References" />

@@ -48,6 +48,11 @@ export default function ShotPromptForm({
           >
             Prompt
           </label>
+          {!initialShotPrompt?.trim() && defaultPromptProposal && (
+            <p className="text-[10px] text-[#4b5158]">
+              No saved prompt yet — pre-filled from shot description and camera details.
+            </p>
+          )}
           <textarea
             id="shot-prompt-textarea"
             name="shotPrompt"
