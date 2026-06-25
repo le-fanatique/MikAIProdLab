@@ -71,7 +71,7 @@ export default async function ProjectPage({ params }: Props) {
               href={`/projects/${id}/story`}
               className="rounded border border-[#2c3035] text-[#6e767d] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors"
             >
-              Story
+              Story Workspace
             </Link>
             <Link
               href={`/projects/${id}/assets`}
@@ -219,7 +219,7 @@ export default async function ProjectPage({ params }: Props) {
           className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
         >
           <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-            Project Story
+            Story Workspace
           </span>
           <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
             →

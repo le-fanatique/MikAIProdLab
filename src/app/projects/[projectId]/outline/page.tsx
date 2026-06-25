@@ -16,11 +16,19 @@ import DeleteButton from "@/components/DeleteButton";
 import { deleteSequenceAndReturn } from "@/actions/sequences";
 import { getLLMSettings } from "@/lib/settings";
 
-type Props = { params: Promise<{ projectId: string }> };
+type Props = {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
-export default async function OutlinePage({ params }: Props) {
+export default async function OutlinePage({ params, searchParams }: Props) {
   const { projectId } = await params;
+  const resolvedSP = await searchParams;
   const pid = parseInt(projectId, 10);
+
+  const rawSequencesCreated = resolvedSP["sequencesCreated"];
+  const sequencesCreated =
+    typeof rawSequencesCreated === "string" ? parseInt(rawSequencesCreated, 10) : null;
 
   const [project, llmSettings] = await Promise.all([
     db.select().from(projects).where(eq(projects.id, pid)).then((r) => r[0]),
@@ -62,7 +70,8 @@ export default async function OutlinePage({ params }: Props) {
       />
 
       <PageHeader
-        title={project.name}
+        title="Outline Builder"
+        meta={project.name}
         badge={<StatusBadge status={project.status} />}
         actions={
           <Link
@@ -146,6 +155,11 @@ export default async function OutlinePage({ params }: Props) {
       </div>
 
       {/* ── 5. Sequence Structure ── */}
+      {sequencesCreated != null && Number.isFinite(sequencesCreated) && sequencesCreated > 0 && (
+        <p className="mb-3 text-xs text-[#6b9e72]">
+          Created {sequencesCreated} sequence{sequencesCreated !== 1 ? "s" : ""}.
+        </p>
+      )}
       <Card title="Sequence Structure" className="mb-6">
         {seqs.length === 0 ? (
           <EmptyState

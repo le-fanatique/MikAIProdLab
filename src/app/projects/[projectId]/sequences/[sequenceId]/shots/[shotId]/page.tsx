@@ -627,12 +627,18 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
       </div>
 
-      <div className="mt-8 pt-4 border-t border-[#232629]">
+      <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-4">
         <Link
           href={`/projects/${pid}/sequences/${sid}`}
           className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
         >
           ← Back to {sequence.title}
+        </Link>
+        <Link
+          href={`/projects/${pid}/story`}
+          className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors"
+        >
+          ↑ Story Workspace
         </Link>
       </div>
       </div>

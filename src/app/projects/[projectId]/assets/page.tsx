@@ -193,7 +193,7 @@ export default async function AssetsPage({ params, searchParams }: Props) {
       )}
 
       {/* ── LLM Assist ───────────────────────────────────────────────── */}
-      <SectionLabel label="LLM Assist" />
+      <SectionLabel label="Extract Asset Drafts" />
       <Card title="Extract Asset Drafts" className="mb-6">
         <AssetsLLMExtractPanel
           projectId={pid}
@@ -204,12 +204,18 @@ export default async function AssetsPage({ params, searchParams }: Props) {
         />
       </Card>
 
-      <div className="mt-8 pt-4 border-t border-[#232629]">
+      <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-4">
         <Link
           href={`/projects/${pid}`}
           className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
         >
           ← Back to {project.name}
+        </Link>
+        <Link
+          href={`/projects/${pid}/story`}
+          className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors"
+        >
+          ↑ Story Workspace
         </Link>
       </div>
     </div>

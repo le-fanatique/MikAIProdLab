@@ -124,6 +124,10 @@ export default async function StoryPage({ params, searchParams }: Props) {
   const shotTotal = allShots.length;
   const castShotCount = castedShotIds.size;
   const storyReturnTo = `/projects/${pid}/story`;
+  const uncastedSeqs = seqs.filter((seq) => {
+    const seqShots = shotsBySeq.get(seq.id) ?? [];
+    return seqShots.some((shot) => !castedShotIds.has(shot.id));
+  });
   const existingAssetNames = assetRows.map((a) => a.name);
 
   return (
@@ -465,9 +469,24 @@ export default async function StoryPage({ params, searchParams }: Props) {
                   cast asset.
                 </p>
                 {castShotCount < shotTotal && (
-                  <p className="text-xs text-[#4b5158]">
-                    Open individual sequences to run Casting Suggestions.
-                  </p>
+                  <>
+                    <p className="text-xs text-[#4b5158]">
+                      Open individual sequences to run Casting Suggestions.
+                    </p>
+                    {uncastedSeqs.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1">
+                        {uncastedSeqs.map((seq) => (
+                          <Link
+                            key={seq.id}
+                            href={`/projects/${pid}/sequences/${seq.id}`}
+                            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                          >
+                            {seq.title} →
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <span
