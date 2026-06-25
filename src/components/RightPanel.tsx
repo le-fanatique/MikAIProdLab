@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SidebarLLMChat from "@/components/SidebarLLMChat";
+import ResizableRightPanelShell from "@/components/ResizableRightPanelShell";
 
 type SidebarShot = { id: number; shotCode: string | null; title: string; orderIndex: number };
 type SidebarSequence = { id: number; title: string; orderIndex: number; shots: SidebarShot[] };
@@ -12,12 +13,12 @@ type Props = { tree: SidebarProject[] };
 
 function RightPanelShell({ children }: { children: React.ReactNode }) {
   return (
-    <aside className="w-[280px] shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4">
+    <ResizableRightPanelShell>
       <div className="min-h-full flex flex-col">
         <div className="flex-1">{children}</div>
         <SidebarLLMChat />
       </div>
-    </aside>
+    </ResizableRightPanelShell>
   );
 }
 
