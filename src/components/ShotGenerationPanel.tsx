@@ -27,6 +27,12 @@ import {
   mapWorkflowInputs,
 } from "@/lib/comfy/mapWorkflowInputs";
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
+import {
+  detectDynamicBatchInput,
+  traceUpstreamTemplateChain,
+  expandDynamicBatchWorkflow,
+  type DynamicBatchExpansionImage,
+} from "@/lib/comfy/expandDynamicBatch";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import {
@@ -37,6 +43,9 @@ import {
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { type FillSource } from "@/lib/textInputKind";
+import DynamicBatchImageList from "@/components/DynamicBatchImageList";
+import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
+import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 
 type Props = {
   projectId: number;
@@ -254,25 +263,68 @@ export default async function ShotGenerationPanel({
       ? mapWorkflowInputs(parsed.inputs, compiledShotPrompt.text, availableImages, textOverrideByNodeId)
       : [];
 
-  const payloadPreview =
-    parsed !== null
-      ? patchWorkflowPayload(workflow.workflowJson, mappings, {
-          selectedImageByNodeId,
-          scalarOverrideByNodeId: scalarValueByNodeId,
-        })
-      : null;
-
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
+
+  // --- Dynamic Batch Input detection (before building classic image UI) ---
+  const batchDetection = parsed !== null ? detectDynamicBatchInput(workflow.workflowJson) : null;
+  let batchPreview: BatchExpansionPreview | null = null;
+  let batchError: { kind: "detection"; message: string } | null = null;
+  let batchTemplateChainNodeIds: string[] = [];
+
+  if (batchDetection?.ok) {
+    const trace = traceUpstreamTemplateChain(JSON.parse(workflow.workflowJson), batchDetection.info);
+    if (trace.ok) {
+      batchTemplateChainNodeIds = trace.templateChainNodeIds;
+      const parsedWorkflowJson = JSON.parse(workflow.workflowJson) as Record<string, { _meta?: { title?: string }; class_type?: string }>;
+      const titles = batchTemplateChainNodeIds.map((nid) => {
+        const node = parsedWorkflowJson[nid];
+        if (!node) return nid;
+        const t = node._meta?.title ?? node.class_type ?? nid;
+        return t.replace("(Input)", "").replace("(Dynamic Batch Input)", "").trim();
+      });
+      batchPreview = {
+        batchTitle: batchDetection.info.title.replace("(Dynamic Batch Input)", "").trim(),
+        templateChainTitles: titles,
+        selectedImageCount: 0,
+        clonedNodeCount: 0,
+      };
+    } else {
+      batchError = { kind: "detection", message: trace.error };
+    }
+  } else if (batchDetection && !batchDetection.ok && batchDetection.error) {
+    batchError = { kind: "detection", message: batchDetection.error };
+  }
+
+  // Parse selected batch images from searchParams
+  let batchSelectedIds: string[] = [];
+  if (batchDetection?.ok) {
+    const raw = currentSearchParams[`batchImages_${batchDetection.info.nodeId}`] ?? "";
+    batchSelectedIds = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (batchPreview) {
+      batchPreview.selectedImageCount = batchSelectedIds.length;
+      batchPreview.clonedNodeCount = batchSelectedIds.length * batchPreview.templateChainTitles.length;
+    }
+  }
+
+  // When Dynamic Batch is active, template-chain image inputs are replaced by the batch list.
+  // Exclude them from classic UI display and from preview warnings.
+  const displayImageMappings = batchDetection?.ok
+    ? imageMappings.filter((m) => !batchTemplateChainNodeIds.includes(m.input.nodeId))
+    : imageMappings;
+
+  const previewMappings = batchDetection?.ok
+    ? mappings.filter((m) => !batchTemplateChainNodeIds.includes(m.input.nodeId))
+    : mappings;
 
   // Build panelImageNodes for the client image preview component
   const _labelCount: Record<string, number> = {};
-  for (const m of imageMappings) {
+  for (const m of displayImageMappings) {
     const l = m.input.label || m.input.title || "Load Image";
     _labelCount[l] = (_labelCount[l] ?? 0) + 1;
   }
   const _labelIndex: Record<string, number> = {};
 
-  const panelImageNodes: ShotPanelImageNode[] = imageMappings.map((mapping) => {
+  const panelImageNodes: ShotPanelImageNode[] = displayImageMappings.map((mapping) => {
     const nodeId = mapping.input.nodeId;
     const rawLabel = mapping.input.label || mapping.input.title || "Load Image";
     const isDup = _labelCount[rawLabel] > 1;
@@ -308,6 +360,63 @@ export default async function ShotGenerationPanel({
     };
   });
 
+  // --- Build the runtime preview JSON ---
+  // Order: expandDynamicBatchWorkflow first, then patchWorkflowPayload on the expanded JSON.
+  // This mirrors the server-side pipeline exactly so the preview matches what's sent to ComfyUI.
+  let payloadPreview: import("@/lib/comfy/patchWorkflowPayload").WorkflowPayloadPatchResult | null = null;
+
+  if (parsed !== null) {
+    let previewJsonSource = workflow.workflowJson;
+
+    if (batchDetection?.ok && batchSelectedIds.length > 0) {
+      // Resolve batch image IDs to DynamicBatchExpansionImage[]
+      const resolvedBatchImages: DynamicBatchExpansionImage[] = [];
+      for (const id of batchSelectedIds) {
+        const found = availableImages.find((img) => img.id === id);
+        if (found) {
+          resolvedBatchImages.push({ id: found.id, imagePath: found.imagePath });
+        }
+      }
+
+      // Expand workflow with selected batch images
+      const expansion = expandDynamicBatchWorkflow({
+        workflowJson: workflow.workflowJson,
+        selectedImages: resolvedBatchImages,
+      });
+
+      if (expansion.ok) {
+        previewJsonSource = expansion.workflowJson;
+      }
+    }
+
+    payloadPreview = patchWorkflowPayload(previewJsonSource, previewMappings, {
+      selectedImageByNodeId,
+      scalarOverrideByNodeId: scalarValueByNodeId,
+    });
+  }
+
+  // Build available images as BatchImageGroups for DynamicBatchImageList
+  const batchImageGroups: BatchImageGroup[] = [];
+  if (batchDetection?.ok) {
+    const shotItems = availableImages.filter((img) => img.source === "shot").map((img) => ({
+      id: img.id,
+      imagePath: img.imagePath,
+      label: img.label,
+      source: img.source,
+      assetName: img.assetName,
+    }));
+    const assetItems = availableImages.filter((img) => img.source === "asset").map((img) => ({
+      id: img.id,
+      imagePath: img.imagePath,
+      label: img.assetName ? `${img.assetName}${img.role ? " · " + img.role : ""}` : (img.role ?? img.label),
+      source: img.source,
+      assetName: img.assetName,
+    }));
+    if (shotItems.length > 0) batchImageGroups.push({ groupLabel: "Shot Sources", items: shotItems });
+    if (assetItems.length > 0) batchImageGroups.push({ groupLabel: "Cast Sources", items: assetItems });
+  }
+
+  // Build selectionParams — also include batchImages_* to persist selection after Generate
   const selectionParams = new URLSearchParams({ generation: "open", workflowId: String(wid) });
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
     selectionParams.set(`imageNode_${nodeId}`, imageId);
@@ -317,6 +426,9 @@ export default async function ShotGenerationPanel({
   }
   for (const [nodeId, value] of Object.entries(textOverrideByNodeId)) {
     selectionParams.set(`textNode_${nodeId}`, value);
+  }
+  if (batchDetection?.ok && batchSelectedIds.length > 0) {
+    selectionParams.set(`batchImages_${batchDetection.info.nodeId}`, batchSelectedIds.join(","));
   }
   const returnTo = `${basePath}?${selectionParams.toString()}`;
 
@@ -425,7 +537,7 @@ export default async function ShotGenerationPanel({
               />
             </div>
 
-            {imageMappings.length > 0 && (
+            {displayImageMappings.length > 0 && (
               <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
                   Image Sources
@@ -440,10 +552,48 @@ export default async function ShotGenerationPanel({
                 />
               </div>
             )}
+
+            {/* Dynamic Image Batch (WFBUILD.1A) */}
+            {batchDetection?.ok && (
+              <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
+                <DynamicBatchImageList
+                  batchNodeId={batchDetection.info.nodeId}
+                  preview={batchPreview}
+                  error={batchError}
+                  availableImages={batchImageGroups}
+                  selectedImageIds={batchSelectedIds}
+                  passthroughParams={currentSearchParams}
+                  basePath={basePath}
+                  contextType="shot"
+                  projectId={pid}
+                  shotId={shid}
+                  sequenceId={sid}
+                />
+              </div>
+            )}
+
+            {/* Batch detection error (non-fatal, but informative) */}
+            {batchError && !batchDetection?.ok && (
+              <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
+                <DynamicBatchImageList
+                  batchNodeId=""
+                  preview={null}
+                  error={batchError}
+                  availableImages={[]}
+                  selectedImageIds={[]}
+                  passthroughParams={currentSearchParams}
+                  basePath={basePath}
+                  contextType="shot"
+                  projectId={pid}
+                  shotId={shid}
+                  sequenceId={sid}
+                />
+              </div>
+            )}
           </>
         )}
 
-        {/* Preview */}
+        {/* Preview — shows the final expanded+patched JSON */}
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
@@ -483,6 +633,12 @@ export default async function ShotGenerationPanel({
                   value={value}
                 />
               ))}
+              {/* DynamicBatchFormSync replaces the static hidden input — it reads
+                  the current URL searchParams at submit time, keeping in sync with
+                  client-side DynamicBatchImageList updates via pushState(). */}
+              {batchDetection?.ok && (
+                <DynamicBatchFormSync batchNodeId={batchDetection.info.nodeId} />
+              )}
               <WorkflowGenerateActions
                 initialJsonText={payloadPreview.patchedJsonText}
                 buttonLabel={workflow.kind === "video" ? "Generate Video" : "Generate Keyframe"}

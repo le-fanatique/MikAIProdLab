@@ -16,9 +16,18 @@ import {
   type RuntimeImageOption,
 } from "@/lib/comfy/mapWorkflowInputs";
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
+import {
+  detectDynamicBatchInput,
+  traceUpstreamTemplateChain,
+  expandDynamicBatchWorkflow,
+  type DynamicBatchExpansionImage,
+} from "@/lib/comfy/expandDynamicBatch";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { type FillSource } from "@/lib/textInputKind";
+import DynamicBatchImageList from "@/components/DynamicBatchImageList";
+import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
+import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 
 type Props = {
   projectId: number;
@@ -102,25 +111,67 @@ export default async function AssetGenerationPanel({
     parsed !== null
       ? mapWorkflowInputs(parsed.inputs, assetPromptText, availableImages, textOverrideByNodeId)
       : [];
-  const payloadPreview =
-    parsed !== null
-      ? patchWorkflowPayload(workflow.workflowJson, mappings, {
-          selectedImageByNodeId,
-          scalarOverrideByNodeId: scalarValueByNodeId,
-        })
-      : null;
 
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
 
+  // --- Dynamic Batch Input detection (before building classic image UI) ---
+  const batchDetection = parsed !== null ? detectDynamicBatchInput(workflow.workflowJson) : null;
+  let batchPreview: BatchExpansionPreview | null = null;
+  let batchError: { kind: "detection"; message: string } | null = null;
+  let batchTemplateChainNodeIds: string[] = [];
+
+  if (batchDetection?.ok) {
+    const trace = traceUpstreamTemplateChain(JSON.parse(workflow.workflowJson), batchDetection.info);
+    if (trace.ok) {
+      batchTemplateChainNodeIds = trace.templateChainNodeIds;
+      const parsedWorkflowJson = JSON.parse(workflow.workflowJson) as Record<string, { _meta?: { title?: string }; class_type?: string }>;
+      const titles = batchTemplateChainNodeIds.map((nid) => {
+        const node = parsedWorkflowJson[nid];
+        if (!node) return nid;
+        const t = node._meta?.title ?? node.class_type ?? nid;
+        return t.replace("(Input)", "").replace("(Dynamic Batch Input)", "").trim();
+      });
+      batchPreview = {
+        batchTitle: batchDetection.info.title.replace("(Dynamic Batch Input)", "").trim(),
+        templateChainTitles: titles,
+        selectedImageCount: 0,
+        clonedNodeCount: 0,
+      };
+    } else {
+      batchError = { kind: "detection", message: trace.error };
+    }
+  } else if (batchDetection && !batchDetection.ok && batchDetection.error) {
+    batchError = { kind: "detection", message: batchDetection.error };
+  }
+
+  // Parse selected batch images from searchParams
+  let batchSelectedIds: string[] = [];
+  if (batchDetection?.ok) {
+    const raw = currentSearchParams[`batchImages_${batchDetection.info.nodeId}`] ?? "";
+    batchSelectedIds = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (batchPreview) {
+      batchPreview.selectedImageCount = batchSelectedIds.length;
+      batchPreview.clonedNodeCount = batchSelectedIds.length * batchPreview.templateChainTitles.length;
+    }
+  }
+
+  const displayImageMappings = batchDetection?.ok
+    ? imageMappings.filter((m) => !batchTemplateChainNodeIds.includes(m.input.nodeId))
+    : imageMappings;
+
+  const previewMappings = batchDetection?.ok
+    ? mappings.filter((m) => !batchTemplateChainNodeIds.includes(m.input.nodeId))
+    : mappings;
+
   // Build panelImageNodes for the client image preview component
   const _labelCount: Record<string, number> = {};
-  for (const m of imageMappings) {
+  for (const m of displayImageMappings) {
     const l = m.input.label || m.input.title || "Load Image";
     _labelCount[l] = (_labelCount[l] ?? 0) + 1;
   }
   const _labelIndex: Record<string, number> = {};
 
-  const panelImageNodes: AssetPanelImageNode[] = imageMappings.map((mapping) => {
+  const panelImageNodes: AssetPanelImageNode[] = displayImageMappings.map((mapping) => {
     const nodeId = mapping.input.nodeId;
     const rawLabel = mapping.input.label || mapping.input.title || "Load Image";
     const isDup = _labelCount[rawLabel] > 1;
@@ -146,6 +197,51 @@ export default async function AssetGenerationPanel({
     };
   });
 
+  // --- Build the runtime preview JSON ---
+  // Order: expandDynamicBatchWorkflow first, then patchWorkflowPayload on the expanded JSON.
+  let payloadPreview: import("@/lib/comfy/patchWorkflowPayload").WorkflowPayloadPatchResult | null = null;
+
+  if (parsed !== null) {
+    let previewJsonSource = workflow.workflowJson;
+
+    if (batchDetection?.ok && batchSelectedIds.length > 0) {
+      const resolvedBatchImages: DynamicBatchExpansionImage[] = [];
+      for (const id of batchSelectedIds) {
+        const found = availableImages.find((img) => img.id === id);
+        if (found) {
+          resolvedBatchImages.push({ id: found.id, imagePath: found.imagePath });
+        }
+      }
+
+      const expansion = expandDynamicBatchWorkflow({
+        workflowJson: workflow.workflowJson,
+        selectedImages: resolvedBatchImages,
+      });
+
+      if (expansion.ok) {
+        previewJsonSource = expansion.workflowJson;
+      }
+    }
+
+    payloadPreview = patchWorkflowPayload(previewJsonSource, previewMappings, {
+      selectedImageByNodeId,
+      scalarOverrideByNodeId: scalarValueByNodeId,
+    });
+  }
+
+  // Build available images as BatchImageGroups
+  const batchImageGroups: BatchImageGroup[] = [];
+  if (batchDetection?.ok) {
+    const items = availableImages.map((img) => ({
+      id: img.id,
+      imagePath: img.imagePath,
+      label: img.assetName ? `${img.assetName}${img.role ? " · " + img.role : ""}` : (img.role ?? img.label),
+      source: img.source,
+      assetName: img.assetName,
+    }));
+    if (items.length > 0) batchImageGroups.push({ groupLabel: "Asset Sources", items });
+  }
+
   const selectionParams = new URLSearchParams({ generation: "open", workflowId: String(wid) });
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
     selectionParams.set(`imageNode_${nodeId}`, imageId);
@@ -156,16 +252,17 @@ export default async function AssetGenerationPanel({
   for (const [nodeId, value] of Object.entries(textOverrideByNodeId)) {
     selectionParams.set(`textNode_${nodeId}`, value);
   }
+  if (batchDetection?.ok && batchSelectedIds.length > 0) {
+    selectionParams.set(`batchImages_${batchDetection.info.nodeId}`, batchSelectedIds.join(","));
+  }
   const returnTo = `${basePath}?${selectionParams.toString()}`;
 
-  // editDetailsHref preserves generation panel + scrolls to asset details section
   const editDetailsParams = new URLSearchParams(selectionParams);
   if (activeJobId !== null) {
     editDetailsParams.set("jobId", String(activeJobId));
   }
   const editDetailsHref = `/projects/${pid}/assets/${aid}?${editDetailsParams.toString()}#asset-details`;
 
-  // approveReturnTo keeps the panel open with the current jobId visible
   const approveParams = new URLSearchParams(selectionParams);
   if (activeJobId !== null) {
     approveParams.set("jobId", String(activeJobId));
@@ -235,7 +332,6 @@ export default async function AssetGenerationPanel({
       {/* Body */}
       <div className="px-5 py-4 flex flex-col gap-5">
 
-        {/* Asset Prompt — compact link */}
         {assetPromptText ? (
           <p className="text-xs text-[#4b5158]">
             Asset prompt set.{" "}
@@ -260,7 +356,6 @@ export default async function AssetGenerationPanel({
           </div>
         )}
 
-        {/* Suggested Inputs */}
         {parsed === null ? (
           <p className="text-sm text-[#cf7b6b]">Workflow JSON could not be parsed.</p>
         ) : (
@@ -279,7 +374,7 @@ export default async function AssetGenerationPanel({
               />
             </div>
 
-            {imageMappings.length > 0 && (
+            {displayImageMappings.length > 0 && (
               <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
                   Image Sources
@@ -293,10 +388,43 @@ export default async function AssetGenerationPanel({
                 />
               </div>
             )}
+
+            {batchDetection?.ok && (
+              <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
+                <DynamicBatchImageList
+                  batchNodeId={batchDetection.info.nodeId}
+                  preview={batchPreview}
+                  error={batchError}
+                  availableImages={batchImageGroups}
+                  selectedImageIds={batchSelectedIds}
+                  passthroughParams={currentSearchParams}
+                  basePath={basePath}
+                  contextType="asset"
+                  projectId={pid}
+                  assetId={aid}
+                />
+              </div>
+            )}
+
+            {batchError && !batchDetection?.ok && (
+              <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
+                <DynamicBatchImageList
+                  batchNodeId=""
+                  preview={null}
+                  error={batchError}
+                  availableImages={[]}
+                  selectedImageIds={[]}
+                  passthroughParams={currentSearchParams}
+                  basePath={basePath}
+                  contextType="asset"
+                  projectId={pid}
+                  assetId={aid}
+                />
+              </div>
+            )}
           </>
         )}
 
-        {/* Preview */}
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
@@ -306,7 +434,6 @@ export default async function AssetGenerationPanel({
           </div>
         )}
 
-        {/* Generate */}
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4">
             {generationError && (
@@ -325,6 +452,9 @@ export default async function AssetGenerationPanel({
               {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
                 <input key={`scalar-${nodeId}`} type="hidden" name={`scalarNode_${nodeId}`} value={value} />
               ))}
+              {batchDetection?.ok && (
+                <DynamicBatchFormSync batchNodeId={batchDetection.info.nodeId} />
+              )}
               <WorkflowGenerateActions
                 initialJsonText={payloadPreview.patchedJsonText}
                 buttonLabel="Generate Image"
@@ -333,7 +463,6 @@ export default async function AssetGenerationPanel({
           </div>
         )}
 
-        {/* Output */}
         {activeJobId !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">Output</p>

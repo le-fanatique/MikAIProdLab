@@ -30,6 +30,7 @@ import {
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
+import { expandDynamicBatchWorkflow, type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,6 +127,7 @@ export async function runWorkflowGeneration(args: {
   selectedImageByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
   patchedJsonOverride?: Record<string, unknown>;
+  batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, sequenceId, shotId, workflowId } = args;
 
@@ -253,7 +255,58 @@ export async function runWorkflowGeneration(args: {
     availableImages
   );
 
-  const preview = patchWorkflowPayload(workflow.workflowJson, mappings, {
+  // --- 5a. Dynamic Batch Expansion (WFBUILD.1A) ---
+  // Run before patchWorkflowPayload so template chain clones are already in place.
+  let expandedWorkflowJson = workflow.workflowJson;
+
+  // Collect batch images: read from args.batchImagesByNodeId
+  const batchEntry = args.batchImagesByNodeId
+    ? Object.entries(args.batchImagesByNodeId)[0]
+    : undefined;
+
+  // Resolve placeholder image ids → actual imagePaths using availableImages
+  const resolvedBatchImages: DynamicBatchExpansionImage[] = [];
+  if (batchEntry) {
+    for (const placeholder of batchEntry[1]) {
+      const found = availableImages.find((img) => img.id === placeholder.id);
+      if (!found) {
+        return {
+          ok: false,
+          error: `Selected batch image "${placeholder.id}" not found in available images.`,
+        };
+      }
+      resolvedBatchImages.push({ id: found.id, imagePath: found.imagePath });
+    }
+  }
+
+  const expansion = expandDynamicBatchWorkflow({
+    workflowJson: workflow.workflowJson,
+    selectedImages: resolvedBatchImages,
+  });
+
+  if (!expansion.ok) {
+    // null error = no batch node → proceed normally
+    if (expansion.error !== undefined) {
+      // DynamicBatchExpansionResult with ok:false always has error: string
+      return { ok: false, error: (expansion as { ok: false; error: string }).error };
+    }
+  } else {
+    expandedWorkflowJson = expansion.workflowJson;
+  }
+
+  // Filter out template chain image mappings to avoid double-patching
+  // (clones already have their LoadImage patched during expansion)
+  const filteredMappings = expansion.ok && expansion.ok === true
+    ? mappings.filter((m) => {
+        if (m.mappingKind !== "image") return true;
+        // If the image mapping's nodeId is in the template chain, skip it
+        // (the original template chain LoadImage stays untouched)
+        const expanded = expansion as Extract<typeof expansion, { ok: true }>;
+        return !expanded.templateChainNodeIds.includes(m.input.nodeId);
+      })
+    : mappings;
+
+  const preview = patchWorkflowPayload(expandedWorkflowJson, filteredMappings, {
     selectedImageByNodeId: args.selectedImageByNodeId,
     scalarOverrideByNodeId: args.scalarOverrideByNodeId,
   });
@@ -357,6 +410,23 @@ export async function runWorkflowGenerationFromForm(
     scalarOverrideByNodeId[nodeId] = value;
   }
 
+  // --- Collect dynamic batch images (WFBUILD.1A) ---
+  const batchImagesByNodeId: Record<string, DynamicBatchExpansionImage[]> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("batchImages_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("batchImages_".length).trim();
+    if (!nodeId) continue;
+    const raw = value.trim();
+    if (!raw) continue;
+    // Format: "id1,id2,id3" — store as placeholder; resolution happens server-side
+    // in runWorkflowGeneration where availableImages is known.
+    batchImagesByNodeId[nodeId] = raw.split(",").map((id) => ({
+      id: id.trim(),
+      imagePath: "", // placeholder — resolved in runWorkflowGeneration
+    }));
+  }
+
   const rawPatchedJsonOverride = (formData.get("patchedJsonOverride") as string | null)?.trim() || null;
   let patchedJsonOverride: Record<string, unknown> | undefined;
   if (rawPatchedJsonOverride) {
@@ -380,6 +450,7 @@ export async function runWorkflowGenerationFromForm(
     selectedImageByNodeId,
     scalarOverrideByNodeId,
     patchedJsonOverride,
+    batchImagesByNodeId,
   });
 
   if (result.ok) {
@@ -429,6 +500,7 @@ export async function runAssetGeneration(input: {
   selectedImageByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
   patchedJsonOverride?: Record<string, unknown>;
+  batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
 }): Promise<{ ok: true; jobId: number } | { ok: false; error: string }> {
   const { projectId, assetId, workflowId } = input;
 
@@ -499,7 +571,49 @@ export async function runAssetGeneration(input: {
   // --- 9. Map inputs + patch payload ---
   const mappings = mapWorkflowInputs(parsed.inputs, assetPromptText, availableImages);
 
-  const preview = patchWorkflowPayload(workflow.workflowJson, mappings, {
+  // --- 9a. Dynamic Batch Expansion (WFBUILD.1A) ---
+  let expandedWorkflowJson = workflow.workflowJson;
+
+  const assetBatchEntry = input.batchImagesByNodeId
+    ? Object.entries(input.batchImagesByNodeId)[0]
+    : undefined;
+
+  const assetResolvedBatchImages: DynamicBatchExpansionImage[] = [];
+  if (assetBatchEntry) {
+    for (const placeholder of assetBatchEntry[1]) {
+      const found = availableImages.find((img) => img.id === placeholder.id);
+      if (!found) {
+        return {
+          ok: false,
+          error: `Selected batch image "${placeholder.id}" not found in available images.`,
+        };
+      }
+      assetResolvedBatchImages.push({ id: found.id, imagePath: found.imagePath });
+    }
+  }
+
+  const assetExpansion = expandDynamicBatchWorkflow({
+    workflowJson: workflow.workflowJson,
+    selectedImages: assetResolvedBatchImages,
+  });
+
+  if (!assetExpansion.ok) {
+    if (assetExpansion.error !== undefined) {
+      return { ok: false, error: (assetExpansion as { ok: false; error: string }).error };
+    }
+  } else {
+    expandedWorkflowJson = assetExpansion.workflowJson;
+  }
+
+  const assetFilteredMappings = assetExpansion.ok && assetExpansion.ok === true
+    ? mappings.filter((m) => {
+        if (m.mappingKind !== "image") return true;
+        const expanded = assetExpansion as Extract<typeof assetExpansion, { ok: true }>;
+        return !expanded.templateChainNodeIds.includes(m.input.nodeId);
+      })
+    : mappings;
+
+  const preview = patchWorkflowPayload(expandedWorkflowJson, assetFilteredMappings, {
     selectedImageByNodeId: input.selectedImageByNodeId,
     scalarOverrideByNodeId: input.scalarOverrideByNodeId,
   });
@@ -596,6 +710,21 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     scalarOverrideByNodeId[nodeId] = value;
   }
 
+  // --- Collect dynamic batch images (WFBUILD.1A) ---
+  const assetBatchImagesByNodeId: Record<string, DynamicBatchExpansionImage[]> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("batchImages_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("batchImages_".length).trim();
+    if (!nodeId) continue;
+    const raw = value.trim();
+    if (!raw) continue;
+    assetBatchImagesByNodeId[nodeId] = raw.split(",").map((id) => ({
+      id: id.trim(),
+      imagePath: "",
+    }));
+  }
+
   const rawPatchedJsonOverride = (formData.get("patchedJsonOverride") as string | null)?.trim() || null;
   let patchedJsonOverride: Record<string, unknown> | undefined;
   if (rawPatchedJsonOverride) {
@@ -619,6 +748,7 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     selectedImageByNodeId,
     scalarOverrideByNodeId,
     patchedJsonOverride,
+    batchImagesByNodeId: assetBatchImagesByNodeId,
   });
 
   if (result.ok) {
