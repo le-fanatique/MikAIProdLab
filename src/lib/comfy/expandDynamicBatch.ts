@@ -205,8 +205,8 @@ export function detectDynamicBatchInput(
     return {
       ok: false,
       error:
-        "Multiple Dynamic Batch Inputs are not supported yet. " +
-        "Only one (Dynamic Batch Input) node is allowed per workflow in V1.",
+        "Only one Dynamic Batch Input is supported in V1. " +
+        "Remove extra (Dynamic Batch Input) markers from this workflow.",
     };
   }
 
@@ -242,7 +242,7 @@ export function traceUpstreamTemplateChain(
     if (visited.has(currentId)) {
       return {
         ok: false,
-        error: "Cycle detected in template chain upstream of Dynamic Batch Input.",
+        error: "Cycle detected in the template chain leading to the batch node. Check for loops.",
       };
     }
     visited.add(currentId);
@@ -276,9 +276,8 @@ export function traceUpstreamTemplateChain(
       return {
         ok: false,
         error:
-          `No image source found upstream of Dynamic Batch Input. ` +
-          `Node ${currentId} (${ct}) is not an image source and has no connected inputs. ` +
-          "The chain must start from a LoadImage node.",
+          `Dynamic Batch setup is invalid. The batch node must receive a linear image chain ` +
+          `starting from a Load Image node. Node ${currentId} (${ct}) has no connected inputs.`,
       };
     }
 
@@ -286,8 +285,8 @@ export function traceUpstreamTemplateChain(
       return {
         ok: false,
         error:
-          "Branching detected in template chain. V1 supports only linear chains " +
-          `(one input → one output per node). Node ${currentId} has ${connectedEntries.length} connected inputs.`,
+          "Dynamic Batch supports one image source in V1. " +
+          `Node ${currentId} has ${connectedEntries.length} connected inputs — use a single linear chain.`,
       };
     }
 
@@ -365,7 +364,7 @@ export function expandDynamicBatchWorkflow(params: {
   if (selectedImages.length === 0) {
     return {
       ok: false,
-      error: "Select at least one reference image for the Dynamic Batch Input.",
+      error: "Add at least one image to Dynamic Image Batch before generating.",
     };
   }
 

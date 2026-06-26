@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { buildBatchKey } from "@/components/DynamicBatchImageList";
 
 /**
  * DynamicBatchFormSync
@@ -14,22 +15,29 @@ import { useEffect, useRef } from "react";
  * value from sessionStorage (written synchronously by DynamicBatchImageList
  * before router.replace finishes), guaranteeing the server action always
  * receives the current selection on the first click.
+ *
+ * FIX (WFBUILD.1B.B): sessionStorage key is now workflow-keyed to avoid
+ * collisions when two different workflows share the same nodeId.
  */
 
 type Props = {
   batchNodeId: string;
+  workflowId: string;
 };
 
-export default function DynamicBatchFormSync({ batchNodeId }: Props) {
+export default function DynamicBatchFormSync({ batchNodeId, workflowId }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const key = `batchImages_${batchNodeId}`;
+    // T2 — workflow-keyed sessionStorage
+    const ssKey = buildBatchKey(workflowId, batchNodeId);
+    // URL param key stays the same (unchanged server contract)
+    const urlKey = `batchImages_${batchNodeId}`;
 
     function syncFromUrl() {
       if (!inputRef.current) return;
       const params = new URLSearchParams(window.location.search);
-      const value = params.get(key) ?? "";
+      const value = params.get(urlKey) ?? "";
       inputRef.current.value = value;
     }
 
@@ -54,21 +62,20 @@ export default function DynamicBatchFormSync({ batchNodeId }: Props) {
 
     /**
      * On submit, read from sessionStorage first (synchronous, set immediately
-     * by DynamicBatchImageList.pushState), then fall back to URL searchParams.
-     * This eliminates the race where router.replace() hasn't updated the URL
-     * by the time the form serializes its data.
+     * by DynamicBatchImageList.pushState using the workflow-keyed key), then
+     * fall back to URL searchParams.
      */
     function onFormSubmit(_event: Event) {
       let value = "";
       try {
-        value = sessionStorage.getItem(key) ?? "";
+        value = sessionStorage.getItem(ssKey) ?? "";
       } catch {
         // sessionStorage unavailable — fall through to URL.
       }
       // Fallback: if sessionStorage is empty, try URL
       if (!value) {
         const params = new URLSearchParams(window.location.search);
-        value = params.get(key) ?? "";
+        value = params.get(urlKey) ?? "";
       }
       const el = inputRef.current;
       if (el && el.value !== value) {
@@ -90,7 +97,7 @@ export default function DynamicBatchFormSync({ batchNodeId }: Props) {
         form.removeEventListener("submit", onFormSubmit);
       }
     };
-  }, [batchNodeId]);
+  }, [batchNodeId, workflowId]);
 
   return (
     <input

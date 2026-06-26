@@ -30,6 +30,14 @@ export type BatchExpansionPreview = {
   clonedNodeCount: number;
 };
 
+// ---------------------------------------------------------------------------
+// Shared key helper (T2 — workflow-keyed sessionStorage)
+// ---------------------------------------------------------------------------
+
+export function buildBatchKey(workflowId: string, batchNodeId: string): string {
+  return `mikai.dynamicBatchImages.${workflowId}.${batchNodeId}`;
+}
+
 export type BatchError =
   | { kind: "detection"; message: string }
   | { kind: "none" };
@@ -45,6 +53,7 @@ type Props = {
   /** "shot" or "asset" — determines which panel upload server action to use */
   contextType: "shot" | "asset";
   projectId: number;
+  workflowId: string;
   shotId?: number;
   sequenceId?: number;
   assetId?: number;
@@ -77,6 +86,7 @@ export default function DynamicBatchImageList({
   basePath,
   contextType,
   projectId,
+  workflowId,
   shotId,
   sequenceId,
   assetId,
@@ -89,33 +99,45 @@ export default function DynamicBatchImageList({
   // Combine all available images into flat picker items
   const allPickerItems = availableImages.flatMap((g) => g.items);
 
+  // T2 — workflow-keyed sessionStorage
+  const ssKey = buildBatchKey(workflowId, batchNodeId);
+
   // Seed sessionStorage from initial URL params on mount so the hidden input
   // can read a fresh value on the very first Generate click after page load.
   useEffect(() => {
-    const key = buildBatchParamKey(batchNodeId);
     try {
-      if (sessionStorage.getItem(key) === null) {
-        sessionStorage.setItem(key, selectedImageIds.length > 0 ? selectedImageIds.join(",") : "");
+      if (sessionStorage.getItem(ssKey) === null) {
+        sessionStorage.setItem(ssKey, selectedImageIds.length > 0 ? selectedImageIds.join(",") : "");
       }
     } catch { /* sessionStorage unavailable */ }
-  }, [batchNodeId]);
+  }, [ssKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pushState(newIds: string[]) {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(passthroughParams)) {
       if (!k.startsWith("batchImages_") && k !== "jobId") params.set(k, v);
     }
-    const key = buildBatchParamKey(batchNodeId);
-    if (newIds.length > 0) params.set(key, newIds.join(","));
+    const urlKey = buildBatchParamKey(batchNodeId);
+    if (newIds.length > 0) params.set(urlKey, newIds.join(","));
     router.replace(`${basePath}?${params.toString()}`, { scroll: false });
 
     // Sync sessionStorage immediately so DynamicBatchFormSync can read it
     // at submit time before router.replace has updated window.location.search.
     try {
-      sessionStorage.setItem(key, newIds.length > 0 ? newIds.join(",") : "");
+      if (newIds.length > 0) {
+        sessionStorage.setItem(ssKey, newIds.join(","));
+      } else {
+        sessionStorage.removeItem(ssKey);
+      }
     } catch {
       // sessionStorage unavailable — ignore, URL-based sync is fallback.
     }
+  }
+
+  // T1 — Clear Images
+  function handleClear() {
+    setSelected([]);
+    pushState([]);
   }
 
   function handleRemove(id: string) {
@@ -170,8 +192,8 @@ export default function DynamicBatchImageList({
   // --- Error state ---
   if (error && error.kind === "detection") {
     return (
-      <div className="rounded border border-[#5c4a24]/60 bg-[#141008] px-3 py-2.5">
-        <p className="text-xs text-[#b89a5a]">{error.message}</p>
+      <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2.5">
+        <p className="text-xs text-[#cf7b6b]">{error.message}</p>
       </div>
     );
   }
@@ -191,50 +213,66 @@ export default function DynamicBatchImageList({
         </p>
       </div>
 
-      {/* Preview info */}
+      {/* T5 — Runtime Expansion Preview (polished) */}
       {hasPreview && preview!.batchTitle && (
-        <div className="flex flex-col gap-1 rounded border border-[#232629] bg-[#0d0e10] px-3 py-2">
-          <p className="text-xs text-[#a4abb2]">
-            <span className="text-[#6e767d]">Dynamic Batch detected:</span>{" "}
-            {preview!.batchTitle}
+        <div className="flex flex-col gap-2 rounded border border-[#2a2f35] bg-[#131518] px-3 py-2.5">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-[#5a6168]">
+            Runtime Expansion Preview
           </p>
-          {preview!.templateChainTitles.length > 0 && (
-            <p className="text-xs text-[#a4abb2]">
-              <span className="text-[#6e767d]">Template chain:</span>{" "}
-              {preview!.templateChainTitles.join(" → ")}
-            </p>
-          )}
-          <p className="text-xs text-[#6e767d]">
-            Selected images: {selected.length}
-          </p>
-          {selected.length > 0 && (
-            <p className="text-xs text-[#6e767d]">
-              Batch inputs:{" "}
-              {selected.map((_, i) => buildBatchSlotLabels(i)).join(", ")}
-            </p>
-          )}
-          {preview!.clonedNodeCount > 0 && (
-            <p className="text-xs text-[#6e767d]">
-              Runtime nodes to generate: {preview!.clonedNodeCount} cloned nodes
-            </p>
-          )}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#5a6168]">Batch node</span>
+              <span className="text-xs text-[#a4abb2]">{preview!.batchTitle}</span>
+            </div>
+            {preview!.templateChainTitles.length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-[#5a6168]">Template chain</span>
+                <span className="text-xs text-[#a4abb2]">
+                  {preview!.templateChainTitles.join(" → ")}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#5a6168]">Selected images</span>
+              <span className="text-xs text-[#e7e9ec]">{selected.length}</span>
+            </div>
+            {selected.length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-[#5a6168]">Batch inputs</span>
+                <span className="text-xs font-mono text-[#8fbbe8]">
+                  {selected.map((_, i) => buildBatchSlotLabels(i)).join(", ")}
+                </span>
+              </div>
+            )}
+            {preview!.clonedNodeCount > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-[#5a6168]">Runtime clones</span>
+                <span className="text-xs text-[#a4abb2]">{preview!.clonedNodeCount} nodes</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Selected images list */}
+      {/* T4 — Selected images list with improved reorder feedback */}
       {selected.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-            Selected Images
-          </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+              Selected Images
+            </p>
+            <p className="text-[10px] text-[#4b5158]">
+              Images are sent in order: {selected.map((_, i) => buildBatchSlotLabels(i)).join(", ")}
+            </p>
+          </div>
           <div className="flex flex-col gap-1">
             {selected.map((id, index) => (
               <div
                 key={id}
                 className="flex items-center gap-2 rounded border border-[#232629] bg-[#1a1d20] px-2 py-1.5"
               >
-                <span className="text-[10px] text-[#4b5158] font-mono w-3">
-                  {index + 1}
+                <span className="text-[10px] text-[#5a6168] font-mono w-16 shrink-0 text-left">
+                  {buildBatchSlotLabels(index)}
                 </span>
                 <div className="w-7 h-7 rounded overflow-hidden bg-[#141618] shrink-0 flex items-center justify-center">
                   <ThumbnailHoverPreview
@@ -255,9 +293,6 @@ export default function DynamicBatchImageList({
                   <span className="text-xs text-[#a4abb2] truncate">
                     {getLabel(id)}
                   </span>
-                  <span className="text-[10px] text-[#4b5158]">
-                    Slot: {buildBatchSlotLabels(index)}
-                  </span>
                   {getRoleLabel(id) && (
                     <span className="text-[10px] text-[#4b5158] truncate">
                       {getRoleLabel(id)}
@@ -269,7 +304,7 @@ export default function DynamicBatchImageList({
                     type="button"
                     onClick={() => handleMoveUp(index)}
                     disabled={index === 0}
-                    className="text-[10px] text-[#4b5158] hover:text-[#a4abb2] transition-colors px-1 py-0.5 rounded hover:bg-[#232629] disabled:opacity-30 disabled:cursor-default"
+                    className="text-[10px] text-[#5a6168] hover:text-[#e7e9ec] transition-colors px-1.5 py-1 rounded hover:bg-[#2a2f35] disabled:opacity-20 disabled:cursor-default"
                     title="Move Up"
                   >
                     ▲
@@ -278,7 +313,7 @@ export default function DynamicBatchImageList({
                     type="button"
                     onClick={() => handleMoveDown(index)}
                     disabled={index === selected.length - 1}
-                    className="text-[10px] text-[#4b5158] hover:text-[#a4abb2] transition-colors px-1 py-0.5 rounded hover:bg-[#232629] disabled:opacity-30 disabled:cursor-default"
+                    className="text-[10px] text-[#5a6168] hover:text-[#e7e9ec] transition-colors px-1.5 py-1 rounded hover:bg-[#2a2f35] disabled:opacity-20 disabled:cursor-default"
                     title="Move Down"
                   >
                     ▼
@@ -298,17 +333,27 @@ export default function DynamicBatchImageList({
         </div>
       )}
 
-      {/* Selected count as warning if none */}
+      {/* T3 — Improved warning message */}
       {selected.length === 0 && (
         <div className="rounded border border-[#5c4a24]/60 bg-[#141008] px-3 py-2">
           <p className="text-xs text-[#b89a5a]">
-            Select at least one reference image for the Dynamic Batch Input.
+            Add at least one image to the Dynamic Batch before generating.
           </p>
         </div>
       )}
 
-      {/* Add image section */}
+      {/* T1 + Add image section */}
       <div className="flex flex-col gap-2">
+        {/* T1 — Clear Images button (only visible when images selected) */}
+        {selected.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="self-start rounded border border-[#3a2820] text-[#cf7b6b] px-2.5 py-1 text-xs hover:border-[#5a3830] hover:text-[#e89478] hover:bg-[#2a1210] transition-colors"
+          >
+            Clear Images
+          </button>
+        )}
         {!pickerOpen ? (
           <button
             type="button"

@@ -566,6 +566,7 @@ export default async function ShotGenerationPanel({
                   basePath={basePath}
                   contextType="shot"
                   projectId={pid}
+                  workflowId={String(wid)}
                   shotId={shid}
                   sequenceId={sid}
                 />
@@ -585,6 +586,7 @@ export default async function ShotGenerationPanel({
                   basePath={basePath}
                   contextType="shot"
                   projectId={pid}
+                  workflowId={String(wid)}
                   shotId={shid}
                   sequenceId={sid}
                 />
@@ -637,7 +639,7 @@ export default async function ShotGenerationPanel({
                   the current URL searchParams at submit time, keeping in sync with
                   client-side DynamicBatchImageList updates via pushState(). */}
               {batchDetection?.ok && (
-                <DynamicBatchFormSync batchNodeId={batchDetection.info.nodeId} />
+                <DynamicBatchFormSync batchNodeId={batchDetection.info.nodeId} workflowId={String(wid)} />
               )}
               <WorkflowGenerateActions
                 initialJsonText={payloadPreview.patchedJsonText}

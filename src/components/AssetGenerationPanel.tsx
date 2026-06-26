@@ -401,6 +401,7 @@ export default async function AssetGenerationPanel({
                   basePath={basePath}
                   contextType="asset"
                   projectId={pid}
+                  workflowId={String(wid)}
                   assetId={aid}
                 />
               </div>
@@ -418,6 +419,7 @@ export default async function AssetGenerationPanel({
                   basePath={basePath}
                   contextType="asset"
                   projectId={pid}
+                  workflowId={String(wid)}
                   assetId={aid}
                 />
               </div>
@@ -453,7 +455,7 @@ export default async function AssetGenerationPanel({
                 <input key={`scalar-${nodeId}`} type="hidden" name={`scalarNode_${nodeId}`} value={value} />
               ))}
               {batchDetection?.ok && (
-                <DynamicBatchFormSync batchNodeId={batchDetection.info.nodeId} />
+                <DynamicBatchFormSync batchNodeId={batchDetection.info.nodeId} workflowId={String(wid)} />
               )}
               <WorkflowGenerateActions
                 initialJsonText={payloadPreview.patchedJsonText}
