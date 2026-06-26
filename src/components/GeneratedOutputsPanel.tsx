@@ -1,5 +1,6 @@
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import { attachOutputAsShotReference } from "@/actions/generation";
+import { generatedOutputUrl } from "@/lib/getOutputUrl";
 
 export type GeneratedOutputItem = {
   id: number;
@@ -80,7 +81,7 @@ export default function GeneratedOutputsPanel({
             const ext = getExt(item.outputPath);
             const isImage = IMAGE_EXTS.has(ext);
             const isVideo = VIDEO_EXTS.has(ext);
-            const src = `/${item.outputPath}`;
+            const src = generatedOutputUrl(item.outputPath) ?? `/${item.outputPath}`;
             const displayDate = formatDate(item.completedAt ?? item.createdAt);
             const wfName = item.workflowName ?? "Unknown workflow";
 

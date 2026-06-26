@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { generatedOutputUrl } from "@/lib/getOutputUrl";
 
 type JobStatus =
   | "pending"
@@ -212,44 +213,47 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
           )}
 
           {/* Output */}
-          {job.status === "done" && job.outputPath && (
-            <div className="flex flex-col gap-2">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-                Output
-              </p>
-              {isImagePath(job.outputPath) ? (
-                <img
-                  src={`/${job.outputPath}`}
-                  alt="Generation output"
-                  className="max-w-full rounded border border-[#2c3035]"
-                />
-              ) : isVideoPath(job.outputPath) ? (
-                <div className="flex flex-col gap-2">
-                  <video
-                    src={`/${job.outputPath}`}
-                    controls
+          {job.status === "done" && job.outputPath && (() => {
+            const outputSrc = generatedOutputUrl(job.outputPath);
+            return (
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+                  Output
+                </p>
+                {isImagePath(job.outputPath) ? (
+                  <img
+                    src={outputSrc ?? `/${job.outputPath}`}
+                    alt="Generation output"
                     className="max-w-full rounded border border-[#2c3035]"
                   />
+                ) : isVideoPath(job.outputPath) ? (
+                  <div className="flex flex-col gap-2">
+                    <video
+                      src={outputSrc ?? `/${job.outputPath}`}
+                      controls
+                      className="max-w-full rounded border border-[#2c3035]"
+                    />
+                    <a
+                      href={outputSrc ?? `/${job.outputPath}`}
+                      download
+                      className="self-start text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    >
+                      Download video ↓
+                    </a>
+                  </div>
+                ) : (
                   <a
-                    href={`/${job.outputPath}`}
-                    download
-                    className="self-start text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    href={outputSrc ?? `/${job.outputPath}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
                   >
-                    Download video ↓
+                    Open output ↗
                   </a>
-                </div>
-              ) : (
-                <a
-                  href={`/${job.outputPath}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                >
-                  Open output ↗
-                </a>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

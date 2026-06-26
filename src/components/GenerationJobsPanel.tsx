@@ -2,6 +2,7 @@ import Link from "next/link";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import EmptyState from "@/components/EmptyState";
 import { retryGenerationJob, deleteGenerationJob } from "@/actions/generationJobs";
+import { generatedOutputUrl } from "@/lib/getOutputUrl";
 
 export type GenerationJobItem = {
   id: number;
@@ -129,7 +130,7 @@ export default function GenerationJobsPanel({
             const ext = job.outputPath ? getExt(job.outputPath) : "";
             const isImage = job.outputPath && IMAGE_EXTS.has(ext);
             const isVideo = job.outputPath && VIDEO_EXTS.has(ext);
-            const src = job.outputPath ? `/${job.outputPath}` : null;
+            const src = job.outputPath ? (generatedOutputUrl(job.outputPath) ?? null) : null;
             const duration = formatDuration(job.startedAt, job.completedAt);
             const wfKind =
               job.workflowKind === "image" || job.workflowKind === "video"
