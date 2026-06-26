@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
 import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
@@ -89,6 +89,17 @@ export default function DynamicBatchImageList({
   // Combine all available images into flat picker items
   const allPickerItems = availableImages.flatMap((g) => g.items);
 
+  // Seed sessionStorage from initial URL params on mount so the hidden input
+  // can read a fresh value on the very first Generate click after page load.
+  useEffect(() => {
+    const key = buildBatchParamKey(batchNodeId);
+    try {
+      if (sessionStorage.getItem(key) === null) {
+        sessionStorage.setItem(key, selectedImageIds.length > 0 ? selectedImageIds.join(",") : "");
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }, [batchNodeId]);
+
   function pushState(newIds: string[]) {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(passthroughParams)) {
@@ -97,6 +108,14 @@ export default function DynamicBatchImageList({
     const key = buildBatchParamKey(batchNodeId);
     if (newIds.length > 0) params.set(key, newIds.join(","));
     router.replace(`${basePath}?${params.toString()}`, { scroll: false });
+
+    // Sync sessionStorage immediately so DynamicBatchFormSync can read it
+    // at submit time before router.replace has updated window.location.search.
+    try {
+      sessionStorage.setItem(key, newIds.length > 0 ? newIds.join(",") : "");
+    } catch {
+      // sessionStorage unavailable — ignore, URL-based sync is fallback.
+    }
   }
 
   function handleRemove(id: string) {
