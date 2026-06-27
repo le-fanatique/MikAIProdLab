@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import type { LLMProvider, ProviderSettings } from "@/types/llm";
 import {
-  saveOllamaSettings,
-  testOllamaConnection,
-  fetchOllamaModels,
+  saveLLMSettings,
+  testLLMConnection,
+  fetchLLMModels,
 } from "@/actions/settings";
 
 type SaveStatus =
@@ -26,24 +27,37 @@ type RefreshStatus =
   | { status: "error"; message: string };
 
 type Props = {
-  initialBaseUrl: string;
-  initialModel: string;
-  initialTimeoutMs: number;
+  activeProvider: LLMProvider;
+  providers: Record<LLMProvider, ProviderSettings>;
   initialModels: string[];
   initialModelsError: string | null;
 };
 
+const PROVIDER_OPTIONS: { value: LLMProvider; label: string; defaultUrl: string }[] = [
+  { value: "ollama", label: "Ollama", defaultUrl: "http://localhost:11434" },
+  { value: "openrouter", label: "OpenRouter", defaultUrl: "https://openrouter.ai/api/v1" },
+  { value: "openai-compatible", label: "OpenAI-compatible / vLLM", defaultUrl: "http://localhost:8000/v1" },
+];
+
 export default function OllamaSettingsForm({
-  initialBaseUrl,
-  initialModel,
-  initialTimeoutMs,
+  activeProvider,
+  providers,
   initialModels,
   initialModelsError,
 }: Props) {
   const router = useRouter();
-  const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
-  const [model, setModel] = useState(initialModel);
-  const [timeoutMs, setTimeoutMs] = useState(String(initialTimeoutMs));
+  const [provider, setProvider] = useState<LLMProvider>(activeProvider);
+
+  // Form state for the current provider
+  const cur = providers[provider];
+  const [baseUrl, setBaseUrl] = useState(cur.baseUrl);
+  const [model, setModel] = useState(cur.model);
+  const [timeoutMs, setTimeoutMs] = useState(String(cur.timeoutMs));
+  const [temperature, setTemperature] = useState(String(cur.temperature));
+  const [hasApiKey, setHasApiKey] = useState(cur.hasApiKey);
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyTouched, setApiKeyTouched] = useState(false);
+
   const [models, setModels] = useState<string[]>(initialModels);
   const [modelsError, setModelsError] = useState<string | null>(initialModelsError);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: "idle" });
@@ -55,18 +69,50 @@ export default function OllamaSettingsForm({
     testStatus.status === "testing" ||
     refreshStatus.status === "loading";
 
+  const needsApiKey = provider === "openrouter";
+  const apiKeyOptional = provider === "openai-compatible";
+  const showApiKeyField = needsApiKey || apiKeyOptional;
+
   const inputClass =
     "w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:outline-none focus:border-[#3a4046] transition-colors font-mono";
 
   const savedModelInList = models.includes(model);
   const hasSavedModel = !!model.trim();
 
+  function handleProviderChange(newProvider: LLMProvider) {
+    const newCur = providers[newProvider];
+    setProvider(newProvider);
+    setBaseUrl(newCur.baseUrl);
+    setModel(newCur.model);
+    setTimeoutMs(String(newCur.timeoutMs));
+    setTemperature(String(newCur.temperature));
+    setHasApiKey(newCur.hasApiKey);
+    setApiKey("");
+    setApiKeyTouched(false);
+    setTestStatus({ status: "idle" });
+    setSaveStatus({ status: "idle" });
+    setModels([]);
+    setModelsError(null);
+  }
+
   async function handleSave() {
     setSaveStatus({ status: "saving" });
     setTestStatus({ status: "idle" });
-    const result = await saveOllamaSettings(baseUrl, model, timeoutMs);
+    const mode = apiKeyTouched ? "replace" : "keep";
+    const result = await saveLLMSettings(
+      provider,
+      baseUrl,
+      model,
+      apiKeyTouched ? apiKey : "",
+      timeoutMs,
+      temperature,
+      mode
+    );
     if (result.ok) {
       setSaveStatus({ status: "saved" });
+      setHasApiKey(apiKeyTouched ? !!apiKey : hasApiKey);
+      setApiKeyTouched(false);
+      setApiKey("");
       router.refresh();
       setTimeout(() => setSaveStatus({ status: "idle" }), 2500);
     } else {
@@ -76,7 +122,7 @@ export default function OllamaSettingsForm({
 
   async function handleTest() {
     setTestStatus({ status: "testing" });
-    const result = await testOllamaConnection(baseUrl, model);
+    const result = await testLLMConnection(provider, baseUrl, model, apiKey);
     if (result.ok) {
       setTestStatus({ status: "ok", message: result.message });
     } else {
@@ -87,7 +133,7 @@ export default function OllamaSettingsForm({
   async function handleRefreshModels() {
     setRefreshStatus({ status: "loading" });
     setTestStatus({ status: "idle" });
-    const result = await fetchOllamaModels(baseUrl);
+    const result = await fetchLLMModels(provider, baseUrl, apiKey);
     if (result.ok) {
       setModels(result.models);
       setModelsError(null);
@@ -101,24 +147,87 @@ export default function OllamaSettingsForm({
     }
   }
 
+  async function handleClearApiKey() {
+    setApiKey("");
+    setApiKeyTouched(true);
+    const result = await saveLLMSettings(
+      provider, baseUrl, model, "", timeoutMs, temperature, "replace"
+    );
+    if (result.ok) {
+      setHasApiKey(false);
+      router.refresh();
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      {/* Provider */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
+          Provider
+        </label>
+        <select
+          value={provider}
+          onChange={(e) => handleProviderChange(e.target.value as LLMProvider)}
+          disabled={isBusy}
+          className={inputClass + " cursor-pointer"}
+        >
+          {PROVIDER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Base URL */}
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
-          Ollama Server URL
+          Base URL
         </label>
         <input
           type="text"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="http://localhost:11434"
+          placeholder={PROVIDER_OPTIONS.find((p) => p.value === provider)?.defaultUrl}
           disabled={isBusy}
           className={inputClass}
         />
       </div>
 
-      {/* Model selector */}
+      {/* API Key */}
+      {showApiKeyField && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
+              API Key {needsApiKey ? "(required)" : "(optional)"}
+            </label>
+            {hasApiKey && !apiKeyTouched && (
+              <span className="text-[10px] text-[#6b9e72]">Key saved for {PROVIDER_OPTIONS.find((p) => p.value === provider)?.label.toLowerCase()}</span>
+            )}
+          </div>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => { setApiKey(e.target.value); setApiKeyTouched(true); }}
+            placeholder={needsApiKey ? "sk-..." : "Optional"}
+            disabled={isBusy}
+            className={inputClass}
+          />
+          {hasApiKey && (
+            <button
+              type="button"
+              onClick={handleClearApiKey}
+              disabled={isBusy}
+              className="text-xs text-[#6e767d] hover:text-[#cf7b6b] transition-colors self-start"
+            >
+              Clear saved API key
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Model */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
@@ -146,7 +255,7 @@ export default function OllamaSettingsForm({
             className={inputClass + " cursor-pointer"}
           >
             {hasSavedModel && !savedModelInList && (
-              <option value={model}>{model} — saved, not found locally</option>
+              <option value={model}>{model} — saved, not in list</option>
             )}
             {models.map((name) => (
               <option key={name} value={name}>
@@ -155,16 +264,37 @@ export default function OllamaSettingsForm({
             ))}
           </select>
         ) : (
-          <div className={inputClass + " text-[#4b5158] cursor-not-allowed select-none"}>
-            {modelsError
-              ? "No models loaded — click Refresh Models"
-              : "No local models found. Pull one with: ollama pull llama3.2"}
-          </div>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="Enter model ID manually"
+            disabled={isBusy}
+            className={inputClass}
+          />
         )}
 
         {modelsError && (
           <p className="text-xs text-[#cda24f]">{modelsError}</p>
         )}
+      </div>
+
+      {/* Temperature */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
+          Temperature
+        </label>
+        <input
+          type="number"
+          step="0.1"
+          min="0"
+          max="2"
+          value={temperature}
+          onChange={(e) => setTemperature(e.target.value)}
+          placeholder="0.7"
+          disabled={isBusy}
+          className={inputClass}
+        />
       </div>
 
       {/* Timeout */}
@@ -211,9 +341,14 @@ export default function OllamaSettingsForm({
         </button>
       </div>
 
+      {/* Validation warnings */}
+      {needsApiKey && !hasApiKey && !apiKeyTouched && !apiKey.trim() && (
+        <p className="text-xs text-[#cda24f]">API key is required for {PROVIDER_OPTIONS.find((p) => p.value === provider)?.label}. Enter a key or save an existing one.</p>
+      )}
+
       {/* Save feedback */}
       {saveStatus.status === "saved" && (
-        <p className="text-xs text-[#6b9e72]">Settings saved.</p>
+        <p className="text-xs text-[#6b9e72]">Settings saved for {PROVIDER_OPTIONS.find((p) => p.value === provider)?.label.toLowerCase()}.</p>
       )}
       {saveStatus.status === "error" && (
         <p className="text-xs text-[#cf7b6b]">{saveStatus.message}</p>

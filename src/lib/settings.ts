@@ -1,45 +1,254 @@
 import { db } from "@/db";
 import { appSettings } from "@/db/schema";
-import type { LLMConfig } from "@/types/llm";
+import type { LLMConfig, LLMProvider, ProviderSettings } from "@/types/llm";
 
-export interface OllamaSettings {
-  baseUrl: string;
-  model: string;
-  timeoutMs: number;
-  isConfigured: boolean;
+// ---------------------------------------------------------------------------
+// Per-provider settings interfaces
+// ---------------------------------------------------------------------------
+
+export interface AllLLMSettings {
+  activeProvider: LLMProvider;
+  ollama: ProviderSettings;
+  openrouter: ProviderSettings;
+  "openai-compatible": ProviderSettings;
+}
+
+// ---------------------------------------------------------------------------
+// Provider defaults
+// ---------------------------------------------------------------------------
+
+const PROVIDER_DEFAULTS: Record<LLMProvider, Omit<ProviderSettings, "hasApiKey">> = {
+  ollama: {
+    baseUrl: "http://localhost:11434",
+    model: "",
+    timeoutMs: 30000,
+    temperature: 0.7,
+  },
+  openrouter: {
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "",
+    timeoutMs: 30000,
+    temperature: 0.7,
+  },
+  "openai-compatible": {
+    baseUrl: "http://localhost:8000/v1",
+    model: "",
+    timeoutMs: 30000,
+    temperature: 0.7,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Key helpers
+// ---------------------------------------------------------------------------
+
+function key(prefix: string, name: string): string {
+  return `${prefix}${name}`;
 }
 
 /**
- * Reads Ollama settings from DB, with env var fallback.
- * Priority: DB value → env var → hardcoded default.
- * Never reads LLM_API_KEY (not needed for Ollama).
+ * Reads all LLM settings per provider.
+ * Priority: provider-specific key → legacy key → env var → hardcoded default.
  */
-export async function getLLMSettings(): Promise<OllamaSettings> {
+async function readAllLLMSettings(): Promise<AllLLMSettings> {
   const rows = await db.select().from(appSettings);
   const map = new Map(rows.map((r) => [r.key, r.value]));
 
-  const baseUrl =
+  // Active provider
+  const activeProvider =
+    (map.get("llm_provider") as LLMProvider) ??
+    (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
+    "ollama";
+
+  // Legacy fallback values (only used when per-provider keys missing)
+  const legacyBase =
     map.get("llm_base_url") ??
     process.env.LLM_BASE_URL ??
-    "http://localhost:11434";
-
-  const model =
+    null;
+  const legacyModel =
     map.get("llm_model") ??
     process.env.LLM_MODEL ??
-    "";
+    null;
+  const legacyTimeout =
+    map.get("llm_timeout_ms") ??
+    process.env.LLM_TIMEOUT_MS ??
+    null;
+  const legacyTemp =
+    map.get("llm_temperature") ??
+    process.env.LLM_TEMPERATURE ??
+    null;
 
-  const timeoutMs = parseInt(
-    map.get("llm_timeout_ms") ?? process.env.LLM_TIMEOUT_MS ?? "30000",
-    10
-  );
+  // Provider-specific key prefixes
+  const PREFIXES: Record<LLMProvider, string> = {
+    ollama: "llm_ollama_",
+    openrouter: "llm_openrouter_",
+    "openai-compatible": "llm_openai_compatible_",
+  };
+
+  function readProvider(p: LLMProvider): ProviderSettings {
+    const prefix = PREFIXES[p];
+    const def = PROVIDER_DEFAULTS[p];
+
+    // Per-provider key, fallback to legacy, fallback to default
+    const baseUrl =
+      map.get(key(prefix, "base_url")) ??
+      legacyBase ??
+      def.baseUrl;
+    const model =
+      map.get(key(prefix, "model")) ??
+      legacyModel ??
+      def.model;
+    const timeoutMs = parseInt(
+      map.get(key(prefix, "timeout_ms")) ??
+      legacyTimeout ??
+      String(def.timeoutMs),
+      10
+    );
+    const temperature = parseFloat(
+      map.get(key(prefix, "temperature")) ??
+      legacyTemp ??
+      String(def.temperature)
+    );
+
+    // API key per provider (legacy fallback for openrouter/openai-compatible)
+    const apiKey =
+      map.get(key(prefix, "api_key")) ??
+      (p !== "ollama" ? map.get("llm_api_key") ?? null : null);
+    const hasApiKey = !!apiKey;
+
+    return { baseUrl, model, timeoutMs, temperature, hasApiKey };
+  }
 
   return {
-    baseUrl,
-    model,
-    timeoutMs,
-    isConfigured: !!model.trim(),
+    activeProvider,
+    ollama: readProvider("ollama"),
+    openrouter: readProvider("openrouter"),
+    "openai-compatible": readProvider("openai-compatible"),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads settings for a specific provider.
+ */
+export async function getLLMSettings(
+  provider?: LLMProvider
+): Promise<ProviderSettings> {
+  const all = await readAllLLMSettings();
+  const p = provider ?? all.activeProvider;
+  return all[p];
+}
+
+/**
+ * Returns the active provider and its settings.
+ */
+export async function getActiveLLMSettings(): Promise<{
+  provider: LLMProvider;
+  settings: ProviderSettings;
+}> {
+  const all = await readAllLLMSettings();
+  return {
+    provider: all.activeProvider,
+    settings: all[all.activeProvider],
+  };
+}
+
+/**
+ * Returns all provider settings (used for Settings page).
+ */
+export async function getAllLLMSettings(): Promise<AllLLMSettings> {
+  return readAllLLMSettings();
+}
+
+/**
+ * Returns the currently active provider.
+ */
+export async function getActiveProvider(): Promise<LLMProvider> {
+  const all = await readAllLLMSettings();
+  return all.activeProvider;
+}
+
+/**
+ * Returns a LLMConfig ready for the provider router, or null if model is not set.
+ * Uses the active provider's config + its saved API key.
+ */
+export async function getLLMConfig(): Promise<LLMConfig | null> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+
+  const provider =
+    (map.get("llm_provider") as LLMProvider) ??
+    (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
+    "ollama";
+
+  const prefix =
+    provider === "ollama"
+      ? "llm_ollama_"
+      : provider === "openrouter"
+        ? "llm_openrouter_"
+        : "llm_openai_compatible_";
+
+  const legacyBase = map.get("llm_base_url") ?? process.env.LLM_BASE_URL;
+  const legacyModel = map.get("llm_model") ?? process.env.LLM_MODEL;
+  const legacyTimeout = map.get("llm_timeout_ms") ?? process.env.LLM_TIMEOUT_MS;
+  const legacyTemp = map.get("llm_temperature") ?? process.env.LLM_TEMPERATURE;
+  const def = PROVIDER_DEFAULTS[provider];
+
+  const baseUrl =
+    map.get(key(prefix, "base_url")) ?? legacyBase ?? def.baseUrl;
+  const model =
+    map.get(key(prefix, "model")) ?? legacyModel ?? def.model;
+  const timeoutMs = parseInt(
+    map.get(key(prefix, "timeout_ms")) ?? legacyTimeout ?? String(def.timeoutMs),
+    10
+  );
+  const temperature = parseFloat(
+    map.get(key(prefix, "temperature")) ?? legacyTemp ?? String(def.temperature)
+  );
+
+  if (!model.trim()) return null;
+
+  // API key: provider-specific first, then legacy
+  const apiKey =
+    map.get(key(prefix, "api_key")) ??
+    (provider !== "ollama" ? map.get("llm_api_key") ?? null : null);
+
+  return {
+    provider,
+    baseUrl,
+    model,
+    apiKey,
+    timeoutMs,
+    temperature,
+  };
+}
+
+/**
+ * Checks if an API key is saved for a given provider (server-side only).
+ */
+export async function hasApiKeyForProvider(
+  provider: LLMProvider
+): Promise<boolean> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+
+  const prefix =
+    provider === "ollama"
+      ? "llm_ollama_"
+      : provider === "openrouter"
+        ? "llm_openrouter_"
+        : "llm_openai_compatible_";
+
+  const apiKey = map.get(key(prefix, "api_key"));
+  return !!apiKey;
+}
+
+// ---------------------------------------------------------------------------
+// ComfyUI (unchanged)
+// ---------------------------------------------------------------------------
 
 export interface ComfySettings {
   baseUrl: string;
@@ -54,19 +263,4 @@ export async function getComfySettings(): Promise<ComfySettings> {
   const baseUrl = map.get("comfyui_base_url") ?? COMFY_BASE_URL_DEFAULT;
   const apiKey = map.get("comfyui_api_key") ?? "";
   return { baseUrl, apiKey };
-}
-
-/**
- * Returns a LLMConfig ready for callOllama(), or null if model is not set.
- */
-export async function getLLMConfig(): Promise<LLMConfig | null> {
-  const s = await getLLMSettings();
-  if (!s.isConfigured) return null;
-  return {
-    provider: "ollama",
-    baseUrl: s.baseUrl,
-    model: s.model,
-    apiKey: null,
-    timeoutMs: s.timeoutMs,
-  };
 }

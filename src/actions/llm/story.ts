@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import { buildStoryFromPitchPrompt } from "@/lib/prompts/story-from-pitch";
 import { getLLMConfig } from "@/lib/settings";
 import type { GenerateStoryResult } from "@/types/llm";
@@ -79,7 +79,7 @@ export async function generateStory(
       description: project.description,
     });
 
-    const raw = await callOllama(prompt, config);
+    const raw = await callLLMJson(prompt, config);
     const result = parseStoryResult(raw);
 
     return { ok: true, story: result.story };

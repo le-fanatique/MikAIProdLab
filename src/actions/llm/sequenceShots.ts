@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { projects, sequences, shots } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import {
   buildShotsFromSequencePrompt,
   type GeneratedSequenceShot,
@@ -116,7 +116,7 @@ export async function generateShotsFromSequenceDraft(
       targetCount: shotCount,
     });
 
-    const raw = await callOllama(llmPrompt, config);
+    const raw = await callLLMJson(llmPrompt, config);
     const generatedShots = parseShotsResult(raw);
 
     return { ok: true, shots: generatedShots };

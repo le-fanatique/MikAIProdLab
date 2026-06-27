@@ -135,7 +135,7 @@ export default async function OutlinePage({ params, searchParams }: Props) {
           pitch={project.pitch}
           story={project.story}
           existingOutline={project.outline}
-          isConfigured={llmSettings.isConfigured}
+          isConfigured={!!llmSettings.model.trim()}
         />
       </div>
 
@@ -150,7 +150,7 @@ export default async function OutlinePage({ params, searchParams }: Props) {
           story={project.story}
           outline={project.outline}
           existingSequencesCount={seqs.length}
-          isConfigured={llmSettings.isConfigured}
+          isConfigured={!!llmSettings.model.trim()}
         />
       </div>
 

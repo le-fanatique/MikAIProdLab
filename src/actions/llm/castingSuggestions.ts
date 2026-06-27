@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { projects, sequences, shots, assets, shotAssets, sequenceAssets } from "@/db/schema";
 import { eq, inArray, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import { buildCastingFromSequencePrompt } from "@/lib/prompts/casting-from-sequence";
 import { getLLMConfig } from "@/lib/settings";
 import type { GeneratedCastingSuggestion } from "@/types/llm";
@@ -213,7 +213,7 @@ export async function generateCastingSuggestionsDraft(
       includeSequenceLevel,
     });
 
-    const raw = await callOllama(llmPrompt, config);
+    const raw = await callLLMJson(llmPrompt, config);
     const rawSuggestions = parseSuggestionsResult(raw);
 
     // Server-side validation — filter hallucinated IDs

@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { projects, sequences, shots, assets, shotAssets, shotReferenceImages } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import {
   buildShotPromptFromContextPrompt,
   type ShotPromptAssistMode,
@@ -132,7 +132,7 @@ export async function generateShotPromptDraft(
       assistMode: mode,
     });
 
-    const raw = await callOllama(llmPrompt, config);
+    const raw = await callLLMJson(llmPrompt, config);
     const draft = parseDraft(raw);
 
     return { ok: true, draft };

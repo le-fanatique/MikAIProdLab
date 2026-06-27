@@ -11,7 +11,7 @@ import {
   assetReferenceImages,
 } from "@/db/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import { buildAssetDescriptionFromContextPrompt } from "@/lib/prompts/asset-description-from-context";
 import { getLLMConfig } from "@/lib/settings";
 import type { GeneratedAssetDescriptionDraft, LLMConfig } from "@/types/llm";
@@ -116,7 +116,7 @@ async function generateForAsset(
     refImageMeta: refRows,
   });
 
-  const raw = await callOllama(llmPrompt, config);
+  const raw = await callLLMJson(llmPrompt, config);
   return parseDraft(raw);
 }
 

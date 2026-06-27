@@ -1,7 +1,7 @@
 "use server";
 
-import { callOllamaChat, fetchOllamaModelNames } from "@/lib/llm/ollama";
-import { getLLMConfig, getLLMSettings } from "@/lib/settings";
+import { callLLMChat, fetchLLMModelNames } from "@/lib/llm";
+import { getLLMConfig, getActiveLLMSettings } from "@/lib/settings";
 import { getChatSystemPrompts } from "@/actions/settings";
 import type { ChatMessage, ChatSystemPrompt, LLMConfig } from "@/types/llm";
 
@@ -47,7 +47,7 @@ export async function sendChatMessage(input: {
       model: input.model.trim(),
     };
 
-    const content = await callOllamaChat(trimmed, chatConfig);
+    const content = await callLLMChat(trimmed, chatConfig);
     return { ok: true, content };
   } catch (err) {
     const message =
@@ -83,12 +83,18 @@ export async function listChatModels(): Promise<
   | { ok: false; error: string }
 > {
   try {
-    const settings = await getLLMSettings();
-    const models = await fetchOllamaModelNames(settings.baseUrl);
+    const { provider, settings } = await getActiveLLMSettings();
+    const models = await fetchLLMModelNames({
+      provider,
+      baseUrl: settings.baseUrl,
+      model: settings.model,
+      apiKey: null,
+      timeoutMs: settings.timeoutMs,
+    });
     return {
       ok: true,
       models,
-      defaultModel: settings.isConfigured ? settings.model : null,
+      defaultModel: settings.model.trim() ? settings.model : null,
     };
   } catch (err) {
     const message =

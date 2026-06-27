@@ -200,7 +200,7 @@ export default async function AssetsPage({ params, searchParams }: Props) {
           existingAssetNames={assetList.map((a) => a.name)}
           createdCount={Number.isFinite(createdCount) ? createdCount : null}
           createError={createError ?? null}
-          isConfigured={llmSettings.isConfigured}
+          isConfigured={!!llmSettings.model.trim()}
         />
       </Card>
 

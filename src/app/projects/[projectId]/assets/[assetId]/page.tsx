@@ -296,7 +296,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           returnTo={`/projects/${pid}/assets/${aid}`}
           hasExistingDescription={Boolean(asset.description?.trim())}
           hasExistingNotes={Boolean(asset.notes?.trim())}
-          isConfigured={llmSettings.isConfigured}
+          isConfigured={!!llmSettings.model.trim()}
           hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
         />
       </Card>

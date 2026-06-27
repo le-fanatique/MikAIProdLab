@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { projects, sequences } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import {
   buildSequencePromptFromContextPrompt,
   type SequencePromptAssistMode,
@@ -91,7 +91,7 @@ export async function generateSequencePromptDraft(
       currentSequencePrompt: sequence.sequencePrompt,
     });
 
-    const raw = await callOllama(llmPrompt, config);
+    const raw = await callLLMJson(llmPrompt, config);
     const draft = parseDraft(raw);
 
     return { ok: true, draft };

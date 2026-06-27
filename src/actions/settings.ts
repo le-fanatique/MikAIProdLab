@@ -4,42 +4,94 @@ import { db } from "@/db";
 import { appSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { fetchOllamaModelNames } from "@/lib/llm/ollama";
+import { fetchOpenAICompatibleModelNames, testOpenAICompatibleConnection } from "@/lib/llm/openaiCompatible";
 import { redirect } from "next/navigation";
-import type { ChatSystemPrompt } from "@/types/llm";
+import type { ChatSystemPrompt, LLMProvider } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
-// Save Ollama settings to DB
+// Save LLM settings to DB (per-provider)
 // ---------------------------------------------------------------------------
+
+const PREFIXES: Record<LLMProvider, string> = {
+  ollama: "llm_ollama_",
+  openrouter: "llm_openrouter_",
+  "openai-compatible": "llm_openai_compatible_",
+};
+
+const PROVIDER_DEFAULT_URLS: Record<LLMProvider, string> = {
+  ollama: "http://localhost:11434",
+  openrouter: "https://openrouter.ai/api/v1",
+  "openai-compatible": "http://localhost:8000/v1",
+};
+
+function upsertSetting(key: string, value: string) {
+  const now = new Date().toISOString();
+  return db
+    .insert(appSettings)
+    .values({ key, value, updatedAt: now })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value, updatedAt: now },
+    });
+}
 
 export async function saveOllamaSettings(
   baseUrl: string,
   model: string,
   timeoutMs: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  return saveLLMSettings("ollama", baseUrl, model, "", timeoutMs, "0.7");
+}
+
+/**
+ * Saves settings for the given provider using per-provider keys.
+ * apiKeyMode:
+ *   "replace"  → replace saved key with the value (empty = clear)
+ *   "keep"     → keep the existing saved key untouched
+ */
+export async function saveLLMSettings(
+  provider: LLMProvider,
+  baseUrl: string,
+  model: string,
+  apiKey: string,
+  timeoutMs: string,
+  temperature: string,
+  apiKeyMode: "replace" | "keep" = "replace"
+): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const cleanUrl = baseUrl.trim() || "http://localhost:11434";
+    const prefix = PREFIXES[provider];
+    const cleanUrl = baseUrl.trim() || PROVIDER_DEFAULT_URLS[provider];
     const cleanModel = model.trim();
     const cleanTimeout = timeoutMs.trim() || "30000";
+    const cleanTemp = parseFloat(temperature) ?? 0.7;
 
-    const now = new Date().toISOString();
+    await upsertSetting("llm_provider", provider);
+    await upsertSetting(`${prefix}base_url`, cleanUrl);
+    await upsertSetting(`${prefix}model`, cleanModel);
+    await upsertSetting(`${prefix}timeout_ms`, cleanTimeout);
+    await upsertSetting(`${prefix}temperature`, String(cleanTemp));
 
-    const upsert = (key: string, value: string) =>
-      db
-        .insert(appSettings)
-        .values({ key, value, updatedAt: now })
-        .onConflictDoUpdate({
-          target: appSettings.key,
-          set: { value, updatedAt: now },
-        });
-
-    await upsert("llm_base_url", cleanUrl);
-    await upsert("llm_model", cleanModel);
-    await upsert("llm_timeout_ms", cleanTimeout);
+    if (apiKeyMode === "replace") {
+      await upsertSetting(`${prefix}api_key`, apiKey.trim());
+    }
 
     return { ok: true };
   } catch {
     return { ok: false, error: "Failed to save settings. Please try again." };
   }
+}
+
+/**
+ * Loads the saved API key for a provider (server-side only).
+ * Used to merge with form submission when user didn't touch the API key field.
+ */
+export async function getSavedApiKeyForProvider(
+  provider: LLMProvider
+): Promise<string | null> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const prefix = PREFIXES[provider];
+  return map.get(`${prefix}api_key`) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +153,7 @@ export async function saveComfySettings(
 }
 
 // ---------------------------------------------------------------------------
-// Test Ollama connection (server-side only — never called from browser fetch)
+// Test LLM connection (server-side, multi-provider)
 // ---------------------------------------------------------------------------
 
 export async function testOllamaConnection(
@@ -122,7 +174,7 @@ export async function testOllamaConnection(
   }
 
   if (!cleanModel) {
-    return { ok: true, message: "Connected to Ollama. Select a model to continue." };
+    return { ok: true, message: "Connected. Select a model to continue." };
   }
 
   const found = models.some(
@@ -135,13 +187,95 @@ export async function testOllamaConnection(
   if (!found) {
     return {
       ok: false,
-      error: `Connected to Ollama, but model "${cleanModel}" was not found. Run: ollama pull ${cleanModel}`,
+      error: `Connected, but model "${cleanModel}" was not found.`,
     };
   }
 
   return {
     ok: true,
-    message: `Connected to Ollama. Model "${cleanModel}" is available.`,
+    message: `Connected. Model "${cleanModel}" is available.`,
+  };
+}
+
+/**
+ * Test connection for the given provider.
+ * If apiKey is empty, tries to load the saved key from DB.
+ */
+export async function testLLMConnection(
+  provider: LLMProvider,
+  baseUrl: string,
+  model: string,
+  apiKey: string
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  if (provider === "ollama") {
+    return testOllamaConnection(baseUrl, model);
+  }
+  // Use provided key, or fall back to saved key
+  const effectiveKey = apiKey.trim() || (await getSavedApiKeyForProvider(provider));
+  return testOpenAICompatibleConnection(
+    baseUrl.trim().replace(/\/$/, ""),
+    effectiveKey,
+    model,
+    15000
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fetch LLM models (multi-provider)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch models for the given provider.
+ * If apiKey is empty, tries to load the saved key from DB.
+ */
+export async function fetchLLMModels(
+  provider: LLMProvider,
+  baseUrl: string,
+  apiKey: string
+): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
+  if (provider === "ollama") {
+    try {
+      const cleanUrl = baseUrl.trim().replace(/\/$/, "") || "http://localhost:11434";
+      const models = await fetchOllamaModelNames(cleanUrl);
+      return { ok: true, models };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Could not reach server.",
+      };
+    }
+  }
+  // Use provided key, or fall back to saved key
+  const effectiveKey = apiKey.trim() || (await getSavedApiKeyForProvider(provider));
+  try {
+    const models = await fetchOpenAICompatibleModelNames(
+      baseUrl.trim().replace(/\/$/, ""),
+      effectiveKey
+    );
+    return { ok: true, models };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not reach server.",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Get hasApiKey status for all providers (server-side only)
+// ---------------------------------------------------------------------------
+
+export async function getAllProviderApiKeyStatus(): Promise<{
+  ollama: boolean;
+  openrouter: boolean;
+  "openai-compatible": boolean;
+}> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  return {
+    ollama: !!map.get("llm_ollama_api_key"),
+    openrouter: !!map.get("llm_openrouter_api_key") || !!map.get("llm_api_key"),
+    "openai-compatible": !!map.get("llm_openai_compatible_api_key") || !!map.get("llm_api_key"),
   };
 }
 

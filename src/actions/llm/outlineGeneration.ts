@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import { buildOutlineFromStoryPrompt } from "@/lib/prompts/outline-from-story";
 import { getLLMConfig } from "@/lib/settings";
 import type { GenerateOutlineResult } from "@/types/llm";
@@ -73,7 +73,7 @@ export async function generateOutlineDraft(
       targetSections,
     });
 
-    const raw = await callOllama(prompt, config);
+    const raw = await callLLMJson(prompt, config);
     const result = parseOutlineResult(raw);
 
     return { ok: true, outline: result.outline };

@@ -367,7 +367,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
           sequenceId={sid}
           castingsApplied={Number.isFinite(castingsApplied) ? castingsApplied : null}
           castingsError={castingsError ?? null}
-          isConfigured={llmSettings.isConfigured}
+          isConfigured={!!llmSettings.model.trim()}
         />
       </Card>
 

@@ -16,8 +16,17 @@ export interface LLMConfig {
   provider: LLMProvider;
   baseUrl: string;
   model: string;
-  apiKey: string | null; // null for Ollama (no auth required)
+  apiKey: string | null;
   timeoutMs: number;
+  temperature?: number;
+}
+
+export interface ProviderSettings {
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  temperature: number;
+  hasApiKey: boolean;
 }
 
 // ---------------------------------------------------------------------------

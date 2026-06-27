@@ -5,10 +5,10 @@ import Card from "@/components/Card";
 import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
 import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
-import { getLLMSettings, getComfySettings } from "@/lib/settings";
+import { getAllLLMSettings, getActiveProvider, getComfySettings } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
-import { fetchOllamaModelNames } from "@/lib/llm/ollama";
+import { fetchLLMModelNames } from "@/lib/llm";
 import { db } from "@/db";
 import { comfyWorkflows } from "@/db/schema";
 import { sql, desc } from "drizzle-orm";
@@ -31,7 +31,8 @@ function SectionLabel({ label }: { label: string }) {
 
 export default async function SettingsPage({ searchParams }: Props) {
   const { defaultsSaved } = await searchParams;
-  const settings = await getLLMSettings();
+  const allSettings = await getAllLLMSettings();
+  const activeProvider = allSettings.activeProvider;
   const comfySettings = await getComfySettings();
 
   const [{ workflowCount }, allWorkflows, defaults] = await Promise.all([
@@ -49,12 +50,19 @@ export default async function SettingsPage({ searchParams }: Props) {
   let initialModels: string[] = [];
   let initialModelsError: string | null = null;
   try {
-    initialModels = await fetchOllamaModelNames(settings.baseUrl);
+    const activeSettings = allSettings[activeProvider];
+    initialModels = await fetchLLMModelNames({
+      provider: activeProvider,
+      baseUrl: activeSettings.baseUrl,
+      model: activeSettings.model,
+      apiKey: null,
+      timeoutMs: activeSettings.timeoutMs,
+    });
   } catch (err) {
     initialModelsError =
       err instanceof Error
         ? err.message
-        : "Could not reach Ollama. Make sure Ollama is running.";
+        : "Could not reach LLM server.";
   }
 
   return (
@@ -68,13 +76,16 @@ export default async function SettingsPage({ searchParams }: Props) {
       <Card title="Language Model" className="mb-6">
         <div className="flex items-center justify-between mb-5">
           <span className="text-xs text-[#4b5158] border border-[#232629] rounded px-2 py-0.5">
-            Active provider: Ollama
+            Active provider: {activeProvider}
           </span>
         </div>
         <OllamaSettingsForm
-          initialBaseUrl={settings.baseUrl}
-          initialModel={settings.model}
-          initialTimeoutMs={settings.timeoutMs}
+          activeProvider={activeProvider}
+          providers={{
+            ollama: allSettings.ollama,
+            openrouter: allSettings.openrouter,
+            "openai-compatible": allSettings["openai-compatible"],
+          }}
           initialModels={initialModels}
           initialModelsError={initialModelsError}
         />
@@ -83,29 +94,33 @@ export default async function SettingsPage({ searchParams }: Props) {
       <Card title="Quick Setup" className="mb-6">
         <ol className="flex flex-col gap-2 text-sm text-[#6e767d] list-none">
           <li className="flex gap-3">
-            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">1.</span>
+            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">Ollama</span>
             <span>
-              Install Ollama at{" "}
-              <span className="text-[#a4abb2] font-mono text-xs">ollama.com</span>
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">2.</span>
-            <span>
-              Start the server:{" "}
-              <code className="text-[#a4abb2] text-xs">ollama serve</code>
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">3.</span>
-            <span>
-              Pull a model:{" "}
+              Install at{" "}
+              <span className="text-[#a4abb2] font-mono text-xs">ollama.com</span>,{" "}
+              run <code className="text-[#a4abb2] text-xs">ollama serve</code> +{" "}
               <code className="text-[#a4abb2] text-xs">ollama pull llama3.2</code>
             </span>
           </li>
           <li className="flex gap-3">
-            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">4.</span>
-            <span>Select a model from the dropdown above and click Test Connection.</span>
+            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">OpenRouter</span>
+            <span>
+              Select "OpenRouter" provider, get API key from{" "}
+              <span className="text-[#a4abb2] font-mono text-xs">openrouter.ai</span>,{" "}
+              enter key + model ID.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">vLLM</span>
+            <span>
+              Select "OpenAI-compatible", set base URL to{" "}
+              <code className="text-[#a4abb2] text-xs">http://server:8000/v1</code>,{" "}
+              enter model ID.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-[#4b5158] font-mono text-xs mt-0.5 shrink-0">Test</span>
+            <span>Click Test Connection to verify, then Save Changes.</span>
           </li>
         </ol>
       </Card>

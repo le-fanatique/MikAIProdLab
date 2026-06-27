@@ -69,7 +69,7 @@ export default async function StoryPage({ params, searchParams }: Props) {
     db.select().from(projects).where(eq(projects.id, pid)).then((r) => r[0]),
     getLLMSettings(),
   ]);
-  const isLlmConfigured = llmSettings.isConfigured;
+  const isLlmConfigured = !!llmSettings.model.trim();
   if (!project) notFound();
 
   const seqs = await db

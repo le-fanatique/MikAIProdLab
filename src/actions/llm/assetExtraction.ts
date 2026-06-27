@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { projects, sequences, shots, assets } from "@/db/schema";
 import { eq, max, inArray, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import { buildAssetsFromProjectPrompt } from "@/lib/prompts/assets-from-project";
 import { getLLMConfig } from "@/lib/settings";
 import type { GeneratedAssetCandidate } from "@/types/llm";
@@ -183,7 +183,7 @@ export async function generateAssetCandidatesDraft(
       assetTypes,
     });
 
-    const raw = await callOllama(llmPrompt, config);
+    const raw = await callLLMJson(llmPrompt, config);
     const candidates = parseAssetsResult(raw);
 
     return { ok: true, assets: candidates };

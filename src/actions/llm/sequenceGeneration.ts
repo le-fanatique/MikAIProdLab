@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { projects, sequences } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { callOllama } from "@/lib/llm/ollama";
+import { callLLMJson } from "@/lib/llm";
 import { buildSequencesFromOutlinePrompt } from "@/lib/prompts/sequences-from-outline";
 import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
 import { getLLMConfig } from "@/lib/settings";
@@ -140,7 +140,7 @@ export async function generateSequencesFromOutlineDraft(
       outlineSections: outlineSections.length > 0 ? outlineSections : undefined,
     });
 
-    const raw = await callOllama(prompt, config);
+    const raw = await callLLMJson(prompt, config);
     const seqs = parseSequencesResult(raw);
 
     // Deterministic override: when targetCount is unset and LLM returned exactly
