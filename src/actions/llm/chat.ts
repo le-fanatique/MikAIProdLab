@@ -83,12 +83,15 @@ export async function listChatModels(): Promise<
   | { ok: false; error: string }
 > {
   try {
-    const { provider, settings } = await getActiveLLMSettings();
+    const [{ provider, settings }, config] = await Promise.all([
+      getActiveLLMSettings(),
+      getLLMConfig(),
+    ]);
     const models = await fetchLLMModelNames({
       provider,
       baseUrl: settings.baseUrl,
       model: settings.model,
-      apiKey: null,
+      apiKey: config?.apiKey ?? null,
       timeoutMs: settings.timeoutMs,
     });
     return {
@@ -98,7 +101,7 @@ export async function listChatModels(): Promise<
     };
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Could not reach Ollama.";
+      err instanceof Error ? err.message : "Could not reach server.";
     return { ok: false, error: message };
   }
 }

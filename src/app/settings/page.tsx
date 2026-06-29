@@ -5,7 +5,7 @@ import Card from "@/components/Card";
 import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
 import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
-import { getAllLLMSettings, getActiveProvider, getComfySettings } from "@/lib/settings";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -51,11 +51,12 @@ export default async function SettingsPage({ searchParams }: Props) {
   let initialModelsError: string | null = null;
   try {
     const activeSettings = allSettings[activeProvider];
+    const activeConfig = await getLLMConfig();
     initialModels = await fetchLLMModelNames({
       provider: activeProvider,
       baseUrl: activeSettings.baseUrl,
       model: activeSettings.model,
-      apiKey: null,
+      apiKey: activeConfig?.apiKey ?? null,
       timeoutMs: activeSettings.timeoutMs,
     });
   } catch (err) {

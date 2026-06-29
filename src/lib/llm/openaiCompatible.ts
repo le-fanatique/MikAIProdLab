@@ -40,6 +40,10 @@ export async function callOpenAICompatibleChat(
   if (config.apiKey) {
     headers["Authorization"] = `Bearer ${config.apiKey}`;
   }
+  if (config.provider === "openrouter") {
+    headers["HTTP-Referer"] = "http://localhost:3000";
+    headers["X-Title"] = "MikAI Production Lab";
+  }
 
   let response: Response;
   try {
@@ -72,6 +76,11 @@ export async function callOpenAICompatibleChat(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    if (response.status === 401 && config.provider === "openrouter") {
+      throw new Error(
+        `OpenRouter rejected the request with 401. The API key used by MikAI is missing or invalid. Re-save the OpenRouter API key in Settings, without "Bearer ".`
+      );
+    }
     throw new Error(
       `LLM server returned HTTP ${response.status}. ${body.slice(0, 200)}`
     );
@@ -99,6 +108,10 @@ async function callOpenAICompatibleCore(
   };
   if (config.apiKey) {
     headers["Authorization"] = `Bearer ${config.apiKey}`;
+  }
+  if (config.provider === "openrouter") {
+    headers["HTTP-Referer"] = "http://localhost:3000";
+    headers["X-Title"] = "MikAI Production Lab";
   }
 
   const body: Record<string, unknown> = {
@@ -143,6 +156,11 @@ async function callOpenAICompatibleCore(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    if (response.status === 401 && config.provider === "openrouter") {
+      throw new Error(
+        `OpenRouter rejected the request with 401. The API key used by MikAI is missing or invalid. Re-save the OpenRouter API key in Settings, without "Bearer ".`
+      );
+    }
     throw new Error(
       `LLM server returned HTTP ${response.status}. ${body.slice(0, 200)}`
     );
@@ -180,11 +198,16 @@ export async function fetchOpenAICompatibleModelNames(
 ): Promise<string[]> {
   const url = buildUrl(baseUrl, "/models");
 
+  const isOpenRouter = baseUrl.includes("openrouter.ai");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+  if (isOpenRouter) {
+    headers["HTTP-Referer"] = "http://localhost:3000";
+    headers["X-Title"] = "MikAI Production Lab";
   }
 
   const controller = new AbortController();
@@ -204,6 +227,11 @@ export async function fetchOpenAICompatibleModelNames(
   }
 
   if (!response.ok) {
+    if (response.status === 401 && baseUrl.includes("openrouter.ai")) {
+      throw new Error(
+        `OpenRouter rejected the request with 401. The API key used by MikAI is missing or invalid. Re-save the OpenRouter API key in Settings, without "Bearer ".`
+      );
+    }
     throw new Error(`Server returned HTTP ${response.status}.`);
   }
 
@@ -242,11 +270,13 @@ export async function testOpenAICompatibleConnection(
   } catch (err) {
     // If /models fails, try minimal chat
     if (model.trim()) {
+      // Infer the provider from the URL so OpenRouter-specific headers and error messages work
+      const inferredProvider = baseUrl.includes("openrouter.ai") ? "openrouter" as const : "openai-compatible" as const;
       try {
         const content = await callOpenAICompatibleChat(
           [{ role: "user", content: "OK" }],
           {
-            provider: "openai-compatible",
+            provider: inferredProvider,
             baseUrl,
             model: model.trim(),
             apiKey,

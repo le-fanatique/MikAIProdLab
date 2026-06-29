@@ -35,6 +35,20 @@ function upsertSetting(key: string, value: string) {
     });
 }
 
+/**
+ * Normalizes an API key before saving:
+ * - trims surrounding whitespace
+ * - strips a leading "Bearer " prefix (case-insensitive) if the user pasted
+ *   from an Authorization header instead of a raw key
+ */
+function normalizeApiKey(raw: string): string {
+  let k = raw.trim();
+  if (k.toLowerCase().startsWith("bearer ")) {
+    k = k.slice(7).trim();
+  }
+  return k;
+}
+
 export async function saveOllamaSettings(
   baseUrl: string,
   model: string,
@@ -72,7 +86,7 @@ export async function saveLLMSettings(
     await upsertSetting(`${prefix}temperature`, String(cleanTemp));
 
     if (apiKeyMode === "replace") {
-      await upsertSetting(`${prefix}api_key`, apiKey.trim());
+      await upsertSetting(`${prefix}api_key`, normalizeApiKey(apiKey));
     }
 
     return { ok: true };
@@ -91,7 +105,12 @@ export async function getSavedApiKeyForProvider(
   const rows = await db.select().from(appSettings);
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const prefix = PREFIXES[provider];
-  return map.get(`${prefix}api_key`) ?? null;
+  // DB key takes priority; fall back to provider-specific env var
+  const dbKey = map.get(`${prefix}api_key`) || null;
+  if (dbKey) return dbKey;
+  if (provider === "openrouter") return process.env.OPENROUTER_API_KEY?.trim() || null;
+  if (provider === "openai-compatible") return process.env.OPENAI_API_KEY?.trim() || null;
+  return null;
 }
 
 // ---------------------------------------------------------------------------

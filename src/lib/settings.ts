@@ -110,10 +110,17 @@ async function readAllLLMSettings(): Promise<AllLLMSettings> {
       String(def.temperature)
     );
 
-    // API key per provider (legacy fallback for openrouter/openai-compatible)
-    const apiKey =
-      map.get(key(prefix, "api_key")) ??
-      (p !== "ollama" ? map.get("llm_api_key") ?? null : null);
+    // API key priority: provider-specific DB key → provider env var → legacy DB key.
+    // Use || not ?? so a stored "" is treated as absent.
+    const specificKey = map.get(key(prefix, "api_key")) || null;
+    const envKey =
+      p === "openrouter"
+        ? (process.env.OPENROUTER_API_KEY?.trim() || null)
+        : p === "openai-compatible"
+          ? (process.env.OPENAI_API_KEY?.trim() || null)
+          : null;
+    const legacyKey = p !== "ollama" ? (map.get("llm_api_key") || null) : null;
+    const apiKey = specificKey ?? envKey ?? legacyKey;
     const hasApiKey = !!apiKey;
 
     return { baseUrl, model, timeoutMs, temperature, hasApiKey };
@@ -211,10 +218,17 @@ export async function getLLMConfig(): Promise<LLMConfig | null> {
 
   if (!model.trim()) return null;
 
-  // API key: provider-specific first, then legacy
-  const apiKey =
-    map.get(key(prefix, "api_key")) ??
-    (provider !== "ollama" ? map.get("llm_api_key") ?? null : null);
+  // API key priority: provider-specific DB key → provider env var → legacy DB key.
+  // Use || not ?? so a stored "" is treated as absent.
+  const specificKey = map.get(key(prefix, "api_key")) || null;
+  const envKey =
+    provider === "openrouter"
+      ? (process.env.OPENROUTER_API_KEY?.trim() || null)
+      : provider === "openai-compatible"
+        ? (process.env.OPENAI_API_KEY?.trim() || null)
+        : null;
+  const legacyKey = provider !== "ollama" ? (map.get("llm_api_key") || null) : null;
+  const apiKey = specificKey ?? envKey ?? legacyKey;
 
   return {
     provider,
