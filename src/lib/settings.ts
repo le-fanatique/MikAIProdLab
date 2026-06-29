@@ -267,6 +267,7 @@ export async function hasApiKeyForProvider(
 export interface ComfySettings {
   baseUrl: string;
   apiKey: string;
+  localVramAutoManagement: boolean;
 }
 
 const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
@@ -276,5 +277,6 @@ export async function getComfySettings(): Promise<ComfySettings> {
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const baseUrl = map.get("comfyui_base_url") ?? COMFY_BASE_URL_DEFAULT;
   const apiKey = map.get("comfyui_api_key") ?? "";
-  return { baseUrl, apiKey };
+  const localVramAutoManagement = map.get("local_vram_auto_management_enabled") === "true";
+  return { baseUrl, apiKey, localVramAutoManagement };
 }

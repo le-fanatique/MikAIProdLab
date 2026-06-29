@@ -140,7 +140,8 @@ const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
 
 export async function saveComfySettings(
   baseUrl: string,
-  apiKey: string
+  apiKey: string,
+  localVramAutoManagement: boolean = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const trimmed = baseUrl.trim();
@@ -164,6 +165,7 @@ export async function saveComfySettings(
 
     await upsert("comfyui_base_url", finalUrl);
     await upsert("comfyui_api_key", finalApiKey);
+    await upsert("local_vram_auto_management_enabled", localVramAutoManagement ? "true" : "false");
 
     return { ok: true };
   } catch {

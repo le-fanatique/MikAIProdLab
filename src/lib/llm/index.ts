@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 import {
   callOllama,
@@ -9,6 +11,7 @@ import {
   callOpenAICompatibleChat,
   fetchOpenAICompatibleModelNames,
 } from "./openaiCompatible";
+import { maybePurgeComfyBeforeOllama } from "@/lib/vramManager";
 
 // ---------------------------------------------------------------------------
 // Provider router — dispatches to the correct caller based on provider
@@ -22,6 +25,7 @@ export async function callLLMJson(
   config: LLMConfig
 ): Promise<string> {
   if (config.provider === "ollama") {
+    await maybePurgeComfyBeforeOllama();
     return callOllama(prompt, config);
   }
   // openrouter and openai-compatible both use OpenAI-compatible protocol
@@ -36,6 +40,7 @@ export async function callLLMChat(
   config: LLMConfig
 ): Promise<string> {
   if (config.provider === "ollama") {
+    await maybePurgeComfyBeforeOllama();
     return callOllamaChat(messages, config);
   }
   return callOpenAICompatibleChat(messages, config);

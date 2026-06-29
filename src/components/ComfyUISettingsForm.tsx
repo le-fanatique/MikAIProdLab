@@ -6,17 +6,23 @@ import { saveComfySettings } from "@/actions/settings";
 type Props = {
   initialBaseUrl: string;
   initialApiKey: string;
+  initialLocalVramAutoManagement: boolean;
 };
 
-export default function ComfyUISettingsForm({ initialBaseUrl, initialApiKey }: Props) {
+export default function ComfyUISettingsForm({
+  initialBaseUrl,
+  initialApiKey,
+  initialLocalVramAutoManagement,
+}: Props) {
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
   const [apiKey, setApiKey] = useState(initialApiKey);
+  const [localVramAutoManagement, setLocalVramAutoManagement] = useState(initialLocalVramAutoManagement);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
     startTransition(async () => {
-      const res = await saveComfySettings(baseUrl, apiKey);
+      const res = await saveComfySettings(baseUrl, apiKey, localVramAutoManagement);
       if (res.ok) {
         setResult({ ok: true, message: "ComfyUI settings saved." });
       } else {
@@ -65,6 +71,30 @@ export default function ComfyUISettingsForm({ initialBaseUrl, initialApiKey }: P
         <p className="text-xs text-[#4b5158]">
           Optional. Used for ComfyUI API / partner nodes through extra_data.
         </p>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <input
+          id="comfyui-local-vram-auto"
+          type="checkbox"
+          checked={localVramAutoManagement}
+          onChange={(e) => {
+            setLocalVramAutoManagement(e.target.checked);
+            setResult(null);
+          }}
+          className="mt-0.5 rounded border border-[#2c3035] bg-[#0d0e10] accent-[#5b93d6] cursor-pointer"
+        />
+        <div className="flex flex-col gap-0.5">
+          <label
+            htmlFor="comfyui-local-vram-auto"
+            className="text-xs font-medium text-[#a4abb2] cursor-pointer select-none"
+          >
+            Auto manage local VRAM between ComfyUI and Ollama
+          </label>
+          <p className="text-xs text-[#4b5158]">
+            When enabled, MikAI unloads the inactive local runtime before starting a local Ollama request or a ComfyUI generation.
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

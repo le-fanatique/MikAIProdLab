@@ -30,6 +30,7 @@ import {
 import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
+import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { expandDynamicBatchWorkflow, type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 
 // ---------------------------------------------------------------------------
@@ -349,6 +350,7 @@ export async function runWorkflowGeneration(args: {
     const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
 
     // --- 8. Queue prompt ---
+    await maybeUnloadOllamaBeforeComfy();
     const queued = await queueComfyPrompt({
       workflow: prepared.workflow,
       clientId,
@@ -656,6 +658,7 @@ export async function runAssetGeneration(input: {
 
     const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
 
+    await maybeUnloadOllamaBeforeComfy();
     const queued = await queueComfyPrompt({
       workflow: prepared.workflow,
       clientId,

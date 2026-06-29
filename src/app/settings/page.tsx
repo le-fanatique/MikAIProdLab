@@ -140,7 +140,11 @@ export default async function SettingsPage({ searchParams }: Props) {
       <SectionLabel label="ComfyUI" />
 
       <Card title="ComfyUI Connection" className="mb-6">
-        <ComfyUISettingsForm initialBaseUrl={comfySettings.baseUrl} initialApiKey={comfySettings.apiKey} />
+        <ComfyUISettingsForm
+          initialBaseUrl={comfySettings.baseUrl}
+          initialApiKey={comfySettings.apiKey}
+          initialLocalVramAutoManagement={comfySettings.localVramAutoManagement}
+        />
       </Card>
 
       <Card title="Workflow Library" className="mb-6">

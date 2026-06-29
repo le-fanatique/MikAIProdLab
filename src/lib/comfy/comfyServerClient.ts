@@ -242,6 +242,52 @@ export async function uploadImageToComfy(args: {
 }
 
 // ---------------------------------------------------------------------------
+// freeComfyVRAM
+// ---------------------------------------------------------------------------
+
+/**
+ * Calls ComfyUI POST /free to unload models and free VRAM.
+ * Never throws — returns a safe result object.
+ * Returns { ok: false } silently on 404/405 (older ComfyUI builds without /free).
+ */
+export async function freeComfyVRAM(
+  baseUrl?: string
+): Promise<{ ok: boolean; error?: string }> {
+  let resolvedUrl: string;
+  try {
+    resolvedUrl = baseUrl ?? (await getConfiguredComfyBaseUrl());
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not resolve ComfyUI base URL.",
+    };
+  }
+
+  try {
+    const response = await fetch(`${resolvedUrl}/free`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unload_models: true, free_memory: true }),
+    });
+
+    if (!response.ok) {
+      const excerpt = await readResponseText(response);
+      return {
+        ok: false,
+        error: `ComfyUI /free responded ${response.status}: ${excerpt}`,
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Network error calling /free.",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // extractFirstComfyOutput
 // ---------------------------------------------------------------------------
 

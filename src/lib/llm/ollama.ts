@@ -149,6 +149,41 @@ export async function callOllamaChat(
   return content;
 }
 
+/**
+ * Unloads an Ollama model from VRAM by sending a generate request with keep_alive: 0.
+ * Uses /api/generate (simpler than /api/chat for a no-output unload — no messages array needed).
+ * Never throws — returns a safe result object.
+ */
+export async function unloadOllamaModel(
+  baseUrl: string,
+  model: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!baseUrl || !model) {
+    return { ok: false, error: "Missing baseUrl or model for Ollama unload." };
+  }
+  const cleanUrl = baseUrl.replace(/\/$/, "");
+  try {
+    const response = await fetch(`${cleanUrl}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt: "", keep_alive: 0, stream: false }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      return {
+        ok: false,
+        error: `Ollama /api/generate responded ${response.status}: ${body.slice(0, 200)}`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Network error unloading Ollama model.",
+    };
+  }
+}
+
 export async function fetchOllamaModelNames(
   baseUrl: string,
   timeoutMs = 8000
