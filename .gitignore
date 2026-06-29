@@ -40,11 +40,13 @@ yarn-error.log*
 *.db-shm
 *.db-wal
 
-# user uploads — local only, not committed
-/public/uploads/
+# user uploads — local only, not committed (folder tracked via .gitkeep)
+/public/uploads/*
+!/public/uploads/.gitkeep
 
-# generated outputs — local only, not committed
-/public/outputs/
+# generated outputs — local only, not committed (folder tracked via .gitkeep)
+/public/outputs/*
+!/public/outputs/.gitkeep
 
 # vercel
 .vercel
