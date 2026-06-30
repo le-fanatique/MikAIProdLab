@@ -11,6 +11,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
+    "start:linux": "bash ./start-dev.sh",
+    "setup:linux": "bash ./setup-linux.sh",
+    "doctor:linux": "bash ./doctor.sh",
     "setup:windows": "powershell -ExecutionPolicy Bypass -File ./setup-windows.ps1",
     "doctor:windows": "powershell -ExecutionPolicy Bypass -File ./doctor.ps1"
   },

@@ -79,6 +79,100 @@ npm.cmd run doctor:windows
 > `setup-windows.ps1` will abort with a clear error if the wrong Node version is active.
 > `doctor.ps1` is read-only — it never modifies files, installs packages, or runs migrations.
 
+## Quick Start — Linux / Ubuntu
+
+```bash
+# Install nvm and Node 22 LTS
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install 22
+nvm use 22
+
+git clone https://github.com/le-fanatique/MikAIProdLab.git ~/MikAIProdLab
+cd ~/MikAIProdLab
+
+# First-time setup (installs deps, migrates DB, creates folders)
+chmod +x setup-linux.sh start-dev.sh doctor.sh
+./setup-linux.sh
+
+# Start the dev server
+./start-dev.sh
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+Or via npm:
+
+```bash
+npm run setup:linux
+npm run start:linux
+```
+
+> **If better-sqlite3 fails to build** (prebuilt binary not available for your platform):
+> ```bash
+> sudo apt-get install -y build-essential python3
+> npm ci
+> ```
+
+## Linux assisted setup
+
+Three shell scripts are available for Linux users:
+
+```bash
+# First-time setup after clone (installs deps, migrates DB, creates folders)
+./setup-linux.sh
+
+# Diagnose the local environment without modifying anything
+./doctor.sh
+
+# Start the dev server on all network interfaces
+./start-dev.sh
+```
+
+> `doctor.sh` is read-only — it never modifies files, installs packages, or runs migrations.
+
+Make sure scripts are executable after clone:
+
+```bash
+chmod +x setup-linux.sh start-dev.sh doctor.sh
+```
+
+## WSL Notes
+
+- Clone into `~/MikAIProdLab` (Linux filesystem), **not** `/mnt/c/...` — I/O on the Windows filesystem is much slower.
+- The Next.js dev server runs in WSL; the browser on Windows can access `http://localhost:3000` via WSL2 port forwarding.
+- If ComfyUI or Ollama run on the **Windows host**, `localhost` from inside WSL does not reach them. Find the Windows host IP:
+  ```bash
+  cat /etc/resolv.conf | grep nameserver | awk '{print $2}'
+  ```
+  Then set that IP in the **Settings UI** (ComfyUI URL / Ollama URL).
+- On Windows 11 with Docker Desktop installed, `host.docker.internal` may work as the Windows host alias.
+
+## RunPod / Cloud GPU
+
+- Mount a **persistent volume** (e.g. `/workspace`) so data survives pod restarts.
+- Expose **port 3000** in the pod configuration (RunPod HTTP ports).
+- Start the dev server with `./start-dev.sh` or `npm run dev:host` — both bind to `0.0.0.0:3000`.
+- If ComfyUI and Ollama run on the same pod, the default URLs work as-is:
+  - ComfyUI: `http://127.0.0.1:8188`
+  - Ollama: `http://127.0.0.1:11434`
+- Override the DB path to the persistent volume in `.env.local`:
+  ```bash
+  DB_PATH=/workspace/data/mikailab.db
+  ```
+- **Without a persistent volume**, all local data (`data/`, `public/uploads/`, `public/outputs/`, `storage/`) is lost when the pod stops.
+
+## Linux Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `better-sqlite3` build failed | `sudo apt-get install -y build-essential python3` then re-run `npm ci` |
+| `nvm: command not found` | `source ~/.bashrc` (or open a new terminal) |
+| `node: command not found` after nvm install | `nvm use 22` then `source ~/.bashrc` |
+| ComfyUI or Ollama not reachable from WSL | Use Windows host IP in Settings UI instead of `localhost` |
+| Port 3000 blocked | `sudo ufw allow 3000` or check firewall settings |
+| Scripts not executable | `chmod +x setup-linux.sh start-dev.sh doctor.sh` |
+
 ## Environment configuration
 
 ```powershell
