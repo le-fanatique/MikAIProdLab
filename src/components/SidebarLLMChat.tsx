@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
 import type { ChatMessage, ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -388,20 +389,16 @@ export default function SidebarLLMChat() {
           {modelError ? (
             <div className="text-[10px] text-[#e0556a] mb-1.5">{modelError}</div>
           ) : (
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="text-[9px] text-[#4b5158] uppercase tracking-wider shrink-0">
+            <div className="flex flex-col gap-0.5 mb-1.5">
+              <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
                 Model
               </label>
-              <select
+              <ModelPickerWithFilter
+                models={models}
                 value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="flex-1 bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
-              >
-                {models.length === 0 && <option value="">No models found.</option>}
-                {models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+                onChange={setSelectedModel}
+                compact
+              />
             </div>
           )}
 

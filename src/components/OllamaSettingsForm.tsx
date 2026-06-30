@@ -8,6 +8,7 @@ import {
   testLLMConnection,
   fetchLLMModels,
 } from "@/actions/settings";
+import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 type SaveStatus =
   | { status: "idle" }
@@ -248,21 +249,13 @@ export default function OllamaSettingsForm({
         </div>
 
         {models.length > 0 || (hasSavedModel && !savedModelInList) ? (
-          <select
+          <ModelPickerWithFilter
+            models={models}
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={setModel}
             disabled={isBusy}
-            className={inputClass + " cursor-pointer"}
-          >
-            {hasSavedModel && !savedModelInList && (
-              <option value={model}>{model} — saved, not in list</option>
-            )}
-            {models.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+            savedNotInList={hasSavedModel && !savedModelInList}
+          />
         ) : (
           <input
             type="text"
