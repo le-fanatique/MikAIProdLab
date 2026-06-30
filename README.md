@@ -53,6 +53,32 @@ powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
 > **PowerShell Execution Policy**: If `.ps1` scripts are blocked, run once:
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
+## Windows assisted setup
+
+Three PowerShell scripts are available for Windows users. Run them with:
+
+```powershell
+# First-time setup after clone (installs deps, migrates DB, creates folders)
+powershell -ExecutionPolicy Bypass -File .\setup-windows.ps1
+
+# Diagnose the local environment without modifying anything
+powershell -ExecutionPolicy Bypass -File .\doctor.ps1
+
+# Start the dev server on all network interfaces
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
+```
+
+Or via npm (Windows only):
+
+```powershell
+npm.cmd run setup:windows
+npm.cmd run doctor:windows
+```
+
+> **Node 22 LTS is required** before running any of these scripts.
+> `setup-windows.ps1` will abort with a clear error if the wrong Node version is active.
+> `doctor.ps1` is read-only — it never modifies files, installs packages, or runs migrations.
+
 ## Environment configuration
 
 ```powershell

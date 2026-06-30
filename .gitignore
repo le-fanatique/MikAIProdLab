@@ -48,6 +48,12 @@ yarn-error.log*
 /public/outputs/*
 !/public/outputs/.gitkeep
 
+# storage — local runtime files, not committed (folders tracked via .gitkeep)
+/storage/*
+!/storage/.gitkeep
+/storage/outputs/*
+!/storage/outputs/.gitkeep
+
 # vercel
 .vercel
 

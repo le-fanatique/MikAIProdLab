@@ -10,7 +10,9 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "setup:windows": "powershell -ExecutionPolicy Bypass -File ./setup-windows.ps1",
+    "doctor:windows": "powershell -ExecutionPolicy Bypass -File ./doctor.ps1"
   },
   "engines": {
     "node": ">=22 <23",
