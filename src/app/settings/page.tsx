@@ -5,7 +5,8 @@ import Card from "@/components/Card";
 import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
 import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig } from "@/lib/settings";
+import ChatProviderSettingsForm from "@/components/ChatProviderSettingsForm";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -33,7 +34,10 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { defaultsSaved } = await searchParams;
   const allSettings = await getAllLLMSettings();
   const activeProvider = allSettings.activeProvider;
-  const comfySettings = await getComfySettings();
+  const [comfySettings, chatProviderInfo] = await Promise.all([
+    getComfySettings(),
+    getChatProviderInfo(),
+  ]);
 
   const [{ workflowCount }, allWorkflows, defaults] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
@@ -126,8 +130,20 @@ export default async function SettingsPage({ searchParams }: Props) {
         </ol>
       </Card>
 
-      {/* ── LLM Chat System Prompt Library ───────────────────── */}
+      {/* ── LLM Chat ─────────────────────────────────────────── */}
       <SectionLabel label="LLM Chat" />
+
+      <Card title="Chat LLM Provider" className="mb-6">
+        <ChatProviderSettingsForm
+          initialUseSeparate={chatProviderInfo.useSeparate}
+          initialChatProvider={chatProviderInfo.chatProvider}
+          providers={{
+            ollama: allSettings.ollama,
+            openrouter: allSettings.openrouter,
+            "openai-compatible": allSettings["openai-compatible"],
+          }}
+        />
+      </Card>
 
       <Card title="LLM Chat System Prompt Library" className="mb-6">
         <p className="text-xs text-[#6e767d] mb-4">

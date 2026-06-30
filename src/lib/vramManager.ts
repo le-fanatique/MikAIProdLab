@@ -1,11 +1,12 @@
 import "server-only";
 
 import { db } from "@/db";
-import { generationJobs } from "@/db/schema";
+import { generationJobs, appSettings } from "@/db/schema";
 import { eq, or } from "drizzle-orm";
-import { getComfySettings, getActiveProvider, getLLMSettings } from "@/lib/settings";
+import { getComfySettings } from "@/lib/settings";
 import { freeComfyVRAM } from "@/lib/comfy/comfyServerClient";
 import { unloadOllamaModel } from "@/lib/llm/ollama";
+import type { LLMProvider } from "@/types/llm";
 
 // Terminal statuses: done, failed, timeout.
 // Everything else (pending, uploading, queued, running) counts as active.
@@ -56,8 +57,8 @@ export async function maybePurgeComfyBeforeOllama(): Promise<void> {
 
 /**
  * Called before queuing a ComfyUI generation prompt.
- * If local VRAM auto-management is enabled and the active LLM provider is Ollama,
- * unloads the configured Ollama model from VRAM so ComfyUI has maximum VRAM available.
+ * Unloads the Ollama model from VRAM if Ollama is in use — either as the
+ * production LLM provider or as the separate chat LLM provider.
  * Never throws — logs safe warnings on failure.
  */
 export async function maybeUnloadOllamaBeforeComfy(): Promise<void> {
@@ -65,18 +66,43 @@ export async function maybeUnloadOllamaBeforeComfy(): Promise<void> {
     const comfySettings = await getComfySettings();
     if (!comfySettings.localVramAutoManagement) return;
 
-    const provider = await getActiveProvider();
-    if (provider !== "ollama") return;
+    // Read provider config in one query to check both production and chat
+    const rows = await db.select().from(appSettings);
+    const map = new Map(rows.map((r) => [r.key, r.value]));
 
-    const ollamaSettings = await getLLMSettings("ollama");
-    if (!ollamaSettings.baseUrl || !ollamaSettings.model) {
+    const productionProvider =
+      (map.get("llm_provider") as LLMProvider) ??
+      (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
+      "ollama";
+    const useSeparateChat = map.get("llm_chat_use_separate_provider") === "true";
+    const chatProvider: LLMProvider = useSeparateChat
+      ? ((map.get("llm_chat_provider") as LLMProvider) ?? productionProvider)
+      : productionProvider;
+
+    // Unload if Ollama is used in production OR as separate chat provider
+    const ollamaInUse =
+      productionProvider === "ollama" || (useSeparateChat && chatProvider === "ollama");
+    if (!ollamaInUse) return;
+
+    const ollamaBaseUrl =
+      map.get("llm_ollama_base_url") ??
+      map.get("llm_base_url") ??
+      process.env.LLM_BASE_URL ??
+      "http://localhost:11434";
+    const ollamaModel =
+      map.get("llm_ollama_model") ??
+      map.get("llm_model") ??
+      process.env.LLM_MODEL ??
+      "";
+
+    if (!ollamaBaseUrl || !ollamaModel) {
       console.warn("[VRAM] Ollama unload skipped — baseUrl or model not configured.");
       return;
     }
 
-    const result = await unloadOllamaModel(ollamaSettings.baseUrl, ollamaSettings.model);
+    const result = await unloadOllamaModel(ollamaBaseUrl, ollamaModel);
     if (result.ok) {
-      console.log(`[VRAM] Ollama model "${ollamaSettings.model}" unloaded before ComfyUI generation.`);
+      console.log(`[VRAM] Ollama model "${ollamaModel}" unloaded before ComfyUI generation.`);
     } else {
       console.warn(`[VRAM] Ollama unload failed: ${result.error}`);
     }

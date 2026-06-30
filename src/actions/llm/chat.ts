@@ -1,12 +1,16 @@
 "use server";
 
 import { callLLMChat, fetchLLMModelNames } from "@/lib/llm";
-import { getLLMConfig, getActiveLLMSettings } from "@/lib/settings";
+import {
+  getChatLLMConfig,
+  getChatLLMConfigForListing,
+  getChatProviderInfo,
+} from "@/lib/settings";
 import { getChatSystemPrompts } from "@/actions/settings";
-import type { ChatMessage, ChatSystemPrompt, LLMConfig } from "@/types/llm";
+import type { ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
-// Send a chat message to Ollama (free-form, no JSON format enforced)
+// Send a chat message using the effective chat LLM provider
 // ---------------------------------------------------------------------------
 
 export async function sendChatMessage(input: {
@@ -17,9 +21,9 @@ export async function sendChatMessage(input: {
   | { ok: false; error: string }
 > {
   try {
-    const config = await getLLMConfig();
+    const config = await getChatLLMConfig();
     if (!config) {
-      return { ok: false, error: "Configure Ollama in Settings first." };
+      return { ok: false, error: "No LLM model configured for chat. Check Settings." };
     }
 
     if (!input.model?.trim()) {
@@ -75,29 +79,47 @@ export async function listChatSystemPrompts(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// List available Ollama models + the currently configured default
+// List available models for the effective chat provider
 // ---------------------------------------------------------------------------
 
+const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
+  ollama: "Ollama",
+  openrouter: "OpenRouter",
+  "openai-compatible": "OpenAI-compatible",
+};
+
 export async function listChatModels(): Promise<
-  | { ok: true; models: string[]; defaultModel: string | null }
+  | {
+      ok: true;
+      models: string[];
+      defaultModel: string | null;
+      effectiveProvider: LLMProvider;
+      useSeparate: boolean;
+      providerLabel: string;
+    }
   | { ok: false; error: string }
 > {
   try {
-    const [{ provider, settings }, config] = await Promise.all([
-      getActiveLLMSettings(),
-      getLLMConfig(),
+    const [info, listConfig] = await Promise.all([
+      getChatProviderInfo(),
+      getChatLLMConfigForListing(),
     ]);
+
     const models = await fetchLLMModelNames({
-      provider,
-      baseUrl: settings.baseUrl,
-      model: settings.model,
-      apiKey: config?.apiKey ?? null,
-      timeoutMs: settings.timeoutMs,
+      provider: listConfig.provider,
+      baseUrl: listConfig.baseUrl,
+      model: listConfig.model || "placeholder",
+      apiKey: listConfig.apiKey,
+      timeoutMs: listConfig.timeoutMs,
     });
+
     return {
       ok: true,
       models,
-      defaultModel: settings.model.trim() ? settings.model : null,
+      defaultModel: listConfig.model.trim() ? listConfig.model : null,
+      effectiveProvider: info.effectiveProvider,
+      useSeparate: info.useSeparate,
+      providerLabel: PROVIDER_DISPLAY_NAMES[info.effectiveProvider] ?? info.effectiveProvider,
     };
   } catch (err) {
     const message =

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
-import type { ChatMessage, ChatSystemPrompt } from "@/types/llm";
+import type { ChatMessage, ChatSystemPrompt, LLMProvider } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -178,6 +178,12 @@ const DEFAULT_HEIGHT = 320;
 const MIN_HEIGHT = 220;
 const MAX_HEIGHT = 640;
 
+const PROVIDER_DISPLAY: Record<LLMProvider, string> = {
+  ollama: "Ollama",
+  openrouter: "OpenRouter",
+  "openai-compatible": "OpenAI-compatible",
+};
+
 export default function SidebarLLMChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -187,6 +193,8 @@ export default function SidebarLLMChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
+  const [effectiveProvider, setEffectiveProvider] = useState<LLMProvider | null>(null);
+  const [useSeparateProvider, setUseSeparateProvider] = useState(false);
 
   // System prompt state
   const [systemPrompts, setSystemPrompts] = useState<ChatSystemPrompt[]>([]);
@@ -223,6 +231,8 @@ export default function SidebarLLMChat() {
 
       if (modelsRes.ok) {
         setModels(modelsRes.models);
+        setEffectiveProvider(modelsRes.effectiveProvider);
+        setUseSeparateProvider(modelsRes.useSeparate);
         if (modelsRes.defaultModel && modelsRes.models.includes(modelsRes.defaultModel)) {
           setSelectedModel(modelsRes.defaultModel);
         } else if (modelsRes.models.length > 0) {
@@ -336,7 +346,11 @@ export default function SidebarLLMChat() {
           className="w-full text-left px-3 py-2 rounded hover:bg-[#1a1d20] transition-colors"
         >
           <div className="text-[11px] font-medium text-[#a4abb2]">Chat</div>
-          <div className="text-[10px] text-[#6e767d]">Ask the local LLM</div>
+          <div className="text-[10px] text-[#6e767d]">
+            {effectiveProvider
+              ? `via ${PROVIDER_DISPLAY[effectiveProvider] ?? effectiveProvider}`
+              : "Ask the LLM"}
+          </div>
         </button>
       ) : (
         // ── Open state ────────────────────────────────────────────────
@@ -352,7 +366,15 @@ export default function SidebarLLMChat() {
 
           {/* Header */}
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-[#e0e4e8]">LLM Chat</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-[#e0e4e8]">LLM Chat</span>
+              {effectiveProvider && (
+                <span className="text-[9px] text-[#4b5158] border border-[#232629] rounded px-1 py-0.5">
+                  {useSeparateProvider ? "Chat: " : ""}
+                  {PROVIDER_DISPLAY[effectiveProvider] ?? effectiveProvider}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setIsOpen(false)}
               className="text-[#4b5158] hover:text-[#a4abb2] text-sm leading-none"

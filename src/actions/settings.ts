@@ -301,6 +301,23 @@ export async function getAllProviderApiKeyStatus(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Save Chat LLM provider settings to DB
+// ---------------------------------------------------------------------------
+
+export async function saveChatProviderSettings(
+  useSeparate: boolean,
+  chatProvider: LLMProvider
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await upsertSetting("llm_chat_use_separate_provider", useSeparate ? "true" : "false");
+    await upsertSetting("llm_chat_provider", chatProvider);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save chat provider settings." };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Save workflow generation defaults to DB
 // ---------------------------------------------------------------------------
 

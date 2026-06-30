@@ -3,6 +3,16 @@ import { appSettings } from "@/db/schema";
 import type { LLMConfig, LLMProvider, ProviderSettings } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
+// Module-level provider prefix map (used by new chat config functions)
+// ---------------------------------------------------------------------------
+
+const PROVIDER_PREFIXES: Record<LLMProvider, string> = {
+  ollama: "llm_ollama_",
+  openrouter: "llm_openrouter_",
+  "openai-compatible": "llm_openai_compatible_",
+};
+
+// ---------------------------------------------------------------------------
 // Per-provider settings interfaces
 // ---------------------------------------------------------------------------
 
@@ -258,6 +268,103 @@ export async function hasApiKeyForProvider(
 
   const apiKey = map.get(key(prefix, "api_key"));
   return !!apiKey;
+}
+
+// ---------------------------------------------------------------------------
+// Chat LLM provider — separate from production LLM
+// ---------------------------------------------------------------------------
+
+export interface ChatProviderInfo {
+  useSeparate: boolean;
+  chatProvider: LLMProvider;
+  effectiveProvider: LLMProvider;
+}
+
+/**
+ * Returns the effective chat provider and whether a separate one is configured.
+ */
+export async function getChatProviderInfo(): Promise<ChatProviderInfo> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+
+  const useSeparate = map.get("llm_chat_use_separate_provider") === "true";
+  const productionProvider =
+    (map.get("llm_provider") as LLMProvider) ??
+    (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
+    "ollama";
+  const chatProvider =
+    (map.get("llm_chat_provider") as LLMProvider) ?? productionProvider;
+
+  return {
+    useSeparate,
+    chatProvider,
+    effectiveProvider: useSeparate ? chatProvider : productionProvider,
+  };
+}
+
+/**
+ * Builds a chat LLMConfig from the map (sync helper).
+ * Model may be "" — callers decide whether to reject that.
+ */
+function buildChatConfigFromMap(map: Map<string, string>): LLMConfig {
+  const useSeparate = map.get("llm_chat_use_separate_provider") === "true";
+  const productionProvider =
+    (map.get("llm_provider") as LLMProvider) ??
+    (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
+    "ollama";
+  const provider: LLMProvider = useSeparate
+    ? ((map.get("llm_chat_provider") as LLMProvider) ?? productionProvider)
+    : productionProvider;
+
+  const prefix = PROVIDER_PREFIXES[provider];
+  const def = PROVIDER_DEFAULTS[provider];
+
+  const legacyBase = map.get("llm_base_url") ?? process.env.LLM_BASE_URL;
+  const legacyModel = map.get("llm_model") ?? process.env.LLM_MODEL;
+  const legacyTimeout = map.get("llm_timeout_ms") ?? process.env.LLM_TIMEOUT_MS;
+  const legacyTemp = map.get("llm_temperature") ?? process.env.LLM_TEMPERATURE;
+
+  const baseUrl = map.get(`${prefix}base_url`) ?? legacyBase ?? def.baseUrl;
+  const model = map.get(`${prefix}model`) ?? legacyModel ?? def.model;
+  const timeoutMs = parseInt(
+    map.get(`${prefix}timeout_ms`) ?? legacyTimeout ?? String(def.timeoutMs),
+    10
+  );
+  const temperature = parseFloat(
+    map.get(`${prefix}temperature`) ?? legacyTemp ?? String(def.temperature)
+  );
+
+  const specificKey = map.get(`${prefix}api_key`) || null;
+  const envKey =
+    provider === "openrouter"
+      ? (process.env.OPENROUTER_API_KEY?.trim() || null)
+      : provider === "openai-compatible"
+        ? (process.env.OPENAI_API_KEY?.trim() || null)
+        : null;
+  const legacyKey = provider !== "ollama" ? (map.get("llm_api_key") || null) : null;
+  const apiKey = specificKey ?? envKey ?? legacyKey;
+
+  return { provider, baseUrl, model: model || "", apiKey, timeoutMs, temperature };
+}
+
+/**
+ * Returns a full LLMConfig for the effective chat provider, including API key.
+ * Unlike getLLMConfig(), model may be "" — callers must check.
+ * Intended for model listing (does not require model to be set).
+ */
+export async function getChatLLMConfigForListing(): Promise<LLMConfig> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  return buildChatConfigFromMap(map);
+}
+
+/**
+ * Returns the effective chat LLMConfig, or null if no model is configured.
+ * Use this for sending chat messages.
+ */
+export async function getChatLLMConfig(): Promise<LLMConfig | null> {
+  const cfg = await getChatLLMConfigForListing();
+  return cfg.model.trim() ? cfg : null;
 }
 
 // ---------------------------------------------------------------------------
