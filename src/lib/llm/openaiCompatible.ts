@@ -1,4 +1,4 @@
-import type { ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatGeneratedImage, ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // OpenAI-compatible caller (OpenRouter, vLLM, any OpenAI API server)
@@ -24,11 +24,12 @@ export async function callOpenAICompatibleJson(
 /**
  * Calls an OpenAI-compatible /chat/completions endpoint.
  * Freeform chat, no JSON enforcement.
+ * Returns the full response including any image content parts.
  */
 export async function callOpenAICompatibleChat(
   messages: ChatMessage[],
   config: LLMConfig
-): Promise<string> {
+): Promise<ChatLLMResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -86,7 +87,7 @@ export async function callOpenAICompatibleChat(
     );
   }
 
-  return parseOpenAIChatResponse(await response.json());
+  return parseOpenAIChatResponseFull(await response.json());
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +184,76 @@ function parseOpenAIChatResponse(json: unknown): string {
   ) {
     const content = (json as any).choices[0]?.message?.content;
     if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((p: unknown) => p && typeof p === "object" && (p as any).type === "text" && typeof (p as any).text === "string")
+        .map((p: unknown) => (p as any).text as string)
+        .join("\n");
+    }
+  }
+  throw new Error("LLM server returned an unexpected response shape.");
+}
+
+// ---------------------------------------------------------------------------
+// Full chat response parser — extracts text AND image content parts
+// ---------------------------------------------------------------------------
+
+const SAFE_RESPONSE_IMAGE_MIMES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+]);
+
+function isAllowedResponseImageUrl(url: unknown): url is string {
+  if (!url || typeof url !== "string") return false;
+  if (url.startsWith("https://") || url.startsWith("http://")) return true;
+  if (url.startsWith("data:")) {
+    const mime = url.slice(5).split(";")[0]?.toLowerCase() ?? "";
+    return SAFE_RESPONSE_IMAGE_MIMES.has(mime);
+  }
+  return false;
+}
+
+function parseOpenAIChatResponseFull(json: unknown): ChatLLMResponse {
+  if (
+    json &&
+    typeof json === "object" &&
+    "choices" in json &&
+    Array.isArray((json as any).choices) &&
+    (json as any).choices.length > 0
+  ) {
+    const message = (json as any).choices[0]?.message;
+    if (message) {
+      const content = message.content;
+
+      if (typeof content === "string") {
+        return { text: content, images: [] };
+      }
+
+      if (Array.isArray(content)) {
+        const textParts: string[] = [];
+        const images: ChatGeneratedImage[] = [];
+
+        for (const part of content) {
+          if (!part || typeof part !== "object") continue;
+          const p = part as Record<string, unknown>;
+
+          if (p.type === "text" && typeof p.text === "string") {
+            textParts.push(p.text);
+          } else if (p.type === "image_url") {
+            const imageUrl = (p.image_url as Record<string, unknown> | undefined)?.url;
+            if (isAllowedResponseImageUrl(imageUrl)) {
+              if (imageUrl.startsWith("data:")) {
+                const mimeType = imageUrl.slice(5).split(";")[0]?.toLowerCase();
+                images.push({ dataUrl: imageUrl, mimeType });
+              } else {
+                images.push({ url: imageUrl });
+              }
+            }
+          }
+        }
+
+        return { text: textParts.join("\n"), images };
+      }
+    }
   }
   throw new Error("LLM server returned an unexpected response shape.");
 }
@@ -273,7 +344,7 @@ export async function testOpenAICompatibleConnection(
       // Infer the provider from the URL so OpenRouter-specific headers and error messages work
       const inferredProvider = baseUrl.includes("openrouter.ai") ? "openrouter" as const : "openai-compatible" as const;
       try {
-        const content = await callOpenAICompatibleChat(
+        const chatResponse = await callOpenAICompatibleChat(
           [{ role: "user", content: "OK" }],
           {
             provider: inferredProvider,
@@ -285,7 +356,7 @@ export async function testOpenAICompatibleConnection(
         );
         return {
           ok: true,
-          message: `Connected. Model "${model.trim()}" responded (${content.length} chars).`,
+          message: `Connected. Model "${model.trim()}" responded (${chatResponse.text.length} chars).`,
         };
       } catch (chatErr) {
         return {

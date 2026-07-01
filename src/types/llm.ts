@@ -53,6 +53,23 @@ export type ChatMessage = {
 };
 
 // ---------------------------------------------------------------------------
+// Chat image response types
+// ---------------------------------------------------------------------------
+
+export type ChatGeneratedImage = {
+  url?: string;       // https:// URL from provider
+  dataUrl?: string;   // data:image/* base64 URL
+  mimeType?: string;  // e.g. "image/png"
+  filename?: string;  // optional download filename hint
+  alt?: string;       // optional alt text
+};
+
+export type ChatLLMResponse = {
+  text: string;
+  images?: ChatGeneratedImage[];
+};
+
+// ---------------------------------------------------------------------------
 // System prompt library for sidebar chat
 // ---------------------------------------------------------------------------
 

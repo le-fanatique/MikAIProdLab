@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
-import type { ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import type { ChatGeneratedImage, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
@@ -17,6 +17,7 @@ type LocalMessage = {
   attachmentLabel?: string; // "notes.md · 12 KB" — badge shown in message bubble
   imageLabel?: string;      // "photo.png · 200 KB" — image badge
   imageThumbnailDataUrl?: string; // data URL for thumbnail display in bubble
+  images?: ChatGeneratedImage[]; // images returned by the assistant provider
 };
 
 let _msgId = 0;
@@ -135,9 +136,55 @@ function AssistantImage({ src, alt }: { src: string; alt: string }) {
         onClick={handleDownload}
         className="text-[9px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors block mt-0.5"
       >
-        Download image
+        {src.startsWith("data:") ? "Download image" : "Open image"}
       </button>
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AssistantGeneratedImage — renders a structured image from a provider response
+// ---------------------------------------------------------------------------
+
+function AssistantGeneratedImage({ image }: { image: ChatGeneratedImage }) {
+  const src = image.dataUrl ?? image.url ?? "";
+  if (!isSafeImageSrc(src)) return null;
+
+  function handleAction() {
+    if (src.startsWith("data:")) {
+      const a = document.createElement("a");
+      a.href = src;
+      const ext = src.slice(5).split(";")[0]?.split("/")[1] ?? "png";
+      a.download = image.filename ?? `image.${ext}`;
+      a.click();
+    } else if (src.startsWith("http://") || src.startsWith("https://")) {
+      window.open(src, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  const isDataUrl = src.startsWith("data:");
+
+  return (
+    <div className="mt-1">
+      <img
+        src={src}
+        alt={image.alt ?? "generated image"}
+        className="max-w-full max-h-[240px] object-contain rounded border border-[#232629]"
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = "none";
+        }}
+      />
+      {image.filename && (
+        <div className="text-[9px] text-[#4b5158] font-mono mt-0.5">{image.filename}</div>
+      )}
+      <button
+        type="button"
+        onClick={handleAction}
+        className="text-[9px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors block mt-0.5"
+      >
+        {isDataUrl ? "Download image" : "Open image"}
+      </button>
+    </div>
   );
 }
 
@@ -602,7 +649,15 @@ export default function SidebarLLMChat() {
     const res = await sendChatMessage({ model: selectedModel, messages: apiMessages });
 
     if (res.ok) {
-      const assistantMsg: LocalMessage = { id: nextId(), role: "assistant", content: res.content };
+      const validImages = (res.images ?? []).filter((img) =>
+        isSafeImageSrc(img.dataUrl ?? img.url ?? "")
+      );
+      const assistantMsg: LocalMessage = {
+        id: nextId(),
+        role: "assistant",
+        content: res.content,
+        images: validImages.length > 0 ? validImages : undefined,
+      };
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setInput("");
       setAttachedFile(null);
@@ -772,7 +827,16 @@ export default function SidebarLLMChat() {
                     )}
                   </div>
                 ) : (
-                  <div>{renderMarkdown(msg.content)}</div>
+                  <div>
+                    {renderMarkdown(msg.content)}
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="mt-1 space-y-1">
+                        {msg.images.map((img, idx) => (
+                          <AssistantGeneratedImage key={idx} image={img} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

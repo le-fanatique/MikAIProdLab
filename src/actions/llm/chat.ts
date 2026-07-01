@@ -7,7 +7,7 @@ import {
   getChatProviderInfo,
 } from "@/lib/settings";
 import { getChatSystemPrompts } from "@/actions/settings";
-import type { ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
+import type { ChatGeneratedImage, ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // Send a chat message using the effective chat LLM provider
@@ -17,7 +17,7 @@ export async function sendChatMessage(input: {
   model: string;
   messages: ChatMessage[];
 }): Promise<
-  | { ok: true; content: string }
+  | { ok: true; content: string; images?: ChatGeneratedImage[] }
   | { ok: false; error: string }
 > {
   try {
@@ -53,8 +53,8 @@ export async function sendChatMessage(input: {
       model: input.model.trim(),
     };
 
-    const content = await callLLMChat(trimmed, chatConfig);
-    return { ok: true, content };
+    const response = await callLLMChat(trimmed, chatConfig);
+    return { ok: true, content: response.text, images: response.images };
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "An unexpected error occurred.";

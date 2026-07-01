@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 import {
   callOllama,
   callOllamaChat,
@@ -34,14 +34,16 @@ export async function callLLMJson(
 
 /**
  * Calls the configured LLM provider for freeform chat.
+ * Returns the full response including any image content parts from the provider.
  */
 export async function callLLMChat(
   messages: ChatMessage[],
   config: LLMConfig
-): Promise<string> {
+): Promise<ChatLLMResponse> {
   if (config.provider === "ollama") {
     await maybePurgeComfyBeforeOllama();
-    return callOllamaChat(messages, config);
+    const text = await callOllamaChat(messages, config);
+    return { text, images: [] };
   }
   return callOpenAICompatibleChat(messages, config);
 }
