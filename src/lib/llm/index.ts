@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatImageGenerationRequest, ChatImageGenerationResponse, ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 import {
   callOllama,
   callOllamaChat,
@@ -9,6 +9,7 @@ import {
 import {
   callOpenAICompatibleJson,
   callOpenAICompatibleChat,
+  callOpenAICompatibleImageGeneration,
   fetchOpenAICompatibleModelNames,
 } from "./openaiCompatible";
 import { maybePurgeComfyBeforeOllama } from "@/lib/vramManager";
@@ -46,6 +47,22 @@ export async function callLLMChat(
     return { text, images: [] };
   }
   return callOpenAICompatibleChat(messages, config);
+}
+
+/**
+ * Calls the configured LLM provider's dedicated image generation endpoint.
+ * Ollama does not support this — throws a clear user-facing error.
+ */
+export async function callLLMImageGeneration(
+  config: LLMConfig,
+  request: ChatImageGenerationRequest
+): Promise<ChatImageGenerationResponse> {
+  if (config.provider === "ollama") {
+    throw new Error(
+      "This provider does not support dedicated image generation in Sidebar Chat yet."
+    );
+  }
+  return callOpenAICompatibleImageGeneration(config, request);
 }
 
 /**

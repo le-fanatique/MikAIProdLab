@@ -1,13 +1,13 @@
 "use server";
 
-import { callLLMChat, fetchLLMModelNames } from "@/lib/llm";
+import { callLLMChat, callLLMImageGeneration, fetchLLMModelNames } from "@/lib/llm";
 import {
   getChatLLMConfig,
   getChatLLMConfigForListing,
   getChatProviderInfo,
 } from "@/lib/settings";
 import { getChatSystemPrompts } from "@/actions/settings";
-import type { ChatGeneratedImage, ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
+import type { ChatGeneratedImage, ChatImageSize, ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // Send a chat message using the effective chat LLM provider
@@ -55,6 +55,44 @@ export async function sendChatMessage(input: {
 
     const response = await callLLMChat(trimmed, chatConfig);
     return { ok: true, content: response.text, images: response.images };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "An unexpected error occurred.";
+    return { ok: false, error: message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Generate images using the effective chat provider's image generation endpoint
+// ---------------------------------------------------------------------------
+
+export async function generateChatImages(input: {
+  model: string;
+  prompt: string;
+  size: ChatImageSize;
+}): Promise<
+  | { ok: true; images: ChatGeneratedImage[]; text: string }
+  | { ok: false; error: string }
+> {
+  try {
+    const config = await getChatLLMConfig();
+    if (!config) {
+      return { ok: false, error: "No LLM model configured for chat. Check Settings." };
+    }
+    if (!input.model?.trim()) {
+      return { ok: false, error: "No model selected." };
+    }
+    if (!input.prompt?.trim()) {
+      return { ok: false, error: "No prompt provided." };
+    }
+
+    const chatConfig: LLMConfig = { ...config, model: input.model.trim() };
+    const result = await callLLMImageGeneration(chatConfig, {
+      model: input.model.trim(),
+      prompt: input.prompt.trim(),
+      size: input.size,
+    });
+    return { ok: true, images: result.images, text: result.text };
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "An unexpected error occurred.";

@@ -70,6 +70,23 @@ export type ChatLLMResponse = {
 };
 
 // ---------------------------------------------------------------------------
+// Image generation types
+// ---------------------------------------------------------------------------
+
+export type ChatImageSize = "square" | "landscape" | "portrait";
+
+export type ChatImageGenerationRequest = {
+  model: string;
+  prompt: string;
+  size: ChatImageSize;
+};
+
+export type ChatImageGenerationResponse = {
+  images: ChatGeneratedImage[];
+  text: string; // e.g. "Generated 1 image."
+};
+
+// ---------------------------------------------------------------------------
 // System prompt library for sidebar chat
 // ---------------------------------------------------------------------------
 

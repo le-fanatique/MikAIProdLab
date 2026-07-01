@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
-import type { ChatGeneratedImage, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import { generateChatImages, listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
+import type { ChatGeneratedImage, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
@@ -400,6 +400,11 @@ export default function SidebarLLMChat() {
   const [attachedImageError, setAttachedImageError] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  // Mode state
+  const [mode, setMode] = useState<"chat" | "image">("chat");
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imageSize, setImageSize] = useState<ChatImageSize>("square");
+
   // Resizable height
   const [chatHeight, setChatHeight] = useState(() => {
     if (typeof window !== "undefined") {
@@ -683,10 +688,46 @@ export default function SidebarLLMChat() {
     [handleSend]
   );
 
+  const handleGenerateImage = useCallback(async () => {
+    const prompt = imagePrompt.trim();
+    if (!prompt || isLoading || !selectedModel) return;
+
+    setError(null);
+    setIsLoading(true);
+
+    const userMsg: LocalMessage = {
+      id: nextId(),
+      role: "user",
+      content: prompt,
+      sentContent: prompt,
+    };
+
+    const res = await generateChatImages({ model: selectedModel, prompt, size: imageSize });
+
+    if (res.ok) {
+      const validImages = res.images.filter((img) =>
+        isSafeImageSrc(img.dataUrl ?? img.url ?? "")
+      );
+      const assistantMsg: LocalMessage = {
+        id: nextId(),
+        role: "assistant",
+        content: res.text,
+        images: validImages.length > 0 ? validImages : undefined,
+      };
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setImagePrompt("");
+    } else {
+      setError(res.error);
+    }
+
+    setIsLoading(false);
+  }, [imagePrompt, imageSize, isLoading, selectedModel]);
+
   const handleClear = useCallback(() => {
     setMessages([]);
     setError(null);
     setInput("");
+    setImagePrompt("");
     setAttachedFile(null);
     setAttachedFileError(null);
     setAttachedFileWarning(null);
@@ -743,6 +784,24 @@ export default function SidebarLLMChat() {
             </button>
           </div>
 
+          {/* Mode tabs */}
+          <div className="flex mb-2 border border-[#232629] rounded overflow-hidden">
+            {(["chat", "image"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { setMode(m); setError(null); }}
+                className={`flex-1 py-0.5 text-[9px] tracking-wider transition-colors ${
+                  mode === m
+                    ? "bg-[#232629] text-[#e0e4e8]"
+                    : "text-[#4b5158] hover:text-[#6e767d]"
+                }`}
+              >
+                {m === "chat" ? "Chat" : "Generate Image"}
+              </button>
+            ))}
+          </div>
+
           {/* Model selector */}
           {modelError ? (
             <div className="text-[10px] text-[#e0556a] mb-1.5">{modelError}</div>
@@ -760,37 +819,42 @@ export default function SidebarLLMChat() {
             </div>
           )}
 
-          {/* System Prompt selector */}
-          {promptsError ? (
-            <div className="text-[9px] text-[#4b5158] mb-1.5">{promptsError}</div>
-          ) : (
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="text-[9px] text-[#4b5158] uppercase tracking-wider shrink-0">
-                System Prompt
-              </label>
-              <select
-                value={selectedSystemPromptId}
-                onChange={(e) => setSelectedSystemPromptId(e.target.value)}
-                className="flex-1 bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
-              >
-                <option value="none">None</option>
-                {systemPrompts.map((sp) => (
-                  <option key={sp.id} value={sp.id}>{sp.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {selectedSystemPrompt && (
-            <div className="text-[9px] text-[#4b5158] mb-1.5 truncate">
-              Active: {selectedSystemPrompt.name}
-            </div>
+          {/* System Prompt selector — chat mode only */}
+          {mode === "chat" && (
+            <>
+              {promptsError ? (
+                <div className="text-[9px] text-[#4b5158] mb-1.5">{promptsError}</div>
+              ) : (
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-[9px] text-[#4b5158] uppercase tracking-wider shrink-0">
+                    System Prompt
+                  </label>
+                  <select
+                    value={selectedSystemPromptId}
+                    onChange={(e) => setSelectedSystemPromptId(e.target.value)}
+                    className="flex-1 bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+                  >
+                    <option value="none">None</option>
+                    {systemPrompts.map((sp) => (
+                      <option key={sp.id} value={sp.id}>{sp.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {selectedSystemPrompt && (
+                <div className="text-[9px] text-[#4b5158] mb-1.5 truncate">
+                  Active: {selectedSystemPrompt.name}
+                </div>
+              )}
+            </>
           )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto mb-2 space-y-1.5 min-h-[40px]">
             {messages.length === 0 && !error && (
-              <div className="text-[10px] text-[#4b5158] italic">Ask anything...</div>
+              <div className="text-[10px] text-[#4b5158] italic">
+                {mode === "chat" ? "Ask anything..." : "Generate an image from a prompt..."}
+              </div>
             )}
             {messages.map((msg) => (
               <div
@@ -841,7 +905,9 @@ export default function SidebarLLMChat() {
               </div>
             ))}
             {isLoading && (
-              <div className="px-2 py-1 text-[10px] text-[#6e767d] italic">Thinking...</div>
+              <div className="px-2 py-1 text-[10px] text-[#6e767d] italic">
+                {mode === "chat" ? "Thinking..." : "Generating image..."}
+              </div>
             )}
             {error && (
               <div className="px-2 py-1 rounded bg-[#2d1518] border border-[#5a1a1a] text-[10px] text-[#e0556a]">
@@ -851,138 +917,204 @@ export default function SidebarLLMChat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Text file attachment badge */}
-          {attachedFile && (
-            <div className="flex items-center gap-1.5 mb-1 px-1">
-              <span className="text-[9px] text-[#6b9e72] font-mono truncate flex-1">
-                {attachedFile.name} · {fmtBytes(attachedFile.sizeBytes)}
-              </span>
-              <button
-                type="button"
-                onClick={clearAttachment}
-                className="text-[9px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors shrink-0"
-              >
-                Remove
-              </button>
-            </div>
-          )}
+          {/* ── Mode-specific input area ───────────────────────────── */}
+          {mode === "chat" ? (
+            <>
+              {/* Text file attachment badge */}
+              {attachedFile && (
+                <div className="flex items-center gap-1.5 mb-1 px-1">
+                  <span className="text-[9px] text-[#6b9e72] font-mono truncate flex-1">
+                    {attachedFile.name} · {fmtBytes(attachedFile.sizeBytes)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearAttachment}
+                    className="text-[9px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
 
-          {/* Text file attachment warning */}
-          {attachedFileWarning && (
-            <div className="text-[9px] text-[#cda24f] mb-1 px-1">{attachedFileWarning}</div>
-          )}
+              {/* Text file attachment warning */}
+              {attachedFileWarning && (
+                <div className="text-[9px] text-[#cda24f] mb-1 px-1">{attachedFileWarning}</div>
+              )}
 
-          {/* Text file attachment error */}
-          {attachedFileError && (
-            <div className="text-[9px] text-[#e0556a] mb-1 px-1">{attachedFileError}</div>
-          )}
+              {/* Text file attachment error */}
+              {attachedFileError && (
+                <div className="text-[9px] text-[#e0556a] mb-1 px-1">{attachedFileError}</div>
+              )}
 
-          {/* Image attachment badge */}
-          {attachedImage && (
-            <div className="flex items-center gap-1.5 mb-1 px-1">
-              <img
-                src={attachedImage.dataUrl}
-                alt={attachedImage.name}
-                className="w-8 h-8 object-cover rounded border border-[#232629] shrink-0"
+              {/* Image attachment badge */}
+              {attachedImage && (
+                <div className="flex items-center gap-1.5 mb-1 px-1">
+                  <img
+                    src={attachedImage.dataUrl}
+                    alt={attachedImage.name}
+                    className="w-8 h-8 object-cover rounded border border-[#232629] shrink-0"
+                  />
+                  <span className="text-[9px] text-[#7d8cf0] font-mono truncate flex-1">
+                    {attachedImage.name} · {fmtBytes(attachedImage.sizeBytes)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="text-[9px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
+              {/* Vision model warning */}
+              {attachedImage && (
+                <div className="text-[9px] text-[#cda24f] mb-1 px-1">
+                  The selected model may not support image attachments.
+                </div>
+              )}
+
+              {/* Image attachment error */}
+              {attachedImageError && (
+                <div className="text-[9px] text-[#e0556a] mb-1 px-1">{attachedImageError}</div>
+              )}
+
+              {/* Hidden file inputs */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.json,.csv,.log,.ts,.tsx,.js,.jsx,.py,.sh,.yaml,.yml,.toml,.xml"
+                onChange={handleFileSelect}
+                className="hidden"
               />
-              <span className="text-[9px] text-[#7d8cf0] font-mono truncate flex-1">
-                {attachedImage.name} · {fmtBytes(attachedImage.sizeBytes)}
-              </span>
-              <button
-                type="button"
-                onClick={clearImage}
-                className="text-[9px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors shrink-0"
-              >
-                Remove
-              </button>
-            </div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp,.gif"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+
+              {/* Chat input */}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading || !selectedModel}
+                placeholder={
+                  attachedFile || attachedImage
+                    ? "Add a message or send attachment alone..."
+                    : "Ask anything..."
+                }
+                rows={2}
+                className="w-full bg-[#0d0e10] border border-[#232629] rounded px-2 py-1 text-[11px] text-[#a4abb2] placeholder-[#4b5158] resize-none focus:outline-none focus:border-[#3a4046] disabled:opacity-50"
+              />
+
+              {/* Chat buttons */}
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Send
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachedFileError(null);
+                    fileInputRef.current?.click();
+                  }}
+                  disabled={isLoading || !selectedModel}
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Attach text file"
+                >
+                  Attach
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachedImageError(null);
+                    imageInputRef.current?.click();
+                  }}
+                  disabled={isLoading || !selectedModel}
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Attach image"
+                >
+                  Image
+                </button>
+                <button
+                  onClick={handleClear}
+                  disabled={isLoading}
+                  className="px-3 py-1 rounded text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Image generation prompt */}
+              <textarea
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                disabled={isLoading || !selectedModel}
+                placeholder="Describe the image you want to generate..."
+                rows={3}
+                className="w-full bg-[#0d0e10] border border-[#232629] rounded px-2 py-1 text-[11px] text-[#a4abb2] placeholder-[#4b5158] resize-none focus:outline-none focus:border-[#3a4046] disabled:opacity-50"
+              />
+
+              {/* Size selector */}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[9px] text-[#4b5158] uppercase tracking-wider shrink-0">Size</span>
+                <div className="flex gap-1">
+                  {(["square", "landscape", "portrait"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setImageSize(s)}
+                      disabled={isLoading}
+                      className={`px-2 py-0.5 rounded text-[9px] capitalize transition-colors ${
+                        imageSize === s
+                          ? "bg-[#3a4046] text-[#e0e4e8] border border-[#4b5158]"
+                          : "bg-[#1a1d20] text-[#6e767d] hover:text-[#a4abb2] border border-[#232629]"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ollama unsupported warning */}
+              {effectiveProvider === "ollama" && (
+                <p className="text-[9px] text-[#cda24f] mt-1">
+                  Ollama does not support dedicated image generation. Switch to OpenRouter or an OpenAI-compatible provider in Settings.
+                </p>
+              )}
+
+              {/* Generate buttons */}
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateImage}
+                  disabled={isLoading || !selectedModel || !imagePrompt.trim()}
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoading ? "Generating..." : "Generate Image"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  disabled={isLoading}
+                  className="px-3 py-1 rounded text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            </>
           )}
-
-          {/* Vision model warning */}
-          {attachedImage && (
-            <div className="text-[9px] text-[#cda24f] mb-1 px-1">
-              The selected model may not support image attachments.
-            </div>
-          )}
-
-          {/* Image attachment error */}
-          {attachedImageError && (
-            <div className="text-[9px] text-[#e0556a] mb-1 px-1">{attachedImageError}</div>
-          )}
-
-          {/* Hidden file inputs */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.md,.json,.csv,.log,.ts,.tsx,.js,.jsx,.py,.sh,.yaml,.yml,.toml,.xml"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept=".png,.jpg,.jpeg,.webp,.gif"
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-
-          {/* Input */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading || !selectedModel}
-            placeholder={
-              attachedFile || attachedImage
-                ? "Add a message or send attachment alone..."
-                : "Ask anything..."
-            }
-            rows={2}
-            className="w-full bg-[#0d0e10] border border-[#232629] rounded px-2 py-1 text-[11px] text-[#a4abb2] placeholder-[#4b5158] resize-none focus:outline-none focus:border-[#3a4046] disabled:opacity-50"
-          />
-
-          {/* Buttons */}
-          <div className="flex items-center gap-2 mt-2">
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Send
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAttachedFileError(null);
-                fileInputRef.current?.click();
-              }}
-              disabled={isLoading || !selectedModel}
-              className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Attach text file"
-            >
-              Attach
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAttachedImageError(null);
-                imageInputRef.current?.click();
-              }}
-              disabled={isLoading || !selectedModel}
-              className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Attach image"
-            >
-              Image
-            </button>
-            <button
-              onClick={handleClear}
-              disabled={isLoading}
-              className="px-3 py-1 rounded text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors"
-            >
-              Clear
-            </button>
-          </div>
         </div>
       )}
     </div>

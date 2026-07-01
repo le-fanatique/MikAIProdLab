@@ -1,4 +1,4 @@
-import type { ChatGeneratedImage, ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatGeneratedImage, ChatImageGenerationRequest, ChatImageGenerationResponse, ChatImageSize, ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // OpenAI-compatible caller (OpenRouter, vLLM, any OpenAI API server)
@@ -256,6 +256,109 @@ function parseOpenAIChatResponseFull(json: unknown): ChatLLMResponse {
     }
   }
   throw new Error("LLM server returned an unexpected response shape.");
+}
+
+// ---------------------------------------------------------------------------
+// Image generation
+// ---------------------------------------------------------------------------
+
+const IMAGE_SIZE_MAP: Record<ChatImageSize, string> = {
+  square: "1024x1024",
+  landscape: "1536x1024",
+  portrait: "1024x1536",
+};
+
+export async function callOpenAICompatibleImageGeneration(
+  config: LLMConfig,
+  request: ChatImageGenerationRequest
+): Promise<ChatImageGenerationResponse> {
+  const effectiveTimeout = Math.max(config.timeoutMs, 60_000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), effectiveTimeout);
+
+  const url = buildUrl(config.baseUrl, "/images/generations");
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (config.apiKey) {
+    headers["Authorization"] = `Bearer ${config.apiKey}`;
+  }
+  if (config.provider === "openrouter") {
+    headers["HTTP-Referer"] = "http://localhost:3000";
+    headers["X-Title"] = "MikAI Production Lab";
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: request.model,
+        prompt: request.prompt,
+        n: 1,
+        size: IMAGE_SIZE_MAP[request.size],
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        `Image generation timed out after ${effectiveTimeout}ms. The model may be loading or overloaded.`
+      );
+    }
+    throw new Error(
+      `Cannot connect to LLM server at ${config.baseUrl}. Check your settings.`
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    if (response.status === 401 && config.provider === "openrouter") {
+      throw new Error(
+        `OpenRouter rejected the request with 401. The API key used by MikAI is missing or invalid. Re-save the OpenRouter API key in Settings, without "Bearer ".`
+      );
+    }
+    throw new Error(
+      `Image generation returned HTTP ${response.status}. ${body.slice(0, 200)}`
+    );
+  }
+
+  const json: unknown = await response.json();
+  const images = parseImageGenerationResponse(json);
+  const count = images.length;
+  return { images, text: `Generated ${count} image${count !== 1 ? "s" : ""}.` };
+}
+
+function parseImageGenerationResponse(json: unknown): ChatGeneratedImage[] {
+  if (!json || typeof json !== "object") {
+    throw new Error("Image generation returned an unexpected response shape.");
+  }
+  const data = (json as Record<string, unknown>).data;
+  if (!Array.isArray(data)) {
+    throw new Error("Image generation response missing `data` array.");
+  }
+
+  const images: ChatGeneratedImage[] = [];
+  for (const item of data) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as Record<string, unknown>;
+
+    if (typeof entry.url === "string" && isAllowedResponseImageUrl(entry.url)) {
+      images.push({ url: entry.url });
+    } else if (typeof entry.b64_json === "string") {
+      const dataUrl = `data:image/png;base64,${entry.b64_json}`;
+      images.push({ dataUrl, mimeType: "image/png" });
+    }
+  }
+
+  if (images.length === 0) {
+    throw new Error("Image generation returned no usable images.");
+  }
+  return images;
 }
 
 // ---------------------------------------------------------------------------
