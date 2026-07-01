@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
-import type { ChatMessage, ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import type { ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
@@ -12,12 +12,133 @@ import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 type LocalMessage = {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  content: string;          // displayed text (typed message, or "" if file/image-only)
+  sentContent?: string;     // full merged text content sent to LLM (includes file body)
+  attachmentLabel?: string; // "notes.md · 12 KB" — badge shown in message bubble
+  imageLabel?: string;      // "photo.png · 200 KB" — image badge
+  imageThumbnailDataUrl?: string; // data URL for thumbnail display in bubble
 };
 
 let _msgId = 0;
 function nextId(): string {
   return `msg-${++_msgId}-${Date.now()}`;
+}
+
+// ---------------------------------------------------------------------------
+// Text attachment validation
+// ---------------------------------------------------------------------------
+
+const ALLOWED_EXTS = new Set([
+  ".txt", ".md", ".json", ".csv", ".log",
+  ".ts", ".tsx", ".js", ".jsx",
+  ".py", ".sh", ".yaml", ".yml", ".toml", ".xml",
+]);
+
+const BLOCKED_EXTS = new Set([
+  ".pem", ".key", ".p12", ".pfx",
+  ".db", ".sqlite", ".sqlite3", ".secret",
+]);
+
+const MAX_FILE_BYTES = 1 * 1024 * 1024;   // 1 MB hard limit
+const WARN_FILE_BYTES = 256 * 1024;        // 256 KB soft warning
+
+// ---------------------------------------------------------------------------
+// Image attachment validation
+// ---------------------------------------------------------------------------
+
+const ALLOWED_IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB hard limit
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+function fileExt(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+}
+
+function isBlockedFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (lower === ".env" || lower.startsWith(".env.")) return true;
+  return BLOCKED_EXTS.has(fileExt(name));
+}
+
+function isAllowedFile(name: string): boolean {
+  if (isBlockedFile(name)) return false;
+  return ALLOWED_EXTS.has(fileExt(name));
+}
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+const SAFE_IMAGE_MIME_TYPES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+]);
+
+function isSafeImageSrc(src: string): boolean {
+  if (!src) return false;
+  if (src.startsWith("https://") || src.startsWith("http://")) return true;
+  if (src.startsWith("data:")) {
+    const mime = src.slice(5).split(";")[0]?.toLowerCase() ?? "";
+    return SAFE_IMAGE_MIME_TYPES.has(mime);
+  }
+  return false;
+}
+
+function buildSentContent(
+  fileName: string,
+  sizeBytes: number,
+  fileContent: string,
+  userText: string
+): string {
+  const header = `Attached file: ${fileName}\nSize: ${fmtBytes(sizeBytes)}\n---\n${fileContent}\n---`;
+  return userText.trim() ? `${header}\n\nUser message:\n${userText.trim()}` : header;
+}
+
+type AttachedFile = { name: string; sizeBytes: number; content: string };
+type AttachedImage = { name: string; sizeBytes: number; dataUrl: string; mimeType: string };
+
+// ---------------------------------------------------------------------------
+// AssistantImage — renders an image received in an assistant response
+// ---------------------------------------------------------------------------
+
+function AssistantImage({ src, alt }: { src: string; alt: string }) {
+  if (!isSafeImageSrc(src)) return null;
+
+  function handleDownload() {
+    if (src.startsWith("data:")) {
+      const a = document.createElement("a");
+      a.href = src;
+      const ext = src.slice(5).split(";")[0]?.split("/")[1] ?? "png";
+      a.download = `image.${ext}`;
+      a.click();
+    } else if (src.startsWith("http://") || src.startsWith("https://")) {
+      window.open(src, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  return (
+    <span className="block my-1">
+      <img
+        src={src}
+        alt={alt || "image"}
+        className="max-w-full max-h-[200px] object-contain rounded border border-[#232629]"
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = "none";
+        }}
+      />
+      <button
+        type="button"
+        onClick={handleDownload}
+        className="text-[9px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors block mt-0.5"
+      >
+        Download image
+      </button>
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +179,25 @@ function renderMarkdown(text: string): React.ReactNode[] {
     const parts: React.ReactNode[] = [];
     let j = 0;
     while (j < raw.length) {
+      // Markdown image: ![alt](url)
+      if (raw[j] === "!" && raw[j + 1] === "[") {
+        const closeB = raw.indexOf("](", j + 1);
+        if (closeB !== -1) {
+          const closeP = raw.indexOf(")", closeB + 2);
+          if (closeP !== -1) {
+            const alt = raw.slice(j + 2, closeB);
+            const src = raw.slice(closeB + 2, closeP);
+            if (isSafeImageSrc(src)) {
+              parts.push(
+                <AssistantImage key={`${baseKey}-img-${j}`} src={src} alt={alt} />
+              );
+              j = closeP + 1;
+              continue;
+            }
+          }
+        }
+      }
+
       if (raw[j] === "`") {
         const endTick = raw.indexOf("`", j + 1);
         if (endTick !== -1) {
@@ -202,6 +342,17 @@ export default function SidebarLLMChat() {
   const [selectedSystemPromptId, setSelectedSystemPromptId] = useState<string>("none");
   const [promptsError, setPromptsError] = useState<string | null>(null);
 
+  // Text file attachment state
+  const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
+  const [attachedFileError, setAttachedFileError] = useState<string | null>(null);
+  const [attachedFileWarning, setAttachedFileWarning] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Image attachment state
+  const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null);
+  const [attachedImageError, setAttachedImageError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   // Resizable height
   const [chatHeight, setChatHeight] = useState(() => {
     if (typeof window !== "undefined") {
@@ -287,41 +438,185 @@ export default function SidebarLLMChat() {
     };
   }, [chatHeight]);
 
+  // Text file selection handler
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+
+    setAttachedFileError(null);
+    setAttachedFileWarning(null);
+    setAttachedFile(null);
+
+    if (!file) return;
+
+    if (isBlockedFile(file.name)) {
+      setAttachedFileError("This file type is not allowed for chat attachments.");
+      return;
+    }
+
+    if (!isAllowedFile(file.name)) {
+      setAttachedFileError("This file type is not allowed for chat attachments.");
+      return;
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      setAttachedFileError("File is too large. Maximum size is 1 MB.");
+      return;
+    }
+
+    if (file.size > WARN_FILE_BYTES) {
+      setAttachedFileWarning("This file is large and may exceed the model context window.");
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result;
+      if (typeof text !== "string") {
+        setAttachedFileError("Could not read file.");
+        return;
+      }
+      setAttachedFile({ name: file.name, sizeBytes: file.size, content: text });
+    };
+    reader.onerror = () => {
+      setAttachedFileError("Could not read file.");
+    };
+    reader.readAsText(file);
+  }, []);
+
+  // Image selection handler
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+
+    setAttachedImageError(null);
+    setAttachedImage(null);
+
+    if (!file) return;
+
+    const ext = fileExt(file.name);
+    if (ext === ".svg") {
+      setAttachedImageError("SVG files are not supported for security reasons.");
+      return;
+    }
+    if (!ALLOWED_IMAGE_EXTS.has(ext)) {
+      setAttachedImageError("Unsupported image format. Use PNG, JPG, JPEG, WebP, or GIF.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setAttachedImageError("Image is too large. Maximum size is 5 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result;
+      if (typeof dataUrl !== "string") {
+        setAttachedImageError("Could not read image.");
+        return;
+      }
+      setAttachedImage({ name: file.name, sizeBytes: file.size, dataUrl, mimeType: file.type });
+    };
+    reader.onerror = () => {
+      setAttachedImageError("Could not read image.");
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const clearAttachment = useCallback(() => {
+    setAttachedFile(null);
+    setAttachedFileError(null);
+    setAttachedFileWarning(null);
+  }, []);
+
+  const clearImage = useCallback(() => {
+    setAttachedImage(null);
+    setAttachedImageError(null);
+  }, []);
+
   const selectedSystemPrompt = selectedSystemPromptId !== "none"
     ? systemPrompts.find((p) => p.id === selectedSystemPromptId) ?? null
     : null;
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed || isLoading || !selectedModel) return;
+    const hasText = !!trimmed;
+    const hasFile = !!attachedFile;
+    const hasImage = !!attachedImage;
+
+    if ((!hasText && !hasFile && !hasImage) || isLoading || !selectedModel) return;
 
     setError(null);
-    const userMsg: LocalMessage = { id: nextId(), role: "user", content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
     setIsLoading(true);
 
-    // Build API messages with system prompt if selected
+    // Text content (includes file body if attached)
+    const sentContent = hasFile
+      ? buildSentContent(attachedFile.name, attachedFile.sizeBytes, attachedFile.content, trimmed)
+      : trimmed;
+
+    const attachmentLabel = hasFile
+      ? `${attachedFile.name} · ${fmtBytes(attachedFile.sizeBytes)}`
+      : undefined;
+
+    const imageLabel = hasImage
+      ? `${attachedImage.name} · ${fmtBytes(attachedImage.sizeBytes)}`
+      : undefined;
+
+    const userMsg: LocalMessage = {
+      id: nextId(),
+      role: "user",
+      content: trimmed,
+      sentContent,
+      attachmentLabel,
+      imageLabel,
+      imageThumbnailDataUrl: hasImage ? attachedImage.dataUrl : undefined,
+    };
+
+    // Build API messages from committed history (text only for history)
     const apiMessages: ChatMessage[] = [];
     if (selectedSystemPrompt) {
       apiMessages.push({ role: "system", content: selectedSystemPrompt.prompt });
     }
     for (const m of messages) {
-      apiMessages.push({ role: m.role as "user" | "assistant", content: m.content });
+      apiMessages.push({ role: m.role as "user" | "assistant", content: m.sentContent ?? m.content });
     }
-    apiMessages.push({ role: "user" as const, content: trimmed });
+
+    // Build current user message in provider-specific format
+    if (hasImage) {
+      // Fallback prompt when no text or file was provided alongside the image
+      const textPart = sentContent || "Please analyze the attached image.";
+      if (effectiveProvider === "ollama") {
+        // Ollama vision: string content + images array (raw base64, no data URI prefix)
+        const base64 = attachedImage.dataUrl.replace(/^data:[^;]+;base64,/, "");
+        apiMessages.push({ role: "user", content: textPart, images: [base64] });
+      } else {
+        // OpenRouter / OpenAI-compatible: multipart content array
+        const contentParts: ChatMessageContentPart[] = [];
+        if (textPart) contentParts.push({ type: "text", text: textPart });
+        contentParts.push({ type: "image_url", image_url: { url: attachedImage.dataUrl } });
+        apiMessages.push({ role: "user", content: contentParts });
+      }
+    } else {
+      apiMessages.push({ role: "user", content: sentContent });
+    }
 
     const res = await sendChatMessage({ model: selectedModel, messages: apiMessages });
 
     if (res.ok) {
       const assistantMsg: LocalMessage = { id: nextId(), role: "assistant", content: res.content };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setInput("");
+      setAttachedFile(null);
+      setAttachedFileError(null);
+      setAttachedFileWarning(null);
+      setAttachedImage(null);
+      setAttachedImageError(null);
     } else {
+      // Preserve input, file and image so the user can retry
       setError(res.error);
     }
 
     setIsLoading(false);
-  }, [input, isLoading, selectedModel, selectedSystemPrompt, messages]);
+  }, [input, attachedFile, attachedImage, isLoading, selectedModel, selectedSystemPrompt, messages, effectiveProvider]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -336,7 +631,15 @@ export default function SidebarLLMChat() {
   const handleClear = useCallback(() => {
     setMessages([]);
     setError(null);
+    setInput("");
+    setAttachedFile(null);
+    setAttachedFileError(null);
+    setAttachedFileWarning(null);
+    setAttachedImage(null);
+    setAttachedImageError(null);
   }, []);
+
+  const canSend = !isLoading && !!selectedModel && (!!input.trim() || !!attachedFile || !!attachedImage);
 
   return (
     <div className="border-t border-[#232629] px-4 pt-4 mt-4">
@@ -444,7 +747,30 @@ export default function SidebarLLMChat() {
                 }`}
               >
                 {msg.role === "user" ? (
-                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                  <div>
+                    {msg.content && (
+                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    )}
+                    {msg.attachmentLabel && (
+                      <div className={`text-[9px] text-[#4b5158] font-mono${msg.content ? " mt-1" : ""}`}>
+                        [file] {msg.attachmentLabel}
+                      </div>
+                    )}
+                    {msg.imageThumbnailDataUrl && (
+                      <div className={msg.content || msg.attachmentLabel ? "mt-1" : ""}>
+                        <img
+                          src={msg.imageThumbnailDataUrl}
+                          alt={msg.imageLabel ?? "attached image"}
+                          className="max-w-[120px] max-h-[80px] object-contain rounded border border-[#232629]"
+                        />
+                        {msg.imageLabel && (
+                          <div className="text-[9px] text-[#4b5158] font-mono mt-0.5">
+                            [image] {msg.imageLabel}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div>{renderMarkdown(msg.content)}</div>
                 )}
@@ -461,6 +787,81 @@ export default function SidebarLLMChat() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Text file attachment badge */}
+          {attachedFile && (
+            <div className="flex items-center gap-1.5 mb-1 px-1">
+              <span className="text-[9px] text-[#6b9e72] font-mono truncate flex-1">
+                {attachedFile.name} · {fmtBytes(attachedFile.sizeBytes)}
+              </span>
+              <button
+                type="button"
+                onClick={clearAttachment}
+                className="text-[9px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors shrink-0"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+
+          {/* Text file attachment warning */}
+          {attachedFileWarning && (
+            <div className="text-[9px] text-[#cda24f] mb-1 px-1">{attachedFileWarning}</div>
+          )}
+
+          {/* Text file attachment error */}
+          {attachedFileError && (
+            <div className="text-[9px] text-[#e0556a] mb-1 px-1">{attachedFileError}</div>
+          )}
+
+          {/* Image attachment badge */}
+          {attachedImage && (
+            <div className="flex items-center gap-1.5 mb-1 px-1">
+              <img
+                src={attachedImage.dataUrl}
+                alt={attachedImage.name}
+                className="w-8 h-8 object-cover rounded border border-[#232629] shrink-0"
+              />
+              <span className="text-[9px] text-[#7d8cf0] font-mono truncate flex-1">
+                {attachedImage.name} · {fmtBytes(attachedImage.sizeBytes)}
+              </span>
+              <button
+                type="button"
+                onClick={clearImage}
+                className="text-[9px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors shrink-0"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+
+          {/* Vision model warning */}
+          {attachedImage && (
+            <div className="text-[9px] text-[#cda24f] mb-1 px-1">
+              The selected model may not support image attachments.
+            </div>
+          )}
+
+          {/* Image attachment error */}
+          {attachedImageError && (
+            <div className="text-[9px] text-[#e0556a] mb-1 px-1">{attachedImageError}</div>
+          )}
+
+          {/* Hidden file inputs */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md,.json,.csv,.log,.ts,.tsx,.js,.jsx,.py,.sh,.yaml,.yml,.toml,.xml"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept=".png,.jpg,.jpeg,.webp,.gif"
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+
           {/* Input */}
           <textarea
             ref={textareaRef}
@@ -468,7 +869,11 @@ export default function SidebarLLMChat() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading || !selectedModel}
-            placeholder="Ask anything..."
+            placeholder={
+              attachedFile || attachedImage
+                ? "Add a message or send attachment alone..."
+                : "Ask anything..."
+            }
             rows={2}
             className="w-full bg-[#0d0e10] border border-[#232629] rounded px-2 py-1 text-[11px] text-[#a4abb2] placeholder-[#4b5158] resize-none focus:outline-none focus:border-[#3a4046] disabled:opacity-50"
           />
@@ -477,10 +882,34 @@ export default function SidebarLLMChat() {
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim() || !selectedModel}
+              disabled={!canSend}
               className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Send
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAttachedFileError(null);
+                fileInputRef.current?.click();
+              }}
+              disabled={isLoading || !selectedModel}
+              className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Attach text file"
+            >
+              Attach
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAttachedImageError(null);
+                imageInputRef.current?.click();
+              }}
+              disabled={isLoading || !selectedModel}
+              className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Attach image"
+            >
+              Image
             </button>
             <button
               onClick={handleClear}

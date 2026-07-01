@@ -34,7 +34,9 @@ export async function sendChatMessage(input: {
     const valid = input.messages.filter(
       (m) =>
         ["user", "assistant", "system"].includes(m.role) &&
-        m.content?.trim().length > 0
+        (typeof m.content === "string"
+          ? m.content.trim().length > 0
+          : m.content.length > 0)
     );
 
     if (valid.length === 0) {

@@ -96,7 +96,18 @@ export async function callOllamaChat(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: config.model,
-        messages,
+        messages: messages.map((m) => {
+          const content =
+            typeof m.content === "string"
+              ? m.content
+              : m.content
+                  .filter((p): p is { type: "text"; text: string } => p.type === "text")
+                  .map((p) => p.text)
+                  .join("\n");
+          const msg: { role: string; content: string; images?: string[] } = { role: m.role, content };
+          if (m.images && m.images.length > 0) msg.images = m.images;
+          return msg;
+        }),
         stream: false,
       }),
       signal: controller.signal,
