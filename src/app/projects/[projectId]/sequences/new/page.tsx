@@ -1,10 +1,12 @@
 import { db } from "@/db";
-import { projects } from "@/db/schema";
+import { projects, sequences } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import FormField from "@/components/FormField";
 import { createSequence } from "@/actions/sequences";
+import { getNomenclatureSettings } from "@/lib/settings";
+import { generateNextCode } from "@/lib/nomenclature";
 
 type Props = { params: Promise<{ projectId: string }> };
 
@@ -17,6 +19,14 @@ export default async function NewSequencePage({ params }: Props) {
 
   const createAction = createSequence.bind(null, id);
 
+  // Compute suggested sequence code
+  const { sequenceTemplate } = await getNomenclatureSettings();
+  const existingCodes = await db
+    .select({ sequenceCode: sequences.sequenceCode })
+    .from(sequences)
+    .where(eq(sequences.projectId, id));
+  const suggestedCode = generateNextCode(sequenceTemplate, existingCodes.map((r) => r.sequenceCode));
+
   return (
     <div>
       <Breadcrumb
@@ -28,7 +38,13 @@ export default async function NewSequencePage({ params }: Props) {
       />
       <h1 className="text-2xl font-semibold tracking-tight mb-8">New Sequence</h1>
 
-      <form action={createAction} className="max-w-xl flex flex-col gap-5">
+      <form action={createAction} autoComplete="off" className="max-w-xl flex flex-col gap-5">
+        <FormField
+          label="Sequence Code"
+          name="sequence_code"
+          defaultValue={suggestedCode}
+          placeholder={suggestedCode}
+        />
         <FormField label="Title" name="title" required placeholder="Sequence title" />
         <FormField
           label="Summary"

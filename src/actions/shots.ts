@@ -5,6 +5,8 @@ import { shots, sequences } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
+import { getNomenclatureSettings } from "@/lib/settings";
+import { generateNextCode } from "@/lib/nomenclature";
 
 export async function createShot(
   sequenceId: number,
@@ -33,11 +35,22 @@ export async function createShot(
 
   const orderIndex = (maxResult?.max ?? -1) + 1;
 
+  // Auto-generate shot code if not provided
+  let resolvedShotCode = shotCode;
+  if (!resolvedShotCode) {
+    const { shotTemplate } = await getNomenclatureSettings();
+    const existingCodes = await db
+      .select({ shotCode: shots.shotCode })
+      .from(shots)
+      .where(eq(shots.sequenceId, sequenceId));
+    resolvedShotCode = generateNextCode(shotTemplate, existingCodes.map((r) => r.shotCode));
+  }
+
   const shotPrompt = resolveShotPromptWithDefault({ description, actionPitch, cameraPitch });
 
   await db.insert(shots).values({
     sequenceId,
-    shotCode,
+    shotCode: resolvedShotCode,
     title: title.trim(),
     description,
     durationSeconds,

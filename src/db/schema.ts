@@ -24,6 +24,7 @@ export const sequences = sqliteTable("sequences", {
   projectId: int("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  sequenceCode: text("sequence_code"),
   title: text("title").notNull(),
   summary: text("summary"),
   description: text("description"),

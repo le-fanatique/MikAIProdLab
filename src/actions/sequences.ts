@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { sequences } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { getNomenclatureSettings } from "@/lib/settings";
+import { generateNextCode } from "@/lib/nomenclature";
 
 export async function createSequence(projectId: number, formData: FormData) {
   const title = formData.get("title") as string;
@@ -12,6 +14,7 @@ export async function createSequence(projectId: number, formData: FormData) {
   const narrativePurpose = (formData.get("narrative_purpose") as string) || null;
   const mood = (formData.get("mood") as string) || null;
   const locationHint = (formData.get("location_hint") as string) || null;
+  const sequenceCodeRaw = (formData.get("sequence_code") as string)?.trim() || null;
 
   if (!title?.trim()) return;
 
@@ -22,10 +25,22 @@ export async function createSequence(projectId: number, formData: FormData) {
 
   const orderIndex = (maxResult?.max ?? -1) + 1;
 
+  // Auto-generate code if not provided
+  let sequenceCode = sequenceCodeRaw;
+  if (!sequenceCode) {
+    const { sequenceTemplate } = await getNomenclatureSettings();
+    const existingCodes = await db
+      .select({ sequenceCode: sequences.sequenceCode })
+      .from(sequences)
+      .where(eq(sequences.projectId, projectId));
+    sequenceCode = generateNextCode(sequenceTemplate, existingCodes.map((r) => r.sequenceCode));
+  }
+
   const [seq] = await db
     .insert(sequences)
     .values({
       projectId,
+      sequenceCode,
       title: title.trim(),
       summary,
       description,

@@ -7,6 +7,7 @@ import { fetchOllamaModelNames } from "@/lib/llm/ollama";
 import { fetchOpenAICompatibleModelNames, testOpenAICompatibleConnection } from "@/lib/llm/openaiCompatible";
 import { redirect } from "next/navigation";
 import type { ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import { validateTemplate, DEFAULT_SEQUENCE_TEMPLATE, DEFAULT_SHOT_TEMPLATE } from "@/lib/nomenclature";
 
 // ---------------------------------------------------------------------------
 // Save LLM settings to DB (per-provider)
@@ -473,4 +474,30 @@ export async function deleteChatSystemPrompt(input: {
   if (filtered.length === prompts.length) return { ok: false, error: "Prompt not found." };
   await writeSystemPrompts(filtered);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Nomenclature settings
+// ---------------------------------------------------------------------------
+
+export async function saveNomenclatureSettings(input: {
+  sequenceTemplate: string;
+  shotTemplate: string;
+}): Promise<{ ok: true } | { ok: false; error: string; field?: "sequence" | "shot" }> {
+  const seqTemplate = input.sequenceTemplate.trim() || DEFAULT_SEQUENCE_TEMPLATE;
+  const shotTemplate = input.shotTemplate.trim() || DEFAULT_SHOT_TEMPLATE;
+
+  const seqError = validateTemplate(seqTemplate);
+  if (seqError) return { ok: false, error: `Sequence template: ${seqError}`, field: "sequence" };
+
+  const shotError = validateTemplate(shotTemplate);
+  if (shotError) return { ok: false, error: `Shot template: ${shotError}`, field: "shot" };
+
+  try {
+    await upsertSetting("nomenclature_sequence_template", seqTemplate);
+    await upsertSetting("nomenclature_shot_template", shotTemplate);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save nomenclature settings." };
+  }
 }

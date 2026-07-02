@@ -137,11 +137,11 @@ export default async function SequencePage({ params, searchParams }: Props) {
 
       <PageHeader
         title={sequence.title}
-        meta={
-          totalDuration > 0
-            ? `${shotList.length} shot${shotList.length !== 1 ? "s" : ""} · ${totalDuration.toFixed(1)}s`
-            : `${shotList.length} shot${shotList.length !== 1 ? "s" : ""}`
-        }
+        meta={[
+          sequence.sequenceCode || null,
+          `${shotList.length} shot${shotList.length !== 1 ? "s" : ""}`,
+          totalDuration > 0 ? `${totalDuration.toFixed(1)}s` : null,
+        ].filter(Boolean).join(" · ")}
         actions={
           <>
             <Link

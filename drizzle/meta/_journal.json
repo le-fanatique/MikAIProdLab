@@ -120,6 +120,13 @@
       "when": 1782297638543,
       "tag": "0016_skinny_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1783013828683,
+      "tag": "0017_worthless_ultimates",
+      "breakpoints": true
     }
   ]
 }

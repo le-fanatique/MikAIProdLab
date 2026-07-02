@@ -1,10 +1,12 @@
 import { db } from "@/db";
-import { projects, sequences } from "@/db/schema";
+import { projects, sequences, shots } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import FormField from "@/components/FormField";
 import { createShot } from "@/actions/shots";
+import { getNomenclatureSettings } from "@/lib/settings";
+import { generateNextCode } from "@/lib/nomenclature";
 
 type Props = { params: Promise<{ projectId: string; sequenceId: string }> };
 
@@ -21,6 +23,14 @@ export default async function NewShotPage({ params }: Props) {
 
   const createAction = createShot.bind(null, sid, pid);
 
+  // Compute suggested shot code for this sequence
+  const { shotTemplate } = await getNomenclatureSettings();
+  const existingCodes = await db
+    .select({ shotCode: shots.shotCode })
+    .from(shots)
+    .where(eq(shots.sequenceId, sid));
+  const suggestedCode = generateNextCode(shotTemplate, existingCodes.map((r) => r.shotCode));
+
   return (
     <div>
       <Breadcrumb
@@ -33,11 +43,12 @@ export default async function NewShotPage({ params }: Props) {
       />
       <h1 className="text-2xl font-semibold tracking-tight mb-8">New Shot</h1>
 
-      <form action={createAction} className="max-w-xl flex flex-col gap-5">
+      <form action={createAction} autoComplete="off" className="max-w-xl flex flex-col gap-5">
         <FormField
           label="Shot Code"
           name="shot_code"
-          placeholder="e.g. SQ01_SH010"
+          defaultValue={suggestedCode}
+          placeholder={suggestedCode}
         />
         <FormField label="Title" name="title" required placeholder="Descriptive title for this shot" />
         <FormField

@@ -387,3 +387,26 @@ export async function getComfySettings(): Promise<ComfySettings> {
   const localVramAutoManagement = map.get("local_vram_auto_management_enabled") === "true";
   return { baseUrl, apiKey, localVramAutoManagement };
 }
+
+// ---------------------------------------------------------------------------
+// Nomenclature settings
+// ---------------------------------------------------------------------------
+
+export interface NomenclatureSettings {
+  sequenceTemplate: string;
+  shotTemplate: string;
+}
+
+const NOMENCLATURE_DEFAULTS: NomenclatureSettings = {
+  sequenceTemplate: "Sq_1XXX",
+  shotTemplate: "Sh_1XX",
+};
+
+export async function getNomenclatureSettings(): Promise<NomenclatureSettings> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  return {
+    sequenceTemplate: map.get("nomenclature_sequence_template") || NOMENCLATURE_DEFAULTS.sequenceTemplate,
+    shotTemplate: map.get("nomenclature_shot_template") || NOMENCLATURE_DEFAULTS.shotTemplate,
+  };
+}

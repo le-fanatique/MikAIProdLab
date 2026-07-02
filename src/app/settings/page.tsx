@@ -6,7 +6,8 @@ import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
 import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
 import ChatProviderSettingsForm from "@/components/ChatProviderSettingsForm";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo } from "@/lib/settings";
+import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -38,6 +39,8 @@ export default async function SettingsPage({ searchParams }: Props) {
     getComfySettings(),
     getChatProviderInfo(),
   ]);
+
+  const nomenclatureSettings = await getNomenclatureSettings();
 
   const [{ workflowCount }, allWorkflows, defaults] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
@@ -254,6 +257,19 @@ export default async function SettingsPage({ searchParams }: Props) {
             </button>
           </div>
         </form>
+      </Card>
+
+      {/* ── Nomenclature ───────────────────────────────────── */}
+      <SectionLabel label="Nomenclature" />
+
+      <Card title="Code Templates" className="mb-6">
+        <p className="text-xs text-[#6e767d] mb-4">
+          Templates define how sequence and shot codes are generated. Use a numeric seed followed by X's to set the step size.
+        </p>
+        <NomenclatureSettingsForm
+          initialSequenceTemplate={nomenclatureSettings.sequenceTemplate}
+          initialShotTemplate={nomenclatureSettings.shotTemplate}
+        />
       </Card>
 
       {/* ── Integrations ───────────────────────────────────── */}

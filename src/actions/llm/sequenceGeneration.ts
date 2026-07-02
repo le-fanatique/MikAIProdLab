@@ -4,11 +4,13 @@ import { db } from "@/db";
 import { projects, sequences } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { callLLMJson } from "@/lib/llm";
 import { buildSequencesFromOutlinePrompt } from "@/lib/prompts/sequences-from-outline";
 import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
-import { getLLMConfig } from "@/lib/settings";
+import { getLLMConfig, getNomenclatureSettings } from "@/lib/settings";
 import type { GeneratedSequence } from "@/types/llm";
+import { generateSequentialCodes } from "@/lib/nomenclature";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -202,10 +204,20 @@ export async function createGeneratedSequences(formData: FormData): Promise<void
 
   const startIndex = (maxResult?.max ?? -1) + 1;
 
+  // Generate sequential sequence codes for the batch
+  const { sequenceTemplate } = await getNomenclatureSettings();
+  const existingCodeRows = await db
+    .select({ sequenceCode: sequences.sequenceCode })
+    .from(sequences)
+    .where(eq(sequences.projectId, projectId));
+  const existingCodes = existingCodeRows.map((r) => r.sequenceCode);
+  const newCodes = generateSequentialCodes(sequenceTemplate, existingCodes, candidates!.length);
+
   for (let i = 0; i < candidates!.length; i++) {
     const seq = candidates![i];
     await db.insert(sequences).values({
       projectId,
+      sequenceCode: newCodes[i],
       title: seq.title,
       summary: seq.summary ?? null,
       description: seq.description ?? null,
@@ -216,6 +228,7 @@ export async function createGeneratedSequences(formData: FormData): Promise<void
     });
   }
 
+  revalidatePath("/", "layout");
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}sequencesCreated=${candidates!.length}`);
 }

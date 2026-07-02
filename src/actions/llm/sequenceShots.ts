@@ -4,13 +4,15 @@ import { db } from "@/db";
 import { projects, sequences, shots } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { callLLMJson } from "@/lib/llm";
 import {
   buildShotsFromSequencePrompt,
   type GeneratedSequenceShot,
 } from "@/lib/prompts/shots-from-sequence";
-import { getLLMConfig } from "@/lib/settings";
+import { getLLMConfig, getNomenclatureSettings } from "@/lib/settings";
 import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
+import { generateSequentialCodes } from "@/lib/nomenclature";
 
 function str(value: unknown, maxLen = 1000): string | null {
   if (typeof value !== "string") return null;
@@ -171,8 +173,18 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
 
   const startIndex = (maxResult?.max ?? -1) + 1;
 
+  // LLM-provided shot codes are ignored. Settings templates are the source of truth.
+  const { shotTemplate } = await getNomenclatureSettings();
+  const existingCodeRows = await db
+    .select({ shotCode: shots.shotCode })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId));
+  const existingCodes = existingCodeRows.map((r) => r.shotCode);
+  const generatedCodes = generateSequentialCodes(shotTemplate, existingCodes, parsedShots!.length);
+
   for (let i = 0; i < parsedShots!.length; i++) {
     const shot = parsedShots![i];
+    const shotCode = generatedCodes[i];
     const shotPrompt = resolveShotPromptWithDefault({
       shotPrompt: shot.shot_prompt,
       description: shot.description,
@@ -181,7 +193,7 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
     });
     await db.insert(shots).values({
       sequenceId,
-      shotCode: shot.shot_code ?? null,
+      shotCode,
       title: shot.title,
       description: shot.description ?? null,
       durationSeconds: shot.duration_seconds ?? null,
@@ -196,6 +208,7 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
     });
   }
 
+  revalidatePath("/", "layout");
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}shotsCreated=${parsedShots!.length}`);
 }
