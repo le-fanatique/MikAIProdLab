@@ -75,10 +75,18 @@ export type ChatLLMResponse = {
 
 export type ChatImageSize = "square" | "landscape" | "portrait";
 
+export type ChatImageReference = {
+  dataUrl: string;    // data:image/*;base64,... validated before use
+  mimeType: string;   // image/png, image/jpeg, image/jpg, image/webp, image/gif
+  name?: string;      // original filename for display only, never logged
+  sizeBytes?: number; // for server-side size validation
+};
+
 export type ChatImageGenerationRequest = {
   model: string;
   prompt: string;
   size: ChatImageSize;
+  referenceImages?: ChatImageReference[];
 };
 
 export type ChatImageGenerationResponse = {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateChatImages, listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
-import type { ChatGeneratedImage, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ function AssistantImage({ src, alt }: { src: string; alt: string }) {
       <img
         src={src}
         alt={alt || "image"}
-        className="max-w-full max-h-[200px] object-contain rounded border border-[#232629]"
+        className="w-full h-auto object-contain rounded border border-[#232629]"
         onError={(e) => {
           (e.target as HTMLImageElement).style.display = "none";
         }}
@@ -169,7 +169,7 @@ function AssistantGeneratedImage({ image }: { image: ChatGeneratedImage }) {
       <img
         src={src}
         alt={image.alt ?? "generated image"}
-        className="max-w-full max-h-[240px] object-contain rounded border border-[#232629]"
+        className="w-full h-auto object-contain rounded border border-[#232629]"
         onError={(e) => {
           (e.target as HTMLImageElement).style.display = "none";
         }}
@@ -404,6 +404,11 @@ export default function SidebarLLMChat() {
   const [mode, setMode] = useState<"chat" | "image">("chat");
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageSize, setImageSize] = useState<ChatImageSize>("square");
+
+  // Reference images for Generate Image mode (separate from chat attachments)
+  const [imageGenAttachments, setImageGenAttachments] = useState<AttachedImage[]>([]);
+  const [imageGenAttachError, setImageGenAttachError] = useState<string | null>(null);
+  const imageGenAttachInputRef = useRef<HTMLInputElement>(null);
 
   // Resizable height
   const [chatHeight, setChatHeight] = useState(() => {
@@ -688,6 +693,53 @@ export default function SidebarLLMChat() {
     [handleSend]
   );
 
+  const handleImageGenAttachSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setImageGenAttachError(null);
+      const files = Array.from(e.target.files ?? []);
+      if (files.length === 0) return;
+
+      const remaining = 4 - imageGenAttachments.length;
+      if (remaining <= 0) {
+        setImageGenAttachError("Maximum 4 reference images.");
+        e.target.value = "";
+        return;
+      }
+      const toProcess = files.slice(0, remaining);
+      if (files.length > remaining) {
+        setImageGenAttachError(`Only ${remaining} more image(s) can be added (max 4). First ${remaining} selected.`);
+      }
+
+      toProcess.forEach((file) => {
+        const ext = fileExt(file.name);
+        if (!ALLOWED_IMAGE_EXTS.has(ext)) {
+          setImageGenAttachError(`"${file.name}" — unsupported type. Use PNG, JPG, WebP, or GIF.`);
+          return;
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+          setImageGenAttachError(`"${file.name}" exceeds 5 MB limit.`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = ev.target?.result as string;
+          if (!dataUrl || !isSafeImageSrc(dataUrl)) {
+            setImageGenAttachError(`"${file.name}" — invalid image data.`);
+            return;
+          }
+          const mime = file.type.toLowerCase() || `image/${ext.slice(1)}`;
+          setImageGenAttachments((prev) => {
+            if (prev.length >= 4) return prev;
+            return [...prev, { name: file.name, sizeBytes: file.size, dataUrl, mimeType: mime }];
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = "";
+    },
+    [imageGenAttachments]
+  );
+
   const handleGenerateImage = useCallback(async () => {
     const prompt = imagePrompt.trim();
     if (!prompt || isLoading || !selectedModel) return;
@@ -695,14 +747,32 @@ export default function SidebarLLMChat() {
     setError(null);
     setIsLoading(true);
 
+    const refImages: ChatImageReference[] = imageGenAttachments.map((a) => ({
+      dataUrl: a.dataUrl,
+      mimeType: a.mimeType,
+      name: a.name,
+      sizeBytes: a.sizeBytes,
+    }));
+
+    const attachLabel =
+      imageGenAttachments.length > 0
+        ? `${imageGenAttachments.length} reference image${imageGenAttachments.length > 1 ? "s" : ""}`
+        : undefined;
+
     const userMsg: LocalMessage = {
       id: nextId(),
       role: "user",
       content: prompt,
       sentContent: prompt,
+      attachmentLabel: attachLabel,
     };
 
-    const res = await generateChatImages({ model: selectedModel, prompt, size: imageSize });
+    const res = await generateChatImages({
+      model: selectedModel,
+      prompt,
+      size: imageSize,
+      referenceImages: refImages.length > 0 ? refImages : undefined,
+    });
 
     if (res.ok) {
       const validImages = res.images.filter((img) =>
@@ -716,12 +786,14 @@ export default function SidebarLLMChat() {
       };
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setImagePrompt("");
+      setImageGenAttachments([]);
+      setImageGenAttachError(null);
     } else {
       setError(res.error);
     }
 
     setIsLoading(false);
-  }, [imagePrompt, imageSize, isLoading, selectedModel]);
+  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, selectedModel]);
 
   const handleClear = useCallback(() => {
     setMessages([]);
@@ -733,9 +805,17 @@ export default function SidebarLLMChat() {
     setAttachedFileWarning(null);
     setAttachedImage(null);
     setAttachedImageError(null);
+    setImageGenAttachments([]);
+    setImageGenAttachError(null);
   }, []);
 
   const canSend = !isLoading && !!selectedModel && (!!input.trim() || !!attachedFile || !!attachedImage);
+
+  // When assistant images are visible, let the component grow to full height instead
+  // of locking content inside the fixed-height scrollable message list.
+  const hasVisibleAssistantImages = messages.some(
+    (msg) => msg.role === "assistant" && msg.images && msg.images.length > 0
+  );
 
   return (
     <div className="border-t border-[#232629] px-4 pt-4 mt-4">
@@ -754,7 +834,10 @@ export default function SidebarLLMChat() {
         </button>
       ) : (
         // ── Open state ────────────────────────────────────────────────
-        <div className="flex flex-col" style={{ height: chatHeight }}>
+        <div
+          className="flex flex-col"
+          style={hasVisibleAssistantImages ? { minHeight: chatHeight } : { height: chatHeight }}
+        >
           {/* Drag handle */}
           <div
             onMouseDown={onDragStart}
@@ -785,7 +868,7 @@ export default function SidebarLLMChat() {
           </div>
 
           {/* Mode tabs */}
-          <div className="flex mb-2 border border-[#232629] rounded overflow-hidden">
+          <div className="flex mb-1 border border-[#232629] rounded overflow-hidden">
             {(["chat", "image"] as const).map((m) => (
               <button
                 key={m}
@@ -801,6 +884,11 @@ export default function SidebarLLMChat() {
               </button>
             ))}
           </div>
+          <p className="text-[9px] text-[#4b5158] mb-2 leading-snug">
+            {mode === "chat"
+              ? "Ask questions, attach files, or analyze images."
+              : "Generate images with the selected chat provider."}
+          </p>
 
           {/* Model selector */}
           {modelError ? (
@@ -817,6 +905,15 @@ export default function SidebarLLMChat() {
                 compact
               />
             </div>
+          )}
+
+          {/* Model compatibility hint — image mode only */}
+          {mode === "image" && !modelError && effectiveProvider !== "ollama" && (
+            <p className="text-[9px] text-[#4b5158] mb-1.5">
+              {effectiveProvider === "openrouter"
+                ? "OpenRouter image generation uses /images endpoint. Use an image-output model (e.g. google/gemini-3.1-flash-lite-image)."
+                : "Select a model that supports image generation at this provider."}
+            </p>
           )}
 
           {/* System Prompt selector — chat mode only */}
@@ -841,19 +938,19 @@ export default function SidebarLLMChat() {
                   </select>
                 </div>
               )}
-              {selectedSystemPrompt && (
-                <div className="text-[9px] text-[#4b5158] mb-1.5 truncate">
-                  Active: {selectedSystemPrompt.name}
-                </div>
-              )}
             </>
           )}
 
+          {/* Settings / messages separator */}
+          <div className="border-b border-[#1a1d20] mb-2" />
+
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto mb-2 space-y-1.5 min-h-[40px]">
+          <div className={hasVisibleAssistantImages ? "mb-2 space-y-1.5 min-h-[40px]" : "flex-1 overflow-y-auto mb-2 space-y-1.5 min-h-[40px]"}>
             {messages.length === 0 && !error && (
               <div className="text-[10px] text-[#4b5158] italic">
-                {mode === "chat" ? "Ask anything..." : "Generate an image from a prompt..."}
+                {mode === "chat"
+                  ? "Start a conversation or attach a file to analyze."
+                  : "Describe the image you want to generate."}
               </div>
             )}
             {messages.map((msg) => (
@@ -862,7 +959,7 @@ export default function SidebarLLMChat() {
                 className={`px-2 py-1 rounded text-[11px] leading-relaxed ${
                   msg.role === "user"
                     ? "bg-[#1a1d20] text-[#a4abb2]"
-                    : "bg-transparent text-[#a4abb2]"
+                    : "bg-transparent text-[#a4abb2] border-l-2 border-[#2a2d31] ml-0.5"
                 }`}
               >
                 {msg.role === "user" ? (
@@ -871,8 +968,10 @@ export default function SidebarLLMChat() {
                       <span className="whitespace-pre-wrap">{msg.content}</span>
                     )}
                     {msg.attachmentLabel && (
-                      <div className={`text-[9px] text-[#4b5158] font-mono${msg.content ? " mt-1" : ""}`}>
-                        [file] {msg.attachmentLabel}
+                      <div className={msg.content ? "mt-1" : ""}>
+                        <span className="inline-block px-1.5 py-0.5 bg-[#0d0e10] border border-[#232629] rounded text-[9px] font-mono text-[#6b9e72]">
+                          {msg.attachmentLabel}
+                        </span>
                       </div>
                     )}
                     {msg.imageThumbnailDataUrl && (
@@ -883,8 +982,10 @@ export default function SidebarLLMChat() {
                           className="max-w-[120px] max-h-[80px] object-contain rounded border border-[#232629]"
                         />
                         {msg.imageLabel && (
-                          <div className="text-[9px] text-[#4b5158] font-mono mt-0.5">
-                            [image] {msg.imageLabel}
+                          <div className="mt-0.5">
+                            <span className="inline-block px-1.5 py-0.5 bg-[#0d0e10] border border-[#232629] rounded text-[9px] font-mono text-[#7d8cf0]">
+                              {msg.imageLabel}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -905,7 +1006,7 @@ export default function SidebarLLMChat() {
               </div>
             ))}
             {isLoading && (
-              <div className="px-2 py-1 text-[10px] text-[#6e767d] italic">
+              <div className="px-2 py-1 text-[10px] text-[#6e767d] italic animate-pulse">
                 {mode === "chat" ? "Thinking..." : "Generating image..."}
               </div>
             )}
@@ -967,10 +1068,10 @@ export default function SidebarLLMChat() {
                 </div>
               )}
 
-              {/* Vision model warning */}
+              {/* Vision model note */}
               {attachedImage && (
-                <div className="text-[9px] text-[#cda24f] mb-1 px-1">
-                  The selected model may not support image attachments.
+                <div className="text-[9px] text-[#4b5158] mb-1 px-1">
+                  Vision support varies by model.
                 </div>
               )}
 
@@ -1016,7 +1117,7 @@ export default function SidebarLLMChat() {
                 <button
                   onClick={handleSend}
                   disabled={!canSend}
-                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#3a4046] text-[10px] text-[#c0c8d0] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   Send
                 </button>
@@ -1027,10 +1128,10 @@ export default function SidebarLLMChat() {
                     fileInputRef.current?.click();
                   }}
                   disabled={isLoading || !selectedModel}
-                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#6e767d] hover:bg-[#252830] hover:text-[#a4abb2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="Attach text file"
                 >
-                  Attach
+                  Attach file
                 </button>
                 <button
                   type="button"
@@ -1039,15 +1140,15 @@ export default function SidebarLLMChat() {
                     imageInputRef.current?.click();
                   }}
                   disabled={isLoading || !selectedModel}
-                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#6e767d] hover:bg-[#252830] hover:text-[#a4abb2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="Attach image"
                 >
-                  Image
+                  Attach image
                 </button>
                 <button
                   onClick={handleClear}
                   disabled={isLoading}
-                  className="px-3 py-1 rounded text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                  className="ml-auto px-3 py-1 rounded text-[10px] text-[#4b5158] hover:text-[#6e767d] transition-colors"
                 >
                   Clear
                 </button>
@@ -1087,6 +1188,42 @@ export default function SidebarLLMChat() {
                 </div>
               </div>
 
+              {/* Reference images */}
+              {imageGenAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {imageGenAttachments.map((img, idx) => (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={img.dataUrl}
+                        alt={img.name}
+                        className="w-10 h-10 object-cover rounded border border-[#232629]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setImageGenAttachments((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-[#1a1d20] border border-[#3a4046] text-[8px] text-[#cf7b6b] hover:text-[#e0556a] opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={`Remove ${img.name}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {imageGenAttachError && (
+                <div className="text-[9px] text-[#e0556a] mt-1 px-1">{imageGenAttachError}</div>
+              )}
+
+              <p className="text-[9px] text-[#4b5158] mt-1">
+                Uses the selected chat provider image endpoint when available.
+                {imageGenAttachments.length === 0 && (
+                  <> Optional reference images can be used by compatible image models.</>
+                )}
+              </p>
+
               {/* Ollama unsupported warning */}
               {effectiveProvider === "ollama" && (
                 <p className="text-[9px] text-[#cda24f] mt-1">
@@ -1094,21 +1231,45 @@ export default function SidebarLLMChat() {
                 </p>
               )}
 
+              {/* Hidden file input for reference images */}
+              <input
+                ref={imageGenAttachInputRef}
+                type="file"
+                multiple
+                accept=".png,.jpg,.jpeg,.webp,.gif"
+                onChange={handleImageGenAttachSelect}
+                className="hidden"
+              />
+
               {/* Generate buttons */}
               <div className="flex items-center gap-2 mt-2">
                 <button
                   type="button"
                   onClick={handleGenerateImage}
                   disabled={isLoading || !selectedModel || !imagePrompt.trim()}
-                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#a4abb2] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#3a4046] text-[10px] text-[#c0c8d0] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {isLoading ? "Generating..." : "Generate Image"}
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    setImageGenAttachError(null);
+                    imageGenAttachInputRef.current?.click();
+                  }}
+                  disabled={isLoading || imageGenAttachments.length >= 4}
+                  className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#6e767d] hover:bg-[#252830] hover:text-[#a4abb2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Add reference image (max 4)"
+                >
+                  {imageGenAttachments.length > 0
+                    ? `Ref images (${imageGenAttachments.length}/4)`
+                    : "Add ref image"}
+                </button>
+                <button
+                  type="button"
                   onClick={handleClear}
                   disabled={isLoading}
-                  className="px-3 py-1 rounded text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                  className="ml-auto px-3 py-1 rounded text-[10px] text-[#4b5158] hover:text-[#6e767d] transition-colors"
                 >
                   Clear
                 </button>

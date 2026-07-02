@@ -7,7 +7,7 @@ import {
   getChatProviderInfo,
 } from "@/lib/settings";
 import { getChatSystemPrompts } from "@/actions/settings";
-import type { ChatGeneratedImage, ChatImageSize, ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
+import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage, ChatSystemPrompt, LLMConfig, LLMProvider } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // Send a chat message using the effective chat LLM provider
@@ -66,10 +66,15 @@ export async function sendChatMessage(input: {
 // Generate images using the effective chat provider's image generation endpoint
 // ---------------------------------------------------------------------------
 
+const ALLOWED_REF_IMAGE_MIMES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+]);
+
 export async function generateChatImages(input: {
   model: string;
   prompt: string;
   size: ChatImageSize;
+  referenceImages?: Array<{ dataUrl: string; mimeType: string; name?: string; sizeBytes?: number }>;
 }): Promise<
   | { ok: true; images: ChatGeneratedImage[]; text: string }
   | { ok: false; error: string }
@@ -86,11 +91,33 @@ export async function generateChatImages(input: {
       return { ok: false, error: "No prompt provided." };
     }
 
+    // Server-side validation for reference images
+    const refs = input.referenceImages ?? [];
+    if (refs.length > 4) {
+      return { ok: false, error: "Too many reference images. Maximum 4 allowed." };
+    }
+    const MAX_REF_IMAGE_BYTES = 5 * 1024 * 1024;
+    const validatedRefs: ChatImageReference[] = [];
+    for (const ref of refs) {
+      const mime = ref.mimeType?.toLowerCase().trim() ?? "";
+      if (!ALLOWED_REF_IMAGE_MIMES.has(mime)) {
+        return { ok: false, error: `Reference image type "${mime}" is not allowed. Use PNG, JPEG, WebP, or GIF.` };
+      }
+      if (!ref.dataUrl.startsWith("data:image/")) {
+        return { ok: false, error: "Invalid reference image data URL." };
+      }
+      if (typeof ref.sizeBytes === "number" && ref.sizeBytes > MAX_REF_IMAGE_BYTES) {
+        return { ok: false, error: `Reference image exceeds the 5 MB limit.` };
+      }
+      validatedRefs.push({ dataUrl: ref.dataUrl, mimeType: mime, name: ref.name, sizeBytes: ref.sizeBytes });
+    }
+
     const chatConfig: LLMConfig = { ...config, model: input.model.trim() };
     const result = await callLLMImageGeneration(chatConfig, {
       model: input.model.trim(),
       prompt: input.prompt.trim(),
       size: input.size,
+      referenceImages: validatedRefs.length > 0 ? validatedRefs : undefined,
     });
     return { ok: true, images: result.images, text: result.text };
   } catch (err) {

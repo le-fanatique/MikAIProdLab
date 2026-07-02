@@ -262,21 +262,50 @@ function parseOpenAIChatResponseFull(json: unknown): ChatLLMResponse {
 // Image generation
 // ---------------------------------------------------------------------------
 
+// Standard OpenAI-compatible size strings
 const IMAGE_SIZE_MAP: Record<ChatImageSize, string> = {
   square: "1024x1024",
   landscape: "1536x1024",
   portrait: "1024x1536",
 };
 
+// OpenRouter uses aspect_ratio instead of size
+const IMAGE_ASPECT_RATIO_MAP: Record<ChatImageSize, string> = {
+  square: "1:1",
+  landscape: "16:9",
+  portrait: "9:16",
+};
+
+// baseUrl suffixes that indicate a full endpoint path instead of an API root
+const BAD_BASE_URL_SUFFIXES = [
+  "/chat/completions",
+  "/images/generations",
+  "/images",
+  "/completions",
+];
+
 export async function callOpenAICompatibleImageGeneration(
   config: LLMConfig,
   request: ChatImageGenerationRequest
 ): Promise<ChatImageGenerationResponse> {
+  // Sanity-check: baseUrl must be an API root, not a specific endpoint path
+  const normalizedBase = config.baseUrl.replace(/\/+$/, "").toLowerCase();
+  for (const suffix of BAD_BASE_URL_SUFFIXES) {
+    if (normalizedBase.endsWith(suffix)) {
+      throw new Error(
+        `The configured base URL ends with "${suffix}", which looks like a specific endpoint path. ` +
+        `Set the base URL to the API root instead (e.g. https://openrouter.ai/api/v1) and update it in Settings.`
+      );
+    }
+  }
+
   const effectiveTimeout = Math.max(config.timeoutMs, 60_000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), effectiveTimeout);
 
-  const url = buildUrl(config.baseUrl, "/images/generations");
+  // OpenRouter image endpoint is /images; standard OpenAI-compat uses /images/generations
+  const imagePath = config.provider === "openrouter" ? "/images" : "/images/generations";
+  const url = buildUrl(config.baseUrl, imagePath);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -289,17 +318,38 @@ export async function callOpenAICompatibleImageGeneration(
     headers["X-Title"] = "MikAI Production Lab";
   }
 
+  // Provider-specific payload: OpenRouter uses aspect_ratio, others use size + n
+  const payload: Record<string, unknown> = {
+    model: request.model,
+    prompt: request.prompt,
+  };
+  if (config.provider === "openrouter") {
+    payload.aspect_ratio = IMAGE_ASPECT_RATIO_MAP[request.size];
+
+    // Reference images: full data URL, wrapped in input_references array
+    if (request.referenceImages && request.referenceImages.length > 0) {
+      payload.input_references = request.referenceImages.map((ref) => ({
+        type: "image_url",
+        image_url: { url: ref.dataUrl },
+      }));
+    }
+  } else {
+    payload.n = 1;
+    payload.size = IMAGE_SIZE_MAP[request.size];
+
+    if (request.referenceImages && request.referenceImages.length > 0) {
+      throw new Error(
+        "Reference images are not supported for this provider yet. Use OpenRouter with an image-editing model."
+      );
+    }
+  }
+
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        model: request.model,
-        prompt: request.prompt,
-        n: 1,
-        size: IMAGE_SIZE_MAP[request.size],
-      }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (err) {
@@ -317,32 +367,73 @@ export async function callOpenAICompatibleImageGeneration(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+
     if (response.status === 401 && config.provider === "openrouter") {
       throw new Error(
         `OpenRouter rejected the request with 401. The API key used by MikAI is missing or invalid. Re-save the OpenRouter API key in Settings, without "Bearer ".`
       );
     }
+
+    if (response.status === 404) {
+      const modelHint =
+        config.provider === "openrouter"
+          ? ` For OpenRouter, use an image-output model (e.g. google/gemini-3.1-flash-lite-image). The currently selected model (${request.model}) may not support image generation.`
+          : ` Verify the selected model (${request.model}) supports image generation at this provider, and that the base URL is an API root (e.g. https://provider/api/v1).`;
+      throw new Error(
+        `Image generation returned 404 — endpoint or model not found.${modelHint} (URL: ${url})`
+      );
+    }
+
+    if (response.status === 400 || response.status === 422) {
+      const modelHint =
+        config.provider === "openrouter"
+          ? ` For OpenRouter, use an image-output model (e.g. google/gemini-3.1-flash-lite-image).`
+          : "";
+      throw new Error(
+        `Image generation returned HTTP ${response.status}.${modelHint} ${body.slice(0, 150)}`
+      );
+    }
+
     throw new Error(
       `Image generation returned HTTP ${response.status}. ${body.slice(0, 200)}`
     );
   }
 
   const json: unknown = await response.json();
-  const images = parseImageGenerationResponse(json);
+  const images = parseImageGenerationResponse(json, { url, model: request.model });
   const count = images.length;
   return { images, text: `Generated ${count} image${count !== 1 ? "s" : ""}.` };
 }
 
-function parseImageGenerationResponse(json: unknown): ChatGeneratedImage[] {
+function parseImageGenerationResponse(
+  json: unknown,
+  context: { url: string; model: string }
+): ChatGeneratedImage[] {
+  const topKeys =
+    json && typeof json === "object"
+      ? Object.keys(json as Record<string, unknown>).join(", ")
+      : "none";
+
   if (!json || typeof json !== "object") {
-    throw new Error("Image generation returned an unexpected response shape.");
+    throw new Error(
+      `Image generation returned an unexpected response shape. ` +
+      `Expected data[].b64_json or data[].url. ` +
+      `(URL: ${context.url}, model: ${context.model})`
+    );
   }
+
   const data = (json as Record<string, unknown>).data;
   if (!Array.isArray(data)) {
-    throw new Error("Image generation response missing `data` array.");
+    throw new Error(
+      `Image generation response missing \`data\` array. ` +
+      `Expected data[].b64_json or data[].url. ` +
+      `Received keys: ${topKeys}. (URL: ${context.url}, model: ${context.model})`
+    );
   }
 
   const images: ChatGeneratedImage[] = [];
+  let rejectedByMediaType = 0;
+
   for (const item of data) {
     if (!item || typeof item !== "object") continue;
     const entry = item as Record<string, unknown>;
@@ -350,13 +441,34 @@ function parseImageGenerationResponse(json: unknown): ChatGeneratedImage[] {
     if (typeof entry.url === "string" && isAllowedResponseImageUrl(entry.url)) {
       images.push({ url: entry.url });
     } else if (typeof entry.b64_json === "string") {
-      const dataUrl = `data:image/png;base64,${entry.b64_json}`;
-      images.push({ dataUrl, mimeType: "image/png" });
+      if (typeof entry.media_type === "string") {
+        // media_type explicitly provided — accept only if in allowlist, hard-reject otherwise
+        const rawMime = entry.media_type.toLowerCase().trim();
+        if (!SAFE_RESPONSE_IMAGE_MIMES.has(rawMime)) {
+          rejectedByMediaType++;
+          continue;
+        }
+        const dataUrl = `data:${rawMime};base64,${entry.b64_json}`;
+        images.push({ dataUrl, mimeType: rawMime });
+      } else {
+        // media_type absent — safe fallback to image/png
+        const dataUrl = `data:image/png;base64,${entry.b64_json}`;
+        images.push({ dataUrl, mimeType: "image/png" });
+      }
     }
   }
 
   if (images.length === 0) {
-    throw new Error("Image generation returned no usable images.");
+    if (rejectedByMediaType > 0) {
+      throw new Error(
+        `Image generation returned images with unsupported media types. ` +
+        `(URL: ${context.url}, model: ${context.model})`
+      );
+    }
+    throw new Error(
+      `Image generation returned no usable images. ` +
+      `Received keys: ${topKeys}. (URL: ${context.url}, model: ${context.model})`
+    );
   }
   return images;
 }
