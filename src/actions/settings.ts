@@ -174,6 +174,64 @@ export async function saveComfySettings(
 }
 
 // ---------------------------------------------------------------------------
+// Test ComfyUI connection (read-only ping via /system_stats)
+// ---------------------------------------------------------------------------
+
+export async function testComfyConnection(
+  baseUrl: string
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return { ok: false, error: "Set a ComfyUI server URL before testing the connection." };
+  }
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    return { ok: false, error: "Invalid URL. Must start with http:// or https://." };
+  }
+
+  const url = `${trimmed}/system_stats`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      return {
+        ok: false,
+        error: "Could not reach the ComfyUI server. Check the URL and make sure the server is running.",
+      };
+    }
+    return {
+      ok: false,
+      error: "Could not reach the ComfyUI server. Check the URL and make sure the server is running.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return {
+      ok: false,
+      error: "ComfyUI connection failed. Check the API key or server access settings.",
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: `ComfyUI server responded with HTTP ${response.status}. Check the URL and server configuration.`,
+    };
+  }
+
+  return { ok: true, message: "ComfyUI connection successful." };
+}
+
+// ---------------------------------------------------------------------------
 // Test LLM connection (server-side, multi-provider)
 // ---------------------------------------------------------------------------
 

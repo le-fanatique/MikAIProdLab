@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveComfySettings } from "@/actions/settings";
+import { saveComfySettings, testComfyConnection } from "@/actions/settings";
 
 type Props = {
   initialBaseUrl: string;
@@ -19,6 +19,16 @@ export default function ComfyUISettingsForm({
   const [localVramAutoManagement, setLocalVramAutoManagement] = useState(initialLocalVramAutoManagement);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  async function handleTestConnection() {
+    setIsTesting(true);
+    setTestResult(null);
+    const res = await testComfyConnection(baseUrl);
+    setTestResult({ ok: res.ok, message: res.ok ? res.message : res.error });
+    setIsTesting(false);
+  }
 
   function handleSave() {
     startTransition(async () => {
@@ -97,25 +107,40 @@ export default function ComfyUISettingsForm({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isPending}
-          className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {isPending ? "Saving…" : "Save Changes"}
-        </button>
-
-        {result && (
-          <p
-            className={`text-xs ${
-              result.ok ? "text-[#6b9e72]" : "text-[#cf7b6b]"
-            }`}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending}
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {result.message}
-          </p>
-        )}
+            {isPending ? "Saving…" : "Save Changes"}
+          </button>
+
+          {result && (
+            <p className={`text-xs ${result.ok ? "text-[#6b9e72]" : "text-[#cf7b6b]"}`}>
+              {result.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleTestConnection}
+            disabled={isTesting || isPending}
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isTesting ? "Testing..." : "Test ComfyUI Connection"}
+          </button>
+
+          {testResult && (
+            <p className={`text-xs ${testResult.ok ? "text-[#6b9e72]" : "text-[#cf7b6b]"}`}>
+              {testResult.message}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
