@@ -20,6 +20,13 @@ type Props = {
   getDeleteAction: (imageId: number) => () => Promise<void>;
 };
 
+function refImageUrl(imagePath: string): string {
+  if (imagePath.startsWith("uploads/")) {
+    return `/api/uploads/${imagePath.slice("uploads/".length)}`;
+  }
+  return `/${imagePath}`;
+}
+
 export default function ReferenceImagesPanel({
   images,
   addHref,
@@ -53,7 +60,7 @@ export default function ReferenceImagesPanel({
             <div key={image.id} className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
               {/* Thumbnail — compact, object-contain, no crop */}
               <ThumbnailHoverPreview
-                src={`/${image.imagePath}`}
+                src={refImageUrl(image.imagePath)}
                 alt={altText}
                 previewSize={480}
                 className="shrink-0"
@@ -61,7 +68,7 @@ export default function ReferenceImagesPanel({
                 <div className="w-10 h-10 rounded overflow-hidden border border-[#232629] bg-[#141618] flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/${image.imagePath}`}
+                    src={refImageUrl(image.imagePath)}
                     alt={altText}
                     className="w-full h-full object-contain"
                   />
