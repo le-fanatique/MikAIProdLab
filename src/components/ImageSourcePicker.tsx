@@ -1,6 +1,7 @@
 "use client";
 
 import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
+import { refImageUrl } from "@/lib/refImageUrl";
 
 export type ImagePickerItem = {
   id: string;
@@ -44,7 +45,7 @@ function PickerCard({
       <div className="aspect-square w-full bg-[#141618] flex items-center justify-center overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/${item.imagePath}`}
+          src={refImageUrl(item.imagePath)}
           alt={item.label}
           className="w-full h-full object-contain"
         />
@@ -77,7 +78,7 @@ function PickerGrid({
       {items.map((item) => (
         <ThumbnailHoverPreview
           key={item.id}
-          src={`/${item.imagePath}`}
+          src={refImageUrl(item.imagePath)}
           alt={item.label}
           previewSize={640}
           className="w-full"

@@ -3,6 +3,7 @@ import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import ReferenceImageRoleBadge from "@/components/ReferenceImageRoleBadge";
 import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
+import { refImageUrl } from "@/lib/refImageUrl";
 
 type ReferenceImageItem = {
   id: number;
@@ -19,13 +20,6 @@ type Props = {
   getEditHref: (imageId: number) => string;
   getDeleteAction: (imageId: number) => () => Promise<void>;
 };
-
-function refImageUrl(imagePath: string): string {
-  if (imagePath.startsWith("uploads/")) {
-    return `/api/uploads/${imagePath.slice("uploads/".length)}`;
-  }
-  return `/${imagePath}`;
-}
 
 export default function ReferenceImagesPanel({
   images,

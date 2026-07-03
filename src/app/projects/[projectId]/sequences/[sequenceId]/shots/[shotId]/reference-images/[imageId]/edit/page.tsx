@@ -6,6 +6,7 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import { updateShotReferenceImage } from "@/actions/shotReferenceImages";
+import { refImageUrl } from "@/lib/refImageUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,7 @@ export default async function EditShotReferenceImagePage({ params, searchParams 
       <div className="mb-5 max-w-lg">
         <p className={`${labelClass} mb-2`}>Current Image</p>
         <img
-          src={`/${image.imagePath}`}
+          src={refImageUrl(image.imagePath)}
           alt={image.label ?? image.sourceFilename ?? "Reference image"}
           className="rounded border border-[#2c3035] max-h-48 object-contain bg-[#141618]"
         />

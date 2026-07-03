@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
 import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { uploadShotSourceFromPanel, uploadAssetSourceFromPanel } from "@/actions/panelUpload";
+import { refImageUrl } from "@/lib/refImageUrl";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -276,14 +277,14 @@ export default function DynamicBatchImageList({
                 </span>
                 <div className="w-7 h-7 rounded overflow-hidden bg-[#141618] shrink-0 flex items-center justify-center">
                   <ThumbnailHoverPreview
-                    src={`/${getImagePath(id)}`}
+                    src={refImageUrl(getImagePath(id))}
                     alt={getLabel(id)}
                     previewSize={320}
                     className="w-full h-full"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`/${getImagePath(id)}`}
+                      src={refImageUrl(getImagePath(id))}
                       alt={getLabel(id)}
                       className="w-full h-full object-contain"
                     />

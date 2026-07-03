@@ -1,4 +1,5 @@
 import type { WorkflowInputMapping, RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
+import { refImageUrl } from "@/lib/refImageUrl";
 
 type Props = {
   basePath: string;
@@ -102,7 +103,7 @@ export default function WorkflowImageSelectionForm({
                     {previewImage && (
                       <div className="shrink-0 w-20 rounded border border-[#2c3035] overflow-hidden bg-[#0d0e10]">
                         <img
-                          src={`/${previewImage.imagePath}`}
+                          src={refImageUrl(previewImage.imagePath)}
                           alt={previewImage.label}
                           className="w-full aspect-square object-cover"
                         />
