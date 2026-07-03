@@ -242,6 +242,35 @@ export async function uploadImageToComfy(args: {
 }
 
 // ---------------------------------------------------------------------------
+// isPromptInComfyQueue
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the given promptId is still in ComfyUI's running or pending queue.
+ * Returns true on network errors / unexpected formats to avoid false "lost job" conclusions
+ * when ComfyUI is temporarily unreachable.
+ */
+export async function isPromptInComfyQueue(promptId: string): Promise<boolean> {
+  try {
+    const baseUrl = await getConfiguredComfyBaseUrl();
+    const response = await fetch(`${baseUrl}/queue`);
+    if (!response.ok) return true; // unreachable → assume still alive
+
+    const json = (await response.json()) as unknown;
+    if (!isRecord(json)) return true; // unexpected format → safe default
+
+    const running = Array.isArray(json["queue_running"]) ? json["queue_running"] : [];
+    const pending = Array.isArray(json["queue_pending"]) ? json["queue_pending"] : [];
+
+    return [...running, ...pending].some(
+      (item) => Array.isArray(item) && item[1] === promptId
+    );
+  } catch {
+    return true; // network error → assume still alive
+  }
+}
+
+// ---------------------------------------------------------------------------
 // freeComfyVRAM
 // ---------------------------------------------------------------------------
 

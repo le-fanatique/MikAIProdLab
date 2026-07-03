@@ -10,6 +10,7 @@ import {
   getComfyHistory,
   extractFirstComfyOutput,
   buildComfyViewUrl,
+  isPromptInComfyQueue,
 } from "@/lib/comfy/comfyServerClient";
 
 // ---------------------------------------------------------------------------
@@ -214,10 +215,53 @@ export async function GET(
     // Poll ComfyUI history — one check, no loop
     try {
       const history = await getComfyHistory(promptId);
+      const entry = history[promptId];
+
+      // Detect ComfyUI execution error recorded in history
+      if (entry) {
+        const status =
+          typeof entry["status"] === "object" &&
+          entry["status"] !== null &&
+          !Array.isArray(entry["status"])
+            ? (entry["status"] as Record<string, unknown>)
+            : null;
+
+        if (status?.["status_str"] === "error") {
+          const messages = Array.isArray(status["messages"]) ? status["messages"] : [];
+          const errorEvent = messages.find(
+            (m): m is [string, Record<string, unknown>] =>
+              Array.isArray(m) &&
+              m[0] === "error" &&
+              typeof m[1] === "object" &&
+              m[1] !== null
+          );
+          const raw = errorEvent
+            ? (errorEvent[1] as Record<string, unknown>)["exception_message"]
+            : undefined;
+          const msg =
+            typeof raw === "string" && raw.trim()
+              ? raw.trim()
+              : "ComfyUI execution error.";
+          job = await failJob(jobId, msg.slice(0, 500));
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+      }
+
       const outputFile = extractFirstComfyOutput(history, promptId);
 
       if (!outputFile) {
-        // Not done yet — return current running state
+        // Detect orphaned job: not in history and not in ComfyUI queue
+        if (!entry) {
+          const inQueue = await isPromptInComfyQueue(promptId);
+          if (!inQueue) {
+            job = await failJob(
+              jobId,
+              "ComfyUI job was lost. The ComfyUI server may have restarted."
+            );
+            return NextResponse.json({ ok: true, job: serializeJob(job) });
+          }
+        }
+        // Still in queue or history not yet available
         return NextResponse.json({ ok: true, job: serializeJob(job) });
       }
 
