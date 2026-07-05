@@ -1,14 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { generateChatImages, listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
 import { listImageModels } from "@/actions/llm/imageGeneration";
+import { saveLLMChatImageAsReference } from "@/actions/llm/chatImageReferences";
 import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, ImageModelInfo, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+// Generated image enriched with local-only metadata for Save as Reference
+type LocalGeneratedImage = ChatGeneratedImage & {
+  prompt?: string;
+  model?: string;
+  createdAt?: string;
+};
 
 type LocalMessage = {
   id: string;
@@ -18,8 +27,22 @@ type LocalMessage = {
   attachmentLabel?: string; // "notes.md · 12 KB" — badge shown in message bubble
   imageLabel?: string;      // "photo.png · 200 KB" — image badge
   imageThumbnailDataUrl?: string; // data URL for thumbnail display in bubble
-  images?: ChatGeneratedImage[]; // images returned by the assistant provider
+  images?: LocalGeneratedImage[]; // images returned by the assistant provider
 };
+
+// Route context where Save as Reference is supported (client-side hint only —
+// the server action re-validates ownership)
+type SaveContext =
+  | { targetType: "asset"; projectId: number; assetId: number }
+  | { targetType: "shot"; projectId: number; shotId: number };
+
+type RefSaveState =
+  | { status: "saving" }
+  | { status: "saved" }
+  | { status: "error"; error: string };
+
+// Keep the data URL comfortably under the 10mb server action body limit
+const MAX_SAVE_DATAURL_LENGTH = 9_500_000;
 
 let _msgId = 0;
 function nextId(): string {
@@ -374,6 +397,35 @@ const PROVIDER_DISPLAY: Record<LLMProvider, string> = {
 };
 
 export default function SidebarLLMChat() {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Parse the current route for a supported Save as Reference context.
+  // Display-only — the server action re-validates all IDs and ownership.
+  const saveContext = useMemo<SaveContext | null>(() => {
+    const segs = pathname.split("/").filter(Boolean);
+    if (segs[0] !== "projects" || !segs[1]) return null;
+    const projectId = parseInt(segs[1], 10);
+    if (!Number.isInteger(projectId) || projectId <= 0) return null;
+
+    if (segs[2] === "assets" && segs[3]) {
+      const assetId = parseInt(segs[3], 10);
+      if (Number.isInteger(assetId) && assetId > 0) {
+        return { targetType: "asset", projectId, assetId };
+      }
+    }
+    if (segs[2] === "sequences" && segs[4] === "shots" && segs[5]) {
+      const shotId = parseInt(segs[5], 10);
+      if (Number.isInteger(shotId) && shotId > 0) {
+        return { targetType: "shot", projectId, shotId };
+      }
+    }
+    return null;
+  }, [pathname]);
+
+  // Per-image save state, keyed by `${messageId}-${imageIndex}`
+  const [refSaveStates, setRefSaveStates] = useState<Record<string, RefSaveState>>({});
+
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
@@ -859,9 +911,15 @@ export default function SidebarLLMChat() {
     });
 
     if (res.ok) {
-      const validImages = res.images.filter((img) =>
-        isSafeImageSrc(img.dataUrl ?? img.url ?? "")
-      );
+      const now = new Date().toISOString();
+      const validImages: LocalGeneratedImage[] = res.images
+        .filter((img) => isSafeImageSrc(img.dataUrl ?? img.url ?? ""))
+        .map((img) => ({
+          ...img,
+          prompt,
+          model: effectiveImageModel,
+          createdAt: now,
+        }));
       const assistantMsg: LocalMessage = {
         id: nextId(),
         role: "assistant",
@@ -878,6 +936,49 @@ export default function SidebarLLMChat() {
 
     setIsLoading(false);
   }, [imageGenAttachments, imagePrompt, imageSize, isLoading, effectiveImageModel, effectiveProvider, referencesUnsupported, numImages]);
+
+  const handleSaveReference = useCallback(
+    async (key: string, image: LocalGeneratedImage) => {
+      if (!saveContext || !image.dataUrl) return;
+
+      const current = refSaveStates[key];
+      if (current?.status === "saving" || current?.status === "saved") return;
+
+      if (image.dataUrl.length > MAX_SAVE_DATAURL_LENGTH) {
+        setRefSaveStates((prev) => ({
+          ...prev,
+          [key]: {
+            status: "error",
+            error: "Image is too large to save from the chat. Please download it instead.",
+          },
+        }));
+        return;
+      }
+
+      setRefSaveStates((prev) => ({ ...prev, [key]: { status: "saving" } }));
+
+      const res = await saveLLMChatImageAsReference({
+        targetType: saveContext.targetType,
+        projectId: saveContext.projectId,
+        assetId: saveContext.targetType === "asset" ? saveContext.assetId : undefined,
+        shotId: saveContext.targetType === "shot" ? saveContext.shotId : undefined,
+        imageDataUrl: image.dataUrl,
+        prompt: image.prompt,
+        model: image.model,
+      });
+
+      if (res.ok) {
+        setRefSaveStates((prev) => ({ ...prev, [key]: { status: "saved" } }));
+        router.refresh();
+      } else {
+        setRefSaveStates((prev) => ({
+          ...prev,
+          [key]: { status: "error", error: res.error },
+        }));
+      }
+    },
+    [saveContext, refSaveStates, router]
+  );
 
   const handleClear = useCallback(() => {
     setMessages([]);
@@ -1103,9 +1204,46 @@ export default function SidebarLLMChat() {
                     {renderMarkdown(msg.content)}
                     {msg.images && msg.images.length > 0 && (
                       <div className="mt-1 space-y-1">
-                        {msg.images.map((img, idx) => (
-                          <AssistantGeneratedImage key={idx} image={img} />
-                        ))}
+                        {msg.images.map((img, idx) => {
+                          const saveKey = `${msg.id}-${idx}`;
+                          const saveState = refSaveStates[saveKey];
+                          const canSave = saveContext !== null && !!img.dataUrl;
+                          return (
+                            <div key={idx}>
+                              <AssistantGeneratedImage image={img} />
+                              {canSave && (
+                                <div className="mt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveReference(saveKey, img)}
+                                    disabled={
+                                      saveState?.status === "saving" ||
+                                      saveState?.status === "saved"
+                                    }
+                                    className={
+                                      saveState?.status === "saved"
+                                        ? "text-[9px] text-[#6b9e72] cursor-default"
+                                        : "text-[9px] text-[#5b93d6] hover:text-[#8fbbe8] disabled:opacity-60 transition-colors"
+                                    }
+                                  >
+                                    {saveState?.status === "saved"
+                                      ? "Saved as reference"
+                                      : saveState?.status === "saving"
+                                        ? "Saving..."
+                                        : saveContext!.targetType === "asset"
+                                          ? "Save as Asset Reference"
+                                          : "Save as Shot Reference"}
+                                  </button>
+                                  {saveState?.status === "error" && (
+                                    <p className="text-[9px] text-[#e0556a] mt-0.5">
+                                      {saveState.error}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1360,6 +1498,12 @@ export default function SidebarLLMChat() {
                   <> Optional reference images can be used by compatible image models.</>
                 )}
               </p>
+
+              {!saveContext && hasVisibleAssistantImages && (
+                <p className="text-[9px] text-[#4b5158] mt-1">
+                  Save as Reference is available on Asset and Shot pages.
+                </p>
+              )}
 
               {/* Ollama unsupported warning */}
               {effectiveProvider === "ollama" && (
