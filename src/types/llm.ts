@@ -89,6 +89,10 @@ export type ChatImageGenerationRequest = {
   referenceImages?: ChatImageReference[];
   /** Number of images to generate — sent only when > 1 and supported. */
   n?: number;
+  /** Capability-driven options — sent only when set and exposed by the model. */
+  resolution?: string;
+  quality?: string;
+  outputFormat?: string;
 };
 
 /**

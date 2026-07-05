@@ -466,6 +466,11 @@ export default function SidebarLLMChat() {
   const [imageModelsLoaded, setImageModelsLoaded] = useState(false);
   const [numImages, setNumImages] = useState(1);
 
+  // Capability-driven image options — "" means provider default
+  const [imageResolution, setImageResolution] = useState("");
+  const [imageQuality, setImageQuality] = useState("");
+  const [imageOutputFormat, setImageOutputFormat] = useState("");
+
   // Reference images for Generate Image mode (separate from chat attachments)
   const [imageGenAttachments, setImageGenAttachments] = useState<AttachedImage[]>([]);
   const [imageGenAttachError, setImageGenAttachError] = useState<string | null>(null);
@@ -578,6 +583,20 @@ export default function SidebarLLMChat() {
     const limit = imageMaxImages && imageMaxImages > 1 ? imageMaxImages : 1;
     setNumImages((prev) => Math.min(prev, limit));
   }, [imageMaxImages]);
+
+  // Reset options no longer supported by the newly selected model
+  useEffect(() => {
+    const info = imageModels.find((m) => m.id === selectedImageModel) ?? null;
+    setImageResolution((prev) =>
+      prev && info?.resolutions?.includes(prev) ? prev : ""
+    );
+    setImageQuality((prev) =>
+      prev && info?.qualities?.includes(prev) ? prev : ""
+    );
+    setImageOutputFormat((prev) =>
+      prev && info?.outputFormats?.includes(prev) ? prev : ""
+    );
+  }, [selectedImageModel, imageModels]);
 
   // Drag resize handlers
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -908,6 +927,9 @@ export default function SidebarLLMChat() {
       size: imageSize,
       referenceImages: refImages.length > 0 ? refImages : undefined,
       n: numImages > 1 ? numImages : undefined,
+      resolution: imageResolution || undefined,
+      quality: imageQuality || undefined,
+      outputFormat: imageOutputFormat || undefined,
     });
 
     if (res.ok) {
@@ -935,7 +957,7 @@ export default function SidebarLLMChat() {
     }
 
     setIsLoading(false);
-  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, effectiveImageModel, effectiveProvider, referencesUnsupported, numImages]);
+  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, effectiveImageModel, effectiveProvider, referencesUnsupported, numImages, imageResolution, imageQuality, imageOutputFormat]);
 
   const handleSaveReference = useCallback(
     async (key: string, image: LocalGeneratedImage) => {
@@ -1454,6 +1476,69 @@ export default function SidebarLLMChat() {
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+              {/* Image Options — capability-driven, only shown when the model exposes them */}
+              {effectiveProvider === "openrouter" &&
+                selectedImageModelInfo &&
+                ((selectedImageModelInfo.resolutions?.length ?? 0) > 0 ||
+                  (selectedImageModelInfo.qualities?.length ?? 0) > 0 ||
+                  (selectedImageModelInfo.outputFormats?.length ?? 0) > 0) && (
+                  <div className="flex flex-col gap-1 mt-1">
+                    <span className="text-[9px] text-[#4b5158] uppercase tracking-wider">
+                      Image Options
+                    </span>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {(selectedImageModelInfo.resolutions?.length ?? 0) > 0 && (
+                        <label className="flex items-center gap-1">
+                          <span className="text-[9px] text-[#4b5158]">Resolution</span>
+                          <select
+                            value={imageResolution}
+                            onChange={(e) => setImageResolution(e.target.value)}
+                            disabled={isLoading}
+                            className="bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+                          >
+                            <option value="">Default</option>
+                            {selectedImageModelInfo.resolutions!.map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {(selectedImageModelInfo.qualities?.length ?? 0) > 0 && (
+                        <label className="flex items-center gap-1">
+                          <span className="text-[9px] text-[#4b5158]">Quality</span>
+                          <select
+                            value={imageQuality}
+                            onChange={(e) => setImageQuality(e.target.value)}
+                            disabled={isLoading}
+                            className="bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+                          >
+                            <option value="">Default</option>
+                            {selectedImageModelInfo.qualities!.map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {(selectedImageModelInfo.outputFormats?.length ?? 0) > 0 && (
+                        <label className="flex items-center gap-1">
+                          <span className="text-[9px] text-[#4b5158]">Output Format</span>
+                          <select
+                            value={imageOutputFormat}
+                            onChange={(e) => setImageOutputFormat(e.target.value)}
+                            disabled={isLoading}
+                            className="bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+                          >
+                            <option value="">Default</option>
+                            {selectedImageModelInfo.outputFormats!.map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                    </div>
                   </div>
                 )}
 

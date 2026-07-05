@@ -134,12 +134,31 @@ const ALLOWED_REF_IMAGE_MIMES = new Set([
 
 const MAX_IMAGES_PER_REQUEST = 8;
 
+// Simple option values like "1K", "high", "png" — defensive server-side guard
+const IMAGE_OPTION_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/;
+
+function validateImageOption(
+  value: string | undefined,
+  label: string
+): { ok: true; value: string | undefined } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, value: undefined };
+  if (!IMAGE_OPTION_PATTERN.test(trimmed)) {
+    return { ok: false, error: `Invalid ${label} value.` };
+  }
+  return { ok: true, value: trimmed };
+}
+
 export async function generateChatImages(input: {
   model: string;
   prompt: string;
   size: ChatImageSize;
   referenceImages?: Array<{ dataUrl: string; mimeType: string; name?: string; sizeBytes?: number }>;
   n?: number;
+  resolution?: string;
+  quality?: string;
+  outputFormat?: string;
 }): Promise<
   | { ok: true; images: ChatGeneratedImage[]; text: string }
   | { ok: false; error: string }
@@ -171,6 +190,13 @@ export async function generateChatImages(input: {
       n = input.n > 1 ? input.n : undefined;
     }
 
+    const resolutionCheck = validateImageOption(input.resolution, "resolution");
+    if (!resolutionCheck.ok) return { ok: false, error: resolutionCheck.error };
+    const qualityCheck = validateImageOption(input.quality, "quality");
+    if (!qualityCheck.ok) return { ok: false, error: qualityCheck.error };
+    const outputFormatCheck = validateImageOption(input.outputFormat, "output format");
+    if (!outputFormatCheck.ok) return { ok: false, error: outputFormatCheck.error };
+
     // Server-side validation for reference images
     const refs = input.referenceImages ?? [];
     if (refs.length > 4) {
@@ -199,6 +225,9 @@ export async function generateChatImages(input: {
       size: input.size,
       referenceImages: validatedRefs.length > 0 ? validatedRefs : undefined,
       n,
+      resolution: resolutionCheck.value,
+      quality: qualityCheck.value,
+      outputFormat: outputFormatCheck.value,
     });
     return { ok: true, images: result.images, text: result.text };
   } catch (err) {

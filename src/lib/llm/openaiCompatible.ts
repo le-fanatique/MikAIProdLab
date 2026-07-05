@@ -330,6 +330,11 @@ export async function callOpenAICompatibleImageGeneration(
       payload.n = request.n;
     }
 
+    // Capability-driven options — only sent when explicitly set
+    if (request.resolution) payload.resolution = request.resolution;
+    if (request.quality) payload.quality = request.quality;
+    if (request.outputFormat) payload.output_format = request.outputFormat;
+
     // Reference images: full data URL, wrapped in input_references array
     if (request.referenceImages && request.referenceImages.length > 0) {
       payload.input_references = request.referenceImages.map((ref) => ({
