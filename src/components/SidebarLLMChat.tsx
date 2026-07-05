@@ -5,18 +5,20 @@ import { usePathname, useRouter } from "next/navigation";
 import { generateChatImages, listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
 import { listImageModels } from "@/actions/llm/imageGeneration";
 import { saveLLMChatImageAsReference } from "@/actions/llm/chatImageReferences";
-import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, ImageModelInfo, LLMProvider } from "@/types/llm";
+import type { ChatGeneratedImage, ChatImageGenerationMetadata, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, ImageModelInfo, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-// Generated image enriched with local-only metadata for Save as Reference
+// Generated image enriched with local-only metadata for Save as Reference.
+// options is a snapshot taken at generation time — never the current UI state.
 type LocalGeneratedImage = ChatGeneratedImage & {
   prompt?: string;
   model?: string;
   createdAt?: string;
+  options?: ChatImageGenerationMetadata;
 };
 
 type LocalMessage = {
@@ -470,6 +472,7 @@ export default function SidebarLLMChat() {
   const [imageResolution, setImageResolution] = useState("");
   const [imageQuality, setImageQuality] = useState("");
   const [imageOutputFormat, setImageOutputFormat] = useState("");
+  const [imageBackground, setImageBackground] = useState("");
 
   // Reference images for Generate Image mode (separate from chat attachments)
   const [imageGenAttachments, setImageGenAttachments] = useState<AttachedImage[]>([]);
@@ -595,6 +598,9 @@ export default function SidebarLLMChat() {
     );
     setImageOutputFormat((prev) =>
       prev && info?.outputFormats?.includes(prev) ? prev : ""
+    );
+    setImageBackground((prev) =>
+      prev && info?.backgrounds?.includes(prev) ? prev : ""
     );
   }, [selectedImageModel, imageModels]);
 
@@ -930,10 +936,23 @@ export default function SidebarLLMChat() {
       resolution: imageResolution || undefined,
       quality: imageQuality || undefined,
       outputFormat: imageOutputFormat || undefined,
+      background: imageBackground || undefined,
     });
 
     if (res.ok) {
       const now = new Date().toISOString();
+      // Snapshot of the settings used for THIS generation — saved references
+      // must reflect these, not whatever the UI shows at save time
+      const optionsSnapshot: ChatImageGenerationMetadata = {
+        size: imageSize,
+        resolution: imageResolution || undefined,
+        quality: imageQuality || undefined,
+        outputFormat: imageOutputFormat || undefined,
+        background: imageBackground || undefined,
+        n: numImages > 1 ? numImages : undefined,
+        referenceImageCount: refImages.length > 0 ? refImages.length : undefined,
+        createdAt: now,
+      };
       const validImages: LocalGeneratedImage[] = res.images
         .filter((img) => isSafeImageSrc(img.dataUrl ?? img.url ?? ""))
         .map((img) => ({
@@ -941,6 +960,7 @@ export default function SidebarLLMChat() {
           prompt,
           model: effectiveImageModel,
           createdAt: now,
+          options: optionsSnapshot,
         }));
       const assistantMsg: LocalMessage = {
         id: nextId(),
@@ -957,7 +977,7 @@ export default function SidebarLLMChat() {
     }
 
     setIsLoading(false);
-  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, effectiveImageModel, effectiveProvider, referencesUnsupported, numImages, imageResolution, imageQuality, imageOutputFormat]);
+  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, effectiveImageModel, effectiveProvider, referencesUnsupported, numImages, imageResolution, imageQuality, imageOutputFormat, imageBackground]);
 
   const handleSaveReference = useCallback(
     async (key: string, image: LocalGeneratedImage) => {
@@ -987,6 +1007,8 @@ export default function SidebarLLMChat() {
         imageDataUrl: image.dataUrl,
         prompt: image.prompt,
         model: image.model,
+        // Snapshot from generation time — not the current UI option states
+        generationOptions: image.options ?? (image.createdAt ? { createdAt: image.createdAt } : undefined),
       });
 
       if (res.ok) {
@@ -1484,7 +1506,8 @@ export default function SidebarLLMChat() {
                 selectedImageModelInfo &&
                 ((selectedImageModelInfo.resolutions?.length ?? 0) > 0 ||
                   (selectedImageModelInfo.qualities?.length ?? 0) > 0 ||
-                  (selectedImageModelInfo.outputFormats?.length ?? 0) > 0) && (
+                  (selectedImageModelInfo.outputFormats?.length ?? 0) > 0 ||
+                  (selectedImageModelInfo.backgrounds?.length ?? 0) > 0) && (
                   <div className="flex flex-col gap-1 mt-1">
                     <span className="text-[9px] text-[#4b5158] uppercase tracking-wider">
                       Image Options
@@ -1533,6 +1556,22 @@ export default function SidebarLLMChat() {
                           >
                             <option value="">Default</option>
                             {selectedImageModelInfo.outputFormats!.map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {(selectedImageModelInfo.backgrounds?.length ?? 0) > 0 && (
+                        <label className="flex items-center gap-1">
+                          <span className="text-[9px] text-[#4b5158]">Background</span>
+                          <select
+                            value={imageBackground}
+                            onChange={(e) => setImageBackground(e.target.value)}
+                            disabled={isLoading}
+                            className="bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+                          >
+                            <option value="">Default</option>
+                            {selectedImageModelInfo.backgrounds!.map((v) => (
                               <option key={v} value={v}>{v}</option>
                             ))}
                           </select>

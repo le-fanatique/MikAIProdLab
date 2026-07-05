@@ -15,7 +15,8 @@ import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 const MAX_DECODED_BYTES = 10 * 1024 * 1024; // 10 MB
-const MAX_NOTES_LENGTH = 1000;
+const MAX_NOTES_LENGTH = 2000;
+const MAX_OPTION_LENGTH = 100;
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": ".png",
@@ -23,10 +24,65 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/webp": ".webp",
 };
 
-function buildNotes(prompt?: string, model?: string): string | null {
+export type ChatImageSaveOptions = {
+  size?: string;
+  resolution?: string;
+  quality?: string;
+  outputFormat?: string;
+  background?: string;
+  n?: number;
+  referenceImageCount?: number;
+  createdAt?: string;
+};
+
+// Single-line, bounded option value — strips newlines and control chars
+function sanitizeOptionValue(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.replace(/[\r\n\t]/g, " ").trim().slice(0, MAX_OPTION_LENGTH);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function sanitizeOptionNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined;
+}
+
+function buildNotes(
+  prompt?: string,
+  model?: string,
+  options?: ChatImageSaveOptions
+): string | null {
   const parts: string[] = [];
   if (prompt?.trim()) parts.push(`Prompt:\n${prompt.trim()}`);
   if (model?.trim()) parts.push(`Model:\n${model.trim()}`);
+
+  if (options) {
+    const optionLines: string[] = [];
+    const size = sanitizeOptionValue(options.size);
+    const resolution = sanitizeOptionValue(options.resolution);
+    const quality = sanitizeOptionValue(options.quality);
+    const outputFormat = sanitizeOptionValue(options.outputFormat);
+    const background = sanitizeOptionValue(options.background);
+    const n = sanitizeOptionNumber(options.n);
+    const refCount = sanitizeOptionNumber(options.referenceImageCount);
+
+    if (size) optionLines.push(`- Size: ${size}`);
+    if (resolution) optionLines.push(`- Resolution: ${resolution}`);
+    if (quality) optionLines.push(`- Quality: ${quality}`);
+    if (outputFormat) optionLines.push(`- Output Format: ${outputFormat}`);
+    if (background) optionLines.push(`- Background: ${background}`);
+    if (n && n > 1) optionLines.push(`- Number of Images: ${n}`);
+    if (refCount) optionLines.push(`- Reference Images: ${refCount}`);
+
+    if (optionLines.length > 0) {
+      parts.push(`Image Options:\n${optionLines.join("\n")}`);
+    }
+
+    const createdAt = sanitizeOptionValue(options.createdAt);
+    if (createdAt) parts.push(`Generated At:\n${createdAt}`);
+  }
+
   if (parts.length === 0) return null;
   return parts.join("\n\n").slice(0, MAX_NOTES_LENGTH);
 }
@@ -44,6 +100,7 @@ export async function saveLLMChatImageAsReference(input: {
   imageDataUrl: string;
   prompt?: string;
   model?: string;
+  generationOptions?: ChatImageSaveOptions;
 }): Promise<
   | { ok: true; referenceId: number; imagePath: string }
   | { ok: false; error: string }
@@ -135,7 +192,7 @@ export async function saveLLMChatImageAsReference(input: {
     await writeFile(destAbsolute, buffer);
 
     const imagePath = `uploads/reference-images/${subfolder}/${filename}`;
-    const notes = buildNotes(input.prompt, input.model);
+    const notes = buildNotes(input.prompt, input.model, input.generationOptions);
 
     // --- DB insert ---
     let referenceId: number;

@@ -93,6 +93,22 @@ export type ChatImageGenerationRequest = {
   resolution?: string;
   quality?: string;
   outputFormat?: string;
+  background?: string;
+};
+
+/**
+ * Snapshot of the generation settings taken when an image is generated,
+ * used to enrich reference notes on Save as Reference. All fields optional.
+ */
+export type ChatImageGenerationMetadata = {
+  size?: string;
+  resolution?: string;
+  quality?: string;
+  outputFormat?: string;
+  background?: string;
+  n?: number;
+  referenceImageCount?: number;
+  createdAt?: string;
 };
 
 /**
@@ -108,6 +124,7 @@ export type ImageModelInfo = {
   resolutions?: string[];
   outputFormats?: string[];
   qualities?: string[];
+  backgrounds?: string[];
   maxImages?: number;
   supportsReferences?: boolean;
 };

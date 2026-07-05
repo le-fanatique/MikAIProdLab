@@ -334,6 +334,7 @@ export async function callOpenAICompatibleImageGeneration(
     if (request.resolution) payload.resolution = request.resolution;
     if (request.quality) payload.quality = request.quality;
     if (request.outputFormat) payload.output_format = request.outputFormat;
+    if (request.background) payload.background = request.background;
 
     // Reference images: full data URL, wrapped in input_references array
     if (request.referenceImages && request.referenceImages.length > 0) {

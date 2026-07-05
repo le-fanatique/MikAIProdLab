@@ -77,6 +77,8 @@ function normalizeImageModel(raw: unknown): ImageModelInfo | null {
     enumValues(params["quality"]) ??
     asStringArray(capabilities["qualities"]) ??
     asStringArray(raw["qualities"]);
+  // background: enum only (e.g. ["auto","transparent","opaque"]); non-enum shapes ignored
+  const backgrounds = enumValues(params["background"]);
   const maxImages =
     rangeMax(params["n"]) ??
     asPositiveNumber(capabilities["max_images"]) ??
@@ -113,6 +115,7 @@ function normalizeImageModel(raw: unknown): ImageModelInfo | null {
     resolutions,
     outputFormats,
     qualities,
+    backgrounds,
     maxImages,
     supportsReferences,
   };

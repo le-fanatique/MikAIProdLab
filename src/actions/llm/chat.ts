@@ -159,6 +159,7 @@ export async function generateChatImages(input: {
   resolution?: string;
   quality?: string;
   outputFormat?: string;
+  background?: string;
 }): Promise<
   | { ok: true; images: ChatGeneratedImage[]; text: string }
   | { ok: false; error: string }
@@ -196,6 +197,8 @@ export async function generateChatImages(input: {
     if (!qualityCheck.ok) return { ok: false, error: qualityCheck.error };
     const outputFormatCheck = validateImageOption(input.outputFormat, "output format");
     if (!outputFormatCheck.ok) return { ok: false, error: outputFormatCheck.error };
+    const backgroundCheck = validateImageOption(input.background, "background");
+    if (!backgroundCheck.ok) return { ok: false, error: backgroundCheck.error };
 
     // Server-side validation for reference images
     const refs = input.referenceImages ?? [];
@@ -228,6 +231,7 @@ export async function generateChatImages(input: {
       resolution: resolutionCheck.value,
       quality: qualityCheck.value,
       outputFormat: outputFormatCheck.value,
+      background: backgroundCheck.value,
     });
     return { ok: true, images: result.images, text: result.text };
   } catch (err) {
