@@ -18,6 +18,9 @@ export default function ChatSystemPromptManager() {
   const [isCreating, setIsCreating] = useState(false);
   const [formName, setFormName] = useState("");
   const [formPrompt, setFormPrompt] = useState("");
+  const [formKind, setFormKind] = useState<"chat" | "translation">("chat");
+  const [formTargetLanguage, setFormTargetLanguage] = useState("");
+  const [formSourceLanguage, setFormSourceLanguage] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -42,6 +45,9 @@ export default function ChatSystemPromptManager() {
     setIsCreating(true);
     setFormName("");
     setFormPrompt("");
+    setFormKind("chat");
+    setFormTargetLanguage("");
+    setFormSourceLanguage("");
     setSaveError(null);
   };
 
@@ -50,6 +56,9 @@ export default function ChatSystemPromptManager() {
     setIsCreating(false);
     setFormName(p.name);
     setFormPrompt(p.prompt);
+    setFormKind(p.kind === "translation" ? "translation" : "chat");
+    setFormTargetLanguage(p.targetLanguage ?? "");
+    setFormSourceLanguage(p.sourceLanguage ?? "");
     setSaveError(null);
   };
 
@@ -58,6 +67,9 @@ export default function ChatSystemPromptManager() {
     setIsCreating(false);
     setFormName("");
     setFormPrompt("");
+    setFormKind("chat");
+    setFormTargetLanguage("");
+    setFormSourceLanguage("");
     setSaveError(null);
   };
 
@@ -70,6 +82,9 @@ export default function ChatSystemPromptManager() {
       id: editingId ?? undefined,
       name: formName,
       prompt: formPrompt,
+      kind: formKind,
+      targetLanguage: formKind === "translation" ? formTargetLanguage : undefined,
+      sourceLanguage: formKind === "translation" ? formSourceLanguage : undefined,
     });
 
     if (res.ok) {
@@ -115,8 +130,15 @@ export default function ChatSystemPromptManager() {
                 className="flex items-start justify-between gap-2 rounded border border-[#232629] bg-[#0d0e10] px-3 py-2"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-medium text-[#a4abb2] truncate">
-                    {p.name}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[11px] font-medium text-[#a4abb2] truncate">
+                      {p.name}
+                    </span>
+                    {p.kind === "translation" && (
+                      <span className="shrink-0 text-[8px] uppercase tracking-wider text-[#6b9e72] border border-[#2a3d2e] rounded px-1 py-px">
+                        Translation{p.targetLanguage ? ` → ${p.targetLanguage}` : ""}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] text-[#6e767d] truncate mt-0.5">
                     {p.prompt.slice(0, 100)}
@@ -178,6 +200,50 @@ export default function ChatSystemPromptManager() {
                 {formPrompt.length}/8000
               </span>
             </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
+                Prompt Type
+              </label>
+              <select
+                value={formKind}
+                onChange={(e) => setFormKind(e.target.value === "translation" ? "translation" : "chat")}
+                className="bg-[#141618] border border-[#2c3035] rounded px-2 py-1 text-[11px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+              >
+                <option value="chat">Chat</option>
+                <option value="translation">Translation</option>
+              </select>
+            </div>
+
+            {formKind === "translation" && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
+                    Target Language
+                  </label>
+                  <input
+                    value={formTargetLanguage}
+                    onChange={(e) => setFormTargetLanguage(e.target.value)}
+                    placeholder="e.g. French"
+                    className="bg-[#141618] border border-[#2c3035] rounded px-2 py-1 text-[11px] text-[#a4abb2] placeholder-[#4b5158] focus:outline-none focus:border-[#3a4046]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
+                    Source Language (optional)
+                  </label>
+                  <input
+                    value={formSourceLanguage}
+                    onChange={(e) => setFormSourceLanguage(e.target.value)}
+                    placeholder="e.g. English"
+                    className="bg-[#141618] border border-[#2c3035] rounded px-2 py-1 text-[11px] text-[#a4abb2] placeholder-[#4b5158] focus:outline-none focus:border-[#3a4046]"
+                  />
+                </div>
+                <p className="text-[9px] text-[#4b5158]">
+                  Translation prompts skip chat history and use temperature 0 for reliable output.
+                </p>
+              </>
+            )}
 
             {saveError && (
               <div className="text-[10px] text-[#e0556a]">{saveError}</div>

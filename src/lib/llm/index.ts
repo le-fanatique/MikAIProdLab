@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ChatImageGenerationRequest, ChatImageGenerationResponse, ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatCallOptions, ChatImageGenerationRequest, ChatImageGenerationResponse, ChatLLMResponse, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 import {
   callOllama,
   callOllamaChat,
@@ -39,14 +39,20 @@ export async function callLLMJson(
  */
 export async function callLLMChat(
   messages: ChatMessage[],
-  config: LLMConfig
+  config: LLMConfig,
+  callOptions?: ChatCallOptions
 ): Promise<ChatLLMResponse> {
   if (config.provider === "ollama") {
     await maybePurgeComfyBeforeOllama();
-    const text = await callOllamaChat(messages, config);
+    const text = await callOllamaChat(messages, config, callOptions);
     return { text, images: [] };
   }
-  return callOpenAICompatibleChat(messages, config);
+  // OpenAI-compatible path reads temperature from config — map it when provided
+  const effectiveConfig =
+    typeof callOptions?.temperature === "number"
+      ? { ...config, temperature: callOptions.temperature }
+      : config;
+  return callOpenAICompatibleChat(messages, effectiveConfig);
 }
 
 /**

@@ -102,8 +102,19 @@ export type ChatSystemPrompt = {
   id: string;
   name: string;
   prompt: string;
+  kind?: "chat" | "translation";
+  targetLanguage?: string;
+  sourceLanguage?: string;
   createdAt?: string;
   updatedAt?: string;
+};
+
+/** Per-call options for freeform chat (Ollama options / OpenAI temperature). */
+export type ChatCallOptions = {
+  temperature?: number;
+  numPredict?: number;
+  /** Ollama top-level "think" flag — disables thinking output on reasoning models. */
+  think?: boolean;
 };
 
 // ---------------------------------------------------------------------------

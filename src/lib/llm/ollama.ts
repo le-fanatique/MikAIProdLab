@@ -1,4 +1,4 @@
-import type { ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import type { ChatCallOptions, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 
 /**
  * Calls the Ollama /api/chat endpoint.
@@ -82,12 +82,25 @@ export async function callOllama(
 
 export async function callOllamaChat(
   messages: ChatMessage[],
-  config: LLMConfig
+  config: LLMConfig,
+  callOptions?: ChatCallOptions
 ): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
   const url = `${config.baseUrl}/api/chat`;
+
+  // Only include Ollama options that are explicitly set.
+  // Explicit type checks so falsy values (temperature: 0, think: false) are still sent.
+  const ollamaOptions: Record<string, number> = {};
+  if (typeof callOptions?.temperature === "number") {
+    ollamaOptions["temperature"] = callOptions.temperature;
+  }
+  if (typeof callOptions?.numPredict === "number") {
+    ollamaOptions["num_predict"] = callOptions.numPredict;
+  }
+  // "think" is a top-level Ollama chat field, not an options entry
+  const think = typeof callOptions?.think === "boolean" ? callOptions.think : undefined;
 
   let response: Response;
   try {
@@ -109,6 +122,8 @@ export async function callOllamaChat(
           return msg;
         }),
         stream: false,
+        ...(Object.keys(ollamaOptions).length > 0 ? { options: ollamaOptions } : {}),
+        ...(think !== undefined ? { think } : {}),
       }),
       signal: controller.signal,
     });

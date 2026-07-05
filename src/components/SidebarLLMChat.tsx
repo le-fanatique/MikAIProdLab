@@ -656,7 +656,11 @@ export default function SidebarLLMChat() {
       apiMessages.push({ role: "user", content: sentContent });
     }
 
-    const res = await sendChatMessage({ model: selectedModel, messages: apiMessages });
+    const res = await sendChatMessage({
+      model: selectedModel,
+      messages: apiMessages,
+      systemPromptId: selectedSystemPrompt ? selectedSystemPrompt.id : undefined,
+    });
 
     if (res.ok) {
       const validImages = (res.images ?? []).filter((img) =>

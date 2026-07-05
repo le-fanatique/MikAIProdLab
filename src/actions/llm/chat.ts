@@ -13,9 +13,34 @@ import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage
 // Send a chat message using the effective chat LLM provider
 // ---------------------------------------------------------------------------
 
+function messageTextContent(m: ChatMessage): string {
+  return typeof m.content === "string"
+    ? m.content
+    : m.content
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("\n");
+}
+
+function buildTranslationTask(args: {
+  sourceText: string;
+  targetLanguage: string;
+  sourceLanguage?: string;
+}): string {
+  const from = args.sourceLanguage ? ` from ${args.sourceLanguage}` : "";
+  return (
+    `Task: Translate the following text${from} into ${args.targetLanguage}. ` +
+    `Return only the translation. Do not answer, explain, summarize, or comment.\n\n` +
+    `Text:\n"""\n${args.sourceText}\n"""`
+  );
+}
+
+const TRANSLATION_NUM_PREDICT = 2048;
+
 export async function sendChatMessage(input: {
   model: string;
   messages: ChatMessage[];
+  systemPromptId?: string;
 }): Promise<
   | { ok: true; content: string; images?: ChatGeneratedImage[] }
   | { ok: false; error: string }
@@ -43,15 +68,52 @@ export async function sendChatMessage(input: {
       return { ok: false, error: "No valid messages to send." };
     }
 
-    // Keep system message if present + last N user/assistant messages
-    const systemMsgs = valid.filter((m) => m.role === "system");
-    const chatMsgs = valid.filter((m) => m.role !== "system").slice(-12);
-    const trimmed = [...systemMsgs, ...chatMsgs];
-
     const chatConfig: LLMConfig = {
       ...config,
       model: input.model.trim(),
     };
+
+    // Translation mode: server-side lookup of the selected system prompt's
+    // metadata. Falls back to normal chat when the prompt is not a translation
+    // prompt or has no target language.
+    if (input.systemPromptId) {
+      const prompts = await getChatSystemPrompts();
+      const selected = prompts.find((p) => p.id === input.systemPromptId);
+      const targetLanguage = selected?.targetLanguage?.trim();
+
+      if (selected?.kind === "translation" && targetLanguage) {
+        const lastUser = [...valid].reverse().find((m) => m.role === "user");
+        const sourceText = lastUser ? messageTextContent(lastUser).trim() : "";
+        if (!sourceText) {
+          return { ok: false, error: "No text to translate." };
+        }
+
+        // No history: system prompt + single wrapped user message only
+        const translationMessages: ChatMessage[] = [
+          { role: "system", content: selected.prompt },
+          {
+            role: "user",
+            content: buildTranslationTask({
+              sourceText,
+              targetLanguage,
+              sourceLanguage: selected.sourceLanguage?.trim() || undefined,
+            }),
+          },
+        ];
+
+        const response = await callLLMChat(translationMessages, chatConfig, {
+          temperature: 0,
+          numPredict: TRANSLATION_NUM_PREDICT,
+          think: false,
+        });
+        return { ok: true, content: response.text, images: response.images };
+      }
+    }
+
+    // Normal chat: keep system message if present + last N user/assistant messages
+    const systemMsgs = valid.filter((m) => m.role === "system");
+    const chatMsgs = valid.filter((m) => m.role !== "system").slice(-12);
+    const trimmed = [...systemMsgs, ...chatMsgs];
 
     const response = await callLLMChat(trimmed, chatConfig);
     return { ok: true, content: response.text, images: response.images };

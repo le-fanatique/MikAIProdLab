@@ -435,10 +435,21 @@ export async function getChatSystemPrompts(): Promise<ChatSystemPrompt[]> {
   return readSystemPrompts();
 }
 
+const MAX_LANGUAGE_LENGTH = 60;
+
+function sanitizeLanguage(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, MAX_LANGUAGE_LENGTH);
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export async function saveChatSystemPrompt(input: {
   id?: string;
   name: string;
   prompt: string;
+  kind?: "chat" | "translation";
+  targetLanguage?: string;
+  sourceLanguage?: string;
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const name = input.name.trim();
   const prompt = input.prompt.trim();
@@ -448,18 +459,36 @@ export async function saveChatSystemPrompt(input: {
   if (prompt.length > MAX_PROMPT_LENGTH)
     return { ok: false, error: `Prompt must be under ${MAX_PROMPT_LENGTH} characters.` };
 
+  const kind: "chat" | "translation" =
+    input.kind === "translation" ? "translation" : "chat";
+  const targetLanguage = kind === "translation" ? sanitizeLanguage(input.targetLanguage) : undefined;
+  const sourceLanguage = kind === "translation" ? sanitizeLanguage(input.sourceLanguage) : undefined;
+
+  if (kind === "translation" && !targetLanguage) {
+    return { ok: false, error: "Target language is required for translation prompts." };
+  }
+
   const prompts = await readSystemPrompts();
   const now = new Date().toISOString();
 
   if (input.id) {
-    // Update existing
+    // Update existing — replace metadata fields explicitly so switching back
+    // to "chat" clears stale translation metadata
     const idx = prompts.findIndex((p) => p.id === input.id);
     if (idx === -1) return { ok: false, error: "Prompt not found." };
-    prompts[idx] = { ...prompts[idx], name, prompt, updatedAt: now };
+    prompts[idx] = {
+      ...prompts[idx],
+      name,
+      prompt,
+      kind,
+      targetLanguage,
+      sourceLanguage,
+      updatedAt: now,
+    };
   } else {
     // Create new
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    prompts.push({ id, name, prompt, createdAt: now, updatedAt: now });
+    prompts.push({ id, name, prompt, kind, targetLanguage, sourceLanguage, createdAt: now, updatedAt: now });
   }
 
   await writeSystemPrompts(prompts);
