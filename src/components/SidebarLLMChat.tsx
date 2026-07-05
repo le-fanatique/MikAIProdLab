@@ -477,30 +477,44 @@ export default function SidebarLLMChat() {
   // Load image generation models when the Image tab is opened (OpenRouter only)
   useEffect(() => {
     if (mode !== "image" || effectiveProvider !== "openrouter") return;
-    if (imageModelsLoaded || imageModelsLoading) return;
+    if (imageModelsLoaded) return;
 
     let cancelled = false;
     setImageModelsLoading(true);
     setImageModelsError(null);
 
-    listImageModels().then((res) => {
-      if (cancelled) return;
-      if (res.ok) {
-        setImageModels(res.models);
-        if (res.models.length > 0) {
-          setSelectedImageModel((prev) =>
-            prev && res.models.some((m) => m.id === prev) ? prev : res.models[0].id
-          );
+    (async () => {
+      try {
+        const res = await listImageModels();
+        if (cancelled) return;
+        if (res.ok) {
+          setImageModels(res.models);
+          if (res.models.length > 0) {
+            setSelectedImageModel((prev) =>
+              prev && res.models.some((m) => m.id === prev) ? prev : res.models[0].id
+            );
+          }
+        } else {
+          setImageModelsError(res.error);
         }
-      } else {
-        setImageModelsError(res.error);
+        setImageModelsLoaded(true);
+      } catch {
+        if (!cancelled) {
+          setImageModelsError("Failed to load image models.");
+          setImageModelsLoaded(true);
+        }
+      } finally {
+        // Always clear loading — even when cancelled — so the UI can never
+        // stay stuck on "Loading image models..."
+        setImageModelsLoading(false);
       }
-      setImageModelsLoaded(true);
-      setImageModelsLoading(false);
-    });
+    })();
 
     return () => { cancelled = true; };
-  }, [mode, effectiveProvider, imageModelsLoaded, imageModelsLoading]);
+    // imageModelsLoading is intentionally NOT a dependency: this effect sets it,
+    // and including it re-triggers the cleanup which cancels the in-flight load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, effectiveProvider, imageModelsLoaded]);
 
   const selectedImageModelInfo =
     imageModels.find((m) => m.id === selectedImageModel) ?? null;
