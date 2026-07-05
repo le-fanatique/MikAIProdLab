@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateChatImages, listChatModels, listChatSystemPrompts, sendChatMessage } from "@/actions/llm/chat";
-import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, LLMProvider } from "@/types/llm";
+import { listImageModels } from "@/actions/llm/imageGeneration";
+import type { ChatGeneratedImage, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, ImageModelInfo, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
 
 // ---------------------------------------------------------------------------
@@ -405,6 +406,14 @@ export default function SidebarLLMChat() {
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageSize, setImageSize] = useState<ChatImageSize>("square");
 
+  // Image generation model state — separate from the text chat model
+  const [imageModels, setImageModels] = useState<ImageModelInfo[]>([]);
+  const [selectedImageModel, setSelectedImageModel] = useState("");
+  const [imageModelsError, setImageModelsError] = useState<string | null>(null);
+  const [imageModelsLoading, setImageModelsLoading] = useState(false);
+  const [imageModelsLoaded, setImageModelsLoaded] = useState(false);
+  const [numImages, setNumImages] = useState(1);
+
   // Reference images for Generate Image mode (separate from chat attachments)
   const [imageGenAttachments, setImageGenAttachments] = useState<AttachedImage[]>([]);
   const [imageGenAttachError, setImageGenAttachError] = useState<string | null>(null);
@@ -464,6 +473,45 @@ export default function SidebarLLMChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Load image generation models when the Image tab is opened (OpenRouter only)
+  useEffect(() => {
+    if (mode !== "image" || effectiveProvider !== "openrouter") return;
+    if (imageModelsLoaded || imageModelsLoading) return;
+
+    let cancelled = false;
+    setImageModelsLoading(true);
+    setImageModelsError(null);
+
+    listImageModels().then((res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        setImageModels(res.models);
+        if (res.models.length > 0) {
+          setSelectedImageModel((prev) =>
+            prev && res.models.some((m) => m.id === prev) ? prev : res.models[0].id
+          );
+        }
+      } else {
+        setImageModelsError(res.error);
+      }
+      setImageModelsLoaded(true);
+      setImageModelsLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [mode, effectiveProvider, imageModelsLoaded, imageModelsLoading]);
+
+  const selectedImageModelInfo =
+    imageModels.find((m) => m.id === selectedImageModel) ?? null;
+  const imageMaxImages = selectedImageModelInfo?.maxImages;
+  const referencesUnsupported = selectedImageModelInfo?.supportsReferences === false;
+
+  // Clamp numImages when switching to a model with a lower limit
+  useEffect(() => {
+    const limit = imageMaxImages && imageMaxImages > 1 ? imageMaxImages : 1;
+    setNumImages((prev) => Math.min(prev, limit));
+  }, [imageMaxImages]);
 
   // Drag resize handlers
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -744,19 +792,36 @@ export default function SidebarLLMChat() {
     [imageGenAttachments]
   );
 
+  // OpenRouter image mode uses the dedicated image model; other providers
+  // keep the existing behavior (chat model, no discovery available)
+  const effectiveImageModel =
+    effectiveProvider === "openrouter" ? selectedImageModel : selectedModel;
+
   const handleGenerateImage = useCallback(async () => {
     const prompt = imagePrompt.trim();
-    if (!prompt || isLoading || !selectedModel) return;
+    if (!prompt || isLoading) return;
+
+    if (!effectiveImageModel) {
+      setError(
+        effectiveProvider === "openrouter"
+          ? "Select an image generation model."
+          : "No model selected."
+      );
+      return;
+    }
 
     setError(null);
     setIsLoading(true);
 
-    const refImages: ChatImageReference[] = imageGenAttachments.map((a) => ({
-      dataUrl: a.dataUrl,
-      mimeType: a.mimeType,
-      name: a.name,
-      sizeBytes: a.sizeBytes,
-    }));
+    // Skip reference images when the selected model explicitly does not support them
+    const refImages: ChatImageReference[] = referencesUnsupported
+      ? []
+      : imageGenAttachments.map((a) => ({
+          dataUrl: a.dataUrl,
+          mimeType: a.mimeType,
+          name: a.name,
+          sizeBytes: a.sizeBytes,
+        }));
 
     const attachLabel =
       imageGenAttachments.length > 0
@@ -772,10 +837,11 @@ export default function SidebarLLMChat() {
     };
 
     const res = await generateChatImages({
-      model: selectedModel,
+      model: effectiveImageModel,
       prompt,
       size: imageSize,
       referenceImages: refImages.length > 0 ? refImages : undefined,
+      n: numImages > 1 ? numImages : undefined,
     });
 
     if (res.ok) {
@@ -797,7 +863,7 @@ export default function SidebarLLMChat() {
     }
 
     setIsLoading(false);
-  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, selectedModel]);
+  }, [imageGenAttachments, imagePrompt, imageSize, isLoading, effectiveImageModel, effectiveProvider, referencesUnsupported, numImages]);
 
   const handleClear = useCallback(() => {
     setMessages([]);
@@ -894,29 +960,52 @@ export default function SidebarLLMChat() {
               : "Generate images with the selected chat provider."}
           </p>
 
-          {/* Model selector */}
-          {modelError ? (
-            <div className="text-[10px] text-[#e0556a] mb-1.5">{modelError}</div>
-          ) : (
+          {/* Model selector — text chat model, or image-mode fallback for non-OpenRouter */}
+          {(mode === "chat" || effectiveProvider !== "openrouter") && (
+            modelError ? (
+              <div className="text-[10px] text-[#e0556a] mb-1.5">{modelError}</div>
+            ) : (
+              <div className="flex flex-col gap-0.5 mb-1.5">
+                <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
+                  Model
+                </label>
+                <ModelPickerWithFilter
+                  models={models}
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  compact
+                />
+              </div>
+            )
+          )}
+
+          {/* Image Model selector — image mode, OpenRouter only (discovery-driven) */}
+          {mode === "image" && effectiveProvider === "openrouter" && (
             <div className="flex flex-col gap-0.5 mb-1.5">
               <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
-                Model
+                Image Model
               </label>
-              <ModelPickerWithFilter
-                models={models}
-                value={selectedModel}
-                onChange={setSelectedModel}
-                compact
-              />
+              {imageModelsLoading ? (
+                <p className="text-[10px] text-[#4b5158] italic">Loading image models...</p>
+              ) : imageModelsError ? (
+                <p className="text-[10px] text-[#e0556a]">{imageModelsError}</p>
+              ) : imageModels.length === 0 && imageModelsLoaded ? (
+                <p className="text-[10px] text-[#e0556a]">No image generation models found.</p>
+              ) : (
+                <ModelPickerWithFilter
+                  models={imageModels.map((m) => m.id)}
+                  value={selectedImageModel}
+                  onChange={setSelectedImageModel}
+                  compact
+                />
+              )}
             </div>
           )}
 
-          {/* Model compatibility hint — image mode only */}
-          {mode === "image" && !modelError && effectiveProvider !== "ollama" && (
+          {/* Image mode hint — non-OpenRouter providers have no discovery */}
+          {mode === "image" && effectiveProvider === "openai-compatible" && (
             <p className="text-[9px] text-[#4b5158] mb-1.5">
-              {effectiveProvider === "openrouter"
-                ? "OpenRouter image generation uses /images endpoint. Use an image-output model (e.g. google/gemini-3.1-flash-lite-image)."
-                : "Select a model that supports image generation at this provider."}
+              Image model discovery requires OpenRouter. Select a model that supports image generation at this provider.
             </p>
           )}
 
@@ -1192,6 +1281,30 @@ export default function SidebarLLMChat() {
                 </div>
               </div>
 
+              {/* Number of Images — only when the selected model supports more than one */}
+              {effectiveProvider === "openrouter" &&
+                imageMaxImages !== undefined &&
+                imageMaxImages > 1 && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-[9px] text-[#4b5158] uppercase tracking-wider shrink-0">
+                      Number of Images
+                    </span>
+                    <select
+                      value={numImages}
+                      onChange={(e) => setNumImages(parseInt(e.target.value, 10) || 1)}
+                      disabled={isLoading}
+                      className="bg-[#0d0e10] border border-[#232629] rounded px-1.5 py-0.5 text-[10px] text-[#a4abb2] focus:outline-none focus:border-[#3a4046]"
+                    >
+                      {Array.from(
+                        { length: Math.min(imageMaxImages, 8) },
+                        (_, i) => i + 1
+                      ).map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
               {/* Reference images */}
               {imageGenAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
@@ -1221,9 +1334,15 @@ export default function SidebarLLMChat() {
                 <div className="text-[9px] text-[#e0556a] mt-1 px-1">{imageGenAttachError}</div>
               )}
 
+              {referencesUnsupported && (
+                <p className="text-[9px] text-[#cda24f] mt-1">
+                  This model does not support reference images.
+                </p>
+              )}
+
               <p className="text-[9px] text-[#4b5158] mt-1">
                 Uses the selected chat provider image endpoint when available.
-                {imageGenAttachments.length === 0 && (
+                {imageGenAttachments.length === 0 && !referencesUnsupported && (
                   <> Optional reference images can be used by compatible image models.</>
                 )}
               </p>
@@ -1250,7 +1369,13 @@ export default function SidebarLLMChat() {
                 <button
                   type="button"
                   onClick={handleGenerateImage}
-                  disabled={isLoading || !selectedModel || !imagePrompt.trim()}
+                  disabled={
+                    isLoading ||
+                    !effectiveImageModel ||
+                    !imagePrompt.trim() ||
+                    (effectiveProvider === "openrouter" &&
+                      (imageModelsError !== null || imageModels.length === 0))
+                  }
                   className="px-3 py-1 rounded bg-[#1a1d20] border border-[#3a4046] text-[10px] text-[#c0c8d0] hover:bg-[#252830] hover:text-[#e0e4e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {isLoading ? "Generating..." : "Generate Image"}
@@ -1261,7 +1386,7 @@ export default function SidebarLLMChat() {
                     setImageGenAttachError(null);
                     imageGenAttachInputRef.current?.click();
                   }}
-                  disabled={isLoading || imageGenAttachments.length >= 4}
+                  disabled={isLoading || imageGenAttachments.length >= 4 || referencesUnsupported}
                   className="px-3 py-1 rounded bg-[#1a1d20] border border-[#232629] text-[10px] text-[#6e767d] hover:bg-[#252830] hover:text-[#a4abb2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="Add reference image (max 4)"
                 >

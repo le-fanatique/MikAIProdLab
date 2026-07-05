@@ -326,6 +326,10 @@ export async function callOpenAICompatibleImageGeneration(
   if (config.provider === "openrouter") {
     payload.aspect_ratio = IMAGE_ASPECT_RATIO_MAP[request.size];
 
+    if (typeof request.n === "number" && request.n > 1) {
+      payload.n = request.n;
+    }
+
     // Reference images: full data URL, wrapped in input_references array
     if (request.referenceImages && request.referenceImages.length > 0) {
       payload.input_references = request.referenceImages.map((ref) => ({

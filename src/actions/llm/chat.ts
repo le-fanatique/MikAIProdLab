@@ -132,11 +132,14 @@ const ALLOWED_REF_IMAGE_MIMES = new Set([
   "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
 ]);
 
+const MAX_IMAGES_PER_REQUEST = 8;
+
 export async function generateChatImages(input: {
   model: string;
   prompt: string;
   size: ChatImageSize;
   referenceImages?: Array<{ dataUrl: string; mimeType: string; name?: string; sizeBytes?: number }>;
+  n?: number;
 }): Promise<
   | { ok: true; images: ChatGeneratedImage[]; text: string }
   | { ok: false; error: string }
@@ -151,6 +154,21 @@ export async function generateChatImages(input: {
     }
     if (!input.prompt?.trim()) {
       return { ok: false, error: "No prompt provided." };
+    }
+
+    let n: number | undefined;
+    if (input.n !== undefined) {
+      if (
+        !Number.isInteger(input.n) ||
+        input.n < 1 ||
+        input.n > MAX_IMAGES_PER_REQUEST
+      ) {
+        return {
+          ok: false,
+          error: `Number of images must be between 1 and ${MAX_IMAGES_PER_REQUEST}.`,
+        };
+      }
+      n = input.n > 1 ? input.n : undefined;
     }
 
     // Server-side validation for reference images
@@ -180,6 +198,7 @@ export async function generateChatImages(input: {
       prompt: input.prompt.trim(),
       size: input.size,
       referenceImages: validatedRefs.length > 0 ? validatedRefs : undefined,
+      n,
     });
     return { ok: true, images: result.images, text: result.text };
   } catch (err) {

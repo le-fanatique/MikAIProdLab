@@ -87,6 +87,25 @@ export type ChatImageGenerationRequest = {
   prompt: string;
   size: ChatImageSize;
   referenceImages?: ChatImageReference[];
+  /** Number of images to generate — sent only when > 1 and supported. */
+  n?: number;
+};
+
+/**
+ * Image generation model info from OpenRouter image model discovery.
+ * All capability fields are optional — absent means unknown, and the UI
+ * must fall back to safe defaults.
+ */
+export type ImageModelInfo = {
+  id: string;
+  name?: string;
+  description?: string;
+  aspectRatios?: string[];
+  resolutions?: string[];
+  outputFormats?: string[];
+  qualities?: string[];
+  maxImages?: number;
+  supportsReferences?: boolean;
 };
 
 export type ChatImageGenerationResponse = {
