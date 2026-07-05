@@ -1,5 +1,6 @@
 import { updateShotPrompt } from "@/actions/shots";
 import ShotPromptLLMAssistPanel from "@/components/ShotPromptLLMAssistPanel";
+import PromptTextareaWithTranslate from "@/components/PromptTextareaWithTranslate";
 
 type Props = {
   projectId: number;
@@ -53,13 +54,12 @@ export default function ShotPromptForm({
               No saved prompt yet — pre-filled from shot description and camera details.
             </p>
           )}
-          <textarea
+          <PromptTextareaWithTranslate
             id="shot-prompt-textarea"
             name="shotPrompt"
-            defaultValue={textareaDefaultValue}
+            initialValue={textareaDefaultValue}
             placeholder="Describe the shot as a clean generation prompt..."
             rows={5}
-            className="w-full rounded border border-[#2c3035] bg-[#141618] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#4b5158] resize-y focus:outline-none focus:border-[#3a4046] leading-relaxed"
           />
         </div>
 

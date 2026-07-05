@@ -3,6 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateSequenceContext } from "@/actions/sequences";
+import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
+
+function appendText(current: string, addition: string): string {
+  return current.trim() ? `${current}\n\n${addition}` : addition;
+}
+
+// Single-line inputs cannot hold newlines — join with a comma instead
+function appendInline(current: string, addition: string): string {
+  return current.trim() ? `${current.trim()}, ${addition}` : addition;
+}
 
 type Props = {
   sequenceId: number;
@@ -102,7 +112,7 @@ export default function SequenceContextEditor({
     <div className="pl-9 mb-3 flex flex-col gap-2">
       <div className="flex flex-col gap-2 rounded border border-[#2c3035] bg-[#141618] p-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
               Summary
             </span>
@@ -113,8 +123,14 @@ export default function SequenceContextEditor({
               disabled={saving}
               className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] placeholder-[#3a4046] px-2 py-1.5 resize-none focus:outline-none focus:border-[#3a4046]"
             />
-          </label>
-          <label className="flex flex-col gap-1">
+            <TextFieldTranslationButton
+              getSourceText={() => summary}
+              onReplace={(t) => setSummary(t)}
+              onAppend={(t) => setSummary(appendText(summary, t))}
+              disabled={saving}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
               Description
             </span>
@@ -125,8 +141,14 @@ export default function SequenceContextEditor({
               disabled={saving}
               className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] placeholder-[#3a4046] px-2 py-1.5 resize-none focus:outline-none focus:border-[#3a4046]"
             />
-          </label>
-          <label className="flex flex-col gap-1">
+            <TextFieldTranslationButton
+              getSourceText={() => description}
+              onReplace={(t) => setDescription(t)}
+              onAppend={(t) => setDescription(appendText(description, t))}
+              disabled={saving}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
               Narrative Purpose
             </span>
@@ -137,8 +159,14 @@ export default function SequenceContextEditor({
               disabled={saving}
               className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] placeholder-[#3a4046] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
             />
-          </label>
-          <label className="flex flex-col gap-1">
+            <TextFieldTranslationButton
+              getSourceText={() => narrativePurpose}
+              onReplace={(t) => setNarrativePurpose(t)}
+              onAppend={(t) => setNarrativePurpose(appendInline(narrativePurpose, t))}
+              disabled={saving}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
               Mood
             </span>
@@ -149,8 +177,14 @@ export default function SequenceContextEditor({
               disabled={saving}
               className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] placeholder-[#3a4046] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
             />
-          </label>
-          <label className="flex flex-col gap-1 sm:col-span-2">
+            <TextFieldTranslationButton
+              getSourceText={() => mood}
+              onReplace={(t) => setMood(t)}
+              onAppend={(t) => setMood(appendInline(mood, t))}
+              disabled={saving}
+            />
+          </div>
+          <div className="flex flex-col gap-1 sm:col-span-2">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
               Location Hint
             </span>
@@ -161,7 +195,13 @@ export default function SequenceContextEditor({
               disabled={saving}
               className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] placeholder-[#3a4046] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
             />
-          </label>
+            <TextFieldTranslationButton
+              getSourceText={() => locationHint}
+              onReplace={(t) => setLocationHint(t)}
+              onAppend={(t) => setLocationHint(appendInline(locationHint, t))}
+              disabled={saving}
+            />
+          </div>
         </div>
 
         {error && <p className="text-xs text-red-400">{error}</p>}

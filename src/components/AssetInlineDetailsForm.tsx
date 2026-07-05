@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { updateAssetDetailsInline } from "@/actions/assets";
+import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
+
+function appendText(current: string, addition: string): string {
+  return current.trim() ? `${current}\n\n${addition}` : addition;
+}
 
 type Props = {
   projectId: number;
@@ -67,6 +72,12 @@ export default function AssetInlineDetailsForm({
           className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none focus:outline-none focus:border-[#3a4046] transition-colors leading-relaxed"
           placeholder="Describe this asset..."
         />
+        <TextFieldTranslationButton
+          getSourceText={() => description}
+          onReplace={(t) => setDescription(t)}
+          onAppend={(t) => setDescription(appendText(description, t))}
+          disabled={isSaving}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -80,6 +91,12 @@ export default function AssetInlineDetailsForm({
           rows={4}
           className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none focus:outline-none focus:border-[#3a4046] transition-colors leading-relaxed"
           placeholder="Add any additional notes..."
+        />
+        <TextFieldTranslationButton
+          getSourceText={() => notes}
+          onReplace={(t) => setNotes(t)}
+          onAppend={(t) => setNotes(appendText(notes, t))}
+          disabled={isSaving}
         />
       </div>
 

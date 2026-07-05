@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { WorkflowInputMapping } from "@/lib/comfy/mapWorkflowInputs";
 import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
+import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
 import {
   detectTextInputKind,
   type FillSource,
@@ -118,6 +119,21 @@ export default function WorkflowTextOverrideForm({
                   }
                   rows={5}
                   className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-y focus:outline-none focus:border-[#3a4046] leading-relaxed"
+                />
+                <TextFieldTranslationButton
+                  getSourceText={() => values[input.nodeId] ?? ""}
+                  onReplace={(t) =>
+                    setValues((prev) => ({ ...prev, [input.nodeId]: t }))
+                  }
+                  onAppend={(t) =>
+                    setValues((prev) => {
+                      const current = prev[input.nodeId] ?? "";
+                      return {
+                        ...prev,
+                        [input.nodeId]: current.trim() ? `${current}\n\n${t}` : t,
+                      };
+                    })
+                  }
                 />
                 {showFill && (
                   <div className="relative" data-fill-dropdown>
