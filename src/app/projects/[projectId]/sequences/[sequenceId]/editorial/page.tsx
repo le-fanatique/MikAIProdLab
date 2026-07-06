@@ -9,6 +9,8 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
 import EditorialShotList from "@/components/EditorialShotList";
+import SequencePreviewPlayer from "@/components/SequencePreviewPlayer";
+import { refImageUrl } from "@/lib/refImageUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +96,23 @@ export default async function SequenceEditorialPage({ params }: Props) {
             No shots yet. Add a placeholder shot below to start blocking the rhythm.
           </p>
         )}
+      </Card>
+
+      {/* ── Sequence Preview ─────────────────────────────────────── */}
+      <SectionLabel label="Sequence Preview" />
+      <Card>
+        <SequencePreviewPlayer
+          shots={shotList.map((s) => ({
+            id: s.id,
+            shotCode: s.shotCode,
+            title: s.title,
+            durationSeconds: s.durationSeconds,
+            videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
+            isPlaceholder: s.title === "Placeholder",
+          }))}
+          projectId={pid}
+          sequenceId={sid}
+        />
       </Card>
 
       {/* ── Shot Order ───────────────────────────────────────────── */}
