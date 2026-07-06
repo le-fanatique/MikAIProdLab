@@ -59,6 +59,9 @@ export const shots = sqliteTable("shots", {
   continuityOut: text("continuity_out"),
   shotPrompt: text("shot_prompt"),
   approvedVideoPath: text("approved_video_path"),
+  // Non-destructive editorial trim of the approved video (seconds, nullable)
+  trimInSeconds: real("trim_in_seconds"),
+  trimOutSeconds: real("trim_out_seconds"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

@@ -109,6 +109,8 @@ export default async function SequenceEditorialPage({ params }: Props) {
             durationSeconds: s.durationSeconds,
             videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
             isPlaceholder: s.title === "Placeholder",
+            trimInSeconds: s.trimInSeconds,
+            trimOutSeconds: s.trimOutSeconds,
           }))}
           projectId={pid}
           sequenceId={sid}
@@ -125,6 +127,8 @@ export default async function SequenceEditorialPage({ params }: Props) {
             title: s.title,
             durationSeconds: s.durationSeconds,
             hasApprovedVideo: s.approvedVideoPath !== null,
+            trimInSeconds: s.trimInSeconds,
+            trimOutSeconds: s.trimOutSeconds,
           }))}
           projectId={pid}
           sequenceId={sid}

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { updateSequenceShotOrder, createPlaceholderShot } from "@/actions/shots";
+import { updateSequenceShotOrder, createPlaceholderShot, updateShotTrim } from "@/actions/shots";
 
 type EditorialShot = {
   id: number;
@@ -10,7 +10,18 @@ type EditorialShot = {
   title: string;
   durationSeconds: number | null;
   hasApprovedVideo: boolean;
+  trimInSeconds: number | null;
+  trimOutSeconds: number | null;
 };
+
+function hasValidTrim(shot: EditorialShot): boolean {
+  return (
+    shot.trimInSeconds !== null &&
+    shot.trimOutSeconds !== null &&
+    shot.trimInSeconds >= 0 &&
+    shot.trimOutSeconds > shot.trimInSeconds
+  );
+}
 
 type Props = {
   shots: EditorialShot[];
@@ -66,7 +77,11 @@ export default function EditorialShotList({
   );
 
   const totalDuration = orderedShots.reduce(
-    (sum, s) => sum + (s.durationSeconds ?? 0),
+    (sum, s) =>
+      sum +
+      (hasValidTrim(s)
+        ? s.trimOutSeconds! - s.trimInSeconds!
+        : s.durationSeconds ?? 0),
     0
   );
 
@@ -127,7 +142,8 @@ export default function EditorialShotList({
       {/* ── Shot rows ── */}
       <div className="flex flex-col divide-y divide-[#1a1d20]">
         {orderedShots.map((shot, index) => (
-          <div key={shot.id} className="flex items-center gap-3 py-2">
+          <div key={shot.id} className="flex flex-col gap-1 py-2">
+          <div className="flex items-center gap-3">
             <span className="text-[10px] font-mono text-[#3a4046] w-6 shrink-0 text-right tabular-nums">
               {index + 1}
             </span>
@@ -168,6 +184,79 @@ export default function EditorialShotList({
                 ↓
               </button>
             </div>
+          </div>
+
+          {/* ── Trim row — only for shots with an approved video ── */}
+          {shot.hasApprovedVideo && (
+            <div className="flex items-center gap-2 pl-9 flex-wrap">
+              <form
+                action={updateShotTrim}
+                className="flex items-center gap-1.5"
+              >
+                <input type="hidden" name="projectId" value={String(projectId)} />
+                <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+                <input type="hidden" name="shotId" value={String(shot.id)} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">
+                  Trim
+                </span>
+                <input
+                  type="number"
+                  name="trimInSeconds"
+                  step="0.1"
+                  min="0"
+                  defaultValue={shot.trimInSeconds ?? ""}
+                  placeholder="In"
+                  className="w-16 rounded bg-[#0d0e10] border border-[#2c3035] px-1.5 py-0.5 text-[10px] text-[#e7e9ec] placeholder-[#3a4046] text-right focus:outline-none focus:border-[#3a4046] tabular-nums font-mono"
+                />
+                <span className="text-[9px] text-[#3a4046]">→</span>
+                <input
+                  type="number"
+                  name="trimOutSeconds"
+                  step="0.1"
+                  min="0"
+                  defaultValue={shot.trimOutSeconds ?? ""}
+                  placeholder="Out"
+                  className="w-16 rounded bg-[#0d0e10] border border-[#2c3035] px-1.5 py-0.5 text-[10px] text-[#e7e9ec] placeholder-[#3a4046] text-right focus:outline-none focus:border-[#3a4046] tabular-nums font-mono"
+                />
+                <button
+                  type="submit"
+                  className="rounded border border-[#2c3035] text-[#a4abb2] px-2 py-0.5 text-[10px] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                >
+                  Apply Trim
+                </button>
+              </form>
+              {hasValidTrim(shot) && (
+                <>
+                  <form action={updateShotTrim}>
+                    <input type="hidden" name="projectId" value={String(projectId)} />
+                    <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+                    <input type="hidden" name="shotId" value={String(shot.id)} />
+                    <input type="hidden" name="returnTo" value={returnTo} />
+                    <input type="hidden" name="clearTrim" value="1" />
+                    <button
+                      type="submit"
+                      className="text-[10px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
+                    >
+                      Clear Trim
+                    </button>
+                  </form>
+                  <span className="text-[9px] font-mono text-[#5b93d6]">
+                    Effective: {(shot.trimOutSeconds! - shot.trimInSeconds!).toFixed(1)}s
+                  </span>
+                  {shot.durationSeconds !== null &&
+                    Math.abs(
+                      shot.durationSeconds -
+                        (shot.trimOutSeconds! - shot.trimInSeconds!)
+                    ) > 0.05 && (
+                      <span className="text-[9px] font-mono text-[#cda24f]">
+                        Target: {shot.durationSeconds.toFixed(1)}s
+                      </span>
+                    )}
+                </>
+              )}
+            </div>
+          )}
           </div>
         ))}
         {orderedShots.length === 0 && (

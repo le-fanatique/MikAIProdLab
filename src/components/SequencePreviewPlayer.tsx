@@ -10,7 +10,24 @@ export type PreviewShot = {
   durationSeconds: number | null;
   videoUrl: string | null;
   isPlaceholder: boolean;
+  trimInSeconds: number | null;
+  trimOutSeconds: number | null;
 };
+
+function hasValidTrim(shot: PreviewShot): boolean {
+  return (
+    shot.trimInSeconds !== null &&
+    shot.trimOutSeconds !== null &&
+    shot.trimInSeconds >= 0 &&
+    shot.trimOutSeconds > shot.trimInSeconds
+  );
+}
+
+/** Effective playback duration: trim range, else narrative target, else null. */
+function effectiveDuration(shot: PreviewShot): number | null {
+  if (hasValidTrim(shot)) return shot.trimOutSeconds! - shot.trimInSeconds!;
+  return shot.durationSeconds;
+}
 
 type Props = {
   shots: PreviewShot[];
@@ -65,13 +82,16 @@ export default function SequencePreviewPlayer({
   const pendingPlayRef = useRef(false);
   // Guard against infinite error-skip loops: consecutive failed loads
   const consecutiveErrorsRef = useRef(0);
+  // Guard: advance once per clip when the trim-out boundary is crossed
+  const advancedAtTrimOutRef = useRef(false);
 
   const currentShot = currentIndex !== null ? shots[currentIndex] : null;
   const currentPlayablePos =
     currentIndex !== null ? playableIndices.indexOf(currentIndex) : -1;
 
+  // Estimated total uses effective durations (trim range wins over target)
   const totalEstimated = shots.reduce(
-    (sum, s) => sum + (s.durationSeconds ?? 0),
+    (sum, s) => sum + (effectiveDuration(s) ?? 0),
     0
   );
 
@@ -94,9 +114,10 @@ export default function SequencePreviewPlayer({
     setIsEnded(false);
     setLoadError(null);
     pendingPlayRef.current = autoplay;
+    advancedAtTrimOutRef.current = false;
   }
 
-  function handleEnded() {
+  function advanceOrEnd() {
     if (currentIndex === null) return;
     const next = nextPlayableIndex(currentIndex);
     if (next !== null) {
@@ -107,11 +128,44 @@ export default function SequencePreviewPlayer({
     }
   }
 
+  function handleEnded() {
+    advanceOrEnd();
+  }
+
+  function handleTimeUpdate() {
+    const video = videoRef.current;
+    if (!video || !currentShot || !hasValidTrim(currentShot)) return;
+    if (advancedAtTrimOutRef.current) return;
+    if (video.currentTime >= currentShot.trimOutSeconds!) {
+      advancedAtTrimOutRef.current = true;
+      video.pause();
+      advanceOrEnd();
+    }
+  }
+
+  function handlePlay() {
+    // Replaying a trimmed clip restarts from trim in
+    const video = videoRef.current;
+    if (!video || !currentShot || !hasValidTrim(currentShot)) return;
+    if (
+      video.currentTime < currentShot.trimInSeconds! ||
+      video.currentTime >= currentShot.trimOutSeconds!
+    ) {
+      video.currentTime = currentShot.trimInSeconds!;
+      advancedAtTrimOutRef.current = false;
+    }
+  }
+
   function handleLoadedData() {
     consecutiveErrorsRef.current = 0;
+    const video = videoRef.current;
+    // Position trimmed clips at their trim in before playback
+    if (video && currentShot && hasValidTrim(currentShot)) {
+      video.currentTime = currentShot.trimInSeconds!;
+    }
     if (pendingPlayRef.current) {
       pendingPlayRef.current = false;
-      videoRef.current?.play().catch(() => {
+      video?.play().catch(() => {
         // Browser refused autoplay — user can press play manually
       });
     }
@@ -225,6 +279,8 @@ export default function SequencePreviewPlayer({
             onEnded={handleEnded}
             onError={handleError}
             onLoadedData={handleLoadedData}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={handlePlay}
             className="w-full rounded border border-[#2c3035] bg-black"
           />
         </div>
@@ -301,9 +357,17 @@ function PlaylistRows({
               {shot.title}
             </span>
             <Badge shot={shot} />
+            {hasValidTrim(shot) && (
+              <span
+                className="shrink-0 text-[9px] font-mono text-[#5b93d6]"
+                title={`Trim: ${shot.trimInSeconds!.toFixed(1)}s → ${shot.trimOutSeconds!.toFixed(1)}s`}
+              >
+                Trimmed
+              </span>
+            )}
             <span className="text-[10px] font-mono text-[#6e767d] w-12 shrink-0 text-right tabular-nums">
-              {shot.durationSeconds !== null
-                ? `${shot.durationSeconds.toFixed(1)}s`
+              {effectiveDuration(shot) !== null
+                ? `${effectiveDuration(shot)!.toFixed(1)}s`
                 : "—"}
             </span>
             <Link

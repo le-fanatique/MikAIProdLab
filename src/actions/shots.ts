@@ -246,6 +246,72 @@ export async function updateSequenceShotOrder(formData: FormData): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// updateShotTrim — non-destructive playback trim of the approved video
+// ---------------------------------------------------------------------------
+
+const MAX_TRIM_SECONDS = 36000; // safety bound — video duration is not known server-side
+
+export async function updateShotTrim(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const shotId = parseInt(formData.get("shotId") as string, 10);
+  const clearTrim = formData.get("clearTrim") === "1";
+  const returnToRaw = formData.get("returnTo");
+  const returnTo =
+    typeof returnToRaw === "string" && returnToRaw.trim().startsWith("/")
+      ? returnToRaw.trim()
+      : `/projects/${projectId}/sequences/${sequenceId}/editorial`;
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(shotId) || shotId <= 0
+  ) {
+    return;
+  }
+
+  // Ownership: shot → sequence → project
+  const [shot] = await db.select({ id: shots.id, sequenceId: shots.sequenceId }).from(shots).where(eq(shots.id, shotId));
+  if (!shot || shot.sequenceId !== sequenceId) return;
+  const [sequence] = await db
+    .select({ id: sequences.id, projectId: sequences.projectId })
+    .from(sequences)
+    .where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) return;
+
+  let trimInSeconds: number | null = null;
+  let trimOutSeconds: number | null = null;
+
+  if (!clearTrim) {
+    const trimIn = parseFloat((formData.get("trimInSeconds") as string | null) ?? "");
+    const trimOut = parseFloat((formData.get("trimOutSeconds") as string | null) ?? "");
+    if (
+      !Number.isFinite(trimIn) ||
+      !Number.isFinite(trimOut) ||
+      trimIn < 0 ||
+      trimOut <= trimIn ||
+      trimOut > MAX_TRIM_SECONDS
+    ) {
+      // Invalid values — do not write, return to the page unchanged
+      redirect(returnTo);
+    }
+    trimInSeconds = trimIn;
+    trimOutSeconds = trimOut;
+  }
+
+  await db
+    .update(shots)
+    .set({ trimInSeconds, trimOutSeconds, updatedAt: new Date().toISOString() })
+    .where(eq(shots.id, shotId));
+
+  revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+  revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/editorial`);
+  revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`);
+
+  redirect(returnTo);
+}
+
+// ---------------------------------------------------------------------------
 // createPlaceholderShot — minimal editorial placeholder at the end of a sequence
 // ---------------------------------------------------------------------------
 
