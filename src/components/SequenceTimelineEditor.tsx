@@ -17,6 +17,8 @@ type Props = {
   shots: ShotEntry[];
   projectId: number;
   sequenceId: number;
+  /** Optional redirect target after Apply — defaults to Sequence Detail. */
+  returnTo?: string;
 };
 
 type DragState = {
@@ -39,7 +41,7 @@ function snap(value: number): number {
   return parseFloat((Math.round(value / 0.1) * 0.1).toFixed(1));
 }
 
-export default function SequenceTimelineEditor({ shots, projectId, sequenceId }: Props) {
+export default function SequenceTimelineEditor({ shots, projectId, sequenceId, returnTo }: Props) {
   const [durations, setDurations] = useState<Record<number, string>>(() => {
     const map: Record<number, string> = {};
     for (const s of shots) {
@@ -118,6 +120,7 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId }:
     <form action={updateSequenceShotDurations}>
       <input type="hidden" name="projectId" value={String(projectId)} />
       <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-3 gap-3">

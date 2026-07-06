@@ -307,7 +307,17 @@ export default async function SequencePage({ params, searchParams }: Props) {
       {/* ── Timeline ─────────────────────────────────────────────── */}
       {shotList.length > 0 && (
         <>
-          <SectionLabel label="Timeline" />
+          <SectionLabel
+            label="Timeline"
+            action={
+              <Link
+                href={`/projects/${pid}/sequences/${sid}/editorial`}
+                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+              >
+                Open Editorial →
+              </Link>
+            }
+          />
           <Card>
             <SequenceTimelineEditor
               shots={shotList.map((s) => ({
