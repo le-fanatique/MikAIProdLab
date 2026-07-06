@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import { refImageUrl } from "@/lib/refImageUrl";
 import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -492,7 +493,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             <div className="flex flex-col gap-3">
               {approvedVideoIsPlayable ? (
                 <VideoFrameReviewPlayer
-                  src={`/${shot.approvedVideoPath}`}
+                  src={refImageUrl(shot.approvedVideoPath)}
                   projectId={pid}
                   sequenceId={sid}
                   shotId={shid}
@@ -501,14 +502,14 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                 />
               ) : (
                 <video
-                  src={`/${shot.approvedVideoPath}`}
+                  src={refImageUrl(shot.approvedVideoPath)}
                   controls
                   className="w-full rounded border border-[#2c3035]"
                 />
               )}
               <div className="flex items-center gap-4">
                 <a
-                  href={`/${shot.approvedVideoPath}`}
+                  href={refImageUrl(shot.approvedVideoPath)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
@@ -516,7 +517,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                   Open ↗
                 </a>
                 <a
-                  href={`/${shot.approvedVideoPath}`}
+                  href={refImageUrl(shot.approvedVideoPath)}
                   download
                   className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
                 >
