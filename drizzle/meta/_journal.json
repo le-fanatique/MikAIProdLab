@@ -134,6 +134,13 @@
       "when": 1783380094807,
       "tag": "0018_nappy_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1783387541038,
+      "tag": "0019_strong_marvel_zombies",
+      "breakpoints": true
     }
   ]
 }

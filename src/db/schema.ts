@@ -1,4 +1,4 @@
-import { int, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { index, int, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const projects = sqliteTable("projects", {
@@ -296,3 +296,46 @@ export const generationJobs = sqliteTable(
 
 export type GenerationJob = typeof generationJobs.$inferSelect;
 export type NewGenerationJob = typeof generationJobs.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Editorial timeline items — gap-aware montage layer for a sequence.
+// Shots stay the narrative/production structure; these items carry the
+// editorial arrangement: order, gaps, per-occurrence trims. Time positions
+// are derived by accumulating item durations — no startTimeSeconds stored.
+// ---------------------------------------------------------------------------
+
+export const sequenceEditorialItems = sqliteTable(
+  "sequence_editorial_items",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    sequenceId: int("sequence_id")
+      .notNull()
+      .references(() => sequences.id, { onDelete: "cascade" }),
+    type: text("type", { enum: ["shot", "gap"] }).notNull(),
+    shotId: int("shot_id")
+      .references(() => shots.id, { onDelete: "cascade" }), // null for gap items
+    orderIndex: int("order_index").notNull().default(0),
+    // gap: required by future actions; shot: editorial item duration
+    durationSeconds: real("duration_seconds"),
+    // Trims are per editorial item (per occurrence), not per shot
+    trimInSeconds: real("trim_in_seconds"),
+    trimOutSeconds: real("trim_out_seconds"),
+    // Single-track V1 — column reserved for future multi-track
+    trackIndex: int("track_index").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    index("sequence_editorial_items_seq_order_idx").on(
+      table.sequenceId,
+      table.orderIndex
+    ),
+  ]
+);
+
+export type SequenceEditorialItem = typeof sequenceEditorialItems.$inferSelect;
+export type NewSequenceEditorialItem = typeof sequenceEditorialItems.$inferInsert;
