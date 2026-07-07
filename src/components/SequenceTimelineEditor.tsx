@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { updateSequenceShotDurations } from "@/actions/shots";
+import { updateSequenceShotDurations, updateShotTrim } from "@/actions/shots";
 
 const SHOT_PALETTE = ["#5b93d6", "#6aa6a0", "#9bb05a", "#cda24f", "#cf8b6b"];
 
@@ -14,6 +14,9 @@ const COLOR_PLACEHOLDER = "#cda24f";
 // Visual fallback so untimed shots stay visible as segments (editorial only)
 const FALLBACK_SEGMENT_SECONDS = 1.0;
 
+// Minimum trim span so handles can never cross or collapse the segment
+const MIN_TRIM_GAP = 0.2;
+
 type ShotEntry = {
   id: number;
   shotCode: string | null;
@@ -24,6 +27,7 @@ type ShotEntry = {
   isPlaceholder?: boolean;
   trimInSeconds?: number | null;
   trimOutSeconds?: number | null;
+  videoUrl?: string | null;
 };
 
 type Props = {
@@ -68,6 +72,33 @@ type DragState = {
   trackWidth: number;
 };
 
+type TrimDragState = {
+  shotId: number;
+  edge: "in" | "out";
+  pointerStartX: number;
+  initialIn: number;
+  initialOut: number;
+  videoDuration: number;
+  initialTotalDur: number;
+  trackWidth: number;
+};
+
+type TrimRange = { trimIn: number; trimOut: number };
+
+function round1(value: number): number {
+  return parseFloat(value.toFixed(1));
+}
+
+/** Finite video duration from metadata, with a seekable fallback. */
+function finiteVideoDuration(video: HTMLVideoElement): number {
+  if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
+  if (video.seekable.length > 0) {
+    const end = video.seekable.end(video.seekable.length - 1);
+    if (Number.isFinite(end) && end > 0) return end;
+  }
+  return 0;
+}
+
 function parseRaw(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
@@ -91,7 +122,73 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
   });
 
   const dragRef = useRef<DragState | null>(null);
+  const trimDragRef = useRef<TrimDragState | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+
+  // Real video durations read client-side from metadata (editorial only)
+  const [videoDurations, setVideoDurations] = useState<Record<number, number>>({});
+  // Local unsaved trim edits per shot — never written to DB during drag
+  const [trimDrafts, setTrimDrafts] = useState<Record<number, TrimRange>>({});
+  const [isSavingTrim, startTrimTransition] = useTransition();
+
+  // Server-side trim baseline for a shot: its saved trim, else the full video
+  function trimBaseline(shot: ShotEntry): TrimRange | null {
+    if (hasValidTrim(shot)) {
+      return { trimIn: round1(shot.trimInSeconds!), trimOut: round1(shot.trimOutSeconds!) };
+    }
+    const vd = videoDurations[shot.id];
+    if (vd !== undefined && vd > 0) {
+      return { trimIn: 0, trimOut: round1(vd) };
+    }
+    return null;
+  }
+
+  function trimCurrent(shot: ShotEntry): TrimRange | null {
+    return trimDrafts[shot.id] ?? trimBaseline(shot);
+  }
+
+  function isTrimDirty(shot: ShotEntry): boolean {
+    const draft = trimDrafts[shot.id];
+    if (!draft) return false;
+    const base = trimBaseline(shot);
+    if (!base) return false;
+    return (
+      Math.abs(draft.trimIn - base.trimIn) > 0.001 ||
+      Math.abs(draft.trimOut - base.trimOut) > 0.001
+    );
+  }
+
+  function saveTrim(shot: ShotEntry) {
+    const draft = trimDrafts[shot.id];
+    if (!draft) return;
+    const fd = new FormData();
+    fd.set("projectId", String(projectId));
+    fd.set("sequenceId", String(sequenceId));
+    fd.set("shotId", String(shot.id));
+    fd.set("trimInSeconds", draft.trimIn.toFixed(1));
+    fd.set("trimOutSeconds", draft.trimOut.toFixed(1));
+    fd.set(
+      "returnTo",
+      returnTo ?? `/projects/${projectId}/sequences/${sequenceId}/editorial`
+    );
+    startTrimTransition(() => {
+      // No nested <form>: the component already sits inside the durations form
+      updateShotTrim(fd);
+      setTrimDrafts((prev) => {
+        const next = { ...prev };
+        delete next[shot.id];
+        return next;
+      });
+    });
+  }
+
+  function resetTrim(shotId: number) {
+    setTrimDrafts((prev) => {
+      const next = { ...prev };
+      delete next[shotId];
+      return next;
+    });
+  }
 
   const parsedDurations = useMemo(() => {
     const map: Record<number, number | null> = {};
@@ -133,7 +230,11 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
   const effectiveFor = useMemo(() => {
     const map = new Map<number, number>();
     for (const s of shots) {
-      if (hasValidTrim(s)) {
+      const draft = trimDrafts[s.id];
+      if (draft) {
+        // Live preview while dragging / before Save Trim
+        map.set(s.id, draft.trimOut - draft.trimIn);
+      } else if (hasValidTrim(s)) {
         map.set(s.id, s.trimOutSeconds! - s.trimInSeconds!);
       } else {
         const d = parsedDurations[s.id];
@@ -141,7 +242,7 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
       }
     }
     return map;
-  }, [shots, parsedDurations]);
+  }, [shots, parsedDurations, trimDrafts]);
 
   // Editorial lane shows every shot (holes included); summary keeps timed only
   const laneShots = isEditorial ? shots : timedShots;
@@ -170,6 +271,34 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    // Trim handle drag (editorial, shots with video)
+    const ts = trimDragRef.current;
+    if (ts && ts.initialTotalDur > 0) {
+      const deltaSec =
+        ((e.clientX - ts.pointerStartX) / ts.trackWidth) * ts.initialTotalDur;
+      if (ts.edge === "in") {
+        const raw = snap(ts.initialIn + deltaSec);
+        const nextIn = round1(
+          Math.min(Math.max(0, raw), ts.initialOut - MIN_TRIM_GAP)
+        );
+        setTrimDrafts((prev) => ({
+          ...prev,
+          [ts.shotId]: { trimIn: nextIn, trimOut: ts.initialOut },
+        }));
+      } else {
+        const raw = snap(ts.initialOut + deltaSec);
+        const nextOut = round1(
+          Math.max(Math.min(ts.videoDuration, raw), ts.initialIn + MIN_TRIM_GAP)
+        );
+        setTrimDrafts((prev) => ({
+          ...prev,
+          [ts.shotId]: { trimIn: ts.initialIn, trimOut: nextOut },
+        }));
+      }
+      return;
+    }
+
+    // Target duration drag (existing behavior)
     const ds = dragRef.current;
     if (!ds || ds.initialTotalDur <= 0) return;
     const deltaX = e.clientX - ds.pointerStartX;
@@ -180,6 +309,30 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
 
   function handlePointerUp() {
     dragRef.current = null;
+    trimDragRef.current = null;
+  }
+
+  function startTrimDrag(
+    e: React.PointerEvent<HTMLDivElement>,
+    shot: ShotEntry,
+    edge: "in" | "out"
+  ) {
+    const vd = videoDurations[shot.id];
+    const current = trimCurrent(shot);
+    if (vd === undefined || vd <= 0 || !current || !trackRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    trimDragRef.current = {
+      shotId: shot.id,
+      edge,
+      pointerStartX: e.clientX,
+      initialIn: current.trimIn,
+      initialOut: current.trimOut,
+      videoDuration: round1(vd),
+      initialTotalDur: laneTotal,
+      trackWidth: trackRef.current.clientWidth,
+    };
   }
 
   return (
@@ -272,9 +425,13 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
                 if (shot.isPlaceholder) tooltipParts.push("Placeholder");
                 else if (!shot.hasApprovedVideo) tooltipParts.push("No video");
               }
-              // The drag handle edits the target duration — on trimmed segments
-              // the width follows the trim instead, so the handle is hidden
-              const showHandle = !isEditorial || !trimmed;
+              // Editorial: shots with a video get trim handles; the target-duration
+              // resize handle only remains on no-video / placeholder segments
+              const isVideoShot = isEditorial && !!shot.videoUrl;
+              const showHandle = !isEditorial || !shot.videoUrl;
+              const videoDuration = videoDurations[shot.id];
+              const trimEnabled = isVideoShot && videoDuration !== undefined && videoDuration > 0;
+              const draft = trimDrafts[shot.id];
               return (
                 <div
                   key={shot.id}
@@ -308,14 +465,55 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
                     )}
                     <span className="text-[9px] font-mono tabular-nums leading-none truncate">
                       <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
-                      {isEditorial && trimmed && (
-                        <span className="text-[#5b93d6]"> · Trimmed</span>
+                      {draft ? (
+                        <span className="text-[#5b93d6]">
+                          {" "}· Trim {draft.trimIn.toFixed(1)}s → {draft.trimOut.toFixed(1)}s
+                        </span>
+                      ) : (
+                        isEditorial && trimmed && (
+                          <span className="text-[#5b93d6]"> · Trimmed</span>
+                        )
                       )}
                       {mismatch && (
                         <span className="text-[#cda24f]"> · Target {target!.toFixed(1)}s</span>
                       )}
                     </span>
                   </Link>
+                  {/* Trim handles — left = trim in, right = trim out */}
+                  {isVideoShot && (
+                    trimEnabled ? (
+                      <>
+                        <div
+                          role="slider"
+                          tabIndex={0}
+                          aria-label="Trim in handle"
+                          className="absolute left-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
+                          style={{ width: "10px" }}
+                          onPointerDown={(e) => startTrimDrag(e, shot, "in")}
+                        >
+                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
+                        </div>
+                        <div
+                          role="slider"
+                          tabIndex={0}
+                          aria-label="Trim out handle"
+                          className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
+                          style={{ width: "10px" }}
+                          onPointerDown={(e) => startTrimDrag(e, shot, "out")}
+                        >
+                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        className="absolute right-0 top-0 h-full flex items-center justify-center select-none z-10 opacity-40"
+                        style={{ width: "10px" }}
+                        title="Video duration unavailable — use the trim inputs below."
+                      >
+                        <div className="w-0.5 h-5 rounded-full bg-[#4b5158]" />
+                      </div>
+                    )
+                  )}
                   {/* Right drag handle — edits the target duration */}
                   {showHandle && (
                     <div
@@ -380,6 +578,64 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
           No shot durations set. Enter durations below to preview the timeline.
         </p>
       )}
+
+      {/* ── Unsaved trim edits — Save Trim / Reset per shot ── */}
+      {isEditorial &&
+        shots.filter((s) => isTrimDirty(s)).map((shot) => {
+          const draft = trimDrafts[shot.id]!;
+          return (
+            <div
+              key={`trim-${shot.id}`}
+              className="mt-2 flex items-center gap-2 flex-wrap"
+            >
+              <span className="text-[10px] font-mono text-[#6e767d] w-16 truncate shrink-0">
+                {shot.shotCode ?? shot.title}
+              </span>
+              <span className="text-[10px] font-mono text-[#5b93d6]">
+                Trim {draft.trimIn.toFixed(1)}s → {draft.trimOut.toFixed(1)}s
+              </span>
+              <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
+              <button
+                type="button"
+                onClick={() => saveTrim(shot)}
+                disabled={isSavingTrim}
+                className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-2 py-0.5 text-[10px] hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingTrim ? "Saving..." : "Save Trim"}
+              </button>
+              <button
+                type="button"
+                onClick={() => resetTrim(shot.id)}
+                disabled={isSavingTrim}
+                className="text-[10px] text-[#4b5158] hover:text-[#6e767d] disabled:opacity-40 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          );
+        })}
+
+      {/* ── Hidden metadata probes — read real video durations client-side ── */}
+      {isEditorial &&
+        shots
+          .filter((s) => s.videoUrl)
+          .map((s) => (
+            <video
+              key={`meta-${s.id}`}
+              src={s.videoUrl!}
+              preload="metadata"
+              muted
+              className="hidden"
+              onLoadedMetadata={(e) => {
+                const d = finiteVideoDuration(e.currentTarget);
+                if (d > 0) {
+                  setVideoDurations((prev) =>
+                    prev[s.id] === d ? prev : { ...prev, [s.id]: d }
+                  );
+                }
+              }}
+            />
+          ))}
 
       {/* ── Inputs per shot ── */}
       {isEditorial && (

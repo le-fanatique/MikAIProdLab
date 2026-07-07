@@ -90,6 +90,7 @@ export default async function SequenceEditorialPage({ params }: Props) {
               isPlaceholder: s.title === "Placeholder",
               trimInSeconds: s.trimInSeconds,
               trimOutSeconds: s.trimOutSeconds,
+              videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
             }))}
             projectId={pid}
             sequenceId={sid}
