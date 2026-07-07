@@ -3,8 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import Card from "@/components/Card";
-import EditorialTimeline, { type EditorialTimelineShot } from "@/components/EditorialTimeline";
+import EditorialTimeline, {
+  type EditorialTimelineShot,
+  type EditorialItemView,
+} from "@/components/EditorialTimeline";
 import SequencePreviewPlayer from "@/components/SequencePreviewPlayer";
+import { initializeEditorialTimeline } from "@/actions/shots";
 
 export type EditorialWorkspaceShot = EditorialTimelineShot;
 
@@ -13,6 +17,7 @@ type Props = {
   projectId: number;
   sequenceId: number;
   returnTo: string;
+  editorialItems: EditorialItemView[];
 };
 
 function SectionLabel({ label }: { label: string }) {
@@ -57,8 +62,11 @@ export default function EditorialWorkspace({
   projectId,
   sequenceId,
   returnTo,
+  editorialItems,
 }: Props) {
   const [selectedShotId, setSelectedShotId] = useState<number | null>(null);
+
+  const hasEditorialItems = editorialItems.length > 0;
 
   const selectedShot =
     selectedShotId !== null
@@ -139,6 +147,31 @@ export default function EditorialWorkspace({
 
       {/* ── Editorial Timeline — central editing surface ─────────── */}
       <SectionLabel label="Editorial Timeline" />
+
+      {/* Initialization block — shown until the editorial layer exists */}
+      {!hasEditorialItems && shots.length > 0 && (
+        <div className="mb-4 rounded border border-[#2c3035] bg-[#0d0e10] px-4 py-3 flex flex-col gap-2">
+          <p className="text-xs text-[#a4abb2]">
+            Create editable timeline items from the current shot structure.
+          </p>
+          <p className="text-[10px] text-[#4b5158]">
+            This keeps your story shots intact and creates a separate editorial layer
+            for gaps, per-clip trims, and montage decisions.
+          </p>
+          <form action={initializeEditorialTimeline}>
+            <input type="hidden" name="projectId" value={String(projectId)} />
+            <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <button
+              type="submit"
+              className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-xs hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+            >
+              Initialize Editorial Timeline
+            </button>
+          </form>
+        </div>
+      )}
+
       <Card>
         <EditorialTimeline
           shots={shots}
@@ -147,6 +180,7 @@ export default function EditorialWorkspace({
           returnTo={returnTo}
           selectedShotId={selectedShotId}
           onSelectShot={setSelectedShotId}
+          items={hasEditorialItems ? editorialItems : undefined}
         />
       </Card>
     </>

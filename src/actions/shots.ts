@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { shots, sequences } from "@/db/schema";
-import { eq, max } from "drizzle-orm";
+import { shots, sequences, sequenceEditorialItems } from "@/db/schema";
+import { eq, max, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
@@ -237,6 +237,73 @@ export async function updateSequenceShotOrder(formData: FormData): Promise<void>
       .update(shots)
       .set({ orderIndex: i, updatedAt: now })
       .where(eq(shots.id, orderedIds[i]));
+  }
+
+  revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+  revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/editorial`);
+
+  redirect(returnTo);
+}
+
+// ---------------------------------------------------------------------------
+// initializeEditorialTimeline — create the editorial items layer from shots
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates one "shot" editorial item per existing shot of the sequence,
+ * copying order, editorial duration, and trims. Idempotent: refuses to run
+ * when the sequence already has editorial items. Never modifies the shots.
+ */
+export async function initializeEditorialTimeline(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const returnToRaw = formData.get("returnTo");
+  const returnTo =
+    typeof returnToRaw === "string" && returnToRaw.trim().startsWith("/")
+      ? returnToRaw.trim()
+      : `/projects/${projectId}/sequences/${sequenceId}/editorial`;
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0
+  ) {
+    return;
+  }
+
+  const [sequence] = await db
+    .select({ id: sequences.id, projectId: sequences.projectId })
+    .from(sequences)
+    .where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) return;
+
+  // Idempotence: never create on top of an existing editorial layer
+  const existingItems = await db
+    .select({ id: sequenceEditorialItems.id })
+    .from(sequenceEditorialItems)
+    .where(eq(sequenceEditorialItems.sequenceId, sequenceId));
+  if (existingItems.length > 0) {
+    redirect(returnTo);
+  }
+
+  const shotList = await db
+    .select()
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId))
+    .orderBy(asc(shots.orderIndex));
+
+  // One "shot" item per shot, order normalized 0..n-1, no initial gaps
+  for (let i = 0; i < shotList.length; i++) {
+    const shot = shotList[i];
+    await db.insert(sequenceEditorialItems).values({
+      sequenceId,
+      type: "shot",
+      shotId: shot.id,
+      orderIndex: i,
+      durationSeconds: shot.durationSeconds,
+      trimInSeconds: shot.trimInSeconds,
+      trimOutSeconds: shot.trimOutSeconds,
+      trackIndex: 0,
+    });
   }
 
   revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);

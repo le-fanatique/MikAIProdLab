@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { db } from "@/db";
-import { projects, sequences, shots } from "@/db/schema";
+import { projects, sequences, shots, sequenceEditorialItems } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -44,6 +44,35 @@ export default async function SequenceEditorialPage({ params }: Props) {
     .from(shots)
     .where(eq(shots.sequenceId, sid))
     .orderBy(asc(shots.orderIndex));
+
+  // Gap-aware editorial layer — empty until explicitly initialized
+  const itemRows = await db
+    .select()
+    .from(sequenceEditorialItems)
+    .where(eq(sequenceEditorialItems.sequenceId, sid))
+    .orderBy(
+      asc(sequenceEditorialItems.trackIndex),
+      asc(sequenceEditorialItems.orderIndex)
+    );
+
+  const shotById = new Map(shotList.map((s) => [s.id, s]));
+
+  const editorialItems = itemRows.map((item) => {
+    const shot = item.shotId !== null ? shotById.get(item.shotId) : undefined;
+    return {
+      id: item.id,
+      type: item.type,
+      orderIndex: item.orderIndex,
+      durationSeconds: item.durationSeconds,
+      trimInSeconds: item.trimInSeconds,
+      trimOutSeconds: item.trimOutSeconds,
+      shotId: item.shotId,
+      shotCode: shot?.shotCode ?? null,
+      title: shot?.title ?? null,
+      hasApprovedVideo: shot ? shot.approvedVideoPath !== null : false,
+      isPlaceholder: shot ? shot.title === "Placeholder" : false,
+    };
+  });
 
   const editorialReturnTo = `/projects/${pid}/sequences/${sid}/editorial`;
 
@@ -91,6 +120,7 @@ export default async function SequenceEditorialPage({ params }: Props) {
         projectId={pid}
         sequenceId={sid}
         returnTo={editorialReturnTo}
+        editorialItems={editorialItems}
       />
 
       {/* ── Shot Order & fallback controls ───────────────────────── */}

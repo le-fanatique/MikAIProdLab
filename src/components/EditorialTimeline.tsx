@@ -26,6 +26,21 @@ export type EditorialTimelineShot = {
   videoUrl: string | null;
 };
 
+/** Gap-aware editorial item (read-only rendering in this phase). */
+export type EditorialItemView = {
+  id: number;
+  type: "shot" | "gap";
+  orderIndex: number;
+  durationSeconds: number | null;
+  trimInSeconds: number | null;
+  trimOutSeconds: number | null;
+  shotId: number | null;
+  shotCode: string | null;
+  title: string | null;
+  hasApprovedVideo: boolean;
+  isPlaceholder: boolean;
+};
+
 type Props = {
   shots: EditorialTimelineShot[];
   projectId: number;
@@ -33,7 +48,33 @@ type Props = {
   returnTo: string;
   selectedShotId: number | null;
   onSelectShot: (shotId: number) => void;
+  /** When present and non-empty, the lane renders these items (read-only). */
+  items?: EditorialItemView[];
 };
+
+function itemHasValidTrim(item: EditorialItemView): boolean {
+  return (
+    item.trimInSeconds != null &&
+    item.trimOutSeconds != null &&
+    item.trimInSeconds >= 0 &&
+    item.trimOutSeconds > item.trimInSeconds
+  );
+}
+
+function itemEffectiveDuration(item: EditorialItemView): number {
+  if (itemHasValidTrim(item)) return item.trimOutSeconds! - item.trimInSeconds!;
+  if (item.durationSeconds !== null && item.durationSeconds > 0) {
+    return item.durationSeconds;
+  }
+  return FALLBACK_SEGMENT_SECONDS;
+}
+
+function itemStatusColor(item: EditorialItemView): string {
+  if (item.type === "gap") return COLOR_NO_VIDEO;
+  if (item.isPlaceholder) return COLOR_PLACEHOLDER;
+  if (item.hasApprovedVideo) return COLOR_APPROVED;
+  return COLOR_NO_VIDEO;
+}
 
 type DragState = {
   shotId: number;
@@ -113,7 +154,14 @@ export default function EditorialTimeline({
   returnTo,
   selectedShotId,
   onSelectShot,
+  items,
 }: Props) {
+  // Items mode: the lane is driven by the gap-aware editorial layer
+  // (read-only in this phase); shot-based controls below stay functional.
+  const itemsMode = items !== undefined && items.length > 0;
+  const itemsTotal = itemsMode
+    ? items!.reduce((sum, it) => sum + itemEffectiveDuration(it), 0)
+    : 0;
   const [durations, setDurations] = useState<Record<number, string>>(() => {
     const map: Record<number, string> = {};
     for (const s of shots) {
@@ -324,9 +372,19 @@ export default function EditorialTimeline({
       <div className="flex items-center justify-between mb-3 gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs text-[#6e767d]">
-            Total <span className="font-mono">{laneTotal.toFixed(1)}s</span> effective
+            Total{" "}
+            <span className="font-mono">
+              {(itemsMode ? itemsTotal : laneTotal).toFixed(1)}s
+            </span>{" "}
+            effective
             {" · "}
-            {timedCount} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed
+            {itemsMode ? (
+              <>{items!.length} editorial item{items!.length !== 1 ? "s" : ""}</>
+            ) : (
+              <>
+                {timedCount} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed
+              </>
+            )}
           </span>
           {isDurationsDirty && (
             <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
@@ -351,8 +409,112 @@ export default function EditorialTimeline({
         </div>
       </div>
 
-      {/* ── Lane ── */}
-      {shots.length > 0 && laneTotal > 0 ? (
+      {/* ── Items lane — gap-aware editorial layer (read-only phase) ── */}
+      {itemsMode ? (
+        <>
+          <div
+            className="flex rounded overflow-hidden border border-[#1a1d20] bg-[#0d0e10]"
+            style={{ height: "72px" }}
+          >
+            {items!.map((item) => {
+              const d = itemEffectiveDuration(item);
+              const widthPct = itemsTotal > 0 ? (d / itemsTotal) * 100 : 0;
+              const color = itemStatusColor(item);
+              const trimmed = itemHasValidTrim(item);
+              const isSelected =
+                item.type === "shot" &&
+                item.shotId !== null &&
+                item.shotId === selectedShotId;
+
+              if (item.type === "gap") {
+                return (
+                  <div
+                    key={item.id}
+                    style={{ width: `${widthPct}%`, minWidth: "36px" }}
+                    className="relative flex flex-col justify-between px-1.5 py-1.5 border-r border-r-[#1a1d20] last:border-r-0 border-l-2 border-l-[#2c3035] border-dashed shrink-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.02)_5px,rgba(255,255,255,0.02)_10px)]"
+                    title={`Gap — ${d.toFixed(1)}s`}
+                  >
+                    <span className="text-[9px] font-mono text-[#4b5158] uppercase tracking-wider leading-none">
+                      Gap
+                    </span>
+                    <span className="text-[9px] font-mono text-[#3a4046] tabular-nums leading-none">
+                      {d.toFixed(1)}s
+                    </span>
+                  </div>
+                );
+              }
+
+              const tooltipParts = [
+                item.shotCode ? `${item.shotCode} — ${item.title ?? ""}` : item.title ?? "",
+              ];
+              if (trimmed) {
+                tooltipParts.push(
+                  `Trim: ${item.trimInSeconds!.toFixed(1)}s → ${item.trimOutSeconds!.toFixed(1)}s`,
+                  `Effective: ${d.toFixed(1)}s`
+                );
+              }
+              if (item.isPlaceholder) tooltipParts.push("Placeholder");
+              else if (!item.hasApprovedVideo) tooltipParts.push("No video");
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    if (item.shotId !== null) onSelectShot(item.shotId);
+                  }}
+                  style={{
+                    width: `${widthPct}%`,
+                    minWidth: "48px",
+                    borderLeftColor: color,
+                    backgroundColor: item.isPlaceholder
+                      ? "rgba(205, 162, 79, 0.06)"
+                      : undefined,
+                    boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
+                  }}
+                  className="flex flex-col justify-between px-1.5 py-1.5 border-r border-r-[#1a1d20] last:border-r-0 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden text-left shrink-0 cursor-pointer"
+                  title={tooltipParts.join("\n")}
+                >
+                  <span
+                    className="text-[9px] font-mono truncate leading-none"
+                    style={{ color }}
+                  >
+                    {item.shotCode ?? item.title}
+                  </span>
+                  <span className="text-[9px] text-[#4b5158] truncate leading-none">
+                    {item.title}
+                  </span>
+                  <span className="text-[9px] font-mono tabular-nums leading-none truncate">
+                    <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
+                    {trimmed && <span className="text-[#5b93d6]"> · Trimmed</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Timeline scale for items */}
+          <div className="relative mt-1" style={{ height: "14px" }}>
+            {(() => {
+              const step = tickStep(itemsTotal);
+              const ticks: number[] = [];
+              for (let t = 0; t <= itemsTotal + 0.001; t += step) ticks.push(t);
+              return ticks.map((t) => (
+                <span
+                  key={t}
+                  className="absolute text-[9px] font-mono text-[#3a4046] -translate-x-1/2 first:translate-x-0"
+                  style={{ left: `${Math.min((t / itemsTotal) * 100, 100)}%` }}
+                >
+                  {t.toFixed(0)}s
+                </span>
+              ));
+            })()}
+            <span className="absolute right-0 text-[9px] font-mono text-[#4b5158]">
+              {itemsTotal.toFixed(1)}s
+            </span>
+          </div>
+        </>
+      ) : shots.length > 0 && laneTotal > 0 ? (
         <>
           <div
             ref={trackRef}
@@ -526,8 +688,8 @@ export default function EditorialTimeline({
         </p>
       )}
 
-      {/* ── Unsaved trim edits — Save Trim / Reset per shot ── */}
-      {shots
+      {/* ── Unsaved trim edits — Save Trim / Reset per shot (legacy lane only) ── */}
+      {!itemsMode && shots
         .filter((s) => isTrimDirty(s))
         .map((shot) => {
           const draft = trimDrafts[shot.id]!;
@@ -563,8 +725,8 @@ export default function EditorialTimeline({
           );
         })}
 
-      {/* ── Hidden metadata probes — read real video durations client-side ── */}
-      {shots
+      {/* ── Hidden metadata probes — legacy lane only ── */}
+      {!itemsMode && shots
         .filter((s) => s.videoUrl)
         .map((s) => (
           <video
