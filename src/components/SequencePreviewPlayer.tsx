@@ -71,6 +71,14 @@ function effectiveDuration(entry: Entry): number | null {
   return entry.durationSeconds;
 }
 
+/** A shot entry needs a video; a gap entry needs a positive duration to hold on black. */
+function isPlayableEntry(entry: Entry): boolean {
+  if (entry.kind === "gap") {
+    return entry.durationSeconds !== null && entry.durationSeconds > 0;
+  }
+  return entry.videoUrl !== null;
+}
+
 function Badge({ entry }: { entry: Entry }) {
   if (entry.kind === "gap") {
     return (
@@ -143,10 +151,11 @@ export default function SequencePreviewPlayer({
   );
 
   // Indices (in the full entry list) of entries that can actually play
+  // (a video clip, or a gap with a positive duration held as black)
   const playableIndices = useMemo(
     () =>
       entries
-        .map((e, i) => (e.videoUrl ? i : -1))
+        .map((e, i) => (isPlayableEntry(e) ? i : -1))
         .filter((i) => i >= 0),
     [entries]
   );
@@ -164,6 +173,11 @@ export default function SequencePreviewPlayer({
   const consecutiveErrorsRef = useRef(0);
   // Guard: advance once per clip when the trim-out boundary is crossed
   const advancedAtTrimOutRef = useRef(false);
+
+  // Black hold gap playback — synthetic timer, no <video> involved
+  const [gapPlaying, setGapPlaying] = useState(false);
+  const [gapElapsedDisplay, setGapElapsedDisplay] = useState(0);
+  const gapElapsedRef = useRef(0);
 
   const currentEntry = currentIndex !== null ? entries[currentIndex] : null;
   const currentPlayablePos =
@@ -216,15 +230,16 @@ export default function SequencePreviewPlayer({
       return;
     }
     const index = entries.findIndex((e) => e.key === externalSelectedKey);
-    if (index >= 0 && entries[index].videoUrl) {
+    if (index >= 0 && isPlayableEntry(entries[index])) {
       setCurrentIndex(index);
       setIsEnded(false);
       setLoadError(null);
       pendingPlayRef.current = false;
       advancedAtTrimOutRef.current = false;
     }
-    // Gaps and non-playable selections are ignored by the player — the
-    // timeline still highlights them, and the current clip stays loaded.
+    // Non-playable selections (shot with no video, empty/invalid gap) are
+    // ignored by the player — the timeline still highlights them, and the
+    // current clip stays loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSelectedKey]);
 
@@ -304,6 +319,49 @@ export default function SequencePreviewPlayer({
       pendingPlayRef.current = false;
     }
   }
+
+  // Entering a gap resets its elapsed time and consumes any pending autoplay
+  // (mirrors handleLoadedData's pendingPlayRef consumption for videos).
+  useEffect(() => {
+    if (!currentEntry || currentEntry.kind !== "gap") return;
+    gapElapsedRef.current = 0;
+    setGapElapsedDisplay(0);
+    const autoplay = pendingPlayRef.current;
+    pendingPlayRef.current = false;
+    setGapPlaying(autoplay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEntry?.key]);
+
+  // Black hold timer — advances gapElapsed while playing, advances the
+  // playlist once the gap's duration is reached. Cleaned up on every
+  // entry change and on pause so only one loop ever runs.
+  useEffect(() => {
+    if (!currentEntry || currentEntry.kind !== "gap" || !gapPlaying) return;
+    const duration = currentEntry.durationSeconds ?? 0;
+    if (duration <= 0) {
+      setGapPlaying(false);
+      return;
+    }
+    let raf = 0;
+    let last = performance.now();
+    function tick(now: number) {
+      const dt = (now - last) / 1000;
+      last = now;
+      gapElapsedRef.current += dt;
+      if (gapElapsedRef.current >= duration) {
+        gapElapsedRef.current = duration;
+        setGapElapsedDisplay(duration);
+        setGapPlaying(false);
+        advanceOrEnd();
+        return;
+      }
+      setGapElapsedDisplay(gapElapsedRef.current);
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gapPlaying, currentEntry?.key]);
 
   if (playableIndices.length === 0) {
     return (
@@ -400,6 +458,32 @@ export default function SequencePreviewPlayer({
         </div>
       )}
 
+      {currentEntry && currentEntry.kind === "gap" && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[10px] text-[#6e767d]">
+            <span className="uppercase tracking-wider text-[#4b5158]">
+              Now playing
+            </span>
+            {" · "}Gap
+          </p>
+          <div className="w-full aspect-video max-h-[280px] rounded border border-[#2c3035] bg-black flex flex-col items-center justify-center gap-2">
+            <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">
+              Black hold — no video during this gap
+            </span>
+            <span className="text-xs font-mono text-[#6e767d] tabular-nums">
+              {gapElapsedDisplay.toFixed(1)}s / {(currentEntry.durationSeconds ?? 0).toFixed(1)}s
+            </span>
+            <button
+              type="button"
+              onClick={() => setGapPlaying((p) => !p)}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              {gapPlaying ? "Pause" : "Play"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loadError && <p className="text-xs text-[#cf7b6b]">{loadError}</p>}
       {isEnded && (
         <p className="text-xs text-[#6b9e72]">End of sequence preview.</p>
@@ -438,15 +522,38 @@ function PlaylistRows({
 
         if (entry.kind === "gap") {
           const d = effectiveDuration(entry);
+          const gapPlayable = isPlayableEntry(entry);
           return (
-            <div key={entry.key} className="flex items-center gap-3 py-1.5">
+            <div
+              key={entry.key}
+              className={`flex items-center gap-3 py-1.5 ${
+                isCurrent ? "bg-[#141e2b] -mx-2 px-2 rounded" : ""
+              }`}
+            >
               <span className="text-[10px] font-mono text-[#3a4046] w-6 shrink-0 text-right tabular-nums">
                 {index + 1}
               </span>
-              <span className="text-[10px] font-mono text-[#3a4046] w-16 shrink-0 truncate">
-                —
-              </span>
-              <span className="flex-1 min-w-0 text-xs text-[#4b5158] italic truncate">
+              {gapPlayable ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(index)}
+                  className={`text-[10px] font-mono w-16 shrink-0 truncate text-left transition-colors ${
+                    isCurrent ? "text-[#5b93d6]" : "text-[#6e767d] hover:text-[#a4abb2]"
+                  }`}
+                  title="Load this gap"
+                >
+                  —
+                </button>
+              ) : (
+                <span className="text-[10px] font-mono text-[#3a4046] w-16 shrink-0 truncate">
+                  —
+                </span>
+              )}
+              <span
+                className={`flex-1 min-w-0 text-xs italic truncate ${
+                  gapPlayable ? "text-[#a4abb2]" : "text-[#4b5158]"
+                }`}
+              >
                 Gap{d !== null ? ` · ${d.toFixed(1)}s` : ""}
               </span>
               <Badge entry={entry} />
