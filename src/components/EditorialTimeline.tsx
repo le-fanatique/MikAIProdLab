@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { updateSequenceShotDurations, updateShotTrim } from "@/actions/shots";
+import { updateEditorialItemTrim } from "@/actions/editorialTimeline";
 
 // Editorial status colors
 const COLOR_APPROVED = "#6b9e72";
@@ -162,12 +163,9 @@ export default function EditorialTimeline({
   selectedItemId,
   onSelectItem,
 }: Props) {
-  // Items mode: the lane is driven by the gap-aware editorial layer
-  // (read-only in this phase); shot-based controls below stay functional.
+  // Items mode: the lane is driven by the gap-aware editorial layer.
+  // Trims are edited per item; shot-based duration/trim controls are legacy.
   const itemsMode = items !== undefined && items.length > 0;
-  const itemsTotal = itemsMode
-    ? items!.reduce((sum, it) => sum + itemEffectiveDuration(it), 0)
-    : 0;
   const [durations, setDurations] = useState<Record<number, string>>(() => {
     const map: Record<number, string> = {};
     for (const s of shots) {
@@ -293,6 +291,93 @@ export default function EditorialTimeline({
     });
   }
 
+  // ── Item-level trim helpers (items mode — drafts/durations keyed by itemId) ──
+
+  function itemTrimBaseline(item: EditorialItemView): TrimRange | null {
+    if (itemHasValidTrim(item)) {
+      return {
+        trimIn: round1(item.trimInSeconds!),
+        trimOut: round1(item.trimOutSeconds!),
+      };
+    }
+    const vd = videoDurations[item.id];
+    if (vd !== undefined && vd > 0) {
+      return { trimIn: 0, trimOut: round1(vd) };
+    }
+    return null;
+  }
+
+  function itemTrimCurrent(item: EditorialItemView): TrimRange | null {
+    return trimDrafts[item.id] ?? itemTrimBaseline(item);
+  }
+
+  function isItemTrimDirty(item: EditorialItemView): boolean {
+    const draft = trimDrafts[item.id];
+    if (!draft) return false;
+    const base = itemTrimBaseline(item);
+    if (!base) return false;
+    return (
+      Math.abs(draft.trimIn - base.trimIn) > 0.001 ||
+      Math.abs(draft.trimOut - base.trimOut) > 0.001
+    );
+  }
+
+  function saveItemTrim(item: EditorialItemView) {
+    const draft = trimDrafts[item.id];
+    if (!draft) return;
+    const fd = new FormData();
+    fd.set("projectId", String(projectId));
+    fd.set("sequenceId", String(sequenceId));
+    fd.set("itemId", String(item.id));
+    fd.set("trimInSeconds", draft.trimIn.toFixed(1));
+    fd.set("trimOutSeconds", draft.trimOut.toFixed(1));
+    fd.set("returnTo", returnTo);
+    startTrimTransition(() => {
+      // No nested <form>: trim saves stay imperative
+      updateEditorialItemTrim(fd);
+      setTrimDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    });
+  }
+
+  function startItemTrimDrag(
+    e: React.PointerEvent<HTMLDivElement>,
+    item: EditorialItemView,
+    edge: "in" | "out"
+  ) {
+    const vd = videoDurations[item.id];
+    const current = itemTrimCurrent(item);
+    if (vd === undefined || vd <= 0 || !current || !trackRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    // shotId field carries the draft key — itemId in items mode
+    trimDragRef.current = {
+      shotId: item.id,
+      edge,
+      pointerStartX: e.clientX,
+      initialIn: current.trimIn,
+      initialOut: current.trimOut,
+      videoDuration: round1(vd),
+      initialTotalDur: itemsTotal,
+      trackWidth: trackRef.current.clientWidth,
+    };
+  }
+
+  // Effective item duration, draft-aware for live width preview during drag
+  const itemEff = (item: EditorialItemView): number => {
+    const draft = trimDrafts[item.id];
+    if (draft) return draft.trimOut - draft.trimIn;
+    return itemEffectiveDuration(item);
+  };
+
+  const itemsTotal = itemsMode
+    ? items!.reduce((sum, it) => sum + itemEff(it), 0)
+    : 0;
+
   // ── Pointer handlers ──────────────────────────────────────────────
 
   function handleDurationsReset() {
@@ -392,41 +477,53 @@ export default function EditorialTimeline({
               </>
             )}
           </span>
-          {isDurationsDirty && (
+          {!itemsMode && isDurationsDirty && (
             <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleDurationsReset}
-            disabled={!isDurationsDirty}
-            className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Reset
-          </button>
-          <button
-            type="submit"
-            disabled={!isDurationsDirty}
-            className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1 text-xs hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Apply
-          </button>
-        </div>
+        {!itemsMode && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleDurationsReset}
+              disabled={!isDurationsDirty}
+              className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reset
+            </button>
+            <button
+              type="submit"
+              disabled={!isDurationsDirty}
+              className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1 text-xs hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Apply
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Items lane — gap-aware editorial layer (read-only phase) ── */}
       {itemsMode ? (
         <>
           <div
+            ref={trackRef}
             className="flex rounded overflow-hidden border border-[#1a1d20] bg-[#0d0e10]"
             style={{ height: "72px" }}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
           >
             {items!.map((item) => {
-              const d = itemEffectiveDuration(item);
+              const d = itemEff(item);
               const widthPct = itemsTotal > 0 ? (d / itemsTotal) * 100 : 0;
               const color = itemStatusColor(item);
               const trimmed = itemHasValidTrim(item);
+              const itemDraft = trimDrafts[item.id];
+              const itemVideoDuration = videoDurations[item.id];
+              const itemTrimEnabled =
+                item.videoUrl !== null &&
+                itemVideoDuration !== undefined &&
+                itemVideoDuration > 0;
               // Item-mode selection wins when wired; legacy shot compare as fallback
               const isSelected =
                 onSelectItem !== undefined
@@ -480,36 +577,80 @@ export default function EditorialTimeline({
               else if (!item.hasApprovedVideo) tooltipParts.push("No video");
 
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={selectItem}
-                  style={{
-                    width: `${widthPct}%`,
-                    minWidth: "48px",
-                    borderLeftColor: color,
-                    backgroundColor: item.isPlaceholder
-                      ? "rgba(205, 162, 79, 0.06)"
-                      : undefined,
-                    boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
-                  }}
-                  className="flex flex-col justify-between px-1.5 py-1.5 border-r border-r-[#1a1d20] last:border-r-0 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden text-left shrink-0 cursor-pointer"
-                  title={tooltipParts.join("\n")}
+                  style={{ width: `${widthPct}%`, minWidth: "48px" }}
+                  className="relative flex border-r border-r-[#1a1d20] last:border-r-0 shrink-0"
                 >
-                  <span
-                    className="text-[9px] font-mono truncate leading-none"
-                    style={{ color }}
+                  <button
+                    type="button"
+                    onClick={selectItem}
+                    style={{
+                      borderLeftColor: color,
+                      backgroundColor: item.isPlaceholder
+                        ? "rgba(205, 162, 79, 0.06)"
+                        : undefined,
+                      boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
+                    }}
+                    className="flex-1 min-w-0 flex flex-col justify-between px-1.5 py-1.5 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden text-left cursor-pointer h-full"
+                    title={tooltipParts.join("\n")}
                   >
-                    {item.shotCode ?? item.title}
-                  </span>
-                  <span className="text-[9px] text-[#4b5158] truncate leading-none">
-                    {item.title}
-                  </span>
-                  <span className="text-[9px] font-mono tabular-nums leading-none truncate">
-                    <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
-                    {trimmed && <span className="text-[#5b93d6]"> · Trimmed</span>}
-                  </span>
-                </button>
+                    <span
+                      className="text-[9px] font-mono truncate leading-none"
+                      style={{ color }}
+                    >
+                      {item.shotCode ?? item.title}
+                    </span>
+                    <span className="text-[9px] text-[#4b5158] truncate leading-none">
+                      {item.title}
+                    </span>
+                    <span className="text-[9px] font-mono tabular-nums leading-none truncate">
+                      <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
+                      {itemDraft ? (
+                        <span className="text-[#5b93d6]">
+                          {" "}· Trim {itemDraft.trimIn.toFixed(1)}s → {itemDraft.trimOut.toFixed(1)}s
+                        </span>
+                      ) : (
+                        trimmed && <span className="text-[#5b93d6]"> · Trimmed</span>
+                      )}
+                    </span>
+                  </button>
+
+                  {/* Item-level trim handles — shot items with a video only */}
+                  {item.videoUrl &&
+                    (itemTrimEnabled ? (
+                      <>
+                        <div
+                          role="slider"
+                          tabIndex={0}
+                          aria-label="Trim in handle"
+                          className="absolute left-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
+                          style={{ width: "10px" }}
+                          onPointerDown={(e) => startItemTrimDrag(e, item, "in")}
+                        >
+                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
+                        </div>
+                        <div
+                          role="slider"
+                          tabIndex={0}
+                          aria-label="Trim out handle"
+                          className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
+                          style={{ width: "10px" }}
+                          onPointerDown={(e) => startItemTrimDrag(e, item, "out")}
+                        >
+                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        className="absolute right-0 top-0 h-full flex items-center justify-center select-none z-10 opacity-40"
+                        style={{ width: "10px" }}
+                        title="Video duration unavailable — trims can be set once the video loads."
+                      >
+                        <div className="w-0.5 h-5 rounded-full bg-[#4b5158]" />
+                      </div>
+                    ))}
+                </div>
               );
             })}
           </div>
@@ -709,6 +850,66 @@ export default function EditorialTimeline({
         </p>
       )}
 
+      {/* ── Unsaved item trim edits — Save Trim / Reset per item (items mode) ── */}
+      {itemsMode &&
+        items!
+          .filter((it) => isItemTrimDirty(it))
+          .map((item) => {
+            const draft = trimDrafts[item.id]!;
+            return (
+              <div
+                key={`item-trim-${item.id}`}
+                className="mt-2 flex items-center gap-2 flex-wrap"
+              >
+                <span className="text-[10px] font-mono text-[#6e767d] w-16 truncate shrink-0">
+                  {item.shotCode ?? item.title ?? "—"}
+                </span>
+                <span className="text-[10px] font-mono text-[#5b93d6]">
+                  Trim {draft.trimIn.toFixed(1)}s → {draft.trimOut.toFixed(1)}s
+                </span>
+                <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
+                <button
+                  type="button"
+                  onClick={() => saveItemTrim(item)}
+                  disabled={isSavingTrim}
+                  className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-2 py-0.5 text-[10px] hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSavingTrim ? "Saving..." : "Save Trim"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetTrim(item.id)}
+                  disabled={isSavingTrim}
+                  className="text-[10px] text-[#4b5158] hover:text-[#6e767d] disabled:opacity-40 transition-colors"
+                >
+                  Reset
+                </button>
+              </div>
+            );
+          })}
+
+      {/* ── Hidden metadata probes — items mode ── */}
+      {itemsMode &&
+        items!
+          .filter((it) => it.videoUrl)
+          .map((it) => (
+            <video
+              key={`meta-item-${it.id}`}
+              src={it.videoUrl!}
+              preload="metadata"
+              muted
+              className="hidden"
+              onLoadedMetadata={(e) => {
+                const d = finiteVideoDuration(e.currentTarget);
+                if (d > 0) {
+                  setVideoDurations((prev) =>
+                    prev[it.id] === d ? prev : { ...prev, [it.id]: d }
+                  );
+                }
+              }}
+            />
+          ))}
+
       {/* ── Unsaved trim edits — Save Trim / Reset per shot (legacy lane only) ── */}
       {!itemsMode && shots
         .filter((s) => isTrimDirty(s))
@@ -767,7 +968,10 @@ export default function EditorialTimeline({
           />
         ))}
 
-      {/* ── Target duration inputs ── */}
+      {/* ── Target duration inputs — legacy lane only; item durations will be
+             edited on the editorial layer in a later phase ── */}
+      {!itemsMode && (
+      <>
       <p className="mt-4 text-[9px] uppercase tracking-wider text-[#4b5158]">
         Target durations (seconds) — narrative intent, never changed by trims
       </p>
@@ -805,6 +1009,8 @@ export default function EditorialTimeline({
           );
         })}
       </div>
+      </>
+      )}
     </form>
   );
 }

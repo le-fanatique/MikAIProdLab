@@ -140,6 +140,7 @@ export default async function SequenceEditorialPage({ params }: Props) {
           projectId={pid}
           sequenceId={sid}
           returnTo={editorialReturnTo}
+          editorialLayerActive={editorialItems.length > 0}
         />
       </Card>
     </div>

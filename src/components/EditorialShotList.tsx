@@ -28,6 +28,8 @@ type Props = {
   projectId: number;
   sequenceId: number;
   returnTo: string;
+  /** When the editorial items layer exists, legacy shot trims are managed on the timeline. */
+  editorialLayerActive?: boolean;
 };
 
 function StatusBadge({ shot }: { shot: EditorialShot }) {
@@ -57,6 +59,7 @@ export default function EditorialShotList({
   projectId,
   sequenceId,
   returnTo,
+  editorialLayerActive = false,
 }: Props) {
   const initialOrder = useMemo(() => shots.map((s) => s.id), [shots]);
   const [order, setOrder] = useState<number[]>(initialOrder);
@@ -97,6 +100,12 @@ export default function EditorialShotList({
 
   return (
     <div className="flex flex-col gap-4">
+      {editorialLayerActive && (
+        <p className="text-[10px] text-[#4b5158]">
+          Trims are managed on the editorial timeline.
+        </p>
+      )}
+
       {/* ── Order header ── */}
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-[#6e767d]">
@@ -186,8 +195,8 @@ export default function EditorialShotList({
             </div>
           </div>
 
-          {/* ── Trim row — only for shots with an approved video ── */}
-          {shot.hasApprovedVideo && (
+          {/* ── Trim row — legacy shot trims, hidden when the editorial layer is active ── */}
+          {!editorialLayerActive && shot.hasApprovedVideo && (
             <div className="flex items-center gap-2 pl-9 flex-wrap">
               <form
                 action={updateShotTrim}
