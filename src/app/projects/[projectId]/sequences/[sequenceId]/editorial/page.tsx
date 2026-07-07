@@ -71,6 +71,7 @@ export default async function SequenceEditorialPage({ params }: Props) {
       title: shot?.title ?? null,
       hasApprovedVideo: shot ? shot.approvedVideoPath !== null : false,
       isPlaceholder: shot ? shot.title === "Placeholder" : false,
+      videoUrl: shot?.approvedVideoPath ? refImageUrl(shot.approvedVideoPath) : null,
     };
   });
 

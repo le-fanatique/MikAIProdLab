@@ -20,25 +20,32 @@ type Props = {
   editorialItems: EditorialItemView[];
 };
 
-function SectionLabel({ label }: { label: string }) {
+function SectionLabel({ label, badge }: { label: string; badge?: React.ReactNode }) {
   return (
     <div className="border-t border-[#232629] pt-4 mt-6 mb-4 flex items-center justify-between">
       <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
         {label}
       </span>
+      {badge}
     </div>
   );
 }
 
-function shotStatusBadge(shot: EditorialWorkspaceShot) {
-  if (shot.isPlaceholder) {
+function StatusBadgeParts({
+  isPlaceholder,
+  hasApprovedVideo,
+}: {
+  isPlaceholder: boolean;
+  hasApprovedVideo: boolean;
+}) {
+  if (isPlaceholder) {
     return (
       <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#cda24f] border border-[#3d3423] rounded px-1.5 py-px">
         Placeholder
       </span>
     );
   }
-  if (shot.hasApprovedVideo) {
+  if (hasApprovedVideo) {
     return (
       <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#6b9e72] border border-[#2a3d2e] rounded px-1.5 py-px">
         Approved video
@@ -53,9 +60,10 @@ function shotStatusBadge(shot: EditorialWorkspaceShot) {
 }
 
 /**
- * Client container for the editorial page: owns the shared shot selection so
- * the viewer and the timeline stay synchronized. NLE-like vertical layout:
- * viewer on top, selected-shot strip, timeline below.
+ * Client container for the editorial page: owns the shared selection so the
+ * viewer and the timeline stay synchronized. When the editorial items layer
+ * exists, selection is per item (selectedItemId) and the shot id is derived;
+ * without items, the legacy per-shot selection path is used unchanged.
  */
 export default function EditorialWorkspace({
   shots,
@@ -64,26 +72,41 @@ export default function EditorialWorkspace({
   returnTo,
   editorialItems,
 }: Props) {
-  const [selectedShotId, setSelectedShotId] = useState<number | null>(null);
-
   const hasEditorialItems = editorialItems.length > 0;
 
-  const selectedShot =
-    selectedShotId !== null
+  // Legacy selection (no-items fallback)
+  const [selectedShotId, setSelectedShotId] = useState<number | null>(null);
+  // Item selection (editorial layer active)
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+
+  const selectedItem = hasEditorialItems
+    ? editorialItems.find((it) => it.id === selectedItemId) ?? null
+    : null;
+
+  // Fallback band data (no items): derived from the shots list
+  const fallbackSelectedShot =
+    !hasEditorialItems && selectedShotId !== null
       ? shots.find((s) => s.id === selectedShotId) ?? null
       : null;
 
-  const selectedHasTrim =
-    selectedShot !== null &&
-    selectedShot.trimInSeconds != null &&
-    selectedShot.trimOutSeconds != null &&
-    selectedShot.trimOutSeconds > selectedShot.trimInSeconds;
+  // Target duration of the underlying shot for a selected shot item
+  const selectedItemTargetDuration =
+    selectedItem && selectedItem.shotId !== null
+      ? shots.find((s) => s.id === selectedItem.shotId)?.durationSeconds ?? null
+      : null;
 
-  const selectedEffective = selectedShot
-    ? selectedHasTrim
-      ? selectedShot.trimOutSeconds! - selectedShot.trimInSeconds!
-      : selectedShot.durationSeconds
-    : null;
+  function itemHasTrim(it: EditorialItemView): boolean {
+    return (
+      it.trimInSeconds != null &&
+      it.trimOutSeconds != null &&
+      it.trimOutSeconds > it.trimInSeconds
+    );
+  }
+
+  function itemEffective(it: EditorialItemView): number | null {
+    if (itemHasTrim(it)) return it.trimOutSeconds! - it.trimInSeconds!;
+    return it.durationSeconds;
+  }
 
   return (
     <>
@@ -103,41 +126,128 @@ export default function EditorialWorkspace({
           }))}
           projectId={projectId}
           sequenceId={sequenceId}
-          selectedShotId={selectedShotId}
-          onShotSelect={setSelectedShotId}
+          {...(hasEditorialItems
+            ? {
+                items: editorialItems.map((it) => ({
+                  itemId: it.id,
+                  type: it.type,
+                  shotId: it.shotId,
+                  shotCode: it.shotCode,
+                  title: it.title,
+                  videoUrl: it.videoUrl,
+                  durationSeconds: it.durationSeconds,
+                  trimInSeconds: it.trimInSeconds,
+                  trimOutSeconds: it.trimOutSeconds,
+                  isPlaceholder: it.isPlaceholder,
+                })),
+                selectedItemId,
+                onItemSelect: setSelectedItemId,
+              }
+            : {
+                selectedShotId,
+                onShotSelect: setSelectedShotId,
+              })}
         />
       </Card>
 
-      {/* ── Selected Shot — lightweight read-only strip ──────────── */}
-      {selectedShot && (
+      {/* ── Selected — lightweight read-only strip ───────────────── */}
+      {selectedItem && (
+        <div className="mt-3 flex items-center gap-x-3 gap-y-1 flex-wrap rounded border border-[#232629] bg-[#0d0e10] px-3 py-2">
+          <span className="text-[9px] uppercase tracking-wider text-[#4b5158] shrink-0">
+            Selected
+          </span>
+          {selectedItem.type === "gap" ? (
+            <>
+              <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#4b5158] border border-[#2c3035] border-dashed rounded px-1.5 py-px">
+                Gap
+              </span>
+              <span className="text-[10px] font-mono text-[#6e767d]">
+                {selectedItem.durationSeconds !== null
+                  ? `${selectedItem.durationSeconds.toFixed(1)}s`
+                  : "—"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-mono text-[#6e767d] shrink-0">
+                {selectedItem.shotCode ?? "—"}
+              </span>
+              <span className="text-xs text-[#a4abb2] truncate min-w-0 max-w-[240px]">
+                {selectedItem.title ?? "No shot linked"}
+              </span>
+              <StatusBadgeParts
+                isPlaceholder={selectedItem.isPlaceholder}
+                hasApprovedVideo={selectedItem.hasApprovedVideo}
+              />
+              {selectedItemTargetDuration !== null && (
+                <span className="text-[10px] font-mono text-[#6e767d]">
+                  Target {selectedItemTargetDuration.toFixed(1)}s
+                </span>
+              )}
+              {itemEffective(selectedItem) !== null && (
+                <span className="text-[10px] font-mono text-[#5b93d6]">
+                  Effective {itemEffective(selectedItem)!.toFixed(1)}s
+                </span>
+              )}
+              {itemHasTrim(selectedItem) && (
+                <span className="text-[10px] font-mono text-[#5b93d6]">
+                  Trim {selectedItem.trimInSeconds!.toFixed(1)}s →{" "}
+                  {selectedItem.trimOutSeconds!.toFixed(1)}s
+                </span>
+              )}
+              {selectedItem.shotId !== null && (
+                <Link
+                  href={`/projects/${projectId}/sequences/${sequenceId}/shots/${selectedItem.shotId}`}
+                  className="ml-auto shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                >
+                  Open Shot Detail →
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {fallbackSelectedShot && (
         <div className="mt-3 flex items-center gap-x-3 gap-y-1 flex-wrap rounded border border-[#232629] bg-[#0d0e10] px-3 py-2">
           <span className="text-[9px] uppercase tracking-wider text-[#4b5158] shrink-0">
             Selected
           </span>
           <span className="text-[10px] font-mono text-[#6e767d] shrink-0">
-            {selectedShot.shotCode ?? "—"}
+            {fallbackSelectedShot.shotCode ?? "—"}
           </span>
           <span className="text-xs text-[#a4abb2] truncate min-w-0 max-w-[240px]">
-            {selectedShot.title}
+            {fallbackSelectedShot.title}
           </span>
-          {shotStatusBadge(selectedShot)}
-          {selectedShot.durationSeconds !== null && (
+          <StatusBadgeParts
+            isPlaceholder={fallbackSelectedShot.isPlaceholder}
+            hasApprovedVideo={fallbackSelectedShot.hasApprovedVideo}
+          />
+          {fallbackSelectedShot.durationSeconds !== null && (
             <span className="text-[10px] font-mono text-[#6e767d]">
-              Target {selectedShot.durationSeconds.toFixed(1)}s
+              Target {fallbackSelectedShot.durationSeconds.toFixed(1)}s
             </span>
           )}
-          {selectedEffective !== null && (
-            <span className="text-[10px] font-mono text-[#5b93d6]">
-              Effective {selectedEffective.toFixed(1)}s
-            </span>
-          )}
-          {selectedHasTrim && (
-            <span className="text-[10px] font-mono text-[#5b93d6]">
-              Trim {selectedShot.trimInSeconds!.toFixed(1)}s → {selectedShot.trimOutSeconds!.toFixed(1)}s
-            </span>
-          )}
+          {fallbackSelectedShot.trimInSeconds != null &&
+            fallbackSelectedShot.trimOutSeconds != null &&
+            fallbackSelectedShot.trimOutSeconds > fallbackSelectedShot.trimInSeconds && (
+              <>
+                <span className="text-[10px] font-mono text-[#5b93d6]">
+                  Effective{" "}
+                  {(
+                    fallbackSelectedShot.trimOutSeconds -
+                    fallbackSelectedShot.trimInSeconds
+                  ).toFixed(1)}
+                  s
+                </span>
+                <span className="text-[10px] font-mono text-[#5b93d6]">
+                  Trim {fallbackSelectedShot.trimInSeconds.toFixed(1)}s →{" "}
+                  {fallbackSelectedShot.trimOutSeconds.toFixed(1)}s
+                </span>
+              </>
+            )}
           <Link
-            href={`/projects/${projectId}/sequences/${sequenceId}/shots/${selectedShot.id}`}
+            href={`/projects/${projectId}/sequences/${sequenceId}/shots/${fallbackSelectedShot.id}`}
             className="ml-auto shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
           >
             Open Shot Detail →
@@ -146,7 +256,16 @@ export default function EditorialWorkspace({
       )}
 
       {/* ── Editorial Timeline — central editing surface ─────────── */}
-      <SectionLabel label="Editorial Timeline" />
+      <SectionLabel
+        label="Editorial Timeline"
+        badge={
+          hasEditorialItems ? (
+            <span className="text-[9px] uppercase tracking-wider text-[#5b93d6] border border-[#5b93d6]/30 rounded px-1.5 py-px">
+              Editorial layer active
+            </span>
+          ) : undefined
+        }
+      />
 
       {/* Initialization block — shown until the editorial layer exists */}
       {!hasEditorialItems && shots.length > 0 && (
@@ -178,9 +297,11 @@ export default function EditorialWorkspace({
           projectId={projectId}
           sequenceId={sequenceId}
           returnTo={returnTo}
-          selectedShotId={selectedShotId}
+          selectedShotId={hasEditorialItems ? null : selectedShotId}
           onSelectShot={setSelectedShotId}
           items={hasEditorialItems ? editorialItems : undefined}
+          selectedItemId={hasEditorialItems ? selectedItemId : undefined}
+          onSelectItem={hasEditorialItems ? setSelectedItemId : undefined}
         />
       </Card>
     </>

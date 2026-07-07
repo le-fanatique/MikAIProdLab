@@ -14,20 +14,33 @@ export type PreviewShot = {
   trimOutSeconds: number | null;
 };
 
-function hasValidTrim(shot: PreviewShot): boolean {
-  return (
-    shot.trimInSeconds !== null &&
-    shot.trimOutSeconds !== null &&
-    shot.trimInSeconds >= 0 &&
-    shot.trimOutSeconds > shot.trimInSeconds
-  );
-}
+/** Editorial item entry for the item-driven playlist mode. */
+export type PreviewItem = {
+  itemId: number;
+  type: "shot" | "gap";
+  shotId: number | null;
+  shotCode: string | null;
+  title: string | null;
+  videoUrl: string | null;
+  durationSeconds: number | null;
+  trimInSeconds: number | null;
+  trimOutSeconds: number | null;
+  isPlaceholder: boolean;
+};
 
-/** Effective playback duration: trim range, else narrative target, else null. */
-function effectiveDuration(shot: PreviewShot): number | null {
-  if (hasValidTrim(shot)) return shot.trimOutSeconds! - shot.trimInSeconds!;
-  return shot.durationSeconds;
-}
+// Unified internal playlist entry — key is itemId in items mode, shot id otherwise
+type Entry = {
+  key: number;
+  kind: "shot" | "gap";
+  shotId: number | null;
+  shotCode: string | null;
+  title: string;
+  durationSeconds: number | null;
+  videoUrl: string | null;
+  isPlaceholder: boolean;
+  trimInSeconds: number | null;
+  trimOutSeconds: number | null;
+};
 
 type Props = {
   shots: PreviewShot[];
@@ -37,17 +50,43 @@ type Props = {
   selectedShotId?: number | null;
   /** Optional callback fired whenever the player's current shot changes. */
   onShotSelect?: (shotId: number) => void;
+  /** Item-driven mode: when provided and non-empty, the playlist follows these items. */
+  items?: PreviewItem[];
+  selectedItemId?: number | null;
+  onItemSelect?: (itemId: number) => void;
 };
 
-function Badge({ shot }: { shot: PreviewShot }) {
-  if (shot.isPlaceholder) {
+function hasValidTrim(entry: Entry): boolean {
+  return (
+    entry.trimInSeconds !== null &&
+    entry.trimOutSeconds !== null &&
+    entry.trimInSeconds >= 0 &&
+    entry.trimOutSeconds > entry.trimInSeconds
+  );
+}
+
+/** Effective playback duration: trim range, else narrative target, else null. */
+function effectiveDuration(entry: Entry): number | null {
+  if (hasValidTrim(entry)) return entry.trimOutSeconds! - entry.trimInSeconds!;
+  return entry.durationSeconds;
+}
+
+function Badge({ entry }: { entry: Entry }) {
+  if (entry.kind === "gap") {
+    return (
+      <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#4b5158] border border-[#2c3035] border-dashed rounded px-1.5 py-px">
+        Gap
+      </span>
+    );
+  }
+  if (entry.isPlaceholder) {
     return (
       <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#cda24f] border border-[#3d3423] rounded px-1.5 py-px">
         Placeholder
       </span>
     );
   }
-  if (shot.videoUrl) {
+  if (entry.videoUrl) {
     return (
       <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#6b9e72] border border-[#2a3d2e] rounded px-1.5 py-px">
         Approved video
@@ -67,14 +106,49 @@ export default function SequencePreviewPlayer({
   sequenceId,
   selectedShotId,
   onShotSelect,
+  items,
+  selectedItemId,
+  onItemSelect,
 }: Props) {
-  // Indices (in the full shot list) of shots that can actually play
+  const itemsMode = items !== undefined && items.length > 0;
+
+  const entries: Entry[] = useMemo(
+    () =>
+      itemsMode
+        ? items!.map((it) => ({
+            key: it.itemId,
+            kind: it.type,
+            shotId: it.shotId,
+            shotCode: it.shotCode,
+            title: it.title ?? (it.type === "gap" ? "Gap" : ""),
+            durationSeconds: it.durationSeconds,
+            videoUrl: it.type === "shot" ? it.videoUrl : null,
+            isPlaceholder: it.isPlaceholder,
+            trimInSeconds: it.trimInSeconds,
+            trimOutSeconds: it.trimOutSeconds,
+          }))
+        : shots.map((s) => ({
+            key: s.id,
+            kind: "shot" as const,
+            shotId: s.id,
+            shotCode: s.shotCode,
+            title: s.title,
+            durationSeconds: s.durationSeconds,
+            videoUrl: s.videoUrl,
+            isPlaceholder: s.isPlaceholder,
+            trimInSeconds: s.trimInSeconds,
+            trimOutSeconds: s.trimOutSeconds,
+          })),
+    [itemsMode, items, shots]
+  );
+
+  // Indices (in the full entry list) of entries that can actually play
   const playableIndices = useMemo(
     () =>
-      shots
-        .map((s, i) => (s.videoUrl ? i : -1))
+      entries
+        .map((e, i) => (e.videoUrl ? i : -1))
         .filter((i) => i >= 0),
-    [shots]
+    [entries]
   );
 
   const [currentIndex, setCurrentIndex] = useState<number | null>(
@@ -91,13 +165,13 @@ export default function SequencePreviewPlayer({
   // Guard: advance once per clip when the trim-out boundary is crossed
   const advancedAtTrimOutRef = useRef(false);
 
-  const currentShot = currentIndex !== null ? shots[currentIndex] : null;
+  const currentEntry = currentIndex !== null ? entries[currentIndex] : null;
   const currentPlayablePos =
     currentIndex !== null ? playableIndices.indexOf(currentIndex) : -1;
 
   // Estimated total uses effective durations (trim range wins over target)
-  const totalEstimated = shots.reduce(
-    (sum, s) => sum + (effectiveDuration(s) ?? 0),
+  const totalEstimated = entries.reduce(
+    (sum, e) => sum + (effectiveDuration(e) ?? 0),
     0
   );
 
@@ -115,6 +189,14 @@ export default function SequencePreviewPlayer({
     return null;
   }
 
+  function notifySelect(entry: Entry) {
+    if (itemsMode) {
+      onItemSelect?.(entry.key);
+    } else if (entry.shotId !== null) {
+      onShotSelect?.(entry.shotId);
+    }
+  }
+
   function goTo(index: number, autoplay: boolean) {
     setCurrentIndex(index);
     setIsEnded(false);
@@ -122,26 +204,29 @@ export default function SequencePreviewPlayer({
     pendingPlayRef.current = autoplay;
     advancedAtTrimOutRef.current = false;
     // Report internal clip changes (playlist click, Prev/Next, auto-advance)
-    const shot = shots[index];
-    if (shot) onShotSelect?.(shot.id);
+    const entry = entries[index];
+    if (entry) notifySelect(entry);
   }
 
-  // Follow an external selection when it points to a playable shot
+  // Follow an external selection when it points to a playable entry
+  const externalSelectedKey = itemsMode ? selectedItemId : selectedShotId;
   useEffect(() => {
-    if (selectedShotId == null) return;
-    if (currentIndex !== null && shots[currentIndex]?.id === selectedShotId) return;
-    const index = shots.findIndex((s) => s.id === selectedShotId);
-    if (index >= 0 && shots[index].videoUrl) {
+    if (externalSelectedKey == null) return;
+    if (currentIndex !== null && entries[currentIndex]?.key === externalSelectedKey) {
+      return;
+    }
+    const index = entries.findIndex((e) => e.key === externalSelectedKey);
+    if (index >= 0 && entries[index].videoUrl) {
       setCurrentIndex(index);
       setIsEnded(false);
       setLoadError(null);
       pendingPlayRef.current = false;
       advancedAtTrimOutRef.current = false;
     }
-    // Non-playable selections are ignored by the player — the timeline still
-    // highlights them, and the current clip stays loaded.
+    // Gaps and non-playable selections are ignored by the player — the
+    // timeline still highlights them, and the current clip stays loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedShotId]);
+  }, [externalSelectedKey]);
 
   function advanceOrEnd() {
     if (currentIndex === null) return;
@@ -160,9 +245,9 @@ export default function SequencePreviewPlayer({
 
   function handleTimeUpdate() {
     const video = videoRef.current;
-    if (!video || !currentShot || !hasValidTrim(currentShot)) return;
+    if (!video || !currentEntry || !hasValidTrim(currentEntry)) return;
     if (advancedAtTrimOutRef.current) return;
-    if (video.currentTime >= currentShot.trimOutSeconds!) {
+    if (video.currentTime >= currentEntry.trimOutSeconds!) {
       advancedAtTrimOutRef.current = true;
       video.pause();
       advanceOrEnd();
@@ -172,12 +257,12 @@ export default function SequencePreviewPlayer({
   function handlePlay() {
     // Replaying a trimmed clip restarts from trim in
     const video = videoRef.current;
-    if (!video || !currentShot || !hasValidTrim(currentShot)) return;
+    if (!video || !currentEntry || !hasValidTrim(currentEntry)) return;
     if (
-      video.currentTime < currentShot.trimInSeconds! ||
-      video.currentTime >= currentShot.trimOutSeconds!
+      video.currentTime < currentEntry.trimInSeconds! ||
+      video.currentTime >= currentEntry.trimOutSeconds!
     ) {
-      video.currentTime = currentShot.trimInSeconds!;
+      video.currentTime = currentEntry.trimInSeconds!;
       advancedAtTrimOutRef.current = false;
     }
   }
@@ -186,8 +271,8 @@ export default function SequencePreviewPlayer({
     consecutiveErrorsRef.current = 0;
     const video = videoRef.current;
     // Position trimmed clips at their trim in before playback
-    if (video && currentShot && hasValidTrim(currentShot)) {
-      video.currentTime = currentShot.trimInSeconds!;
+    if (video && currentEntry && hasValidTrim(currentEntry)) {
+      video.currentTime = currentEntry.trimInSeconds!;
     }
     if (pendingPlayRef.current) {
       pendingPlayRef.current = false;
@@ -227,7 +312,7 @@ export default function SequencePreviewPlayer({
           No approved videos in this sequence yet.
         </p>
         <PlaylistRows
-          shots={shots}
+          entries={entries}
           projectId={projectId}
           sequenceId={sequenceId}
           currentIndex={null}
@@ -248,8 +333,11 @@ export default function SequencePreviewPlayer({
               {" · "}
             </>
           )}
-          {playableIndices.length} of {shots.length} shot
-          {shots.length !== 1 ? "s" : ""} have video
+          {playableIndices.length} of {entries.length}{" "}
+          {itemsMode
+            ? `item${entries.length !== 1 ? "s" : ""}`
+            : `shot${entries.length !== 1 ? "s" : ""}`}{" "}
+          have video
           {totalEstimated > 0 && (
             <>
               {" · "}Estimated duration{" "}
@@ -286,21 +374,21 @@ export default function SequencePreviewPlayer({
       </div>
 
       {/* ── Player ── */}
-      {currentShot && currentShot.videoUrl && (
+      {currentEntry && currentEntry.videoUrl && (
         <div className="flex flex-col gap-1.5">
           <p className="text-[10px] text-[#6e767d]">
             <span className="uppercase tracking-wider text-[#4b5158]">
               Now playing
             </span>
             {" · "}
-            <span className="font-mono">{currentShot.shotCode ?? "—"}</span>
+            <span className="font-mono">{currentEntry.shotCode ?? "—"}</span>
             {" — "}
-            {currentShot.title}
+            {currentEntry.title}
           </p>
           <video
-            key={currentShot.id}
+            key={currentEntry.key}
             ref={videoRef}
-            src={currentShot.videoUrl}
+            src={currentEntry.videoUrl}
             controls
             onEnded={handleEnded}
             onError={handleError}
@@ -319,7 +407,7 @@ export default function SequencePreviewPlayer({
 
       {/* ── Playlist ── */}
       <PlaylistRows
-        shots={shots}
+        entries={entries}
         projectId={projectId}
         sequenceId={sequenceId}
         currentIndex={currentIndex}
@@ -330,13 +418,13 @@ export default function SequencePreviewPlayer({
 }
 
 function PlaylistRows({
-  shots,
+  entries,
   projectId,
   sequenceId,
   currentIndex,
   onSelect,
 }: {
-  shots: PreviewShot[];
+  entries: Entry[];
   projectId: number;
   sequenceId: number;
   currentIndex: number | null;
@@ -344,12 +432,35 @@ function PlaylistRows({
 }) {
   return (
     <div className="flex flex-col divide-y divide-[#1a1d20] border-t border-[#1a1d20] max-h-40 overflow-y-auto">
-      {shots.map((shot, index) => {
-        const playable = shot.videoUrl !== null;
+      {entries.map((entry, index) => {
+        const playable = entry.videoUrl !== null;
         const isCurrent = index === currentIndex;
+
+        if (entry.kind === "gap") {
+          const d = effectiveDuration(entry);
+          return (
+            <div key={entry.key} className="flex items-center gap-3 py-1.5">
+              <span className="text-[10px] font-mono text-[#3a4046] w-6 shrink-0 text-right tabular-nums">
+                {index + 1}
+              </span>
+              <span className="text-[10px] font-mono text-[#3a4046] w-16 shrink-0 truncate">
+                —
+              </span>
+              <span className="flex-1 min-w-0 text-xs text-[#4b5158] italic truncate">
+                Gap{d !== null ? ` · ${d.toFixed(1)}s` : ""}
+              </span>
+              <Badge entry={entry} />
+              <span className="text-[10px] font-mono text-[#6e767d] w-12 shrink-0 text-right tabular-nums">
+                {d !== null ? `${d.toFixed(1)}s` : "—"}
+              </span>
+              <span className="shrink-0 w-12" />
+            </div>
+          );
+        }
+
         return (
           <div
-            key={shot.id}
+            key={entry.key}
             className={`flex items-center gap-3 py-1.5 ${
               isCurrent ? "bg-[#141e2b] -mx-2 px-2 rounded" : ""
             }`}
@@ -368,11 +479,11 @@ function PlaylistRows({
                 }`}
                 title="Load this clip"
               >
-                {shot.shotCode ?? "—"}
+                {entry.shotCode ?? "—"}
               </button>
             ) : (
               <span className="text-[10px] font-mono text-[#3a4046] w-16 shrink-0 truncate">
-                {shot.shotCode ?? "—"}
+                {entry.shotCode ?? "—"}
               </span>
             )}
             <span
@@ -380,28 +491,32 @@ function PlaylistRows({
                 playable ? "text-[#a4abb2]" : "text-[#4b5158]"
               }`}
             >
-              {shot.title}
+              {entry.title}
             </span>
-            <Badge shot={shot} />
-            {hasValidTrim(shot) && (
+            <Badge entry={entry} />
+            {hasValidTrim(entry) && (
               <span
                 className="shrink-0 text-[9px] font-mono text-[#5b93d6]"
-                title={`Trim: ${shot.trimInSeconds!.toFixed(1)}s → ${shot.trimOutSeconds!.toFixed(1)}s`}
+                title={`Trim: ${entry.trimInSeconds!.toFixed(1)}s → ${entry.trimOutSeconds!.toFixed(1)}s`}
               >
                 Trimmed
               </span>
             )}
             <span className="text-[10px] font-mono text-[#6e767d] w-12 shrink-0 text-right tabular-nums">
-              {effectiveDuration(shot) !== null
-                ? `${effectiveDuration(shot)!.toFixed(1)}s`
+              {effectiveDuration(entry) !== null
+                ? `${effectiveDuration(entry)!.toFixed(1)}s`
                 : "—"}
             </span>
-            <Link
-              href={`/projects/${projectId}/sequences/${sequenceId}/shots/${shot.id}`}
-              className="shrink-0 text-[10px] text-[#4b5158] hover:text-[#a4abb2] transition-colors"
-            >
-              Open →
-            </Link>
+            {entry.shotId !== null ? (
+              <Link
+                href={`/projects/${projectId}/sequences/${sequenceId}/shots/${entry.shotId}`}
+                className="shrink-0 text-[10px] text-[#4b5158] hover:text-[#a4abb2] transition-colors w-12"
+              >
+                Open →
+              </Link>
+            ) : (
+              <span className="shrink-0 w-12" />
+            )}
           </div>
         );
       })}

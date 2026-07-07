@@ -39,6 +39,7 @@ export type EditorialItemView = {
   title: string | null;
   hasApprovedVideo: boolean;
   isPlaceholder: boolean;
+  videoUrl: string | null;
 };
 
 type Props = {
@@ -50,6 +51,9 @@ type Props = {
   onSelectShot: (shotId: number) => void;
   /** When present and non-empty, the lane renders these items (read-only). */
   items?: EditorialItemView[];
+  /** Item-mode selection — the selected editorial item (shot or gap). */
+  selectedItemId?: number | null;
+  onSelectItem?: (itemId: number) => void;
 };
 
 function itemHasValidTrim(item: EditorialItemView): boolean {
@@ -155,6 +159,8 @@ export default function EditorialTimeline({
   selectedShotId,
   onSelectShot,
   items,
+  selectedItemId,
+  onSelectItem,
 }: Props) {
   // Items mode: the lane is driven by the gap-aware editorial layer
   // (read-only in this phase); shot-based controls below stay functional.
@@ -421,17 +427,34 @@ export default function EditorialTimeline({
               const widthPct = itemsTotal > 0 ? (d / itemsTotal) * 100 : 0;
               const color = itemStatusColor(item);
               const trimmed = itemHasValidTrim(item);
+              // Item-mode selection wins when wired; legacy shot compare as fallback
               const isSelected =
-                item.type === "shot" &&
-                item.shotId !== null &&
-                item.shotId === selectedShotId;
+                onSelectItem !== undefined
+                  ? item.id === selectedItemId
+                  : item.type === "shot" &&
+                    item.shotId !== null &&
+                    item.shotId === selectedShotId;
+
+              const selectItem = () => {
+                if (onSelectItem) {
+                  onSelectItem(item.id);
+                } else if (item.shotId !== null) {
+                  onSelectShot(item.shotId);
+                }
+              };
 
               if (item.type === "gap") {
                 return (
-                  <div
+                  <button
                     key={item.id}
-                    style={{ width: `${widthPct}%`, minWidth: "36px" }}
-                    className="relative flex flex-col justify-between px-1.5 py-1.5 border-r border-r-[#1a1d20] last:border-r-0 border-l-2 border-l-[#2c3035] border-dashed shrink-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.02)_5px,rgba(255,255,255,0.02)_10px)]"
+                    type="button"
+                    onClick={selectItem}
+                    style={{
+                      width: `${widthPct}%`,
+                      minWidth: "36px",
+                      boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
+                    }}
+                    className="relative flex flex-col justify-between px-1.5 py-1.5 border-r border-r-[#1a1d20] last:border-r-0 border-l-2 border-l-[#2c3035] border-dashed shrink-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.02)_5px,rgba(255,255,255,0.02)_10px)] text-left cursor-pointer hover:bg-white/[0.02] transition-colors"
                     title={`Gap — ${d.toFixed(1)}s`}
                   >
                     <span className="text-[9px] font-mono text-[#4b5158] uppercase tracking-wider leading-none">
@@ -440,7 +463,7 @@ export default function EditorialTimeline({
                     <span className="text-[9px] font-mono text-[#3a4046] tabular-nums leading-none">
                       {d.toFixed(1)}s
                     </span>
-                  </div>
+                  </button>
                 );
               }
 
@@ -460,9 +483,7 @@ export default function EditorialTimeline({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    if (item.shotId !== null) onSelectShot(item.shotId);
-                  }}
+                  onClick={selectItem}
                   style={{
                     width: `${widthPct}%`,
                     minWidth: "48px",
