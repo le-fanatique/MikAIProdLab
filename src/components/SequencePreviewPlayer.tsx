@@ -307,7 +307,7 @@ export default function SequencePreviewPlayer({
             onLoadedData={handleLoadedData}
             onTimeUpdate={handleTimeUpdate}
             onPlay={handlePlay}
-            className="w-full rounded border border-[#2c3035] bg-black"
+            className="w-full max-h-[280px] object-contain rounded border border-[#2c3035] bg-black"
           />
         </div>
       )}
@@ -343,7 +343,7 @@ function PlaylistRows({
   onSelect: (index: number) => void;
 }) {
   return (
-    <div className="flex flex-col divide-y divide-[#1a1d20] border-t border-[#1a1d20]">
+    <div className="flex flex-col divide-y divide-[#1a1d20] border-t border-[#1a1d20] max-h-40 overflow-y-auto">
       {shots.map((shot, index) => {
         const playable = shot.videoUrl !== null;
         const isCurrent = index === currentIndex;

@@ -93,8 +93,8 @@ export default async function SequenceEditorialPage({ params }: Props) {
         returnTo={editorialReturnTo}
       />
 
-      {/* ── Shot Order ───────────────────────────────────────────── */}
-      <SectionLabel label="Shot Order" />
+      {/* ── Shot Order & fallback controls ───────────────────────── */}
+      <SectionLabel label="Shot Order & Fallback Controls" />
       <Card>
         <EditorialShotList
           shots={shotList.map((s) => ({
