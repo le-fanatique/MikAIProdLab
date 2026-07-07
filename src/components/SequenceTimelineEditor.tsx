@@ -6,11 +6,24 @@ import { updateSequenceShotDurations } from "@/actions/shots";
 
 const SHOT_PALETTE = ["#5b93d6", "#6aa6a0", "#9bb05a", "#cda24f", "#cf8b6b"];
 
+// Editorial status colors
+const COLOR_APPROVED = "#6b9e72";
+const COLOR_NO_VIDEO = "#4b5158";
+const COLOR_PLACEHOLDER = "#cda24f";
+
+// Visual fallback so untimed shots stay visible as segments (editorial only)
+const FALLBACK_SEGMENT_SECONDS = 1.0;
+
 type ShotEntry = {
   id: number;
   shotCode: string | null;
   title: string;
   durationSeconds: number | null;
+  // Editorial variant only — optional so Sequence Detail keeps its call as-is
+  hasApprovedVideo?: boolean;
+  isPlaceholder?: boolean;
+  trimInSeconds?: number | null;
+  trimOutSeconds?: number | null;
 };
 
 type Props = {
@@ -19,7 +32,33 @@ type Props = {
   sequenceId: number;
   /** Optional redirect target after Apply — defaults to Sequence Detail. */
   returnTo?: string;
+  /** "summary" (default) keeps the compact lane; "editorial" shows montage segments. */
+  variant?: "summary" | "editorial";
 };
+
+function hasValidTrim(shot: ShotEntry): boolean {
+  return (
+    shot.trimInSeconds != null &&
+    shot.trimOutSeconds != null &&
+    shot.trimInSeconds >= 0 &&
+    shot.trimOutSeconds > shot.trimInSeconds
+  );
+}
+
+function statusColor(shot: ShotEntry): string {
+  if (shot.isPlaceholder) return COLOR_PLACEHOLDER;
+  if (shot.hasApprovedVideo) return COLOR_APPROVED;
+  return COLOR_NO_VIDEO;
+}
+
+// Pick a tick step giving at most ~8 labeled graduations
+function tickStep(total: number): number {
+  const candidates = [1, 2, 5, 10, 15, 30, 60, 120, 300];
+  for (const step of candidates) {
+    if (total / step <= 8) return step;
+  }
+  return 600;
+}
 
 type DragState = {
   shotId: number;
@@ -41,7 +80,8 @@ function snap(value: number): number {
   return parseFloat((Math.round(value / 0.1) * 0.1).toFixed(1));
 }
 
-export default function SequenceTimelineEditor({ shots, projectId, sequenceId, returnTo }: Props) {
+export default function SequenceTimelineEditor({ shots, projectId, sequenceId, returnTo, variant = "summary" }: Props) {
+  const isEditorial = variant === "editorial";
   const [durations, setDurations] = useState<Record<number, string>>(() => {
     const map: Record<number, string> = {};
     for (const s of shots) {
@@ -87,6 +127,32 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
     return map;
   }, [shots, parsedDurations]);
 
+  // Effective duration drives editorial segment widths:
+  // trim range if valid, else the (live-edited) target duration, else a
+  // visual fallback so the segment never disappears
+  const effectiveFor = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const s of shots) {
+      if (hasValidTrim(s)) {
+        map.set(s.id, s.trimOutSeconds! - s.trimInSeconds!);
+      } else {
+        const d = parsedDurations[s.id];
+        map.set(s.id, d !== null && d > 0 ? d : FALLBACK_SEGMENT_SECONDS);
+      }
+    }
+    return map;
+  }, [shots, parsedDurations]);
+
+  // Editorial lane shows every shot (holes included); summary keeps timed only
+  const laneShots = isEditorial ? shots : timedShots;
+  const laneDur = (shot: ShotEntry): number =>
+    isEditorial
+      ? effectiveFor.get(shot.id) ?? FALLBACK_SEGMENT_SECONDS
+      : parsedDurations[shot.id] ?? 0;
+  const laneTotal = isEditorial
+    ? laneShots.reduce((sum, s) => sum + laneDur(s), 0)
+    : totalDuration;
+
   const isDirty = useMemo(
     () => shots.some((s) => {
       const initial = s.durationSeconds?.toString() ?? "";
@@ -126,12 +192,22 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
       <div className="flex items-center justify-between mb-3 gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs text-[#6e767d]">
-            {timedShots.length} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed
-            {totalDuration > 0 && (
+            {isEditorial ? (
               <>
+                Total <span className="font-mono">{laneTotal.toFixed(1)}s</span> effective
                 {" · "}
-                <span className="font-mono">{totalDuration.toFixed(1)}s</span>
-                {" total"}
+                {timedShots.length} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed
+              </>
+            ) : (
+              <>
+                {timedShots.length} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed
+                {totalDuration > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-mono">{totalDuration.toFixed(1)}s</span>
+                    {" total"}
+                  </>
+                )}
               </>
             )}
           </span>
@@ -159,31 +235,65 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
       </div>
 
       {/* ── Lane preview ── */}
-      {totalDuration > 0 ? (
+      {laneTotal > 0 && laneShots.length > 0 ? (
         <>
           <div
             ref={trackRef}
             className="flex rounded overflow-hidden border border-[#1a1d20] bg-[#0d0e10]"
-            style={{ height: "56px" }}
+            style={{ height: isEditorial ? "72px" : "56px" }}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
           >
-            {timedShots.map((shot) => {
-              const d = parsedDurations[shot.id] ?? 0;
-              const widthPct = (d / totalDuration) * 100;
-              const color = colorMap.get(shot.id) ?? SHOT_PALETTE[0];
+            {laneShots.map((shot) => {
+              const d = laneDur(shot);
+              const widthPct = (d / laneTotal) * 100;
+              const trimmed = hasValidTrim(shot);
+              const color = isEditorial
+                ? statusColor(shot)
+                : colorMap.get(shot.id) ?? SHOT_PALETTE[0];
+              const target = parsedDurations[shot.id];
+              const mismatch =
+                isEditorial &&
+                trimmed &&
+                target !== null &&
+                Math.abs(target - d) > 0.05;
+              const tooltipParts = [
+                shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title,
+              ];
+              if (isEditorial) {
+                if (trimmed) {
+                  tooltipParts.push(
+                    `Trim: ${shot.trimInSeconds!.toFixed(1)}s → ${shot.trimOutSeconds!.toFixed(1)}s`,
+                    `Effective: ${d.toFixed(1)}s`
+                  );
+                }
+                if (mismatch) tooltipParts.push(`Target: ${target!.toFixed(1)}s`);
+                if (shot.isPlaceholder) tooltipParts.push("Placeholder");
+                else if (!shot.hasApprovedVideo) tooltipParts.push("No video");
+              }
+              // The drag handle edits the target duration — on trimmed segments
+              // the width follows the trim instead, so the handle is hidden
+              const showHandle = !isEditorial || !trimmed;
               return (
                 <div
                   key={shot.id}
-                  style={{ width: `${widthPct}%` }}
+                  style={{
+                    width: `${widthPct}%`,
+                    minWidth: isEditorial ? "48px" : undefined,
+                  }}
                   className="relative flex border-r border-r-[#1a1d20] last:border-r-0 shrink-0"
                 >
                   <Link
                     href={`/projects/${projectId}/sequences/${sequenceId}/shots/${shot.id}`}
-                    style={{ borderLeftColor: color }}
+                    style={{
+                      borderLeftColor: color,
+                      backgroundColor: isEditorial && shot.isPlaceholder
+                        ? "rgba(205, 162, 79, 0.06)"
+                        : undefined,
+                    }}
                     className="flex-1 min-w-0 flex flex-col justify-between px-1.5 py-1.5 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden h-full"
-                    title={shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title}
+                    title={tooltipParts.join("\n")}
                   >
                     <span
                       className="text-[9px] font-mono truncate leading-none"
@@ -191,41 +301,79 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
                     >
                       {shot.shotCode ?? shot.title}
                     </span>
-                    <span className="text-[9px] font-mono text-[#4b5158] tabular-nums leading-none">
-                      {d.toFixed(1)}s
+                    {isEditorial && (
+                      <span className="text-[9px] text-[#4b5158] truncate leading-none">
+                        {shot.title}
+                      </span>
+                    )}
+                    <span className="text-[9px] font-mono tabular-nums leading-none truncate">
+                      <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
+                      {isEditorial && trimmed && (
+                        <span className="text-[#5b93d6]"> · Trimmed</span>
+                      )}
+                      {mismatch && (
+                        <span className="text-[#cda24f]"> · Target {target!.toFixed(1)}s</span>
+                      )}
                     </span>
                   </Link>
-                  {/* Right drag handle */}
-                  <div
-                    className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10"
-                    style={{ width: "10px" }}
-                    onPointerDown={(e) => {
-                      const dur = parsedDurations[shot.id];
-                      if (dur === null || !trackRef.current) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                      dragRef.current = {
-                        shotId: shot.id,
-                        pointerStartX: e.clientX,
-                        initialDur: dur,
-                        initialTotalDur: totalDuration,
-                        trackWidth: trackRef.current.clientWidth,
-                      };
-                    }}
-                  >
-                    <div className="w-0.5 h-4 rounded-full bg-white/25" />
-                  </div>
+                  {/* Right drag handle — edits the target duration */}
+                  {showHandle && (
+                    <div
+                      className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10"
+                      style={{ width: "10px" }}
+                      onPointerDown={(e) => {
+                        const dur = parsedDurations[shot.id];
+                        if (dur === null || !trackRef.current) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        dragRef.current = {
+                          shotId: shot.id,
+                          pointerStartX: e.clientX,
+                          initialDur: dur,
+                          initialTotalDur: laneTotal,
+                          trackWidth: trackRef.current.clientWidth,
+                        };
+                      }}
+                    >
+                      <div className="w-0.5 h-4 rounded-full bg-white/25" />
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-[9px] font-mono text-[#3a4046]">0s</span>
-            <span className="text-[9px] font-mono text-[#3a4046]">
-              {totalDuration.toFixed(1)}s
-            </span>
-          </div>
+          {isEditorial ? (
+            /* Timeline scale — labeled graduations */
+            <div className="relative mt-1" style={{ height: "14px" }}>
+              {(() => {
+                const step = tickStep(laneTotal);
+                const ticks: number[] = [];
+                for (let t = 0; t <= laneTotal + 0.001; t += step) ticks.push(t);
+                return ticks.map((t) => (
+                  <span
+                    key={t}
+                    className="absolute text-[9px] font-mono text-[#3a4046] -translate-x-1/2 first:translate-x-0"
+                    style={{ left: `${Math.min((t / laneTotal) * 100, 100)}%` }}
+                  >
+                    {t.toFixed(0)}s
+                  </span>
+                ));
+              })()}
+              <span
+                className="absolute right-0 text-[9px] font-mono text-[#4b5158]"
+              >
+                {laneTotal.toFixed(1)}s
+              </span>
+            </div>
+          ) : (
+            <div className="flex justify-between mt-1">
+              <span className="text-[9px] font-mono text-[#3a4046]">0s</span>
+              <span className="text-[9px] font-mono text-[#3a4046]">
+                {laneTotal.toFixed(1)}s
+              </span>
+            </div>
+          )}
         </>
       ) : (
         <p className="text-xs text-[#4b5158]">
@@ -234,7 +382,12 @@ export default function SequenceTimelineEditor({ shots, projectId, sequenceId, r
       )}
 
       {/* ── Inputs per shot ── */}
-      <div className="mt-4 flex flex-col gap-1.5">
+      {isEditorial && (
+        <p className="mt-4 text-[9px] uppercase tracking-wider text-[#4b5158]">
+          Target durations (seconds) — narrative intent, never changed by trims
+        </p>
+      )}
+      <div className={isEditorial ? "mt-1.5 flex flex-col gap-1.5" : "mt-4 flex flex-col gap-1.5"}>
         {shots.map((shot, i) => {
           const color = colorMap.get(shot.id);
           return (
