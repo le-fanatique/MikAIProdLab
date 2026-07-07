@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 export type PreviewShot = {
@@ -33,6 +33,10 @@ type Props = {
   shots: PreviewShot[];
   projectId: number;
   sequenceId: number;
+  /** Optional controlled selection — when set, the player follows it for playable shots. */
+  selectedShotId?: number | null;
+  /** Optional callback fired whenever the player's current shot changes. */
+  onShotSelect?: (shotId: number) => void;
 };
 
 function Badge({ shot }: { shot: PreviewShot }) {
@@ -61,6 +65,8 @@ export default function SequencePreviewPlayer({
   shots,
   projectId,
   sequenceId,
+  selectedShotId,
+  onShotSelect,
 }: Props) {
   // Indices (in the full shot list) of shots that can actually play
   const playableIndices = useMemo(
@@ -115,7 +121,27 @@ export default function SequencePreviewPlayer({
     setLoadError(null);
     pendingPlayRef.current = autoplay;
     advancedAtTrimOutRef.current = false;
+    // Report internal clip changes (playlist click, Prev/Next, auto-advance)
+    const shot = shots[index];
+    if (shot) onShotSelect?.(shot.id);
   }
+
+  // Follow an external selection when it points to a playable shot
+  useEffect(() => {
+    if (selectedShotId == null) return;
+    if (currentIndex !== null && shots[currentIndex]?.id === selectedShotId) return;
+    const index = shots.findIndex((s) => s.id === selectedShotId);
+    if (index >= 0 && shots[index].videoUrl) {
+      setCurrentIndex(index);
+      setIsEnded(false);
+      setLoadError(null);
+      pendingPlayRef.current = false;
+      advancedAtTrimOutRef.current = false;
+    }
+    // Non-playable selections are ignored by the player — the timeline still
+    // highlights them, and the current clip stays loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedShotId]);
 
   function advanceOrEnd() {
     if (currentIndex === null) return;

@@ -7,9 +7,8 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
-import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
 import EditorialShotList from "@/components/EditorialShotList";
-import SequencePreviewPlayer from "@/components/SequencePreviewPlayer";
+import EditorialWorkspace from "@/components/EditorialWorkspace";
 import { refImageUrl } from "@/lib/refImageUrl";
 
 export const dynamic = "force-dynamic";
@@ -76,52 +75,23 @@ export default async function SequenceEditorialPage({ params }: Props) {
         {sequence.title}
       </p>
 
-      {/* ── Timeline ─────────────────────────────────────────────── */}
-      <SectionLabel label="Timeline" />
-      <Card>
-        {shotList.length > 0 ? (
-          <SequenceTimelineEditor
-            shots={shotList.map((s) => ({
-              id: s.id,
-              shotCode: s.shotCode,
-              title: s.title,
-              durationSeconds: s.durationSeconds,
-              hasApprovedVideo: s.approvedVideoPath !== null,
-              isPlaceholder: s.title === "Placeholder",
-              trimInSeconds: s.trimInSeconds,
-              trimOutSeconds: s.trimOutSeconds,
-              videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
-            }))}
-            projectId={pid}
-            sequenceId={sid}
-            returnTo={editorialReturnTo}
-            variant="editorial"
-          />
-        ) : (
-          <p className="text-xs text-[#4b5158]">
-            No shots yet. Add a placeholder shot below to start blocking the rhythm.
-          </p>
-        )}
-      </Card>
-
-      {/* ── Sequence Preview ─────────────────────────────────────── */}
-      <SectionLabel label="Sequence Preview" />
-      <Card>
-        <SequencePreviewPlayer
-          shots={shotList.map((s) => ({
-            id: s.id,
-            shotCode: s.shotCode,
-            title: s.title,
-            durationSeconds: s.durationSeconds,
-            videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
-            isPlaceholder: s.title === "Placeholder",
-            trimInSeconds: s.trimInSeconds,
-            trimOutSeconds: s.trimOutSeconds,
-          }))}
-          projectId={pid}
-          sequenceId={sid}
-        />
-      </Card>
+      {/* ── Timeline + Sequence Preview (shared selection) ───────── */}
+      <EditorialWorkspace
+        shots={shotList.map((s) => ({
+          id: s.id,
+          shotCode: s.shotCode,
+          title: s.title,
+          durationSeconds: s.durationSeconds,
+          hasApprovedVideo: s.approvedVideoPath !== null,
+          isPlaceholder: s.title === "Placeholder",
+          trimInSeconds: s.trimInSeconds,
+          trimOutSeconds: s.trimOutSeconds,
+          videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
+        }))}
+        projectId={pid}
+        sequenceId={sid}
+        returnTo={editorialReturnTo}
+      />
 
       {/* ── Shot Order ───────────────────────────────────────────── */}
       <SectionLabel label="Shot Order" />
