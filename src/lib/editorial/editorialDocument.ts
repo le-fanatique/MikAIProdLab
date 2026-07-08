@@ -77,7 +77,17 @@ export type EditorialDocumentInputItem = {
     isPlaceholder: boolean;
   } | null;
   mediaUrl?: string | null;
+  /**
+   * Absolute position in seconds, once backfilled (sequence_editorial_items
+   * .start_seconds). Null/undefined falls back to cumulative derivation —
+   * the only behavior available before a caller starts passing this field.
+   */
+  startSeconds?: number | null;
 };
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
 const PLACEHOLDER_SHOT_FALLBACK_SECONDS = 1.0;
 
@@ -216,8 +226,15 @@ export function buildEditorialDocument(args: {
     const docItems: EditorialDocumentItem[] = [];
     for (const item of sorted) {
       const duration = getEditorialItemEffectiveDuration(item);
-      docItems.push(toDocumentItem(item, cursor, duration));
-      cursor += duration;
+      // Prefer a backfilled startSeconds; fall back to the running
+      // cumulative position otherwise (unchanged legacy behavior).
+      const start = isFiniteNumber(item.startSeconds) ? item.startSeconds : cursor;
+      docItems.push(toDocumentItem(item, start, duration));
+      // Never move the cursor backwards — a stored start that creates an
+      // empty space before the next item still advances the timeline
+      // correctly; a not-yet-backfilled item after a backfilled one still
+      // lands after everything that precedes it.
+      cursor = Math.max(cursor, start + duration);
     }
 
     tracks.push({

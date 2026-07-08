@@ -60,6 +60,7 @@ export default async function NlePrototypePage({ params }: Props) {
       durationSeconds: item.durationSeconds,
       trimInSeconds: item.trimInSeconds,
       trimOutSeconds: item.trimOutSeconds,
+      startSeconds: item.startSeconds,
       shot: shot
         ? {
             id: shot.id,
