@@ -24,6 +24,16 @@ const EFFECT_COLOR: Record<string, string> = {
   gap: "#4b5158",
 };
 
+// Subtle status tint behind each shot chip — reinforces the status color
+// without competing with the selected-state glow.
+const EFFECT_BG: Record<string, string> = {
+  "shot-approved": "rgba(107,158,114,0.08)",
+  "shot-placeholder": "rgba(205,162,79,0.08)",
+  "shot-missing": "rgba(207,123,107,0.08)",
+  shot: "rgba(164,171,178,0.05)",
+};
+
+// Full label — used in the Selected item panel, where there's room.
 const EFFECT_LABEL: Record<string, string> = {
   "shot-approved": "Approved shot",
   "shot-placeholder": "Placeholder shot",
@@ -32,37 +42,83 @@ const EFFECT_LABEL: Record<string, string> = {
   gap: "Gap",
 };
 
+// Short label — used inside the timeline chip itself, where space is tight.
+const EFFECT_LABEL_SHORT: Record<string, string> = {
+  "shot-approved": "Approved",
+  "shot-placeholder": "Placeholder",
+  "shot-missing": "Missing",
+  shot: "Shot",
+};
+
 function ActionBox({
   action,
+  item,
   isSelected,
 }: {
   action: TimelineEditorActionLike;
+  item: EditorialDocumentItem | undefined;
   isSelected: boolean;
 }) {
-  const color = EFFECT_COLOR[action.effectId] ?? "#a4abb2";
   const isGap = action.effectId === "gap";
+  const color = EFFECT_COLOR[action.effectId] ?? "#a4abb2";
   const duration = action.end - action.start;
+  const trimmed = item?.trimIn !== undefined && item?.trimOut !== undefined;
 
   return (
     <div
-      className="flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden px-2"
+      className="flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-sm px-2"
       style={{
-        borderLeft: `2px solid ${color}`,
+        borderLeft: isGap ? `2px dashed ${color}` : `2px solid ${color}`,
         background: isGap
           ? "repeating-linear-gradient(45deg, rgba(75,81,88,0.15), rgba(75,81,88,0.15) 4px, transparent 4px, transparent 8px)"
-          : "rgba(255,255,255,0.02)",
-        boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
+          : EFFECT_BG[action.effectId] ?? "rgba(255,255,255,0.02)",
+        boxShadow: isSelected
+          ? "0 0 0 1.5px #5b93d6, 0 0 10px rgba(91,147,214,0.4)"
+          : undefined,
       }}
     >
-      <span
-        className="truncate text-[9px] font-mono leading-none"
-        style={{ color }}
-      >
-        {EFFECT_LABEL[action.effectId] ?? action.effectId}
-      </span>
-      <span className="truncate text-[9px] font-mono text-[#6e767d] leading-none tabular-nums">
-        {duration.toFixed(1)}s
-      </span>
+      {isGap ? (
+        <>
+          <span className="truncate text-[9px] font-mono leading-none" style={{ color }}>
+            Gap
+          </span>
+          <span className="truncate text-[9px] font-mono text-[#6e767d] leading-none tabular-nums">
+            {duration.toFixed(1)}s
+          </span>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-1 overflow-hidden">
+            <span
+              className="shrink-0 truncate text-[9px] font-mono leading-none"
+              style={{ color }}
+            >
+              {item?.shotCode ?? "Shot"}
+            </span>
+            {item?.title && (
+              <span className="min-w-0 flex-1 truncate text-[9px] text-[#4b5158] leading-none">
+                {item.title}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 overflow-hidden">
+            <span
+              className="shrink-0 text-[9px] uppercase tracking-wide leading-none"
+              style={{ color }}
+            >
+              {EFFECT_LABEL_SHORT[action.effectId] ?? "Shot"}
+            </span>
+            {trimmed && (
+              <span className="shrink-0 text-[9px] text-[#5b93d6] leading-none">
+                Trimmed
+              </span>
+            )}
+            <span className="ml-auto shrink-0 text-[9px] font-mono text-[#6e767d] leading-none tabular-nums">
+              {duration.toFixed(1)}s
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -76,6 +132,16 @@ export default function NlePrototypeTimeline({
     () => toTimelineEditorData(document),
     [document]
   );
+
+  // Simple tick-spacing heuristic — picks a readable seconds-per-tick value
+  // from the document's total duration (no iterative/complex fitting).
+  const { tickSeconds, tickCount } = useMemo(() => {
+    const totalSeconds = Math.max(document.durationSeconds, 1);
+    const seconds =
+      totalSeconds <= 20 ? 2 : totalSeconds <= 60 ? 5 : totalSeconds <= 180 ? 15 : 30;
+    const count = Math.max(Math.ceil(totalSeconds / seconds) + 1, 5);
+    return { tickSeconds: seconds, tickCount: count };
+  }, [document.durationSeconds]);
 
   // Controlled when the parent passes selectedItemId (undefined = uncontrolled fallback).
   const isControlled = selectedItemId !== undefined;
@@ -114,15 +180,27 @@ export default function NlePrototypeTimeline({
           <Timeline
             editorData={rows}
             effects={effects}
-            style={{ width: "100%", height: 220 }}
+            style={{ width: "100%", height: 240 }}
             autoScroll
             disableDrag
             gridSnap={false}
             dragLine={false}
             hideCursor
-            rowHeight={40}
+            rowHeight={52}
+            scale={tickSeconds}
+            scaleWidth={64}
+            minScaleCount={tickCount}
+            getScaleRender={(scale) => (
+              <span className="text-[9px] font-mono text-[#4b5158] tabular-nums">
+                {scale}s
+              </span>
+            )}
             getActionRender={(action) => (
-              <ActionBox action={action} isSelected={action.id === selectedActionId} />
+              <ActionBox
+                action={action}
+                item={itemByActionId.get(action.id)}
+                isSelected={action.id === selectedActionId}
+              />
             )}
             onClickAction={(_e, { action }) => {
               const itemId = Number(action.id);
@@ -135,7 +213,7 @@ export default function NlePrototypeTimeline({
         ) : (
           <div
             className="flex items-center justify-center"
-            style={{ width: "100%", height: 220 }}
+            style={{ width: "100%", height: 240 }}
           >
             <span className="text-xs text-[#4b5158]">
               Loading timeline prototype…
