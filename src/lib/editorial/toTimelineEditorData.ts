@@ -45,7 +45,7 @@ export type TimelineEditorData = {
 };
 
 const EFFECT_LABELS: Record<string, string> = {
-  gap: "Gap",
+  "empty-space": "Empty space",
   "shot-approved": "Approved shot",
   "shot-placeholder": "Placeholder shot",
   "shot-missing": "Missing shot",
@@ -53,11 +53,14 @@ const EFFECT_LABELS: Record<string, string> = {
 };
 
 /**
- * gap -> "gap"; shot -> "shot-<status>" (approved/placeholder/missing);
- * a shot item with no status ever set falls back to the generic "shot".
+ * gap -> "empty-space" (UI vocabulary only — EditorialDocument.sourceType
+ * stays "gap"; a gap is not rendered as a clip-like item in this
+ * prototype, see PHASEC.NLE.C.F: gap = empty space, not an entity);
+ * shot -> "shot-<status>" (approved/placeholder/missing); a shot item
+ * with no status ever set falls back to the generic "shot".
  */
 function deriveEffectId(item: EditorialDocumentItem): string {
-  if (item.sourceType === "gap") return "gap";
+  if (item.sourceType === "gap") return "empty-space";
   if (item.status) return `shot-${item.status}`;
   return "shot";
 }

@@ -92,7 +92,7 @@ const EFFECT_COLOR: Record<string, string> = {
   "shot-placeholder": "#cda24f",
   "shot-missing": "#cf7b6b",
   shot: "#a4abb2",
-  gap: "#4b5158",
+  "empty-space": "#4b5158",
 };
 
 // Subtle status tint behind each shot chip — reinforces the status color
@@ -110,7 +110,7 @@ const EFFECT_LABEL: Record<string, string> = {
   "shot-placeholder": "Placeholder shot",
   "shot-missing": "Missing shot",
   shot: "Shot",
-  gap: "Gap",
+  "empty-space": "Empty space",
 };
 
 // Short label — used inside the timeline chip itself, where space is tight.
@@ -130,66 +130,70 @@ function ActionBox({
   item: EditorialDocumentItem | undefined;
   isSelected: boolean;
 }) {
-  const isGap = action.effectId === "gap";
+  const isEmptySpace = action.effectId === "empty-space";
   const color = EFFECT_COLOR[action.effectId] ?? "#a4abb2";
   const duration = action.end - action.start;
   const trimmed = item?.trimIn !== undefined && item?.trimOut !== undefined;
+
+  // Empty space is deliberately not styled as a clip — no persistent label,
+  // near-transparent, thin hairline only. It reads as "nothing here", not
+  // as an editorial item (see PHASEC.NLE.C.F/C.H: gap = empty space).
+  if (isEmptySpace) {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center overflow-hidden rounded-sm"
+        title={`Empty space · ${duration.toFixed(1)}s`}
+        style={{
+          background:
+            "repeating-linear-gradient(45deg, rgba(75,81,88,0.06), rgba(75,81,88,0.06) 4px, transparent 4px, transparent 8px)",
+          boxShadow: isSelected
+            ? "inset 0 0 0 1px rgba(91,147,214,0.5)"
+            : "inset 0 0 0 1px rgba(35,38,41,0.6)",
+        }}
+      />
+    );
+  }
 
   return (
     <div
       className="flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-sm px-2"
       style={{
-        borderLeft: isGap ? `2px dashed ${color}` : `2px solid ${color}`,
-        background: isGap
-          ? "repeating-linear-gradient(45deg, rgba(75,81,88,0.15), rgba(75,81,88,0.15) 4px, transparent 4px, transparent 8px)"
-          : EFFECT_BG[action.effectId] ?? "rgba(255,255,255,0.02)",
+        borderLeft: `2px solid ${color}`,
+        background: EFFECT_BG[action.effectId] ?? "rgba(255,255,255,0.02)",
         boxShadow: isSelected
           ? "0 0 0 1.5px #5b93d6, 0 0 10px rgba(91,147,214,0.4)"
           : undefined,
       }}
     >
-      {isGap ? (
-        <>
-          <span className="truncate text-[9px] font-mono leading-none" style={{ color }}>
-            Gap
+      <div className="flex items-center gap-1 overflow-hidden">
+        <span
+          className="shrink-0 truncate text-[9px] font-mono leading-none"
+          style={{ color }}
+        >
+          {item?.shotCode ?? "Shot"}
+        </span>
+        {item?.title && (
+          <span className="min-w-0 flex-1 truncate text-[9px] text-[#4b5158] leading-none">
+            {item.title}
           </span>
-          <span className="truncate text-[9px] font-mono text-[#6e767d] leading-none tabular-nums">
-            {duration.toFixed(1)}s
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 overflow-hidden">
+        <span
+          className="shrink-0 text-[9px] uppercase tracking-wide leading-none"
+          style={{ color }}
+        >
+          {EFFECT_LABEL_SHORT[action.effectId] ?? "Shot"}
+        </span>
+        {trimmed && (
+          <span className="shrink-0 text-[9px] text-[#5b93d6] leading-none">
+            Trimmed
           </span>
-        </>
-      ) : (
-        <>
-          <div className="flex items-center gap-1 overflow-hidden">
-            <span
-              className="shrink-0 truncate text-[9px] font-mono leading-none"
-              style={{ color }}
-            >
-              {item?.shotCode ?? "Shot"}
-            </span>
-            {item?.title && (
-              <span className="min-w-0 flex-1 truncate text-[9px] text-[#4b5158] leading-none">
-                {item.title}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 overflow-hidden">
-            <span
-              className="shrink-0 text-[9px] uppercase tracking-wide leading-none"
-              style={{ color }}
-            >
-              {EFFECT_LABEL_SHORT[action.effectId] ?? "Shot"}
-            </span>
-            {trimmed && (
-              <span className="shrink-0 text-[9px] text-[#5b93d6] leading-none">
-                Trimmed
-              </span>
-            )}
-            <span className="ml-auto shrink-0 text-[9px] font-mono text-[#6e767d] leading-none tabular-nums">
-              {duration.toFixed(1)}s
-            </span>
-          </div>
-        </>
-      )}
+        )}
+        <span className="ml-auto shrink-0 text-[9px] font-mono text-[#6e767d] leading-none tabular-nums">
+          {duration.toFixed(1)}s
+        </span>
+      </div>
     </div>
   );
 }
@@ -306,23 +310,29 @@ export default function NlePrototypeTimeline({
         <span className="text-[9px] uppercase tracking-wider text-[#4b5158] block mb-2">
           Selected item
         </span>
-        {selectedItem ? (
+        {selectedItem && selectedItem.sourceType === "gap" ? (
+          // Neutral — an empty space is not an editorial item: no status
+          // badge, no shotCode/title row, no actions.
+          <div className="flex flex-col gap-1 text-xs text-[#a4abb2]">
+            <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">
+              Empty space
+            </span>
+            <div className="flex items-center gap-4 flex-wrap font-mono tabular-nums text-[10px] text-[#6e767d]">
+              <span>Duration {selectedItem.duration.toFixed(1)}s</span>
+              <span className="italic text-[#4b5158]">Black hold preview</span>
+            </div>
+          </div>
+        ) : selectedItem ? (
           <div className="flex flex-col gap-1 text-xs text-[#a4abb2]">
             <div className="flex items-center gap-2 flex-wrap">
               <span
                 className="text-[9px] uppercase tracking-wider border rounded px-1.5 py-px shrink-0"
                 style={{
-                  color: EFFECT_COLOR[
-                    selectedItem.sourceType === "gap"
-                      ? "gap"
-                      : `shot-${selectedItem.status ?? "missing"}`
-                  ],
+                  color: EFFECT_COLOR[`shot-${selectedItem.status ?? "missing"}`],
                   borderColor: "#2c3035",
                 }}
               >
-                {selectedItem.sourceType === "gap"
-                  ? "Gap"
-                  : EFFECT_LABEL[`shot-${selectedItem.status ?? "missing"}`]}
+                {EFFECT_LABEL[`shot-${selectedItem.status ?? "missing"}`]}
               </span>
               {selectedItem.shotCode && (
                 <span className="font-mono text-[#6e767d]">{selectedItem.shotCode}</span>
