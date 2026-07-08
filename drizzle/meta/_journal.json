@@ -141,6 +141,13 @@
       "when": 1783387541038,
       "tag": "0019_strong_marvel_zombies",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1783529808843,
+      "tag": "0020_early_blade",
+      "breakpoints": true
     }
   ]
 }

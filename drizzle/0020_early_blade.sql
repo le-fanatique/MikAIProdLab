@@ -1,0 +1,1 @@
+ALTER TABLE `sequence_editorial_items` ADD `start_seconds` real;

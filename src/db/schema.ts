@@ -301,7 +301,8 @@ export type NewGenerationJob = typeof generationJobs.$inferInsert;
 // Editorial timeline items — gap-aware montage layer for a sequence.
 // Shots stay the narrative/production structure; these items carry the
 // editorial arrangement: order, gaps, per-occurrence trims. Time positions
-// are derived by accumulating item durations — no startTimeSeconds stored.
+// are still derived by accumulating item durations for now — startSeconds
+// below is additive-only (nullable, unread) until a future backfill ticket.
 // ---------------------------------------------------------------------------
 
 export const sequenceEditorialItems = sqliteTable(
@@ -322,6 +323,10 @@ export const sequenceEditorialItems = sqliteTable(
     trimOutSeconds: real("trim_out_seconds"),
     // Single-track V1 — column reserved for future multi-track
     trackIndex: int("track_index").notNull().default(0),
+    // Absolute position in seconds — additive, nullable, not yet backfilled
+    // or read by any code. NULL means "not backfilled yet" (never default 0,
+    // which would collide every unbackfilled item at the same position).
+    startSeconds: real("start_seconds"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
