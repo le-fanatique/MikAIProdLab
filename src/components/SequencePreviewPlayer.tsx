@@ -54,6 +54,19 @@ type Props = {
   items?: PreviewItem[];
   selectedItemId?: number | null;
   onItemSelect?: (itemId: number) => void;
+  /**
+   * Optional: reports elapsed time local to the currently loaded entry
+   * (video currentTime minus trimIn for a trimmed clip, 0-based otherwise;
+   * gap elapsed for a gap). Never a global timeline position — the player
+   * has no notion of where an entry sits in a larger document.
+   */
+  onTimeUpdate?: (localSeconds: number) => void;
+  /**
+   * Optional: request to seek a specific entry to a local offset once it
+   * becomes the loaded entry. Ignored for non-video entries. Pass a new
+   * requestId to trigger a fresh seek (e.g. clicking the same time twice).
+   */
+  seekRequest?: { itemKey: number; localSeconds: number; requestId: number } | null;
 };
 
 function hasValidTrim(entry: Entry): boolean {
@@ -117,6 +130,8 @@ export default function SequencePreviewPlayer({
   items,
   selectedItemId,
   onItemSelect,
+  onTimeUpdate,
+  seekRequest,
 }: Props) {
   const itemsMode = items !== undefined && items.length > 0;
 
@@ -173,6 +188,8 @@ export default function SequencePreviewPlayer({
   const consecutiveErrorsRef = useRef(0);
   // Guard: advance once per clip when the trim-out boundary is crossed
   const advancedAtTrimOutRef = useRef(false);
+  // Guard: apply a given seekRequest at most once
+  const consumedSeekRequestIdRef = useRef<number | null>(null);
 
   // Black hold gap playback — synthetic timer, no <video> involved
   const [gapPlaying, setGapPlaying] = useState(false);
@@ -243,6 +260,41 @@ export default function SequencePreviewPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSelectedKey]);
 
+  // Re-seek the entry that is *already* loaded when a new seekRequest
+  // targets it (clicking a different point within the same clip/gap).
+  // The case where the request causes a *new* entry to load is still
+  // handled by handleLoadedData below — both paths share
+  // consumedSeekRequestIdRef so a request is only ever applied once.
+  useEffect(() => {
+    if (!seekRequest || !currentEntry) return;
+    if (seekRequest.itemKey !== currentEntry.key) return;
+    if (consumedSeekRequestIdRef.current === seekRequest.requestId) return;
+
+    if (currentEntry.videoUrl) {
+      const video = videoRef.current;
+      // Not ready yet (freshly mounted after a selection change) — leave
+      // it unconsumed so handleLoadedData applies it once loading finishes.
+      if (!video || video.readyState < 1) return;
+      consumedSeekRequestIdRef.current = seekRequest.requestId;
+      const trimIn = hasValidTrim(currentEntry) ? currentEntry.trimInSeconds! : 0;
+      const trimOut = hasValidTrim(currentEntry)
+        ? currentEntry.trimOutSeconds!
+        : currentEntry.durationSeconds ?? Infinity;
+      video.currentTime = Math.min(
+        Math.max(trimIn + seekRequest.localSeconds, trimIn),
+        trimOut
+      );
+      advancedAtTrimOutRef.current = false;
+    } else if (currentEntry.kind === "gap") {
+      consumedSeekRequestIdRef.current = seekRequest.requestId;
+      const duration = currentEntry.durationSeconds ?? 0;
+      const clamped = Math.min(Math.max(seekRequest.localSeconds, 0), duration);
+      gapElapsedRef.current = clamped;
+      setGapElapsedDisplay(clamped);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekRequest, currentEntry?.key]);
+
   function advanceOrEnd() {
     if (currentIndex === null) return;
     const next = nextPlayableIndex(currentIndex);
@@ -260,13 +312,19 @@ export default function SequencePreviewPlayer({
 
   function handleTimeUpdate() {
     const video = videoRef.current;
-    if (!video || !currentEntry || !hasValidTrim(currentEntry)) return;
-    if (advancedAtTrimOutRef.current) return;
-    if (video.currentTime >= currentEntry.trimOutSeconds!) {
-      advancedAtTrimOutRef.current = true;
-      video.pause();
-      advanceOrEnd();
+    if (!video || !currentEntry) return;
+    if (hasValidTrim(currentEntry)) {
+      if (advancedAtTrimOutRef.current) return;
+      if (video.currentTime >= currentEntry.trimOutSeconds!) {
+        advancedAtTrimOutRef.current = true;
+        video.pause();
+        advanceOrEnd();
+        return;
+      }
+      onTimeUpdate?.(video.currentTime - currentEntry.trimInSeconds!);
+      return;
     }
+    onTimeUpdate?.(video.currentTime);
   }
 
   function handlePlay() {
@@ -288,6 +346,19 @@ export default function SequencePreviewPlayer({
     // Position trimmed clips at their trim in before playback
     if (video && currentEntry && hasValidTrim(currentEntry)) {
       video.currentTime = currentEntry.trimInSeconds!;
+    }
+    // Apply a pending seek request once, only when it targets the entry
+    // that just loaded (opt-in — no-op unless seekRequest is provided).
+    if (
+      video &&
+      currentEntry &&
+      seekRequest &&
+      seekRequest.itemKey === currentEntry.key &&
+      consumedSeekRequestIdRef.current !== seekRequest.requestId
+    ) {
+      consumedSeekRequestIdRef.current = seekRequest.requestId;
+      const trimIn = hasValidTrim(currentEntry) ? currentEntry.trimInSeconds! : 0;
+      video.currentTime = trimIn + seekRequest.localSeconds;
     }
     if (pendingPlayRef.current) {
       pendingPlayRef.current = false;
@@ -356,6 +427,7 @@ export default function SequencePreviewPlayer({
         return;
       }
       setGapElapsedDisplay(gapElapsedRef.current);
+      onTimeUpdate?.(gapElapsedRef.current);
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);

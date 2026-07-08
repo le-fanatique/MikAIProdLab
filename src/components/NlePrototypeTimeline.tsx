@@ -14,7 +14,78 @@ type Props = {
   /** Optional controlled selection — when provided (even null), the component follows it instead of tracking its own. */
   selectedItemId?: number | null;
   onSelectedItemChange?: (itemId: number | null) => void;
+  /** Global playhead position (seconds from the start of the document). Absent/null hides the playhead. */
+  currentTimeSeconds?: number | null;
+  /** Fired when the user clicks the playhead scrubber at a given global time, resolved to an item + local offset. */
+  onSeek?: (itemId: number, localSeconds: number) => void;
 };
+
+/** Linear scan — document sizes here are small (a handful to a few dozen items), no need for anything smarter. */
+function findItemAtTime(
+  document: EditorialDocument,
+  timeSeconds: number
+): EditorialDocumentItem | null {
+  for (const track of document.tracks) {
+    for (const item of track.items) {
+      if (timeSeconds >= item.start && timeSeconds < item.start + item.duration) {
+        return item;
+      }
+    }
+  }
+  return null;
+}
+
+function PlayheadScrubber({
+  document,
+  currentTimeSeconds,
+  onSeek,
+}: {
+  document: EditorialDocument;
+  currentTimeSeconds: number | null | undefined;
+  onSeek?: (itemId: number, localSeconds: number) => void;
+}) {
+  const totalSeconds = Math.max(document.durationSeconds, 1);
+  const pct =
+    currentTimeSeconds != null
+      ? Math.min(100, Math.max(0, (currentTimeSeconds / totalSeconds) * 100))
+      : 0;
+
+  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!onSeek) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const timeSeconds = ratio * totalSeconds;
+    const item = findItemAtTime(document, timeSeconds);
+    if (item) {
+      onSeek(item.id, timeSeconds - item.start);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-[#4b5158]">
+        <span>Playhead</span>
+        <span className="font-mono tabular-nums text-[#6e767d]">
+          Current time {(currentTimeSeconds ?? 0).toFixed(1)}s / {totalSeconds.toFixed(1)}s
+        </span>
+      </div>
+      <div
+        className={`relative h-3 rounded bg-[#0d0e10] border border-[#232629] ${
+          onSeek ? "cursor-pointer" : ""
+        }`}
+        onClick={handleClick}
+        title={onSeek ? "Click to seek" : undefined}
+      >
+        {currentTimeSeconds != null && (
+          <div className="absolute top-0 h-full" style={{ left: `${pct}%` }}>
+            <div className="absolute top-0 h-full w-px bg-[#5b93d6]" />
+            <div className="absolute -top-0.5 -left-[3px] w-[7px] h-[7px] rounded-full bg-[#5b93d6]" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const EFFECT_COLOR: Record<string, string> = {
   "shot-approved": "#6b9e72",
@@ -127,6 +198,8 @@ export default function NlePrototypeTimeline({
   document,
   selectedItemId,
   onSelectedItemChange,
+  currentTimeSeconds,
+  onSeek,
 }: Props) {
   const { rows, effects, itemByActionId } = useMemo(
     () => toTimelineEditorData(document),
@@ -174,6 +247,12 @@ export default function NlePrototypeTimeline({
           Editing is disabled in this prototype
         </span>
       </div>
+
+      <PlayheadScrubber
+        document={document}
+        currentTimeSeconds={currentTimeSeconds}
+        onSeek={onSeek}
+      />
 
       <div className="rounded border border-[#232629] bg-[#0d0e10] overflow-hidden">
         {isMounted ? (
