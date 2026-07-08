@@ -11,6 +11,9 @@ import {
 
 type Props = {
   document: EditorialDocument;
+  /** Optional controlled selection — when provided (even null), the component follows it instead of tracking its own. */
+  selectedItemId?: number | null;
+  onSelectedItemChange?: (itemId: number | null) => void;
 };
 
 const EFFECT_COLOR: Record<string, string> = {
@@ -64,13 +67,25 @@ function ActionBox({
   );
 }
 
-export default function NlePrototypeTimeline({ document }: Props) {
+export default function NlePrototypeTimeline({
+  document,
+  selectedItemId,
+  onSelectedItemChange,
+}: Props) {
   const { rows, effects, itemByActionId } = useMemo(
     () => toTimelineEditorData(document),
     [document]
   );
 
-  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  // Controlled when the parent passes selectedItemId (undefined = uncontrolled fallback).
+  const isControlled = selectedItemId !== undefined;
+  const [localSelectedActionId, setLocalSelectedActionId] = useState<string | null>(null);
+  const selectedActionId = isControlled
+    ? selectedItemId !== null
+      ? String(selectedItemId)
+      : null
+    : localSelectedActionId;
+
   const selectedItem: EditorialDocumentItem | null = selectedActionId
     ? itemByActionId.get(selectedActionId) ?? null
     : null;
@@ -110,7 +125,11 @@ export default function NlePrototypeTimeline({ document }: Props) {
               <ActionBox action={action} isSelected={action.id === selectedActionId} />
             )}
             onClickAction={(_e, { action }) => {
-              setSelectedActionId(action.id);
+              const itemId = Number(action.id);
+              onSelectedItemChange?.(Number.isNaN(itemId) ? null : itemId);
+              if (!isControlled) {
+                setLocalSelectedActionId(action.id);
+              }
             }}
           />
         ) : (

@@ -6,7 +6,8 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
-import NlePrototypeTimeline from "@/components/NlePrototypeTimeline";
+import NlePrototypeWorkspace from "@/components/NlePrototypeWorkspace";
+import type { PreviewShot, PreviewItem } from "@/components/SequencePreviewPlayer";
 import { refImageUrl } from "@/lib/refImageUrl";
 import {
   buildEditorialDocument,
@@ -78,6 +79,35 @@ export default async function NlePrototypePage({ params }: Props) {
     items: inputItems,
   });
 
+  // Same pattern as /editorial: fallback shots list + item-driven playlist,
+  // shaped for SequencePreviewPlayer (reused as-is, no changes to that component).
+  const previewShots: PreviewShot[] = shotList.map((s) => ({
+    id: s.id,
+    shotCode: s.shotCode,
+    title: s.title,
+    durationSeconds: s.durationSeconds,
+    videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
+    isPlaceholder: s.title === "Placeholder",
+    trimInSeconds: s.trimInSeconds,
+    trimOutSeconds: s.trimOutSeconds,
+  }));
+
+  const previewItems: PreviewItem[] = itemRows.map((item) => {
+    const shot = item.shotId !== null ? shotById.get(item.shotId) : undefined;
+    return {
+      itemId: item.id,
+      type: item.type,
+      shotId: item.shotId,
+      shotCode: shot?.shotCode ?? null,
+      title: shot?.title ?? null,
+      videoUrl: shot?.approvedVideoPath ? refImageUrl(shot.approvedVideoPath) : null,
+      durationSeconds: item.durationSeconds,
+      trimInSeconds: item.trimInSeconds,
+      trimOutSeconds: item.trimOutSeconds,
+      isPlaceholder: shot ? shot.title === "Placeholder" : false,
+    };
+  });
+
   const editorialHref = `/projects/${pid}/sequences/${sid}/editorial`;
 
   return (
@@ -119,9 +149,13 @@ export default async function NlePrototypePage({ params }: Props) {
           </p>
         </Card>
       ) : (
-        <Card>
-          <NlePrototypeTimeline document={document} />
-        </Card>
+        <NlePrototypeWorkspace
+          projectId={pid}
+          sequenceId={sid}
+          previewShots={previewShots}
+          previewItems={previewItems}
+          document={document}
+        />
       )}
     </div>
   );
