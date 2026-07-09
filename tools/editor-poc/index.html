@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MikAI Editorial Export POC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="editor-poc.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>MikAI Editorial Export POC</h1>
+    <p class="subtitle">
+      Reads a <code>mikai-editorial-export-v1</code> JSON document and renders it as a
+      read-only, proportional timeline. No round-trip, no writes, no external library.
+    </p>
+  </header>
+
+  <section class="controls">
+    <label class="file-picker">
+      <span>Load export file</span>
+      <input type="file" id="file-input" accept="application/json" />
+    </label>
+    <button type="button" id="load-sample-btn">Load sample export</button>
+    <span id="load-status" class="load-status"></span>
+  </section>
+
+  <section id="meta-panel" class="meta-panel" hidden>
+    <div>
+      <span class="meta-label">Schema</span>
+      <span id="meta-schema" class="meta-value"></span>
+    </div>
+    <div>
+      <span class="meta-label">Project</span>
+      <span id="meta-project" class="meta-value"></span>
+    </div>
+    <div>
+      <span class="meta-label">Sequence</span>
+      <span id="meta-sequence" class="meta-value"></span>
+    </div>
+    <div>
+      <span class="meta-label">Duration</span>
+      <span id="meta-duration" class="meta-value"></span>
+    </div>
+    <div>
+      <span class="meta-label">Exported at</span>
+      <span id="meta-exported-at" class="meta-value"></span>
+    </div>
+  </section>
+
+  <section id="timeline-panel" class="timeline-panel" hidden>
+    <h2>Timeline</h2>
+    <div id="timeline-tracks" class="timeline-tracks"></div>
+  </section>
+
+  <section id="detail-panel" class="detail-panel" hidden>
+    <h2>Selected item</h2>
+    <div id="detail-content" class="detail-content">
+      <p class="empty-hint">Click a shot or empty space on the timeline to see its details.</p>
+    </div>
+  </section>
+
+  <script src="editor-poc.js"></script>
+</body>
+</html>

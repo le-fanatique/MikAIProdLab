@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "mikai-editorial-export-v1",
+  "exportedAt": "2026-07-09T14:49:02.268Z",
+  "project": {
+    "id": 4,
+    "name": "King of the Office"
+  },
+  "sequence": {
+    "id": 30,
+    "title": "Opening — The Arrival",
+    "durationSeconds": 51.7
+  },
+  "tracks": [
+    {
+      "trackIndex": 0,
+      "items": [
+        {
+          "id": 1,
+          "shotId": 36,
+          "shotCode": "Sh1",
+          "title": "Shot 01: Office Arrival",
+          "status": "approved",
+          "startSeconds": 0,
+          "durationSeconds": 5,
+          "trimInSeconds": null,
+          "trimOutSeconds": null,
+          "approvedVideoPath": "uploads/shot-videos/shot-36/sample.mp4",
+          "mediaUrl": "/api/uploads/shot-videos/shot-36/sample.mp4",
+          "prompt": "A sleek black cat walks into the Whisker & Co. office interior.",
+          "description": "Max enters the Whisker & Co. office, greeted by fellow felines."
+        },
+        {
+          "id": 2,
+          "shotId": 37,
+          "shotCode": null,
+          "title": "Shot 02: Feline Greetings",
+          "status": "approved",
+          "startSeconds": 5,
+          "durationSeconds": 2.7,
+          "trimInSeconds": 0,
+          "trimOutSeconds": 2.7,
+          "approvedVideoPath": "uploads/shot-videos/shot-37/sample.mp4",
+          "mediaUrl": "/api/uploads/shot-videos/shot-37/sample.mp4",
+          "prompt": "Fellow felines acknowledge Max with respectful nods.",
+          "description": "Fellow felines greet Max with a nod and a head butt."
+        },
+        {
+          "id": 3,
+          "shotId": 39,
+          "shotCode": null,
+          "title": "Shot 04: Organization Check",
+          "status": "approved",
+          "startSeconds": 10.2,
+          "durationSeconds": 5,
+          "trimInSeconds": null,
+          "trimOutSeconds": null,
+          "approvedVideoPath": "uploads/shot-videos/shot-39/sample.mp4",
+          "mediaUrl": "/api/uploads/shot-videos/shot-39/sample.mp4",
+          "prompt": "Max checks the to-do list and files.",
+          "description": "Max conducts a quick organization check of Alex's workspace."
+        },
+        {
+          "id": 5,
+          "shotId": 40,
+          "shotCode": null,
+          "title": "Shot 05: Scheduling Meeting",
+          "status": "missing",
+          "startSeconds": 41.7,
+          "durationSeconds": 5,
+          "trimInSeconds": null,
+          "trimOutSeconds": null,
+          "approvedVideoPath": null,
+          "mediaUrl": null,
+          "prompt": "Max efficiently dials the number to schedule a meeting.",
+          "description": "Max picks up the phone and begins dialing a number for a meeting."
+        }
+      ]
+    }
+  ],
+  "emptySpaces": [
+    {
+      "trackIndex": 0,
+      "startSeconds": 7.7,
+      "durationSeconds": 2.5,
+      "previousItemId": 2,
+      "nextItemId": 3
+    },
+    {
+      "trackIndex": 0,
+      "startSeconds": 15.2,
+      "durationSeconds": 26.5,
+      "previousItemId": 3,
+      "nextItemId": 5
+    }
+  ]
+}
