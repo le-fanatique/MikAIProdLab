@@ -147,6 +147,7 @@ export default async function NlePrototypePage({ params }: Props) {
     .map((entry) => entry.previewItem);
 
   const editorialHref = `/projects/${pid}/sequences/${sid}/editorial`;
+  const editorialExportHref = `/api/projects/${pid}/sequences/${sid}/editorial-export`;
 
   return (
     <div>
@@ -162,12 +163,21 @@ export default async function NlePrototypePage({ params }: Props) {
       <PageHeader
         title="NLE Prototype"
         actions={
-          <Link
-            href={editorialHref}
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
-          >
-            ← Editorial
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={editorialExportHref}
+              target="_blank"
+              className="rounded border border-[#2c3035] text-[#6e767d] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors shrink-0"
+            >
+              Export Editorial JSON
+            </Link>
+            <Link
+              href={editorialHref}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
+            >
+              ← Editorial
+            </Link>
+          </div>
         }
       />
 
