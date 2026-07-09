@@ -13,6 +13,7 @@ import { db } from "@/db";
 import { projects, sequences, shots, sequenceEditorialItems } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { resolveEditorSidecarCorsHeaders } from "@/lib/cors/editorSidecarCors";
 import {
   buildEditorialDocument,
   type EditorialDocumentInputItem,
@@ -22,26 +23,49 @@ import {
   type EditorialExportShotExtra,
 } from "@/lib/editorial/editorialExport";
 
+/**
+ * Preflight for a cross-origin fetch (e.g. the OpenReel sidecar's
+ * "Open in Advanced Editor" bootstrap, NLE.OPENREEL.4) — same scoped
+ * allowlist as the uploads route, no wildcard.
+ */
+export async function OPTIONS(request: Request) {
+  const corsHeaders = resolveEditorSidecarCorsHeaders(request.headers.get("origin"));
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders ?? undefined,
+  });
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ projectId: string; sequenceId: string }> }
 ) {
+  const corsHeaders = resolveEditorSidecarCorsHeaders(request.headers.get("origin"));
   const { projectId, sequenceId } = await params;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
 
   if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(sid) || sid <= 0) {
-    return NextResponse.json({ ok: false, error: "Invalid project or sequence id." }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "Invalid project or sequence id." },
+      { status: 400, headers: corsHeaders ?? undefined }
+    );
   }
 
   const [project] = await db.select().from(projects).where(eq(projects.id, pid));
   if (!project) {
-    return NextResponse.json({ ok: false, error: "Project not found." }, { status: 404 });
+    return NextResponse.json(
+      { ok: false, error: "Project not found." },
+      { status: 404, headers: corsHeaders ?? undefined }
+    );
   }
 
   const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sid));
   if (!sequence || sequence.projectId !== pid) {
-    return NextResponse.json({ ok: false, error: "Sequence not found." }, { status: 404 });
+    return NextResponse.json(
+      { ok: false, error: "Sequence not found." },
+      { status: 404, headers: corsHeaders ?? undefined }
+    );
   }
 
   const shotList = await db
@@ -117,6 +141,7 @@ export async function GET(
     headers: {
       "Content-Type": "application/json",
       "Content-Disposition": `inline; filename="${filename}"`,
+      ...corsHeaders,
     },
   });
 }

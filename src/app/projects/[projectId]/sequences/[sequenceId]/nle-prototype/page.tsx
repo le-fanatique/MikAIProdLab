@@ -149,6 +149,21 @@ export default async function NlePrototypePage({ params }: Props) {
   const editorialHref = `/projects/${pid}/sequences/${sid}/editorial`;
   const editorialExportHref = `/api/projects/${pid}/sequences/${sid}/editorial-export`;
 
+  // Bridge to the external OpenReel sidecar (NLE.OPENREEL.4) — a fully
+  // separate local app, never vendored into this repo (see
+  // docs/NLE_VENDOR_DECISION_OPENREEL.md). The sidecar reads
+  // mikaiExportUrl on boot and fetches it itself, so this link only ever
+  // needs to carry an absolute, fetchable export URL — no server-side
+  // integration beyond that already-shipped route.
+  const mikaiOrigin = process.env.NEXT_PUBLIC_MIKAI_ORIGIN ?? "http://localhost:3000";
+  const sidecarOrigin = process.env.NEXT_PUBLIC_MIKAI_OPENREEL_SIDECAR_URL ?? "http://localhost:5173";
+  const absoluteExportUrl = `${mikaiOrigin}${editorialExportHref}`;
+  const advancedEditorHref = `${sidecarOrigin}/?${new URLSearchParams({
+    mikaiExportUrl: absoluteExportUrl,
+    mikaiProjectId: String(pid),
+    mikaiSequenceId: String(sid),
+  }).toString()}`;
+
   return (
     <div>
       <Breadcrumb
@@ -164,6 +179,14 @@ export default async function NlePrototypePage({ params }: Props) {
         title="NLE Prototype"
         actions={
           <div className="flex items-center gap-2">
+            <Link
+              href={advancedEditorHref}
+              target="_blank"
+              className="rounded border border-[#2c3035] text-[#6e767d] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#a4abb2] transition-colors shrink-0"
+              title="Opens the OpenReel sidecar editor in a new tab and loads this sequence"
+            >
+              Open in Advanced Editor
+            </Link>
             <Link
               href={editorialExportHref}
               target="_blank"
