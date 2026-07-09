@@ -53,6 +53,60 @@ For example: `http://localhost:3000/api/projects/4/sequences/30/editorial-export
 Save the response body as a `.json` file and load it via the POC's
 "Load export file" picker.
 
+## How to validate/apply a timing patch (NLE.PLUGIN.SYNC)
+
+MikAI now has a server-side import endpoint that closes the loop for
+`startSeconds`-only edits. This POC does **not** call it automatically
+(no fetch from the browser in this ticket — the priority was the API
+contract) — use `curl` or any HTTP client, pointing at a patch file
+exported via this POC's "Export Timing Patch" button.
+
+Endpoint:
+
+```text
+POST /api/projects/{projectId}/sequences/{sequenceId}/editorial-timing-patch
+```
+
+Body:
+
+```json
+{ "mode": "validate", "patch": { "...": "mikai-editorial-timing-patch-v1" } }
+```
+
+or:
+
+```json
+{ "mode": "apply", "patch": { "...": "mikai-editorial-timing-patch-v1" } }
+```
+
+`validate` never writes to the database, regardless of outcome —
+it only returns a plan (per-item current/next `startSeconds`) and any
+errors. `apply` writes only if the entire patch is valid; a single
+invalid item rejects the whole patch, no partial update.
+
+Example, given a patch file `mikai-sequence-30-timing-patch-v1.json`:
+
+```bash
+# Validate only — never writes
+curl -s -X POST http://localhost:3000/api/projects/4/sequences/30/editorial-timing-patch \
+  -H "Content-Type: application/json" \
+  -d "{\"mode\":\"validate\",\"patch\":$(cat mikai-sequence-30-timing-patch-v1.json)}"
+
+# Apply — writes startSeconds only, all-or-nothing
+curl -s -X POST http://localhost:3000/api/projects/4/sequences/30/editorial-timing-patch \
+  -H "Content-Type: application/json" \
+  -d "{\"mode\":\"apply\",\"patch\":$(cat mikai-sequence-30-timing-patch-v1.json)}"
+```
+
+**V1 only applies `startSeconds`.** The patch also carries
+`durationSeconds`, but the importer treats it as a consistency check,
+not an editable field: it must match the item's current effective
+duration within a small epsilon, or the entire patch is rejected with
+`"Duration changes are not supported by this importer yet."` — no
+`durationSeconds`/`trimInSeconds`/`trimOutSeconds` are ever written by
+this endpoint. `orderIndex` is likewise never read or written; reorder/
+intercalation stays a separate, future concern.
+
 ## How to edit timings locally
 
 1. Load a document (sample or your own export).
@@ -161,15 +215,27 @@ Deliberately minimal — timing only:
   no frame-accurate grid.
 - Overlap validation only considers shots on the same track within the
   in-memory document; it has no knowledge of what may have changed on
-  the MikAI side since the export was generated (that's a conflict
-  question for `NLE.PLUGIN.SYNC` to answer, not this POC).
+  the MikAI side since the export was generated. The server-side import
+  endpoint (see above) re-validates against the *current* DB state at
+  apply time, so a stale export can still be safely rejected there even
+  if this POC's local check passed against an older snapshot.
+- The POC itself still never calls the import endpoint — exporting a
+  patch and sending it to MikAI are two separate manual steps for now.
 
 ## Next step
 
-`NLE.PLUGIN.SYNC` is the next ticket: closing the loop by importing a
-timing patch like the one this POC produces back into
-`sequence_editorial_items` via a new, carefully bounded server action,
-reusing the ownership/validation patterns already established in
-`moveEditorialItem`/`updateEditorialItemTrim` — see
-`docs/NLE_PLUGIN_A_AUDIT.md` section 7 for the full proposed roadmap
-and scope guardrails for that ticket.
+The `NLE.PLUGIN.SYNC` import endpoint now exists (see above), but the
+loop is still manual: export a patch here, POST it with `curl`. Natural
+next steps, in rough order of value:
+
+1. Wire a "Send to MikAI" button in this POC that POSTs the current
+   patch to `editorial-timing-patch` with `mode: "validate"` first,
+   then `mode: "apply"` on confirmation — closing the loop without a
+   manual `curl` step (watch for CORS if the POC and MikAI dev server
+   run on different origins).
+2. Extend the importer beyond `startSeconds` once duration/trim editing
+   is deliberately in scope for a dedicated ticket — not a silent
+   widening of `NLE.PLUGIN.SYNC`'s V1 boundary.
+3. Decide on `orderIndex`/reorder sync as its own ticket (see
+   `docs/NLE_PLUGIN_A_AUDIT.md` for the broader roadmap) — this
+   importer intentionally never reads or writes it.
