@@ -1,16 +1,27 @@
 // ---------------------------------------------------------------------------
 // MikAI Editorial Export POC — reads a mikai-editorial-export-v1 JSON
-// document and renders it as a read-only, proportional timeline.
+// document, renders it as a proportional timeline, and allows local-only
+// timing edits (startSeconds/durationSeconds) that can be exported as a
+// mikai-editorial-timing-patch-v1 JSON patch.
 //
 // No framework, no external library, no build step. No writes anywhere,
-// no round-trip back to MikAI — this only ever reads a local File or the
-// bundled sample-editorial-export.json.
+// no round-trip back to MikAI — edits only ever mutate an in-memory copy
+// of the loaded document; "export patch" downloads a local file, it does
+// not call any MikAI route.
 // ---------------------------------------------------------------------------
 
 const EXPECTED_SCHEMA_VERSION = "mikai-editorial-export-v1";
+const PATCH_SCHEMA_VERSION = "mikai-editorial-timing-patch-v1";
+
+/** Gaps under this duration are treated as touching, not a real empty space — mirrors editorialDocument.ts. */
+const EMPTY_SPACE_EPSILON_SECONDS = 0.05;
+/** Two intervals separated by less than this are treated as touching, not overlapping — mirrors editorialTimeline.ts. */
+const OVERLAP_EPSILON_SECONDS = 0.05;
 
 const fileInput = document.getElementById("file-input");
 const loadSampleBtn = document.getElementById("load-sample-btn");
+const exportPatchBtn = document.getElementById("export-patch-btn");
+const resetChangesBtn = document.getElementById("reset-changes-btn");
 const loadStatus = document.getElementById("load-status");
 
 const metaPanel = document.getElementById("meta-panel");
@@ -25,9 +36,30 @@ const timelineTracks = document.getElementById("timeline-tracks");
 
 const detailPanel = document.getElementById("detail-panel");
 const detailContent = document.getElementById("detail-content");
+const editForm = document.getElementById("edit-form");
+const editStartInput = document.getElementById("edit-start-input");
+const editDurationInput = document.getElementById("edit-duration-input");
+const editApplyBtn = document.getElementById("edit-apply-btn");
+const editError = document.getElementById("edit-error");
 
+const patchPanel = document.getElementById("patch-panel");
+const patchSummary = document.getElementById("patch-summary");
+const patchPreview = document.getElementById("patch-preview");
+
+/** Pristine copy of the last loaded document — never mutated, restored by Reset Changes. */
+let originalDocument = null;
+/** Working copy — the only object timing edits ever touch. */
 let currentDocument = null;
+/** Item ids (sequence_editorial_items id) with local, unexported timing edits. */
+let modifiedItemIds = new Set();
+
 let selectedEl = null;
+let selectedEntry = null; // { kind: "shot", trackIndex, item } | { kind: "empty-space", trackIndex, ... }
+let elByKey = new Map();
+
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 function setStatus(message, isError) {
   loadStatus.textContent = message;
@@ -55,6 +87,132 @@ function validateExport(doc) {
   return doc;
 }
 
+// ---------------------------------------------------------------------------
+// Local derivation — mirrors src/lib/editorial/editorialDocument.ts's
+// deriveEmptySpaces so the POC's timeline stays consistent with MikAI's own
+// definition of empty space after a local edit, without importing any code
+// (this file has no build step / no access to src/).
+// ---------------------------------------------------------------------------
+
+function deriveEmptySpacesLocal(doc) {
+  const spaces = [];
+  for (const track of doc.tracks) {
+    const shotItems = [...track.items].sort((a, b) =>
+      a.startSeconds !== b.startSeconds ? a.startSeconds - b.startSeconds : a.id - b.id
+    );
+    let cursor = 0;
+    let previousId = null;
+    for (const shot of shotItems) {
+      if (shot.startSeconds > cursor + EMPTY_SPACE_EPSILON_SECONDS) {
+        spaces.push({
+          trackIndex: track.trackIndex,
+          startSeconds: cursor,
+          durationSeconds: shot.startSeconds - cursor,
+          previousItemId: previousId,
+          nextItemId: shot.id,
+        });
+      }
+      cursor = Math.max(cursor, shot.startSeconds + shot.durationSeconds);
+      previousId = shot.id;
+    }
+  }
+  return spaces;
+}
+
+/** Recomputes emptySpaces and sequence.durationSeconds in place after a timing edit. */
+function recomputeDerived(doc) {
+  doc.emptySpaces = deriveEmptySpacesLocal(doc);
+  let maxEnd = 0;
+  for (const track of doc.tracks) {
+    for (const item of track.items) {
+      maxEnd = Math.max(maxEnd, item.startSeconds + item.durationSeconds);
+    }
+  }
+  doc.sequence.durationSeconds = maxEnd;
+}
+
+/** Returns an error message (English) if the edit is invalid, or null if valid. */
+function validateTimingEdit(doc, trackIndex, itemId, startSeconds, durationSeconds) {
+  if (!Number.isFinite(startSeconds) || startSeconds < 0) {
+    return "Start seconds must be a number greater than or equal to 0.";
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return "Duration seconds must be a number greater than 0.";
+  }
+  const track = doc.tracks.find((t) => t.trackIndex === trackIndex);
+  if (!track) return null;
+
+  const end = startSeconds + durationSeconds;
+  for (const other of track.items) {
+    if (other.id === itemId) continue;
+    const otherEnd = other.startSeconds + other.durationSeconds;
+    const overlaps =
+      startSeconds < otherEnd - OVERLAP_EPSILON_SECONDS &&
+      end > other.startSeconds + OVERLAP_EPSILON_SECONDS;
+    if (overlaps) {
+      return `Overlaps shot "${other.shotCode ?? other.title ?? `#${other.id}`}" (${formatSeconds(
+        other.startSeconds
+      )} – ${formatSeconds(otherEnd)}).`;
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Timing patch (mikai-editorial-timing-patch-v1)
+// ---------------------------------------------------------------------------
+
+function buildPatch(doc, modifiedIds) {
+  const items = [];
+  for (const track of doc.tracks) {
+    for (const item of track.items) {
+      if (modifiedIds.has(item.id)) {
+        items.push({
+          id: item.id,
+          shotId: item.shotId,
+          startSeconds: item.startSeconds,
+          durationSeconds: item.durationSeconds,
+        });
+      }
+    }
+  }
+  return {
+    schemaVersion: PATCH_SCHEMA_VERSION,
+    sourceSchemaVersion: doc.schemaVersion,
+    projectId: doc.project.id,
+    sequenceId: doc.sequence.id,
+    createdAt: new Date().toISOString(),
+    items,
+  };
+}
+
+function downloadJson(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function renderPatchPreview() {
+  if (!currentDocument) {
+    patchPanel.hidden = true;
+    return;
+  }
+  const patch = buildPatch(currentDocument, modifiedItemIds);
+  patchPanel.hidden = false;
+  patchSummary.textContent = `${patch.items.length} modified item(s) — regenerated live as you edit.`;
+  patchPreview.textContent = JSON.stringify(patch, null, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
 function renderMeta(doc) {
   metaSchema.textContent = doc.schemaVersion;
   metaProject.textContent = `#${doc.project.id} — ${doc.project.name}`;
@@ -68,6 +226,7 @@ function renderDetail(entry) {
   detailPanel.hidden = false;
 
   if (entry.kind === "empty-space") {
+    editForm.hidden = true;
     detailContent.innerHTML = `
       <dl>
         <dt>Type</dt><dd>Empty space</dd>
@@ -82,9 +241,10 @@ function renderDetail(entry) {
   }
 
   const item = entry.item;
+  const modified = modifiedItemIds.has(item.id);
   detailContent.innerHTML = `
     <dl>
-      <dt>Type</dt><dd>Shot</dd>
+      <dt>Type</dt><dd>Shot${modified ? " (modified locally)" : ""}</dd>
       <dt>Item id</dt><dd>${item.id}</dd>
       <dt>Shot id</dt><dd>${item.shotId}</dd>
       <dt>Shot code</dt><dd>${item.shotCode ?? "—"}</dd>
@@ -101,18 +261,33 @@ function renderDetail(entry) {
       <dt>Description</dt><dd>${item.description ?? "—"}</dd>
     </dl>
   `;
+
+  editStartInput.value = item.startSeconds;
+  editDurationInput.value = item.durationSeconds;
+  editError.textContent = "";
+  editForm.hidden = false;
 }
 
-function selectTimelineEl(el, entry) {
+function selectEntry(el, entry) {
   if (selectedEl) selectedEl.classList.remove("selected");
   selectedEl = el;
+  selectedEntry = entry;
   el.classList.add("selected");
   renderDetail(entry);
 }
 
-function makeTimelineItemEl({ startSeconds, durationSeconds, totalSeconds, kind, statusClass, code, title }) {
+function keyForShot(id) {
+  return `shot-${id}`;
+}
+
+function keyForSpace(trackIndex, startSeconds) {
+  return `space-${trackIndex}-${startSeconds.toFixed(2)}`;
+}
+
+function makeTimelineItemEl({ startSeconds, durationSeconds, totalSeconds, kind, statusClass, code, title, modified }) {
   const el = document.createElement("div");
   el.className = `timeline-item ${kind === "empty-space" ? "empty-space" : `status-${statusClass}`}`;
+  if (modified) el.classList.add("modified");
   const leftPct = (startSeconds / totalSeconds) * 100;
   const widthPct = Math.max((durationSeconds / totalSeconds) * 100, 0.3);
   el.style.left = `${leftPct}%`;
@@ -127,7 +302,7 @@ function makeTimelineItemEl({ startSeconds, durationSeconds, totalSeconds, kind,
     titleEl.textContent = title ?? "";
     el.appendChild(codeEl);
     el.appendChild(titleEl);
-    el.title = `${code ?? "Shot"} · ${formatSeconds(durationSeconds)}`;
+    el.title = `${code ?? "Shot"} · ${formatSeconds(durationSeconds)}${modified ? " · modified" : ""}`;
   } else {
     el.title = `Empty space · ${formatSeconds(durationSeconds)}`;
   }
@@ -137,6 +312,7 @@ function makeTimelineItemEl({ startSeconds, durationSeconds, totalSeconds, kind,
 
 function renderTimeline(doc) {
   timelineTracks.innerHTML = "";
+  elByKey = new Map();
   const totalSeconds = Math.max(doc.sequence.durationSeconds, 1);
 
   for (const track of doc.tracks) {
@@ -157,10 +333,12 @@ function renderTimeline(doc) {
         statusClass: item.status,
         code: item.shotCode,
         title: item.title,
+        modified: modifiedItemIds.has(item.id),
       });
       el.addEventListener("click", () =>
-        selectTimelineEl(el, { kind: "shot", trackIndex: track.trackIndex, item })
+        selectEntry(el, { kind: "shot", trackIndex: track.trackIndex, item })
       );
+      elByKey.set(keyForShot(item.id), el);
       trackEl.appendChild(el);
     }
 
@@ -172,8 +350,9 @@ function renderTimeline(doc) {
         kind: "empty-space",
       });
       el.addEventListener("click", () =>
-        selectTimelineEl(el, { kind: "empty-space", trackIndex: track.trackIndex, ...space })
+        selectEntry(el, { kind: "empty-space", trackIndex: track.trackIndex, ...space })
       );
+      elByKey.set(keyForSpace(track.trackIndex, space.startSeconds), el);
       trackEl.appendChild(el);
     }
 
@@ -181,7 +360,30 @@ function renderTimeline(doc) {
   }
 
   timelinePanel.hidden = false;
+
+  // Re-apply selection to the freshly rendered element for the same item,
+  // so editing a shot doesn't lose its own selection/edit form.
+  if (selectedEntry && selectedEntry.kind === "shot") {
+    const el = elByKey.get(keyForShot(selectedEntry.item.id));
+    if (el) {
+      selectedEl = el;
+      el.classList.add("selected");
+    }
+  }
 }
+
+function resetDetailPanel() {
+  selectedEl = null;
+  selectedEntry = null;
+  detailPanel.hidden = true;
+  editForm.hidden = true;
+  detailContent.innerHTML =
+    '<p class="empty-hint">Click a shot or empty space on the timeline to see its details.</p>';
+}
+
+// ---------------------------------------------------------------------------
+// Load / reset
+// ---------------------------------------------------------------------------
 
 function loadDocument(doc, sourceLabel) {
   try {
@@ -190,13 +392,19 @@ function loadDocument(doc, sourceLabel) {
     setStatus(`Invalid export: ${err.message}`, true);
     return;
   }
-  currentDocument = doc;
-  selectedEl = null;
-  detailPanel.hidden = true;
-  detailContent.innerHTML = '<p class="empty-hint">Click a shot or empty space on the timeline to see its details.</p>';
-  renderMeta(doc);
-  renderTimeline(doc);
-  setStatus(`Loaded ${sourceLabel} — ${doc.tracks.reduce((n, t) => n + t.items.length, 0)} shot(s), ${doc.emptySpaces.length} empty space(s).`, false);
+  originalDocument = deepClone(doc);
+  currentDocument = deepClone(doc);
+  modifiedItemIds = new Set();
+  resetDetailPanel();
+  renderMeta(currentDocument);
+  renderTimeline(currentDocument);
+  renderPatchPreview();
+  exportPatchBtn.disabled = false;
+  resetChangesBtn.disabled = false;
+  setStatus(
+    `Loaded ${sourceLabel} — ${currentDocument.tracks.reduce((n, t) => n + t.items.length, 0)} shot(s), ${currentDocument.emptySpaces.length} empty space(s).`,
+    false
+  );
 }
 
 fileInput.addEventListener("change", () => {
@@ -223,4 +431,58 @@ loadSampleBtn.addEventListener("click", () => {
     })
     .then((doc) => loadDocument(doc, "sample-editorial-export.json"))
     .catch((err) => setStatus(`Could not load sample: ${err.message}`, true));
+});
+
+resetChangesBtn.addEventListener("click", () => {
+  if (!originalDocument) return;
+  currentDocument = deepClone(originalDocument);
+  modifiedItemIds = new Set();
+  resetDetailPanel();
+  renderMeta(currentDocument);
+  renderTimeline(currentDocument);
+  renderPatchPreview();
+  setStatus("Local changes reset to the loaded document.", false);
+});
+
+editApplyBtn.addEventListener("click", () => {
+  if (!currentDocument || !selectedEntry || selectedEntry.kind !== "shot") return;
+
+  const startSeconds = parseFloat(editStartInput.value);
+  const durationSeconds = parseFloat(editDurationInput.value);
+  const { trackIndex } = selectedEntry;
+  const itemId = selectedEntry.item.id;
+
+  const error = validateTimingEdit(currentDocument, trackIndex, itemId, startSeconds, durationSeconds);
+  if (error) {
+    editError.textContent = error;
+    return;
+  }
+  editError.textContent = "";
+
+  const track = currentDocument.tracks.find((t) => t.trackIndex === trackIndex);
+  const item = track.items.find((i) => i.id === itemId);
+  item.startSeconds = startSeconds;
+  item.durationSeconds = durationSeconds;
+  modifiedItemIds.add(itemId);
+
+  recomputeDerived(currentDocument);
+  selectedEntry = { kind: "shot", trackIndex, item };
+
+  renderMeta(currentDocument);
+  renderTimeline(currentDocument);
+  renderDetail(selectedEntry);
+  renderPatchPreview();
+  setStatus(`Applied local edit to item #${itemId}.`, false);
+});
+
+exportPatchBtn.addEventListener("click", () => {
+  if (!currentDocument) return;
+  const patch = buildPatch(currentDocument, modifiedItemIds);
+  if (patch.items.length === 0) {
+    setStatus("No local changes to export — edit a shot's timing first.", true);
+    return;
+  }
+  const filename = `mikai-sequence-${currentDocument.sequence.id}-timing-patch-v1.json`;
+  downloadJson(patch, filename);
+  setStatus(`Exported ${filename} with ${patch.items.length} item(s).`, false);
 });

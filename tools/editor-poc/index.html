@@ -10,8 +10,10 @@
   <header class="header">
     <h1>MikAI Editorial Export POC</h1>
     <p class="subtitle">
-      Reads a <code>mikai-editorial-export-v1</code> JSON document and renders it as a
-      read-only, proportional timeline. No round-trip, no writes, no external library.
+      Reads a <code>mikai-editorial-export-v1</code> JSON document, renders it as a
+      proportional timeline, and allows local-only timing edits that can be exported
+      as a <code>mikai-editorial-timing-patch-v1</code> JSON patch. No round-trip, no
+      writes to MikAI, no external library.
     </p>
   </header>
 
@@ -21,6 +23,8 @@
       <input type="file" id="file-input" accept="application/json" />
     </label>
     <button type="button" id="load-sample-btn">Load sample export</button>
+    <button type="button" id="export-patch-btn" disabled>Export Timing Patch</button>
+    <button type="button" id="reset-changes-btn" disabled>Reset Changes</button>
     <span id="load-status" class="load-status"></span>
   </section>
 
@@ -57,6 +61,27 @@
     <div id="detail-content" class="detail-content">
       <p class="empty-hint">Click a shot or empty space on the timeline to see its details.</p>
     </div>
+    <div id="edit-form" class="edit-form" hidden>
+      <h3>Edit timing (local only)</h3>
+      <div class="edit-fields">
+        <label>
+          <span>Start seconds</span>
+          <input type="number" id="edit-start-input" step="0.1" min="0" />
+        </label>
+        <label>
+          <span>Duration seconds</span>
+          <input type="number" id="edit-duration-input" step="0.1" min="0.1" />
+        </label>
+        <button type="button" id="edit-apply-btn">Apply</button>
+      </div>
+      <p id="edit-error" class="edit-error"></p>
+    </div>
+  </section>
+
+  <section id="patch-panel" class="patch-panel" hidden>
+    <h2>Timing patch preview</h2>
+    <p id="patch-summary" class="patch-summary"></p>
+    <pre id="patch-preview" class="patch-preview"></pre>
   </section>
 
   <script src="editor-poc.js"></script>

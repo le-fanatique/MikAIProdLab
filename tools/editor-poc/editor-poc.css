@@ -82,9 +82,29 @@ body {
   cursor: pointer;
 }
 
-#load-sample-btn:hover {
+#load-sample-btn:hover,
+#export-patch-btn:hover:not(:disabled),
+#reset-changes-btn:hover:not(:disabled) {
   border-color: var(--border-strong);
   color: var(--text);
+}
+
+#export-patch-btn,
+#reset-changes-btn {
+  align-self: flex-end;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#export-patch-btn:disabled,
+#reset-changes-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .load-status {
@@ -196,6 +216,22 @@ body {
   box-shadow: 0 0 0 1.5px var(--accent), 0 0 8px rgba(91, 147, 214, 0.4);
 }
 
+.timeline-item.modified::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.timeline-item.modified.selected {
+  box-shadow: 0 0 0 1.5px var(--accent), 0 0 8px rgba(91, 147, 214, 0.4),
+    inset 0 0 0 1px rgba(91, 147, 214, 0.5);
+}
+
 .timeline-item .item-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
@@ -273,5 +309,99 @@ body {
 .empty-hint {
   color: var(--text-faintest);
   font-size: 12px;
+  margin: 0;
+}
+
+.edit-form {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.edit-form h3 {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faintest);
+  margin: 0 0 8px;
+}
+
+.edit-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.edit-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faintest);
+}
+
+.edit-fields input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+  width: 110px;
+}
+
+.edit-fields input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#edit-apply-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#edit-apply-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.edit-error {
+  color: var(--missing);
+  font-size: 11px;
+  margin: 8px 0 0;
+  min-height: 14px;
+}
+
+.patch-panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 14px;
+  margin-top: 20px;
+}
+
+.patch-summary {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+}
+
+.patch-preview {
+  max-height: 240px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  word-break: break-all;
   margin: 0;
 }
