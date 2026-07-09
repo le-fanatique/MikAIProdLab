@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Timeline } from "@xzdarcy/react-timeline-editor";
 import "@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css";
-import type { EditorialDocument, EditorialDocumentItem } from "@/lib/editorial/editorialDocument";
+import {
+  deriveEmptySpaces,
+  getEmptySpacePreviewItemId,
+  type EditorialDocument,
+  type EditorialDocumentItem,
+} from "@/lib/editorial/editorialDocument";
 import {
   toTimelineEditorData,
   type TimelineEditorActionLike,
 } from "@/lib/editorial/toTimelineEditorData";
+import { moveEditorialItem } from "@/actions/editorialTimeline";
 
 type Props = {
   document: EditorialDocument;
+  projectId: number;
+  sequenceId: number;
   /** Optional controlled selection — when provided (even null), the component follows it instead of tracking its own. */
   selectedItemId?: number | null;
   onSelectedItemChange?: (itemId: number | null) => void;
@@ -20,16 +28,35 @@ type Props = {
   onSeek?: (itemId: number, localSeconds: number) => void;
 };
 
+// Seekable geometry for the scrubber — shots + derived empty spaces only,
+// exactly the same segments the timeline actions and previewItems are
+// built from (PHASEC.NLE.C.M1.R2). Legacy gap rows are never consulted
+// here, so a click can never resolve to a legacy gap's DB id.
+type SeekSegment =
+  | { kind: "shot"; itemId: number; start: number; duration: number }
+  | { kind: "empty-space"; previewItemId: number; start: number; duration: number };
+
 /** Linear scan — document sizes here are small (a handful to a few dozen items), no need for anything smarter. */
-function findItemAtTime(
+function findSeekSegmentAtTime(
   document: EditorialDocument,
   timeSeconds: number
-): EditorialDocumentItem | null {
+): SeekSegment | null {
   for (const track of document.tracks) {
     for (const item of track.items) {
+      if (item.sourceType !== "shot") continue;
       if (timeSeconds >= item.start && timeSeconds < item.start + item.duration) {
-        return item;
+        return { kind: "shot", itemId: item.id, start: item.start, duration: item.duration };
       }
+    }
+  }
+  for (const space of deriveEmptySpaces(document)) {
+    if (timeSeconds >= space.start && timeSeconds < space.start + space.duration) {
+      return {
+        kind: "empty-space",
+        previewItemId: getEmptySpacePreviewItemId(space),
+        start: space.start,
+        duration: space.duration,
+      };
     }
   }
   return null;
@@ -55,9 +82,13 @@ function PlayheadScrubber({
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     const timeSeconds = ratio * totalSeconds;
-    const item = findItemAtTime(document, timeSeconds);
-    if (item) {
-      onSeek(item.id, timeSeconds - item.start);
+    const segment = findSeekSegmentAtTime(document, timeSeconds);
+    if (!segment) return;
+    const localSeconds = timeSeconds - segment.start;
+    if (segment.kind === "shot") {
+      onSeek(segment.itemId, localSeconds);
+    } else {
+      onSeek(segment.previewItemId, localSeconds);
     }
   }
 
@@ -200,6 +231,8 @@ function ActionBox({
 
 export default function NlePrototypeTimeline({
   document,
+  projectId,
+  sequenceId,
   selectedItemId,
   onSelectedItemChange,
   currentTimeSeconds,
@@ -209,6 +242,57 @@ export default function NlePrototypeTimeline({
     () => toTimelineEditorData(document),
     [document]
   );
+
+  const [, startTransition] = useTransition();
+  const returnTo = `/projects/${projectId}/sequences/${sequenceId}/nle-prototype`;
+
+  // Fires once per drag, on drop only — never during the drag itself.
+  // Clamp is a safety net (the library should already respect
+  // action.minStart/maxEnd); snap rounds to 0.1s and pulls to a neighbor
+  // edge when close, then persists via moveEditorialItem. If the server
+  // rejects the move (overlap, stale data), the next data refresh from
+  // the redirect brings the item back to its last real position — no
+  // separate client-side rollback state is needed.
+  function handleMoveEnd({
+    action,
+    start,
+  }: {
+    action: TimelineEditorActionLike;
+    row: { id: string };
+    start: number;
+    end: number;
+  }) {
+    const item = itemByActionId.get(action.id);
+    if (!item || item.sourceType !== "shot") return;
+
+    const minStart = action.minStart ?? 0;
+    const maxStart =
+      action.maxEnd !== undefined && Number.isFinite(action.maxEnd)
+        ? action.maxEnd - item.duration
+        : Infinity;
+
+    let target = Math.min(Math.max(start, minStart), maxStart);
+    target = Math.round(target * 10) / 10; // snap to 0.1s
+
+    const EDGE_SNAP_THRESHOLD = 0.15;
+    if (Number.isFinite(minStart) && Math.abs(target - minStart) <= EDGE_SNAP_THRESHOLD) {
+      target = minStart;
+    } else if (Number.isFinite(maxStart) && Math.abs(target - maxStart) <= EDGE_SNAP_THRESHOLD) {
+      target = maxStart;
+    }
+    target = Math.max(target, 0);
+
+    const fd = new FormData();
+    fd.set("projectId", String(projectId));
+    fd.set("sequenceId", String(sequenceId));
+    fd.set("itemId", String(item.id));
+    fd.set("newStartSeconds", target.toFixed(1));
+    fd.set("returnTo", returnTo);
+
+    startTransition(() => {
+      moveEditorialItem(fd);
+    });
+  }
 
   // Simple tick-spacing heuristic — picks a readable seconds-per-tick value
   // from the document's total duration (no iterative/complex fitting).
@@ -245,10 +329,10 @@ export default function NlePrototypeTimeline({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <span className="text-xs text-[#6e767d]">
-          Read-only timeline prototype
+          Drag shots to move them
         </span>
         <span className="text-[9px] uppercase tracking-wider text-[#cda24f] border border-[#3d3423] rounded px-1.5 py-px">
-          Editing is disabled in this prototype
+          Resize, split, and reorder are disabled
         </span>
       </div>
 
@@ -265,7 +349,6 @@ export default function NlePrototypeTimeline({
             effects={effects}
             style={{ width: "100%", height: 240 }}
             autoScroll
-            disableDrag
             gridSnap={false}
             dragLine={false}
             hideCursor
@@ -285,13 +368,14 @@ export default function NlePrototypeTimeline({
                 isSelected={action.id === selectedActionId}
               />
             )}
-            onClickAction={(_e, { action }) => {
+            onClickActionOnly={(_e, { action }) => {
               const itemId = Number(action.id);
               onSelectedItemChange?.(Number.isNaN(itemId) ? null : itemId);
               if (!isControlled) {
                 setLocalSelectedActionId(action.id);
               }
             }}
+            onActionMoveEnd={(params) => handleMoveEnd(params)}
           />
         ) : (
           <div

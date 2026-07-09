@@ -252,3 +252,70 @@ export function buildEditorialDocument(args: {
 
   return { projectId, sequenceId, tracks, durationSeconds };
 }
+
+export type EditorialEmptySpace = {
+  id: string;
+  trackIndex: number;
+  start: number;
+  duration: number;
+  previousItemId: number | null;
+  nextItemId: number | null;
+};
+
+/** Gaps under this duration are treated as touching, not a real empty space. */
+const EMPTY_SPACE_EPSILON_SECONDS = 0.05;
+
+/**
+ * Derives empty-space intervals between shot-backed items on each track,
+ * purely from their positions. Legacy "gap" items in the DB are never
+ * consulted here — see PHASEC.NLE.C.M1.R1: once startSeconds exists,
+ * a gap row is technical-only data, and empty space becomes a derived
+ * property of shot positions rather than a stored entity. Never stored,
+ * never mutates input, deterministic for a given document.
+ */
+export function deriveEmptySpaces(document: EditorialDocument): EditorialEmptySpace[] {
+  const spaces: EditorialEmptySpace[] = [];
+
+  for (const track of document.tracks) {
+    const shotItems = track.items
+      .filter((it) => it.sourceType === "shot")
+      .slice()
+      .sort((a, b) => (a.start !== b.start ? a.start - b.start : a.id - b.id));
+
+    let cursor = 0;
+    let previousId: number | null = null;
+
+    for (const shot of shotItems) {
+      if (shot.start > cursor + EMPTY_SPACE_EPSILON_SECONDS) {
+        const start = cursor;
+        const duration = shot.start - cursor;
+        spaces.push({
+          id: `empty-space-${track.id}-${start}-${duration}`,
+          trackIndex: track.id,
+          start,
+          duration,
+          previousItemId: previousId,
+          nextItemId: shot.id,
+        });
+      }
+      cursor = Math.max(cursor, shot.start + shot.duration);
+      previousId = shot.id;
+    }
+  }
+
+  return spaces;
+}
+
+/**
+ * Deterministic, content-derived numeric id for a derived empty space —
+ * negative, so it never collides with a real (positive, autoincrement)
+ * sequence_editorial_items id. Computed purely from the space's own
+ * trackIndex/start, never from array position, so independent call sites
+ * (preview items, timeline actions, scrubber seek) that each call
+ * deriveEmptySpaces on the same document always agree on the same id for
+ * the same space — no shared iteration order to keep in sync (PHASEC.NLE
+ * .C.M1.R2). Never a legacy gap row's real DB id.
+ */
+export function getEmptySpacePreviewItemId(space: EditorialEmptySpace): number {
+  return -1 - space.trackIndex * 1_000_000 - Math.round(space.start * 10);
+}

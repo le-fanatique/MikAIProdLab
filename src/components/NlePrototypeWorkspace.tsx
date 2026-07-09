@@ -7,7 +7,11 @@ import SequencePreviewPlayer, {
   type PreviewItem,
 } from "@/components/SequencePreviewPlayer";
 import NlePrototypeTimeline from "@/components/NlePrototypeTimeline";
-import type { EditorialDocument } from "@/lib/editorial/editorialDocument";
+import {
+  deriveEmptySpaces,
+  getEmptySpacePreviewItemId,
+  type EditorialDocument,
+} from "@/lib/editorial/editorialDocument";
 
 type Props = {
   projectId: number;
@@ -55,12 +59,19 @@ export default function NlePrototypeWorkspace({
     setLocalTimeSeconds(0);
   }, [selectedItemId]);
 
+  // Shots + derived empty spaces only — legacy gap rows are never a valid
+  // lookup key here (PHASEC.NLE.C.M1.R2), so the playhead keeps working
+  // correctly whether the current selection is a shot or a synthetic
+  // empty-space entry.
   const itemStartById = useMemo(() => {
     const map = new Map<number, number>();
     for (const track of document.tracks) {
       for (const item of track.items) {
-        map.set(item.id, item.start);
+        if (item.sourceType === "shot") map.set(item.id, item.start);
       }
+    }
+    for (const space of deriveEmptySpaces(document)) {
+      map.set(getEmptySpacePreviewItemId(space), space.start);
     }
     return map;
   }, [document]);
@@ -96,6 +107,8 @@ export default function NlePrototypeWorkspace({
       <Card>
         <NlePrototypeTimeline
           document={document}
+          projectId={projectId}
+          sequenceId={sequenceId}
           selectedItemId={selectedItemId}
           onSelectedItemChange={setSelectedItemId}
           currentTimeSeconds={currentTimeSeconds}

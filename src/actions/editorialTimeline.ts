@@ -5,6 +5,7 @@ import { sequences, sequenceEditorialItems, NewSequenceEditorialItem } from "@/d
 import { eq, asc, and, gt } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { getEditorialItemEffectiveDuration } from "@/lib/editorial/editorialDocument";
 
 const MAX_TRIM_SECONDS = 36000; // generic server bound — video duration is client-side only
 /** Epsilon: gap durations ≤ this are treated as zero and removed. */
@@ -315,6 +316,148 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
   if (result.changed) {
     revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
     revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/editorial`);
+  }
+
+  redirect(returnTo);
+}
+
+// ---------------------------------------------------------------------------
+// moveEditorialItem — non-ripple move of a shot-backed item (PHASEC.NLE.C.M1)
+// Writes startSeconds only. Does not touch orderIndex, durationSeconds,
+// trims, shotId, or trackIndex, and never creates/deletes a gap item —
+// moving into an empty space is exactly the point, no bookkeeping needed
+// beyond the moved item's own position.
+// ---------------------------------------------------------------------------
+
+/** Two intervals separated by less than this are treated as touching, not overlapping. */
+const OVERLAP_EPSILON_SECONDS = 0.05;
+
+/**
+ * Moves a "shot" editorial item to a new absolute startSeconds.
+ *
+ * - Only shot-backed items (type === "shot", shotId set) can move.
+ * - Rejects (no write) if the target position is invalid or overlaps
+ *   another shot item on the same track — gap items are never obstacles,
+ *   see toTimelineEditorData's module doc for why.
+ * - orderIndex is intentionally left untouched; a future "sync order"
+ *   ticket will reconcile it with the new temporal arrangement.
+ */
+export async function moveEditorialItem(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const itemId = parseInt(formData.get("itemId") as string, 10);
+  const newStartRaw = parseFloat((formData.get("newStartSeconds") as string | null) ?? "");
+  const returnToRaw = formData.get("returnTo");
+  const returnTo =
+    typeof returnToRaw === "string" && returnToRaw.trim().startsWith("/")
+      ? returnToRaw.trim()
+      : `/projects/${projectId}/sequences/${sequenceId}/nle-prototype`;
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(itemId) || itemId <= 0 ||
+    !Number.isFinite(newStartRaw) || newStartRaw < 0
+  ) {
+    redirect(returnTo);
+  }
+
+  const now = new Date().toISOString();
+  const result = db.transaction((tx) => {
+    // Ownership: sequence → project
+    const seqRows = tx
+      .select({ id: sequences.id, projectId: sequences.projectId })
+      .from(sequences)
+      .where(eq(sequences.id, sequenceId)) as unknown as { id: number; projectId: number }[];
+    const seq = seqRows[0];
+    if (!seq || seq.projectId !== projectId) return { changed: false };
+
+    // Item must exist, belong to the sequence, be a shot-backed item
+    const itemRows = tx
+      .select({
+        id: sequenceEditorialItems.id,
+        sequenceId: sequenceEditorialItems.sequenceId,
+        type: sequenceEditorialItems.type,
+        shotId: sequenceEditorialItems.shotId,
+        trackIndex: sequenceEditorialItems.trackIndex,
+        durationSeconds: sequenceEditorialItems.durationSeconds,
+        trimInSeconds: sequenceEditorialItems.trimInSeconds,
+        trimOutSeconds: sequenceEditorialItems.trimOutSeconds,
+      })
+      .from(sequenceEditorialItems)
+      .where(eq(sequenceEditorialItems.id, itemId)) as unknown as {
+        id: number; sequenceId: number; type: string; shotId: number | null;
+        trackIndex: number; durationSeconds: number | null;
+        trimInSeconds: number | null; trimOutSeconds: number | null;
+      }[];
+    const item = itemRows[0];
+    if (!item || item.sequenceId !== sequenceId) return { changed: false };
+    if (item.type !== "shot" || item.shotId == null) return { changed: false };
+
+    const duration = getEditorialItemEffectiveDuration({
+      type: "shot",
+      durationSeconds: item.durationSeconds,
+      trimInSeconds: item.trimInSeconds,
+      trimOutSeconds: item.trimOutSeconds,
+    } as unknown as Parameters<typeof getEditorialItemEffectiveDuration>[0]);
+    if (duration <= 0) return { changed: false };
+
+    const newStart = newStartRaw;
+    const newEnd = newStart + duration;
+
+    // Overlap check against other shot items on the same track only —
+    // gap items are transparent to movement, never obstacles.
+    const siblingRows = tx
+      .select({
+        id: sequenceEditorialItems.id,
+        type: sequenceEditorialItems.type,
+        startSeconds: sequenceEditorialItems.startSeconds,
+        durationSeconds: sequenceEditorialItems.durationSeconds,
+        trimInSeconds: sequenceEditorialItems.trimInSeconds,
+        trimOutSeconds: sequenceEditorialItems.trimOutSeconds,
+      })
+      .from(sequenceEditorialItems)
+      .where(
+        and(
+          eq(sequenceEditorialItems.sequenceId, sequenceId),
+          eq(sequenceEditorialItems.trackIndex, item.trackIndex)
+        )
+      ) as unknown as {
+        id: number; type: string; startSeconds: number | null;
+        durationSeconds: number | null; trimInSeconds: number | null;
+        trimOutSeconds: number | null;
+      }[];
+
+    for (const sibling of siblingRows) {
+      if (sibling.id === itemId) continue;
+      if (sibling.type !== "shot") continue;
+      if (sibling.startSeconds == null) continue; // not backfilled — ignore defensively
+
+      const siblingDuration = getEditorialItemEffectiveDuration({
+        type: "shot",
+        durationSeconds: sibling.durationSeconds,
+        trimInSeconds: sibling.trimInSeconds,
+        trimOutSeconds: sibling.trimOutSeconds,
+      } as unknown as Parameters<typeof getEditorialItemEffectiveDuration>[0]);
+      const siblingStart = sibling.startSeconds;
+      const siblingEnd = siblingStart + siblingDuration;
+
+      const overlaps =
+        newStart < siblingEnd - OVERLAP_EPSILON_SECONDS &&
+        newEnd > siblingStart + OVERLAP_EPSILON_SECONDS;
+      if (overlaps) return { changed: false };
+    }
+
+    tx.update(sequenceEditorialItems)
+      .set({ startSeconds: newStart, updatedAt: now })
+      .where(eq(sequenceEditorialItems.id, itemId));
+
+    return { changed: true };
+  });
+
+  if (result.changed) {
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/nle-prototype`);
   }
 
   redirect(returnTo);

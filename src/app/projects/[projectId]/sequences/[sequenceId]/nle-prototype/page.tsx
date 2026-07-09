@@ -11,6 +11,8 @@ import type { PreviewShot, PreviewItem } from "@/components/SequencePreviewPlaye
 import { refImageUrl } from "@/lib/refImageUrl";
 import {
   buildEditorialDocument,
+  deriveEmptySpaces,
+  getEmptySpacePreviewItemId,
   type EditorialDocumentInputItem,
 } from "@/lib/editorial/editorialDocument";
 
@@ -93,21 +95,56 @@ export default async function NlePrototypePage({ params }: Props) {
     trimOutSeconds: s.trimOutSeconds,
   }));
 
-  const previewItems: PreviewItem[] = itemRows.map((item) => {
-    const shot = item.shotId !== null ? shotById.get(item.shotId) : undefined;
-    return {
-      itemId: item.id,
-      type: item.type,
-      shotId: item.shotId,
-      shotCode: shot?.shotCode ?? null,
-      title: shot?.title ?? null,
-      videoUrl: shot?.approvedVideoPath ? refImageUrl(shot.approvedVideoPath) : null,
-      durationSeconds: item.durationSeconds,
-      trimInSeconds: item.trimInSeconds,
-      trimOutSeconds: item.trimOutSeconds,
-      isPlaceholder: shot ? shot.title === "Placeholder" : false,
+  // PHASEC.NLE.C.M1.R1 — legacy gap rows are technical-only data now that
+  // shot positions are real (startSeconds). The preview's gap entries and
+  // playback order are derived from shot positions instead, consistent
+  // with how the timeline treats empty space — never from the legacy rows,
+  // so a move can never leave the preview out of sync with the timeline.
+  const shotStartById = new Map<number, number>();
+  for (const track of document.tracks) {
+    for (const it of track.items) {
+      if (it.sourceType === "shot") shotStartById.set(it.id, it.start);
+    }
+  }
+
+  const shotPreviewEntries = itemRows
+    .filter((item) => item.type === "shot")
+    .map((item) => {
+      const shot = item.shotId !== null ? shotById.get(item.shotId) : undefined;
+      const previewItem: PreviewItem = {
+        itemId: item.id,
+        type: "shot",
+        shotId: item.shotId,
+        shotCode: shot?.shotCode ?? null,
+        title: shot?.title ?? null,
+        videoUrl: shot?.approvedVideoPath ? refImageUrl(shot.approvedVideoPath) : null,
+        durationSeconds: item.durationSeconds,
+        trimInSeconds: item.trimInSeconds,
+        trimOutSeconds: item.trimOutSeconds,
+        isPlaceholder: shot ? shot.title === "Placeholder" : false,
+      };
+      return { start: shotStartById.get(item.id) ?? 0, previewItem };
+    });
+
+  const emptySpaceEntries = deriveEmptySpaces(document).map((space) => {
+    const previewItem: PreviewItem = {
+      itemId: getEmptySpacePreviewItemId(space), // synthetic — shared with the timeline/scrubber, never a legacy gap DB id
+      type: "gap",
+      shotId: null,
+      shotCode: null,
+      title: null,
+      videoUrl: null,
+      durationSeconds: space.duration,
+      trimInSeconds: null,
+      trimOutSeconds: null,
+      isPlaceholder: false,
     };
+    return { start: space.start, previewItem };
   });
+
+  const previewItems: PreviewItem[] = [...shotPreviewEntries, ...emptySpaceEntries]
+    .sort((a, b) => a.start - b.start)
+    .map((entry) => entry.previewItem);
 
   const editorialHref = `/projects/${pid}/sequences/${sid}/editorial`;
 
