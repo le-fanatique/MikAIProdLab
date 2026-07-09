@@ -132,7 +132,8 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
     const seqRows = tx
       .select({ id: sequences.id, projectId: sequences.projectId })
       .from(sequences)
-      .where(eq(sequences.id, sequenceId)) as unknown as { id: number; projectId: number }[];
+      .where(eq(sequences.id, sequenceId))
+      .all() as unknown as { id: number; projectId: number }[];
     const seq = seqRows[0];
     if (!seq || seq.projectId !== projectId) return { changed: false };
 
@@ -150,7 +151,8 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
         trackIndex: sequenceEditorialItems.trackIndex,
       })
       .from(sequenceEditorialItems)
-      .where(eq(sequenceEditorialItems.id, itemId)) as unknown as {
+      .where(eq(sequenceEditorialItems.id, itemId))
+      .all() as unknown as {
         id: number; sequenceId: number; type: string; shotId: number | null;
         trimInSeconds: number | null; trimOutSeconds: number | null;
         durationSeconds: number | null; orderIndex: number; trackIndex: number;
@@ -208,7 +210,8 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
         )
       )
       .orderBy(asc(sequenceEditorialItems.orderIndex))
-      .limit(1) as unknown as { id: number; type: string; durationSeconds: number | null; orderIndex: number }[];
+      .limit(1)
+      .all() as unknown as { id: number; type: string; durationSeconds: number | null; orderIndex: number }[];
     const nextItem = nextItemRows[0] ?? null;
 
     if (newDuration < oldDuration) {
@@ -217,13 +220,15 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
 
       tx.update(sequenceEditorialItems)
         .set({ trimOutSeconds: newTrimOutRaw, updatedAt: now })
-        .where(eq(sequenceEditorialItems.id, itemId));
+        .where(eq(sequenceEditorialItems.id, itemId))
+        .run();
 
       if (nextItem && nextItem.type === "gap") {
         const newGapDur = (nextItem.durationSeconds ?? 0) + delta;
         tx.update(sequenceEditorialItems)
           .set({ durationSeconds: newGapDur, updatedAt: now })
-          .where(eq(sequenceEditorialItems.id, nextItem.id));
+          .where(eq(sequenceEditorialItems.id, nextItem.id))
+          .run();
       } else {
         // Shift orderIndex +1 for items after this one
         const allAfter = tx
@@ -234,26 +239,30 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
               eq(sequenceEditorialItems.sequenceId, sequenceId),
               gt(sequenceEditorialItems.orderIndex, item.orderIndex)
             )
-          ) as unknown as { id: number; orderIndex: number }[];
+          )
+          .all() as unknown as { id: number; orderIndex: number }[];
 
         for (const row of allAfter) {
           tx.update(sequenceEditorialItems)
             .set({ orderIndex: row.orderIndex + 1 })
-            .where(eq(sequenceEditorialItems.id, row.id));
+            .where(eq(sequenceEditorialItems.id, row.id))
+            .run();
         }
 
-        tx.insert(sequenceEditorialItems).values({
-          sequenceId,
-          type: "gap",
-          shotId: null,
-          orderIndex: item.orderIndex + 1,
-          durationSeconds: delta,
-          trimInSeconds: null,
-          trimOutSeconds: null,
-          trackIndex,
-          createdAt: now,
-          updatedAt: now,
-        } as const);
+        tx.insert(sequenceEditorialItems)
+          .values({
+            sequenceId,
+            type: "gap",
+            shotId: null,
+            orderIndex: item.orderIndex + 1,
+            durationSeconds: delta,
+            trimInSeconds: null,
+            trimOutSeconds: null,
+            trackIndex,
+            createdAt: now,
+            updatedAt: now,
+          } as const)
+          .run();
       }
     } else {
       // ─── EXTEND: consume next gap ───
@@ -268,17 +277,20 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
 
       tx.update(sequenceEditorialItems)
         .set({ trimOutSeconds: appliedTrimOut, updatedAt: now })
-        .where(eq(sequenceEditorialItems.id, itemId));
+        .where(eq(sequenceEditorialItems.id, itemId))
+        .run();
 
       const newGapDuration = gapDuration - deltaApplied;
 
       if (newGapDuration <= GAP_EPSILON_SECONDS) {
         tx.delete(sequenceEditorialItems)
-          .where(eq(sequenceEditorialItems.id, nextItem.id));
+          .where(eq(sequenceEditorialItems.id, nextItem.id))
+          .run();
       } else {
         tx.update(sequenceEditorialItems)
           .set({ durationSeconds: newGapDuration, updatedAt: now })
-          .where(eq(sequenceEditorialItems.id, nextItem.id));
+          .where(eq(sequenceEditorialItems.id, nextItem.id))
+          .run();
       }
     }
 
@@ -291,7 +303,8 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
       })
       .from(sequenceEditorialItems)
       .where(eq(sequenceEditorialItems.sequenceId, sequenceId))
-      .orderBy(asc(sequenceEditorialItems.orderIndex)) as unknown as { id: number; orderIndex: number; trackIndex: number }[];
+      .orderBy(asc(sequenceEditorialItems.orderIndex))
+      .all() as unknown as { id: number; orderIndex: number; trackIndex: number }[];
 
     const trackMap = new Map<number, { id: number; orderIndex: number; trackIndex: number }[]>();
     for (const row of allItems) {
@@ -305,7 +318,8 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
         if (rows[i].orderIndex !== i) {
           tx.update(sequenceEditorialItems)
             .set({ orderIndex: i })
-            .where(eq(sequenceEditorialItems.id, rows[i].id));
+            .where(eq(sequenceEditorialItems.id, rows[i].id))
+            .run();
         }
       }
     }
@@ -371,7 +385,8 @@ export async function moveEditorialItem(formData: FormData): Promise<void> {
     const seqRows = tx
       .select({ id: sequences.id, projectId: sequences.projectId })
       .from(sequences)
-      .where(eq(sequences.id, sequenceId)) as unknown as { id: number; projectId: number }[];
+      .where(eq(sequences.id, sequenceId))
+      .all() as unknown as { id: number; projectId: number }[];
     const seq = seqRows[0];
     if (!seq || seq.projectId !== projectId) return { changed: false };
 
@@ -388,7 +403,8 @@ export async function moveEditorialItem(formData: FormData): Promise<void> {
         trimOutSeconds: sequenceEditorialItems.trimOutSeconds,
       })
       .from(sequenceEditorialItems)
-      .where(eq(sequenceEditorialItems.id, itemId)) as unknown as {
+      .where(eq(sequenceEditorialItems.id, itemId))
+      .all() as unknown as {
         id: number; sequenceId: number; type: string; shotId: number | null;
         trackIndex: number; durationSeconds: number | null;
         trimInSeconds: number | null; trimOutSeconds: number | null;
@@ -429,7 +445,8 @@ export async function moveEditorialItem(formData: FormData): Promise<void> {
           eq(sequenceEditorialItems.trackIndex, item.trackIndex),
           eq(sequenceEditorialItems.type, "shot")
         )
-      ) as unknown as {
+      )
+      .all() as unknown as {
         id: number; startSeconds: number | null;
         durationSeconds: number | null; trimInSeconds: number | null;
         trimOutSeconds: number | null;
@@ -468,7 +485,8 @@ export async function moveEditorialItem(formData: FormData): Promise<void> {
 
     tx.update(sequenceEditorialItems)
       .set({ startSeconds: newStart, updatedAt: now })
-      .where(eq(sequenceEditorialItems.id, itemId));
+      .where(eq(sequenceEditorialItems.id, itemId))
+      .run();
 
     return { changed: true };
   });
