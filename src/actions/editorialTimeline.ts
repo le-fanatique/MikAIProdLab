@@ -336,9 +336,12 @@ const OVERLAP_EPSILON_SECONDS = 0.05;
  * Moves a "shot" editorial item to a new absolute startSeconds.
  *
  * - Only shot-backed items (type === "shot", shotId set) can move.
- * - Rejects (no write) if the target position is invalid or overlaps
- *   another shot item on the same track — gap items are never obstacles,
- *   see toTimelineEditorData's module doc for why.
+ * - Non-pass-through (PHASEC.NLE.C.M1.R3): rejects (no write) unless the
+ *   target position stays within the space bounded by the item's own
+ *   immediate temporal neighbors (other shots only — gap items are never
+ *   obstacles, see toTimelineEditorData's module doc for why). A shot can
+ *   never cross or jump past another shot to land elsewhere — that is a
+ *   reorder/intercalation, deliberately out of scope until a future ticket.
  * - orderIndex is intentionally left untouched; a future "sync order"
  *   ticket will reconcile it with the new temporal arrangement.
  */
@@ -403,14 +406,17 @@ export async function moveEditorialItem(formData: FormData): Promise<void> {
     if (duration <= 0) return { changed: false };
 
     const newStart = newStartRaw;
-    const newEnd = newStart + duration;
 
-    // Overlap check against other shot items on the same track only —
-    // gap items are transparent to movement, never obstacles.
-    const siblingRows = tx
+    // Non-pass-through (PHASEC.NLE.C.M1.R3): the item may only move within
+    // the space bounded by its own immediate temporal neighbors on the
+    // same track, computed from their CURRENT positions (before this
+    // move) — never anywhere else on the timeline. This is strictly
+    // stronger than a plain overlap check: it also blocks "jumping" past
+    // a neighbor into a distant free slot (reorder/intercalation), which
+    // is explicitly forbidden. Legacy gap rows are never neighbors.
+    const shotRows = tx
       .select({
         id: sequenceEditorialItems.id,
-        type: sequenceEditorialItems.type,
         startSeconds: sequenceEditorialItems.startSeconds,
         durationSeconds: sequenceEditorialItems.durationSeconds,
         trimInSeconds: sequenceEditorialItems.trimInSeconds,
@@ -420,32 +426,44 @@ export async function moveEditorialItem(formData: FormData): Promise<void> {
       .where(
         and(
           eq(sequenceEditorialItems.sequenceId, sequenceId),
-          eq(sequenceEditorialItems.trackIndex, item.trackIndex)
+          eq(sequenceEditorialItems.trackIndex, item.trackIndex),
+          eq(sequenceEditorialItems.type, "shot")
         )
       ) as unknown as {
-        id: number; type: string; startSeconds: number | null;
+        id: number; startSeconds: number | null;
         durationSeconds: number | null; trimInSeconds: number | null;
         trimOutSeconds: number | null;
       }[];
 
-    for (const sibling of siblingRows) {
-      if (sibling.id === itemId) continue;
-      if (sibling.type !== "shot") continue;
-      if (sibling.startSeconds == null) continue; // not backfilled — ignore defensively
+    const shotSiblings = shotRows
+      .filter((s) => s.startSeconds != null)
+      .map((s) => ({
+        id: s.id,
+        start: s.startSeconds!,
+        duration: getEditorialItemEffectiveDuration({
+          type: "shot",
+          durationSeconds: s.durationSeconds,
+          trimInSeconds: s.trimInSeconds,
+          trimOutSeconds: s.trimOutSeconds,
+        } as unknown as Parameters<typeof getEditorialItemEffectiveDuration>[0]),
+      }))
+      .sort((a, b) => a.start - b.start);
 
-      const siblingDuration = getEditorialItemEffectiveDuration({
-        type: "shot",
-        durationSeconds: sibling.durationSeconds,
-        trimInSeconds: sibling.trimInSeconds,
-        trimOutSeconds: sibling.trimOutSeconds,
-      } as unknown as Parameters<typeof getEditorialItemEffectiveDuration>[0]);
-      const siblingStart = sibling.startSeconds;
-      const siblingEnd = siblingStart + siblingDuration;
+    const currentIdx = shotSiblings.findIndex((s) => s.id === itemId);
+    const previous = currentIdx > 0 ? shotSiblings[currentIdx - 1] : undefined;
+    const next =
+      currentIdx >= 0 && currentIdx < shotSiblings.length - 1
+        ? shotSiblings[currentIdx + 1]
+        : undefined;
 
-      const overlaps =
-        newStart < siblingEnd - OVERLAP_EPSILON_SECONDS &&
-        newEnd > siblingStart + OVERLAP_EPSILON_SECONDS;
-      if (overlaps) return { changed: false };
+    const allowedStartMin = previous ? previous.start + previous.duration : 0;
+    const allowedStartMax = next ? next.start - duration : Infinity;
+
+    if (
+      newStart < allowedStartMin - OVERLAP_EPSILON_SECONDS ||
+      newStart > allowedStartMax + OVERLAP_EPSILON_SECONDS
+    ) {
+      return { changed: false };
     }
 
     tx.update(sequenceEditorialItems)
