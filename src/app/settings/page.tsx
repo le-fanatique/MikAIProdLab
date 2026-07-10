@@ -9,6 +9,7 @@ import ChatProviderSettingsForm from "@/components/ChatProviderSettingsForm";
 import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
 import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
 import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
+import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
 import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
@@ -293,6 +294,16 @@ export default async function SettingsPage({ searchParams }: Props) {
         <div className="border-t border-[#232629] pt-6">
           <MikAIPublicBaseUrlSettingsForm initialUrl={mikaiPublicBaseUrl} />
         </div>
+      </Card>
+
+      {/* ── Technical ──────────────────────────────────────── */}
+      <SectionLabel label="Technical" />
+
+      <Card title="Bundled FFmpeg" className="mb-6">
+        <p className="text-xs text-[#6e767d] mb-4">
+          FFmpeg and FFprobe are bundled with MikAI (no system install required) for future video rendering features.
+        </p>
+        <FfmpegHealthCheckForm />
       </Card>
     </div>
   );
