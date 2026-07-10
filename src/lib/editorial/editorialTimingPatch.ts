@@ -21,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { getEditorialItemEffectiveDuration } from "./editorialDocument";
+import { EDITORIAL_SNAPSHOT_SCHEMA_VERSION, type EditorialSnapshot } from "./editorialSnapshot";
 
 export const EDITORIAL_TIMING_PATCH_SCHEMA_VERSION = "mikai-editorial-timing-patch-v1";
 const EXPECTED_SOURCE_SCHEMA_VERSION = "mikai-editorial-export-v1";
@@ -34,6 +35,13 @@ export type MikAIEditorialTimingPatchV1 = {
   projectId: number;
   sequenceId: number;
   createdAt: string;
+  /**
+   * The editorialSnapshot echoed back from the export this patch was built
+   * from (OPENREEL.CONFLICT.1) — optional for backward compatibility with
+   * patches built before this field existed. See
+   * planEditorialTimingPatch's module doc and editorialSnapshot.ts.
+   */
+  sourceEditorialSnapshot?: EditorialSnapshot;
   items: Array<{
     id: number;
     shotId: number;
@@ -79,6 +87,25 @@ export function validateEditorialTimingPatchShape(input: unknown): PatchShapeVal
   }
   if (!Array.isArray(obj.items)) {
     errors.push({ message: "items must be an array." });
+  }
+
+  let sourceEditorialSnapshot: EditorialSnapshot | undefined;
+  if (obj.sourceEditorialSnapshot !== undefined) {
+    const snap = obj.sourceEditorialSnapshot as Record<string, unknown> | null;
+    if (
+      !snap ||
+      typeof snap !== "object" ||
+      snap.schemaVersion !== EDITORIAL_SNAPSHOT_SCHEMA_VERSION ||
+      typeof snap.fingerprint !== "string" ||
+      typeof snap.itemCount !== "number" ||
+      typeof snap.generatedAt !== "string"
+    ) {
+      errors.push({
+        message: `sourceEditorialSnapshot, if present, must be a valid "${EDITORIAL_SNAPSHOT_SCHEMA_VERSION}" object.`,
+      });
+    } else {
+      sourceEditorialSnapshot = snap as unknown as EditorialSnapshot;
+    }
   }
 
   if (errors.length > 0) {
@@ -133,6 +160,7 @@ export function validateEditorialTimingPatchShape(input: unknown): PatchShapeVal
       projectId: obj.projectId as number,
       sequenceId: obj.sequenceId as number,
       createdAt: typeof obj.createdAt === "string" ? obj.createdAt : new Date().toISOString(),
+      sourceEditorialSnapshot,
       items,
     },
   };

@@ -18,6 +18,7 @@ import {
   deriveEmptySpaces,
   type EditorialDocument,
 } from "./editorialDocument";
+import { buildEditorialSnapshot, type EditorialSnapshot } from "./editorialSnapshot";
 
 export const MIKAI_EDITORIAL_EXPORT_SCHEMA_VERSION = "mikai-editorial-export-v1";
 
@@ -33,6 +34,14 @@ export type MikAIEditorialExportV1 = {
     title: string;
     durationSeconds: number;
   };
+  /**
+   * Structural fingerprint of the sequence's editorial state at export
+   * time (OPENREEL.CONFLICT.1) — additive field, existing consumers that
+   * don't know about it are unaffected. A patch built from this export
+   * should echo it back so MikAI can detect staleness before applying
+   * editorial decisions. See src/lib/editorial/editorialSnapshot.ts.
+   */
+  editorialSnapshot: EditorialSnapshot;
   tracks: Array<{
     trackIndex: number;
     items: Array<{
@@ -122,6 +131,7 @@ export function buildEditorialExport(args: {
       title: sequence.title,
       durationSeconds: document.durationSeconds,
     },
+    editorialSnapshot: buildEditorialSnapshot({ sequenceId: sequence.id, document }),
     tracks,
     emptySpaces,
   };

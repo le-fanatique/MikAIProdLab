@@ -18,15 +18,21 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, sequences, sequenceEditorialItems } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { projects, sequences, shots, sequenceEditorialItems } from "@/db/schema";
+import { eq, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { resolveEditorSidecarCorsHeaders } from "@/lib/cors/editorSidecarCors";
+import { refImageUrl } from "@/lib/refImageUrl";
 import {
   validateEditorialTimingPatchShape,
   planEditorialTimingPatch,
   type ExistingEditorialItemForPlan,
 } from "@/lib/editorial/editorialTimingPatch";
+import {
+  buildEditorialDocument,
+  type EditorialDocumentInputItem,
+} from "@/lib/editorial/editorialDocument";
+import { buildEditorialSnapshot, compareEditorialSnapshot } from "@/lib/editorial/editorialSnapshot";
 
 /** POST/JSON route — no Range/streaming, so a narrower method/header set than the media routes' default. */
 const TIMING_PATCH_CORS_OPTIONS = {
@@ -65,6 +71,8 @@ type ResponseBody = {
     patchDurationSeconds: number;
     willUpdateStartSeconds: boolean;
   }>;
+  /** Non-fatal notices — e.g. a legacy patch with no sourceEditorialSnapshot (OPENREEL.CONFLICT.1). */
+  warnings?: string[];
 };
 
 export async function POST(
@@ -134,21 +142,82 @@ export async function POST(
     );
   }
 
-  const itemRows = await db
-    .select({
-      id: sequenceEditorialItems.id,
-      type: sequenceEditorialItems.type,
-      shotId: sequenceEditorialItems.shotId,
-      trackIndex: sequenceEditorialItems.trackIndex,
-      startSeconds: sequenceEditorialItems.startSeconds,
-      durationSeconds: sequenceEditorialItems.durationSeconds,
-      trimInSeconds: sequenceEditorialItems.trimInSeconds,
-      trimOutSeconds: sequenceEditorialItems.trimOutSeconds,
-    })
-    .from(sequenceEditorialItems)
-    .where(eq(sequenceEditorialItems.sequenceId, sid));
+  const shotList = await db.select().from(shots).where(eq(shots.sequenceId, sid));
+  const shotById = new Map(shotList.map((s) => [s.id, s]));
 
-  const existingItems: ExistingEditorialItemForPlan[] = itemRows;
+  const itemRows = await db
+    .select()
+    .from(sequenceEditorialItems)
+    .where(eq(sequenceEditorialItems.sequenceId, sid))
+    .orderBy(asc(sequenceEditorialItems.trackIndex), asc(sequenceEditorialItems.orderIndex));
+
+  // Structural staleness check (OPENREEL.CONFLICT.1) — built from the same
+  // EditorialDocument shape the editorial-export route builds, so a
+  // fingerprint taken at export time and one recomputed here from the
+  // current DB state are directly comparable. Runs before planning so a
+  // stale patch is rejected on structural grounds, not on whatever
+  // incidental overlap/duration errors it happens to also trigger.
+  const inputItems: EditorialDocumentInputItem[] = itemRows.map((item) => {
+    const shot = item.shotId !== null ? shotById.get(item.shotId) : undefined;
+    return {
+      id: item.id,
+      sequenceId: item.sequenceId,
+      type: item.type,
+      shotId: item.shotId,
+      orderIndex: item.orderIndex,
+      trackIndex: item.trackIndex,
+      durationSeconds: item.durationSeconds,
+      trimInSeconds: item.trimInSeconds,
+      trimOutSeconds: item.trimOutSeconds,
+      startSeconds: item.startSeconds,
+      shot: shot
+        ? {
+            id: shot.id,
+            shotCode: shot.shotCode,
+            title: shot.title,
+            approvedVideoPath: shot.approvedVideoPath,
+            isPlaceholder: shot.title === "Placeholder",
+          }
+        : null,
+      mediaUrl: shot?.approvedVideoPath ? refImageUrl(shot.approvedVideoPath) : null,
+    };
+  });
+  const document = buildEditorialDocument({ projectId: pid, sequenceId: sid, items: inputItems });
+  const currentSnapshot = buildEditorialSnapshot({ sequenceId: sid, document });
+
+  const warnings: string[] = [];
+  if (patch.sourceEditorialSnapshot) {
+    const comparison = compareEditorialSnapshot({
+      sourceSnapshot: patch.sourceEditorialSnapshot,
+      currentSnapshot,
+    });
+    if (!comparison.ok) {
+      const response: ResponseBody = {
+        ok: false,
+        mode,
+        applied: false,
+        errors: [{ message: comparison.mismatch.message }],
+        items: [],
+      };
+      return NextResponse.json(response, { status: 409, headers: corsHeaders ?? undefined });
+    }
+  } else {
+    // Legacy patch (built before OPENREEL.CONFLICT.1, or a manually
+    // constructed test patch) — allowed through for backward
+    // compatibility, but flagged: staleness could not be verified.
+    warnings.push("Patch has no source snapshot — staleness could not be verified.");
+  }
+
+  const existingItems: ExistingEditorialItemForPlan[] = itemRows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    shotId: r.shotId,
+    trackIndex: r.trackIndex,
+    startSeconds: r.startSeconds,
+    durationSeconds: r.durationSeconds,
+    trimInSeconds: r.trimInSeconds,
+    trimOutSeconds: r.trimOutSeconds,
+  }));
 
   const plan = planEditorialTimingPatch({
     projectId: pid,
@@ -164,6 +233,7 @@ export async function POST(
       applied: false,
       errors: plan.errors,
       items: plan.items,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
     return NextResponse.json(response, { status: plan.ok ? 200 : 422, headers: corsHeaders ?? undefined });
   }
@@ -193,6 +263,7 @@ export async function POST(
     applied: true,
     errors: [],
     items: plan.items,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
   return NextResponse.json(response, { headers: corsHeaders ?? undefined });
 }
