@@ -24,7 +24,7 @@
 
 import { db } from "@/db";
 import { sequenceResults, sequences } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type {
   SequenceResult,
@@ -167,6 +167,42 @@ export async function archiveSequenceResult(
 
   revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
   return { ok: true };
+}
+
+/**
+ * Marks every non-terminal result (`active`/`published`) of a sequence as
+ * `outdated` — called after a structural editorial change (EDITORIAL.INSERT.1's
+ * shot insertion) that makes existing results no longer a faithful
+ * representation of the sequence. Deliberately does NOT touch `draft` rows
+ * (still in progress, not yet a claim about the sequence) or already
+ * `archived`/`outdated` rows (nothing to demote further). Does not
+ * auto-promote or delete anything — an outdated result stays visible and
+ * playable in the viewer, just clearly flagged; the user re-publishes when
+ * ready. Never throws — a missing/invalid sequence just outdates zero rows.
+ */
+export async function outdateSequenceResultsForSequence(
+  projectId: number,
+  sequenceId: number
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  if (!(await assertSequenceOwnership(projectId, sequenceId))) {
+    return { ok: false, error: "Sequence not found." };
+  }
+
+  const now = new Date().toISOString();
+  const rows = await db
+    .update(sequenceResults)
+    .set({ status: "outdated", updatedAt: now })
+    .where(
+      and(
+        eq(sequenceResults.sequenceId, sequenceId),
+        eq(sequenceResults.projectId, projectId),
+        inArray(sequenceResults.status, ["active", "published"])
+      )
+    )
+    .returning({ id: sequenceResults.id });
+
+  revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+  return { ok: true, count: rows.length };
 }
 
 /**

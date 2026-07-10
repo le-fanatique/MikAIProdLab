@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { db } from "@/db";
 import { projects, sequences, shots, assets, sequenceAssets } from "@/db/schema";
 import { eq, and, notInArray, asc } from "drizzle-orm";
@@ -20,6 +20,7 @@ import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
 import StatusBadge from "@/components/StatusBadge";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
+import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
 import { getLLMSettings } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
@@ -132,7 +133,15 @@ export default async function SequencePage({ params, searchParams }: Props) {
   );
 
   const sequenceResults = await listSequenceResults(pid, sid);
-  const activeResult = sequenceResults.find((r) => r.status === "active") ?? null;
+  // Displayed in the main viewer slot: the active result if one exists,
+  // else the most recent outdated one (EDITORIAL.INSERT.1) — an outdated
+  // result is still shown, with a clear banner, rather than falling back
+  // to the "never published" empty state (results already ordered
+  // createdAt desc by listSequenceResults).
+  const activeResult =
+    sequenceResults.find((r) => r.status === "active") ??
+    sequenceResults.find((r) => r.status === "outdated") ??
+    null;
   const previousResults = sequenceResults.filter((r) => r.id !== activeResult?.id);
   const activeResultWarnings = activeResult ? parseResultWarnings(activeResult.warnings) : [];
 
@@ -210,6 +219,12 @@ export default async function SequencePage({ params, searchParams }: Props) {
                 </span>
               )}
             </div>
+            {activeResult.status === "outdated" && (
+              <p className="text-xs text-[#cda24f]">
+                This result is outdated because the sequence changed after it was published.
+                Publish a new Basic or Advanced Sequence Result to update it.
+              </p>
+            )}
             {activeResult.notes && (
               <p className="text-xs text-[#6e767d]">{activeResult.notes}</p>
             )}
@@ -389,58 +404,79 @@ export default async function SequencePage({ params, searchParams }: Props) {
               {shotList.map((shot) => {
                 const deleteShotAction = deleteShot.bind(null, shot.id, sid, pid);
                 return (
-                  <tr
-                    key={shot.id}
-                    className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {shot.shotCode ? (
-                        <span className="text-[#a4abb2]">{shot.shotCode}</span>
-                      ) : (
-                        <span className="text-[#3a4046]">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}`}
-                        className="font-medium text-[#e7e9ec] hover:text-white transition-colors"
-                      >
-                        {shot.title}
-                      </Link>
-                      {shot.description && (
-                        <p className="text-[#4b5158] text-xs mt-0.5 line-clamp-1">
-                          {shot.description}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-[#6e767d] hidden md:table-cell max-w-xs">
-                      <span className="line-clamp-2 text-xs">{shot.actionPitch ?? "—"}</span>
-                    </td>
-                    <td className="px-4 py-3 text-[#6e767d] hidden lg:table-cell max-w-xs">
-                      <span className="line-clamp-2 text-xs">{shot.cameraPitch ?? "—"}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
-                      {shot.durationSeconds != null ? `${shot.durationSeconds}s` : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-3">
+                  <Fragment key={shot.id}>
+                    <tr
+                      className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors"
+                    >
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {shot.shotCode ? (
+                          <span className="text-[#a4abb2]">{shot.shotCode}</span>
+                        ) : (
+                          <span className="text-[#3a4046]">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <Link
-                          href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}/edit`}
-                          className="text-[#6e767d] hover:text-[#a4abb2] transition-colors text-xs"
+                          href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}`}
+                          className="font-medium text-[#e7e9ec] hover:text-white transition-colors"
                         >
-                          Edit
+                          {shot.title}
                         </Link>
-                        <DeleteButton
-                          action={deleteShotAction}
-                          confirm="Delete this shot?"
-                          label="Del"
-                          className="text-[#cf7b6b]/50 hover:text-[#cf7b6b] transition-colors text-xs"
+                        {shot.description && (
+                          <p className="text-[#4b5158] text-xs mt-0.5 line-clamp-1">
+                            {shot.description}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[#6e767d] hidden md:table-cell max-w-xs">
+                        <span className="line-clamp-2 text-xs">{shot.actionPitch ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-3 text-[#6e767d] hidden lg:table-cell max-w-xs">
+                        <span className="line-clamp-2 text-xs">{shot.cameraPitch ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
+                        {shot.durationSeconds != null ? `${shot.durationSeconds}s` : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-3">
+                          <Link
+                            href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}/edit`}
+                            className="text-[#6e767d] hover:text-[#a4abb2] transition-colors text-xs"
+                          >
+                            Edit
+                          </Link>
+                          <DeleteButton
+                            action={deleteShotAction}
+                            confirm="Delete this shot?"
+                            label="Del"
+                            className="text-[#cf7b6b]/50 hover:text-[#cf7b6b] transition-colors text-xs"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#1a1d20] last:border-0 bg-[#101214]">
+                      <td colSpan={6} className="px-4 py-1.5">
+                        <InsertShotFromEditorialButton
+                          projectId={pid}
+                          sequenceId={sid}
+                          insertAfterShotId={shot.id}
+                          label="Insert Shot Here"
                         />
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                  </Fragment>
                 );
               })}
+              <tr className="last:border-0 bg-[#101214]">
+                <td colSpan={6} className="px-4 py-1.5">
+                  <InsertShotFromEditorialButton
+                    projectId={pid}
+                    sequenceId={sid}
+                    insertAfterShotId={shotList[shotList.length - 1].id}
+                    label="Insert New Shot"
+                  />
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
