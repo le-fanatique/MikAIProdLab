@@ -262,6 +262,35 @@ export async function saveOpenReelSidecarUrl(
 }
 
 // ---------------------------------------------------------------------------
+// Save MikAI public base URL (MIKAI.ORIGIN.1)
+// ---------------------------------------------------------------------------
+
+const MIKAI_PUBLIC_BASE_URL_DEFAULT = "http://localhost:3000";
+
+export async function saveMikAIPublicBaseUrl(
+  url: string
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    // Empty on save restores the fallback rather than storing an unusable value.
+    await upsertSetting("mikai_public_base_url", MIKAI_PUBLIC_BASE_URL_DEFAULT);
+    return { ok: true, value: MIKAI_PUBLIC_BASE_URL_DEFAULT };
+  }
+
+  const cleaned = trimmed.replace(/\/+$/, "");
+  if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
+    return { ok: false, error: "Invalid URL. Must start with http:// or https://." };
+  }
+
+  try {
+    await upsertSetting("mikai_public_base_url", cleaned);
+    return { ok: true, value: cleaned };
+  } catch {
+    return { ok: false, error: "Failed to save MikAI Public Base URL. Please try again." };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Test LLM connection (server-side, multi-provider)
 // ---------------------------------------------------------------------------
 

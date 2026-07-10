@@ -8,7 +8,8 @@ import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
 import ChatProviderSettingsForm from "@/components/ChatProviderSettingsForm";
 import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
 import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl } from "@/lib/settings";
+import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -43,6 +44,7 @@ export default async function SettingsPage({ searchParams }: Props) {
 
   const nomenclatureSettings = await getNomenclatureSettings();
   const openReelSidecarUrl = await getOpenReelSidecarUrl();
+  const mikaiPublicBaseUrl = await getMikAIPublicBaseUrl();
 
   const [{ workflowCount }, allWorkflows, defaults] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
@@ -286,8 +288,11 @@ export default async function SettingsPage({ searchParams }: Props) {
         </p>
       </div>
 
-      <Card title="Advanced Editor (OpenReel)">
+      <Card title="Advanced Editor (OpenReel)" className="flex flex-col gap-6">
         <OpenReelSidecarSettingsForm initialUrl={openReelSidecarUrl} />
+        <div className="border-t border-[#232629] pt-6">
+          <MikAIPublicBaseUrlSettingsForm initialUrl={mikaiPublicBaseUrl} />
+        </div>
       </Card>
     </div>
   );

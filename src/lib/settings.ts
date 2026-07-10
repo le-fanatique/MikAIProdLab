@@ -421,6 +421,38 @@ export async function getOpenReelSidecarUrl(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// MikAI public base URL (MIKAI.ORIGIN.1)
+// ---------------------------------------------------------------------------
+
+const MIKAI_PUBLIC_BASE_URL_DEFAULT = "http://localhost:3000";
+
+/**
+ * Full URL (protocol + host + port, no trailing slash) of this MikAI
+ * instance, as reachable from the *user's browser* — used to build
+ * absolute URLs (e.g. mikaiExportUrl) handed to the OpenReel sidecar,
+ * which fetches them from the browser, not from the MikAI server process.
+ * Behind Tailscale/a remote server, this differs from whatever origin the
+ * MikAI server itself is bound to.
+ *
+ * Priority: DB setting -> NEXT_PUBLIC_MIKAI_ORIGIN env var (previous
+ * configuration mechanism) -> hardcoded http://localhost:3000 default
+ * (historical behavior, keeps existing setups working unchanged).
+ */
+export async function getMikAIPublicBaseUrl(): Promise<string> {
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, "mikai_public_base_url"));
+  const stored = rows[0]?.value?.trim().replace(/\/+$/, "");
+  if (stored) return stored;
+
+  const fromEnv = process.env.NEXT_PUBLIC_MIKAI_ORIGIN?.trim().replace(/\/+$/, "");
+  if (fromEnv) return fromEnv;
+
+  return MIKAI_PUBLIC_BASE_URL_DEFAULT;
+}
+
+// ---------------------------------------------------------------------------
 // Nomenclature settings
 // ---------------------------------------------------------------------------
 
