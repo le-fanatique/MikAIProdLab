@@ -36,24 +36,48 @@ function getAllowedOrigins(): string[] {
   return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...extra])];
 }
 
+export type EditorSidecarCorsOptions = {
+  /** Value for Access-Control-Allow-Methods. Defaults to the media-route set (GET, HEAD, OPTIONS). */
+  methods?: string;
+  /** Value for Access-Control-Allow-Headers. Defaults to the media-route set (Range, Content-Type). */
+  headers?: string;
+  /** Value for Access-Control-Expose-Headers, or null to omit it entirely (e.g. a route with no Range/streaming response). Defaults to the media-route set. */
+  exposeHeaders?: string | null;
+};
+
+const DEFAULT_METHODS = "GET, HEAD, OPTIONS";
+const DEFAULT_ALLOW_HEADERS = "Range, Content-Type";
+const DEFAULT_EXPOSE_HEADERS = "Content-Length, Content-Range, Accept-Ranges";
+
 /**
  * Resolves the CORS response headers for a given request's Origin header.
  * Returns null when there is no Origin header (same-origin request — no
  * CORS headers needed) or when the Origin is not on the allowlist (no
  * Access-Control-Allow-Origin is ever added for an unrecognized origin —
  * never a wildcard fallback).
+ *
+ * `options` lets a POST/JSON route (e.g. editorial-timing-patch) request a
+ * different Allow-Methods/Allow-Headers/Expose-Headers set than the
+ * media-route defaults (GET/HEAD/Range) without duplicating the allowlist
+ * or origin-matching logic — every caller still shares the same allowlist.
  */
 export function resolveEditorSidecarCorsHeaders(
-  originHeader: string | null
+  originHeader: string | null,
+  options: EditorSidecarCorsOptions = {}
 ): Record<string, string> | null {
   if (!originHeader) return null;
   if (!getAllowedOrigins().includes(originHeader)) return null;
 
-  return {
+  const exposeHeaders = options.exposeHeaders === undefined ? DEFAULT_EXPOSE_HEADERS : options.exposeHeaders;
+
+  const result: Record<string, string> = {
     "Access-Control-Allow-Origin": originHeader,
     Vary: "Origin",
-    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-    "Access-Control-Allow-Headers": "Range, Content-Type",
-    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+    "Access-Control-Allow-Methods": options.methods ?? DEFAULT_METHODS,
+    "Access-Control-Allow-Headers": options.headers ?? DEFAULT_ALLOW_HEADERS,
   };
+  if (exposeHeaders) {
+    result["Access-Control-Expose-Headers"] = exposeHeaders;
+  }
+  return result;
 }
