@@ -344,3 +344,64 @@ export const sequenceEditorialItems = sqliteTable(
 
 export type SequenceEditorialItem = typeof sequenceEditorialItems.$inferSelect;
 export type NewSequenceEditorialItem = typeof sequenceEditorialItems.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Sequence results — the published, playable output of a sequence
+// (SEQUENCE.RESULT.1, see docs/EDITORIAL_ARCH_SEQUENCE_RESULT.md).
+//
+// A sequence can have several results (every publish creates a new row —
+// nothing is overwritten); at most one is meant to have status "active" at
+// a time (the one the viewer shows). Uniqueness of "active" is applicative,
+// not DB-enforced: src/actions/sequenceResults.ts's setActiveSequenceResult
+// demotes any other active row for the same sequence inside a transaction
+// before promoting the target — see that file's doc comment for why a
+// partial unique index was not used for V1.
+//
+// cutManifest/editorialSnapshot/warnings are stored as JSON-in-TEXT,
+// following this schema's existing convention (comfyWorkflows.workflowJson,
+// appSettings's JSON-valued keys) rather than adding new tables for what
+// are, for now, small/append-only structures read as a whole.
+// ---------------------------------------------------------------------------
+
+export const sequenceResults = sqliteTable(
+  "sequence_results",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    projectId: int("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sequenceId: int("sequence_id")
+      .notNull()
+      .references(() => sequences.id, { onDelete: "cascade" }),
+    sourceMode: text("source_mode", { enum: ["basic", "advanced"] }).notNull(),
+    status: text("status", {
+      enum: ["draft", "published", "active", "archived", "outdated"],
+    })
+      .notNull()
+      .default("draft"),
+    videoPath: text("video_path"),
+    durationSeconds: real("duration_seconds"),
+    // JSON: SequenceResultCutManifest — see src/types/sequenceResult.ts
+    cutManifest: text("cut_manifest"),
+    // JSON: EditorialSnapshot (src/lib/editorial/editorialSnapshot.ts) this
+    // result was built from — lets a future staleness check compare this
+    // result's source structure against the sequence's current one.
+    editorialSnapshot: text("editorial_snapshot"),
+    notes: text("notes"),
+    // JSON: string[]
+    warnings: text("warnings"),
+    publishedAt: text("published_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    index("sequence_results_sequence_idx").on(table.sequenceId, table.status),
+  ]
+);
+
+export type SequenceResult = typeof sequenceResults.$inferSelect;
+export type NewSequenceResult = typeof sequenceResults.$inferInsert;

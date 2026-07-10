@@ -17,7 +17,12 @@ import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPane
 import CastingSuggestionsPanel from "@/components/CastingSuggestionsPanel";
 import SequencePromptForm from "@/components/SequencePromptForm";
 import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
+import StatusBadge from "@/components/StatusBadge";
+import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import { getLLMSettings } from "@/lib/settings";
+import { refImageUrl } from "@/lib/refImageUrl";
+import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
+import { parseResultWarnings, sequenceResultSourceModeLabel } from "@/types/sequenceResult";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
@@ -125,6 +130,11 @@ export default async function SequencePage({ params, searchParams }: Props) {
     sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint
   );
 
+  const sequenceResults = await listSequenceResults(pid, sid);
+  const activeResult = sequenceResults.find((r) => r.status === "active") ?? null;
+  const previousResults = sequenceResults.filter((r) => r.id !== activeResult?.id);
+  const activeResultWarnings = activeResult ? parseResultWarnings(activeResult.warnings) : [];
+
   return (
     <div>
       <Breadcrumb
@@ -158,6 +168,134 @@ export default async function SequencePage({ params, searchParams }: Props) {
           </>
         }
       />
+
+      {/* ── Sequence Result ───────────────────────────────────────── */}
+      <SectionLabel label="Sequence Result" />
+
+      <Card className="mb-6">
+        {activeResult ? (
+          <div className="flex flex-col gap-3">
+            {activeResult.videoPath ? (
+              <video
+                src={refImageUrl(activeResult.videoPath)}
+                controls
+                className="w-full rounded border border-[#2c3035]"
+              />
+            ) : (
+              <p className="text-xs text-[#4b5158]">No video file recorded for this result yet.</p>
+            )}
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <span>
+                <span className="text-[#4b5158]">Source </span>
+                <span className="text-[#a4abb2]">{sequenceResultSourceModeLabel(activeResult.sourceMode)}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-[#4b5158]">Status</span>
+                <StatusBadge status={activeResult.status} />
+              </span>
+              {activeResult.durationSeconds != null && (
+                <span>
+                  <span className="text-[#4b5158]">Duration </span>
+                  <span className="text-[#a4abb2]">{activeResult.durationSeconds.toFixed(1)}s</span>
+                </span>
+              )}
+              {activeResult.publishedAt && (
+                <span>
+                  <span className="text-[#4b5158]">Published </span>
+                  <span className="text-[#a4abb2]">{new Date(activeResult.publishedAt).toLocaleString()}</span>
+                </span>
+              )}
+            </div>
+            {activeResult.notes && (
+              <p className="text-xs text-[#6e767d]">{activeResult.notes}</p>
+            )}
+            {activeResultWarnings.length > 0 && (
+              <ul className="flex flex-col gap-1 text-xs text-[#cda24f]">
+                {activeResultWarnings.map((w, i) => (
+                  <li key={i}>⚠ {w}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <EmptyState
+            title="No sequence result published yet."
+            description="Use Basic Editorial or Advanced Editor to publish a playable result."
+          />
+        )}
+      </Card>
+
+      {previousResults.length > 0 && (
+        <>
+          <SectionLabel label="Previous Results" />
+          <div className="rounded-lg border border-[#232629] overflow-hidden mb-6">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#232629] bg-[#141618]">
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                    Source
+                  </th>
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                    Status
+                  </th>
+                  <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] w-20">
+                    Dur.
+                  </th>
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                    Published
+                  </th>
+                  <th className="px-4 py-3 w-40" />
+                </tr>
+              </thead>
+              <tbody>
+                {previousResults.map((r) => {
+                  const setActiveAction = async () => {
+                    "use server";
+                    await setActiveSequenceResult(pid, sid, r.id);
+                  };
+                  const archiveAction = async () => {
+                    "use server";
+                    await archiveSequenceResult(pid, sid, r.id);
+                  };
+                  return (
+                    <tr key={r.id} className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors">
+                      <td className="px-4 py-3 text-[#a4abb2]">{sequenceResultSourceModeLabel(r.sourceMode)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
+                        {r.durationSeconds != null ? `${r.durationSeconds.toFixed(1)}s` : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-[#6e767d] text-xs">
+                        {r.publishedAt ? new Date(r.publishedAt).toLocaleString() : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-3">
+                          {r.status !== "archived" && (
+                            <SequenceResultActionForm
+                              action={setActiveAction}
+                              label="Set Active"
+                              className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors text-xs"
+                            />
+                          )}
+                          {r.status !== "archived" && (
+                            <SequenceResultActionForm
+                              action={archiveAction}
+                              label="Archive"
+                              confirmMessage="Archive this sequence result?"
+                              className="text-[#cf7b6b]/70 hover:text-[#cf7b6b] transition-colors text-xs"
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* ── Context ───────────────────────────────────────────────── */}
       {hasContext && (
