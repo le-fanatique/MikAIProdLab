@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { appSettings } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import type { LLMConfig, LLMProvider, ProviderSettings } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
@@ -386,6 +387,37 @@ export async function getComfySettings(): Promise<ComfySettings> {
   const apiKey = map.get("comfyui_api_key") ?? "";
   const localVramAutoManagement = map.get("local_vram_auto_management_enabled") === "true";
   return { baseUrl, apiKey, localVramAutoManagement };
+}
+
+// ---------------------------------------------------------------------------
+// OpenReel sidecar URL (OPENREEL.URL.1)
+// ---------------------------------------------------------------------------
+
+const OPENREEL_SIDECAR_URL_DEFAULT = "http://127.0.0.1:5173";
+
+/**
+ * Full URL (protocol + host + port, no trailing slash) of the OpenReel
+ * sidecar editor, as reachable from the *user's browser* — not necessarily
+ * the same as how the MikAI server itself would reach it (e.g. behind
+ * Tailscale, the sidecar's LAN/tailnet address differs from `localhost`).
+ *
+ * Priority: DB setting -> NEXT_PUBLIC_MIKAI_OPENREEL_SIDECAR_URL env var
+ * (previous configuration mechanism) -> hardcoded 127.0.0.1 default.
+ * 127.0.0.1 (not localhost) is the default because it has proven more
+ * reliable than `localhost` in this project's dev environment.
+ */
+export async function getOpenReelSidecarUrl(): Promise<string> {
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, "openreel_sidecar_url"));
+  const stored = rows[0]?.value?.trim().replace(/\/+$/, "");
+  if (stored) return stored;
+
+  const fromEnv = process.env.NEXT_PUBLIC_MIKAI_OPENREEL_SIDECAR_URL?.trim().replace(/\/+$/, "");
+  if (fromEnv) return fromEnv;
+
+  return OPENREEL_SIDECAR_URL_DEFAULT;
 }
 
 // ---------------------------------------------------------------------------

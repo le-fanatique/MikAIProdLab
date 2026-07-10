@@ -233,6 +233,35 @@ export async function testComfyConnection(
 }
 
 // ---------------------------------------------------------------------------
+// Save OpenReel sidecar URL (OPENREEL.URL.1)
+// ---------------------------------------------------------------------------
+
+const OPENREEL_SIDECAR_URL_DEFAULT = "http://127.0.0.1:5173";
+
+export async function saveOpenReelSidecarUrl(
+  url: string
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    // Empty on save restores the fallback rather than storing an unusable value.
+    await upsertSetting("openreel_sidecar_url", OPENREEL_SIDECAR_URL_DEFAULT);
+    return { ok: true, value: OPENREEL_SIDECAR_URL_DEFAULT };
+  }
+
+  const cleaned = trimmed.replace(/\/+$/, "");
+  if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
+    return { ok: false, error: "Invalid URL. Must start with http:// or https://." };
+  }
+
+  try {
+    await upsertSetting("openreel_sidecar_url", cleaned);
+    return { ok: true, value: cleaned };
+  } catch {
+    return { ok: false, error: "Failed to save OpenReel Sidecar URL. Please try again." };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Test LLM connection (server-side, multi-provider)
 // ---------------------------------------------------------------------------
 

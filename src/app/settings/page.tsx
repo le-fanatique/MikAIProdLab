@@ -7,7 +7,8 @@ import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
 import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
 import ChatProviderSettingsForm from "@/components/ChatProviderSettingsForm";
 import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings } from "@/lib/settings";
+import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -41,6 +42,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   ]);
 
   const nomenclatureSettings = await getNomenclatureSettings();
+  const openReelSidecarUrl = await getOpenReelSidecarUrl();
 
   const [{ workflowCount }, allWorkflows, defaults] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
@@ -274,7 +276,7 @@ export default async function SettingsPage({ searchParams }: Props) {
 
       {/* ── Integrations ───────────────────────────────────── */}
       <SectionLabel label="Integrations" />
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 mb-6">
         <p className="text-xs text-[#6e767d]">
           Active:{" "}
           <span className="text-[#a4abb2]">Generate Story from Pitch</span>
@@ -283,6 +285,10 @@ export default async function SettingsPage({ searchParams }: Props) {
           Coming soon: Generate Sequences from Story · Generate Shots from Sequence
         </p>
       </div>
+
+      <Card title="Advanced Editor (OpenReel)">
+        <OpenReelSidecarSettingsForm initialUrl={openReelSidecarUrl} />
+      </Card>
     </div>
   );
 }

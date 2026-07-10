@@ -9,6 +9,7 @@ import Card from "@/components/Card";
 import NlePrototypeWorkspace from "@/components/NlePrototypeWorkspace";
 import type { PreviewShot, PreviewItem } from "@/components/SequencePreviewPlayer";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { getOpenReelSidecarUrl } from "@/lib/settings";
 import {
   buildEditorialDocument,
   deriveEmptySpaces,
@@ -156,7 +157,11 @@ export default async function NlePrototypePage({ params }: Props) {
   // needs to carry an absolute, fetchable export URL — no server-side
   // integration beyond that already-shipped route.
   const mikaiOrigin = process.env.NEXT_PUBLIC_MIKAI_ORIGIN ?? "http://localhost:3000";
-  const sidecarOrigin = process.env.NEXT_PUBLIC_MIKAI_OPENREEL_SIDECAR_URL ?? "http://localhost:5173";
+  // OPENREEL.URL.1: configurable via Settings (app_settings key
+  // "openreel_sidecar_url"), falling back to the legacy env var, then to
+  // 127.0.0.1:5173 — see getOpenReelSidecarUrl(). Always trailing-slash
+  // stripped, so the href built below never has a double slash before "?".
+  const sidecarOrigin = await getOpenReelSidecarUrl();
   const absoluteExportUrl = `${mikaiOrigin}${editorialExportHref}`;
   const advancedEditorHref = `${sidecarOrigin}/?${new URLSearchParams({
     mikaiExportUrl: absoluteExportUrl,
