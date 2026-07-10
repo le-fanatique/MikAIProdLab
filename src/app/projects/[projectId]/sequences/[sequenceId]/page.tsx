@@ -19,6 +19,7 @@ import SequencePromptForm from "@/components/SequencePromptForm";
 import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
 import StatusBadge from "@/components/StatusBadge";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
+import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
 import { getLLMSettings } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
@@ -170,7 +171,10 @@ export default async function SequencePage({ params, searchParams }: Props) {
       />
 
       {/* ── Sequence Result ───────────────────────────────────────── */}
-      <SectionLabel label="Sequence Result" />
+      <SectionLabel
+        label="Sequence Result"
+        action={<PublishBasicSequenceResultButton projectId={pid} sequenceId={sid} />}
+      />
 
       <Card className="mb-6">
         {activeResult ? (

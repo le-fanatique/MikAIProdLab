@@ -33,11 +33,9 @@ import type {
 import type {
   SequenceResultSourceMode,
   SequenceResultStatus,
-  SequenceResultCutManifest,
 } from "@/types/sequenceResult";
 import type { EditorialSnapshot } from "@/lib/editorial/editorialSnapshot";
 import {
-  serializeCutManifest,
   serializeResultEditorialSnapshot,
   serializeResultWarnings,
 } from "@/types/sequenceResult";
@@ -186,7 +184,15 @@ export async function createSequenceResult(input: {
   status?: SequenceResultStatus;
   videoPath?: string | null;
   durationSeconds?: number | null;
-  cutManifest?: SequenceResultCutManifest | null;
+  /**
+   * Stored verbatim as JSON — deliberately typed as `unknown` rather than
+   * the narrower SequenceResultCutManifest (a generic, mode-agnostic
+   * projection), since a real manifest (e.g. BasicCutManifest, richer than
+   * that generic shape) is what publish actions actually produce. See
+   * docs/SEQUENCE_RESULT_1_DATA_MODEL_VIEWER.md §5 / BASIC_EDITORIAL_1A's
+   * note on this reconciliation.
+   */
+  cutManifest?: unknown;
   editorialSnapshot?: EditorialSnapshot | null;
   notes?: string | null;
   warnings?: string[];
@@ -204,7 +210,7 @@ export async function createSequenceResult(input: {
     status: input.status ?? "draft",
     videoPath: input.videoPath ?? null,
     durationSeconds: input.durationSeconds ?? null,
-    cutManifest: input.cutManifest ? serializeCutManifest(input.cutManifest) : null,
+    cutManifest: input.cutManifest !== undefined && input.cutManifest !== null ? JSON.stringify(input.cutManifest) : null,
     editorialSnapshot: input.editorialSnapshot ? serializeResultEditorialSnapshot(input.editorialSnapshot) : null,
     notes: input.notes ?? null,
     warnings: input.warnings ? serializeResultWarnings(input.warnings) : null,
