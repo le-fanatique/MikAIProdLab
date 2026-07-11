@@ -13,8 +13,10 @@ import DeleteButton from "@/components/DeleteButton";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import CreateFilmResultDraftButton from "@/components/CreateFilmResultDraftButton";
 import RenderFilmResultButton from "@/components/RenderFilmResultButton";
+import Collapsible from "@/components/Collapsible";
 import { deleteProject } from "@/actions/projects";
 import { listFilmResults, setActiveFilmResult, archiveFilmResult } from "@/actions/filmResults";
+import { buildFilmResultManifest, computeFilmResultTotalDuration, FilmResultManifestError } from "@/lib/film/filmResultManifest";
 import { refImageUrl } from "@/lib/refImageUrl";
 import {
   parseFilmResultManifest,
@@ -78,6 +80,24 @@ export default async function ProjectPage({ params }: Props) {
   const previousFilmResults = filmResultsList.filter((r) => r.id !== activeFilmResult?.id);
   const activeFilmResultManifest = activeFilmResult ? parseFilmResultManifest(activeFilmResult.sequenceResultManifest) : null;
   const activeFilmResultWarnings = activeFilmResult ? parseFilmResultWarnings(activeFilmResult.warnings) : [];
+  const expectedDurationSeconds = activeFilmResultManifest ? computeFilmResultTotalDuration(activeFilmResultManifest) : null;
+
+  // Live preview of what a render right now would look like — read-only, no
+  // FFmpeg, just the same DB-only manifest build the render itself uses
+  // (src/lib/film/filmResultManifest.ts). Only used to warn the user in
+  // RenderFilmResultButton's confirm dialog before they actually trigger a
+  // render; a failure here (e.g. zero sequences) is non-fatal to the page.
+  let renderPreviewMissingCount = 0;
+  let renderPreviewTotalCount = 0;
+  try {
+    const renderPreviewManifest = await buildFilmResultManifest(id);
+    renderPreviewTotalCount = renderPreviewManifest.sequences.length;
+    renderPreviewMissingCount = renderPreviewManifest.sequences.filter((s) => !s.included).length;
+  } catch (err) {
+    if (!(err instanceof FilmResultManifestError)) throw err;
+    // No sequences at all — nothing to warn about; the button will fail
+    // with its own clear error if clicked.
+  }
 
   return (
     <div>
@@ -124,7 +144,12 @@ export default async function ProjectPage({ params }: Props) {
         action={
           <div className="flex items-center gap-2">
             <CreateFilmResultDraftButton projectId={id} />
-            <RenderFilmResultButton projectId={id} />
+            <RenderFilmResultButton
+              projectId={id}
+              hasExistingFilmResult={filmResultsList.length > 0}
+              missingOrOutdatedCount={renderPreviewMissingCount}
+              totalSequenceCount={renderPreviewTotalCount}
+            />
           </div>
         }
       />
@@ -136,7 +161,7 @@ export default async function ProjectPage({ params }: Props) {
               <video
                 src={refImageUrl(activeFilmResult.videoPath)}
                 controls
-                className="w-full rounded border border-[#2c3035]"
+                className="w-full max-w-xl rounded border border-[#2c3035]"
               />
             ) : (
               <p className="text-xs text-[#4b5158]">This Film Result has no rendered video yet.</p>
@@ -146,12 +171,18 @@ export default async function ProjectPage({ params }: Props) {
                 <span className="text-[#4b5158]">Status</span>
                 <StatusBadge status={activeFilmResult.status} />
               </span>
-              {activeFilmResult.durationSeconds != null && (
-                <span>
-                  <span className="text-[#4b5158]">Duration </span>
-                  <span className="text-[#a4abb2]">{activeFilmResult.durationSeconds.toFixed(1)}s</span>
+              <span>
+                <span className="text-[#4b5158]">Expected </span>
+                <span className="text-[#a4abb2]">
+                  {expectedDurationSeconds != null ? `${expectedDurationSeconds.toFixed(1)}s` : "—"}
                 </span>
-              )}
+              </span>
+              <span>
+                <span className="text-[#4b5158]">Rendered </span>
+                <span className="text-[#a4abb2]">
+                  {activeFilmResult.durationSeconds != null ? `${activeFilmResult.durationSeconds.toFixed(1)}s` : "—"}
+                </span>
+              </span>
               {activeFilmResult.publishedAt && (
                 <span>
                   <span className="text-[#4b5158]">Published </span>
@@ -169,21 +200,30 @@ export default async function ProjectPage({ params }: Props) {
               <p className="text-xs text-[#6e767d]">{activeFilmResult.notes}</p>
             )}
             {activeFilmResultWarnings.length > 0 && (
-              <ul className="flex flex-col gap-1 text-xs text-[#cda24f]">
-                {activeFilmResultWarnings.map((w, i) => (
-                  <li key={i}>⚠ {w}</li>
-                ))}
-              </ul>
+              <div className="rounded border border-[#cda24f]/30 bg-[#cda24f]/5 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#cda24f] mb-1.5">
+                  Warnings ({activeFilmResultWarnings.length})
+                </p>
+                <ul className="flex flex-col gap-1 text-xs text-[#cda24f]">
+                  {activeFilmResultWarnings.map((w, i) => (
+                    <li key={i}>⚠ {w}</li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {activeFilmResultManifest && (
               <div className="border-t border-[#232629] pt-3 mt-1">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158] mb-2">
-                  Sequences included
+                  Sequences included ({activeFilmResultManifest.sequences.filter((s) => s.included).length}/{activeFilmResultManifest.sequences.length})
                 </p>
                 <div className="flex flex-col gap-1.5">
                   {activeFilmResultManifest.sequences.map((s) => (
-                    <div key={s.sequenceId} className="flex items-center gap-3 text-xs">
+                    <Link
+                      key={s.sequenceId}
+                      href={`/projects/${id}/sequences/${s.sequenceId}`}
+                      className="flex items-center gap-3 text-xs rounded px-2 py-1 -mx-2 hover:bg-[#212529] transition-colors"
+                    >
                       <span className="text-[#a4abb2] flex-1 truncate">{s.sequenceTitle ?? `Sequence ${s.sequenceId}`}</span>
                       <span className="text-[#4b5158] w-16 shrink-0">{filmManifestSourceModeLabel(s.sequenceResultSourceMode)}</span>
                       <span className="text-[#4b5158] w-16 shrink-0 text-right font-mono">
@@ -196,7 +236,7 @@ export default async function ProjectPage({ params }: Props) {
                             ? "Outdated Result"
                             : "Missing Result"}
                       </span>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -211,71 +251,72 @@ export default async function ProjectPage({ params }: Props) {
       </Card>
 
       {previousFilmResults.length > 0 && (
-        <>
-          <SectionLabel label="Previous Film Results" />
-          <div className="rounded-lg border border-[#232629] overflow-hidden mb-6">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#232629] bg-[#141618]">
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
-                    Status
-                  </th>
-                  <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] w-20">
-                    Dur.
-                  </th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
-                    Created
-                  </th>
-                  <th className="px-4 py-3 w-40" />
-                </tr>
-              </thead>
-              <tbody>
-                {previousFilmResults.map((r) => {
-                  const setActiveAction = async () => {
-                    "use server";
-                    await setActiveFilmResult(id, r.id);
-                  };
-                  const archiveAction = async () => {
-                    "use server";
-                    await archiveFilmResult(id, r.id);
-                  };
-                  return (
-                    <tr key={r.id} className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors">
-                      <td className="px-4 py-3">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
-                        {r.durationSeconds != null ? `${r.durationSeconds.toFixed(1)}s` : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-[#6e767d] text-xs">
-                        {new Date(r.createdAt).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-3">
-                          {r.status !== "archived" && (
-                            <SequenceResultActionForm
-                              action={setActiveAction}
-                              label="Set Active"
-                              className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors text-xs"
-                            />
+        <div className="border-t border-[#232629] pt-4 mt-6 mb-6">
+          <Collapsible label={`Previous Film Results (${previousFilmResults.length})`}>
+            <div className="rounded-lg border border-[#232629] overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#232629] bg-[#141618]">
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                      Status
+                    </th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] w-20">
+                      Dur.
+                    </th>
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                      Created
+                    </th>
+                    <th className="px-4 py-3 w-44" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {previousFilmResults.map((r) => {
+                    const setActiveAction = async () => {
+                      "use server";
+                      await setActiveFilmResult(id, r.id);
+                    };
+                    const archiveAction = async () => {
+                      "use server";
+                      await archiveFilmResult(id, r.id);
+                    };
+                    return (
+                      <tr key={r.id} className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors">
+                        <td className="px-4 py-3">
+                          <StatusBadge status={r.status} />
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
+                          {r.durationSeconds != null ? `${r.durationSeconds.toFixed(1)}s` : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-[#6e767d] text-xs">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.status !== "archived" ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <SequenceResultActionForm
+                                action={setActiveAction}
+                                label="Set Active"
+                                className="rounded border border-[#5b93d6]/30 text-[#5b93d6] hover:border-[#5b93d6]/60 hover:text-[#8fbbe8] transition-colors text-xs px-2 py-1"
+                              />
+                              <SequenceResultActionForm
+                                action={archiveAction}
+                                label="Archive"
+                                confirmMessage="Archive this film result?"
+                                className="rounded border border-[#cf7b6b]/30 text-[#cf7b6b]/80 hover:border-[#cf7b6b]/60 hover:text-[#cf7b6b] transition-colors text-xs px-2 py-1"
+                              />
+                            </div>
+                          ) : (
+                            <div className="text-right text-[10px] text-[#4b5158] uppercase tracking-wider">Archived</div>
                           )}
-                          {r.status !== "archived" && (
-                            <SequenceResultActionForm
-                              action={archiveAction}
-                              label="Archive"
-                              confirmMessage="Archive this film result?"
-                              className="text-[#cf7b6b]/70 hover:text-[#cf7b6b] transition-colors text-xs"
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Collapsible>
+        </div>
       )}
 
       {/* ── Overview ──────────────────────────────────────── */}
