@@ -105,6 +105,18 @@ export default async function SequenceEditorialPage({ params }: Props) {
         {sequence.title}
       </p>
 
+      {/* EDITORIAL.UX.1: Publish/Advanced Editor/Export live on the
+          Sequence page now — this page stays reachable for the per-shot
+          trim-in/out and gap-aware fallback controls below, which have no
+          equivalent there yet. */}
+      <p className="text-xs text-[#4b5158] mb-4">
+        Most editorial actions have moved to the{" "}
+        <Link href={`/projects/${pid}/sequences/${sid}`} className="text-[#5b93d6] hover:text-[#8fbbe8]">
+          Sequence page
+        </Link>
+        . This page provides advanced trim-in/out and fallback controls.
+      </p>
+
       {/* ── Timeline + Sequence Preview (shared selection) ───────── */}
       <EditorialWorkspace
         shots={shotList.map((s) => ({

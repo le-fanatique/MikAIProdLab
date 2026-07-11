@@ -21,10 +21,12 @@ import StatusBadge from "@/components/StatusBadge";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
 import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
-import { getLLMSettings } from "@/lib/settings";
+import Collapsible from "@/components/Collapsible";
+import { getLLMSettings, getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
 import { parseResultWarnings, sequenceResultSourceModeLabel } from "@/types/sequenceResult";
+import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
@@ -132,6 +134,14 @@ export default async function SequencePage({ params, searchParams }: Props) {
     sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint
   );
 
+  // EDITORIAL.UX.1: same OpenReel bridge as /nle-prototype, built directly
+  // here so Advanced Editor access no longer requires passing through that
+  // page first — see src/lib/editorial/advancedEditorLink.ts.
+  const mikaiOrigin = await getMikAIPublicBaseUrl();
+  const sidecarOrigin = await getOpenReelSidecarUrl();
+  const editorialExportHref = editorialExportHrefFor(pid, sid);
+  const advancedEditorHref = buildAdvancedEditorHref({ mikaiOrigin, sidecarOrigin, projectId: pid, sequenceId: sid });
+
   const sequenceResults = await listSequenceResults(pid, sid);
   // Displayed in the main viewer slot: the active result if one exists,
   // else the most recent outdated one (EDITORIAL.INSERT.1) — an outdated
@@ -179,11 +189,40 @@ export default async function SequencePage({ params, searchParams }: Props) {
         }
       />
 
+      {/* ── Editorial Actions ─────────────────────────────────────── */}
+      <SectionLabel label="Editorial Actions" />
+      <Card className="mb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <PublishBasicSequenceResultButton projectId={pid} sequenceId={sid} />
+          <Link
+            href={advancedEditorHref}
+            target="_blank"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            title="Opens the OpenReel sidecar editor in a new tab and loads this sequence"
+          >
+            Open in Advanced Editor
+          </Link>
+          <Link
+            href={editorialExportHref}
+            target="_blank"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Export Editorial JSON
+          </Link>
+        </div>
+        <p className="text-xs text-[#4b5158] mt-3">
+          OpenReel must be running at {sidecarOrigin}.
+        </p>
+        <Collapsible label="Show OpenReel start command">
+          <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
+{`cd F:/AI/mikai-openreel-sidecar
+npx -y pnpm@9.0.0 dev`}
+          </pre>
+        </Collapsible>
+      </Card>
+
       {/* ── Sequence Result ───────────────────────────────────────── */}
-      <SectionLabel
-        label="Sequence Result"
-        action={<PublishBasicSequenceResultButton projectId={pid} sequenceId={sid} />}
-      />
+      <SectionLabel label="Sequence Result" />
 
       <Card className="mb-6">
         {activeResult ? (
@@ -192,7 +231,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
               <video
                 src={refImageUrl(activeResult.videoPath)}
                 controls
-                className="w-full rounded border border-[#2c3035]"
+                className="w-full max-w-xl rounded border border-[#2c3035]"
               />
             ) : (
               <p className="text-xs text-[#4b5158]">No video file recorded for this result yet.</p>
@@ -245,9 +284,9 @@ export default async function SequencePage({ params, searchParams }: Props) {
       </Card>
 
       {previousResults.length > 0 && (
-        <>
-          <SectionLabel label="Previous Results" />
-          <div className="rounded-lg border border-[#232629] overflow-hidden mb-6">
+        <div className="border-t border-[#232629] pt-4 mt-6 mb-6">
+          <Collapsible label={`Previous Results (${previousResults.length})`}>
+          <div className="rounded-lg border border-[#232629] overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#232629] bg-[#141618]">
@@ -313,7 +352,8 @@ export default async function SequencePage({ params, searchParams }: Props) {
               </tbody>
             </table>
           </div>
-        </>
+          </Collapsible>
+        </div>
       )}
 
       {/* ── Context ───────────────────────────────────────────────── */}
@@ -492,7 +532,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
                 href={`/projects/${pid}/sequences/${sid}/editorial`}
                 className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
               >
-                Open Editorial →
+                Advanced Trim &amp; Fallback Controls →
               </Link>
             }
           />

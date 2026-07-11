@@ -16,6 +16,7 @@ import {
   getEmptySpacePreviewItemId,
   type EditorialDocumentInputItem,
 } from "@/lib/editorial/editorialDocument";
+import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
 
 export const dynamic = "force-dynamic";
 
@@ -148,31 +149,22 @@ export default async function NlePrototypePage({ params }: Props) {
     .map((entry) => entry.previewItem);
 
   const editorialHref = `/projects/${pid}/sequences/${sid}/editorial`;
-  const editorialExportHref = `/api/projects/${pid}/sequences/${sid}/editorial-export`;
+  const editorialExportHref = editorialExportHrefFor(pid, sid);
 
   // Bridge to the external OpenReel sidecar (NLE.OPENREEL.4) — a fully
   // separate local app, never vendored into this repo (see
-  // docs/NLE_VENDOR_DECISION_OPENREEL.md). The sidecar reads
-  // mikaiExportUrl on boot and fetches it itself, so this link only ever
-  // needs to carry an absolute, fetchable export URL — no server-side
-  // integration beyond that already-shipped route.
-  // MIKAI.ORIGIN.1: configurable via Settings (app_settings key
-  // "mikai_public_base_url"), falling back to the legacy env var, then to
-  // localhost:3000 — see getMikAIPublicBaseUrl(). Must be the URL reachable
-  // from the *browser* opening OpenReel, not necessarily MikAI's own
-  // server-side origin (they differ behind Tailscale/a remote server).
+  // docs/NLE_VENDOR_DECISION_OPENREEL.md). See buildAdvancedEditorHref's
+  // doc comment (src/lib/editorial/advancedEditorLink.ts) for how the URL
+  // is assembled — extracted there (EDITORIAL.UX.1) so Sequence Detail can
+  // build the same link without duplicating this logic.
+  // MIKAI.ORIGIN.1 / OPENREEL.URL.1: both configurable via Settings, must
+  // be the URLs reachable from the *browser* opening OpenReel, not
+  // necessarily MikAI's own server-side origin (they differ behind
+  // Tailscale/a remote server) — see getMikAIPublicBaseUrl()/
+  // getOpenReelSidecarUrl() in src/lib/settings.ts.
   const mikaiOrigin = await getMikAIPublicBaseUrl();
-  // OPENREEL.URL.1: configurable via Settings (app_settings key
-  // "openreel_sidecar_url"), falling back to the legacy env var, then to
-  // 127.0.0.1:5173 — see getOpenReelSidecarUrl(). Always trailing-slash
-  // stripped, so the href built below never has a double slash before "?".
   const sidecarOrigin = await getOpenReelSidecarUrl();
-  const absoluteExportUrl = `${mikaiOrigin}${editorialExportHref}`;
-  const advancedEditorHref = `${sidecarOrigin}/?${new URLSearchParams({
-    mikaiExportUrl: absoluteExportUrl,
-    mikaiProjectId: String(pid),
-    mikaiSequenceId: String(sid),
-  }).toString()}`;
+  const advancedEditorHref = buildAdvancedEditorHref({ mikaiOrigin, sidecarOrigin, projectId: pid, sequenceId: sid });
 
   return (
     <div>
