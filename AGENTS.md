@@ -48,3 +48,8 @@ Do not touch ComfyUI, generation runtime, job runner, polling,
 Never commit DB runtime, uploads, outputs, storage, `.next`, `dist`, or logs.
 
 For UI feature tickets, require a user-validation checklist before commit.
+
+After each completed feature that is visibly accessible in the product, Codex
+must give the user a short manual testing workflow: where to navigate, which
+action to take, and the expected result. Do not provide this workflow for
+internal-only changes such as schema, migration, or database-only work.
