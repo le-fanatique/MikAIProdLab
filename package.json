@@ -15,7 +15,9 @@
     "setup:linux": "bash ./setup-linux.sh",
     "doctor:linux": "bash ./doctor.sh",
     "setup:windows": "powershell -ExecutionPolicy Bypass -File ./setup-windows.ps1",
-    "doctor:windows": "powershell -ExecutionPolicy Bypass -File ./doctor.ps1"
+    "doctor:windows": "powershell -ExecutionPolicy Bypass -File ./doctor.ps1",
+    "dev:all": "node scripts/run-prod-lab.mjs dev",
+    "prod:all": "node scripts/run-prod-lab.mjs prod"
   },
   "engines": {
     "node": ">=22 <23",
