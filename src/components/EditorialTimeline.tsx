@@ -32,6 +32,7 @@ export type EditorialItemView = {
   id: number;
   type: "shot" | "gap";
   orderIndex: number;
+  trackIndex: number;
   durationSeconds: number | null;
   trimInSeconds: number | null;
   trimOutSeconds: number | null;
@@ -430,6 +431,15 @@ export default function EditorialTimeline({
     ? items!.reduce((sum, it) => sum + itemEff(it), 0)
     : 0;
 
+  // Editorial summary counts (BASIC.EDITORIAL.2) — derived from the same
+  // items already loaded for the lane, no new source of truth.
+  const videoReadyCount = itemsMode
+    ? items!.filter((it) => it.type === "shot" && it.hasApprovedVideo && !it.isPlaceholder).length
+    : 0;
+  const missingVideoCount = itemsMode
+    ? items!.filter((it) => it.type === "shot" && (it.isPlaceholder || !it.hasApprovedVideo)).length
+    : 0;
+
   // ── Pointer handlers ──────────────────────────────────────────────
 
   function handleDurationsReset() {
@@ -578,7 +588,13 @@ export default function EditorialTimeline({
             effective
             {" · "}
             {itemsMode ? (
-              <>{items!.length} editorial item{items!.length !== 1 ? "s" : ""}</>
+              <>
+                {items!.length} editorial item{items!.length !== 1 ? "s" : ""}
+                {" · "}
+                {videoReadyCount} with video
+                {" · "}
+                {missingVideoCount} placeholder/no video
+              </>
             ) : (
               <>
                 {timedCount} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed

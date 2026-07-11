@@ -336,6 +336,100 @@ export async function resizeEditorialItemRightEdge(formData: FormData): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// moveEditorialItemOrder — swap orderIndex with the adjacent sibling on the
+// same track (BASIC.EDITORIAL.2). Explicit Move up/down control — no drag,
+// no ripple. Touches orderIndex only: durationSeconds, trims, shotId and
+// trackIndex are all left untouched on both items.
+// ---------------------------------------------------------------------------
+
+export async function moveEditorialItemOrder(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const itemId = parseInt(formData.get("itemId") as string, 10);
+  const direction = formData.get("direction") as string | null;
+  const returnToRaw = formData.get("returnTo");
+  const returnTo =
+    typeof returnToRaw === "string" && returnToRaw.trim().startsWith("/")
+      ? returnToRaw.trim()
+      : `/projects/${projectId}/sequences/${sequenceId}/editorial`;
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(itemId) || itemId <= 0 ||
+    (direction !== "up" && direction !== "down")
+  ) {
+    redirect(returnTo);
+  }
+
+  const now = new Date().toISOString();
+  const result = db.transaction((tx) => {
+    // Ownership: sequence → project
+    const seqRows = tx
+      .select({ id: sequences.id, projectId: sequences.projectId })
+      .from(sequences)
+      .where(eq(sequences.id, sequenceId))
+      .all() as unknown as { id: number; projectId: number }[];
+    const seq = seqRows[0];
+    if (!seq || seq.projectId !== projectId) return { changed: false };
+
+    const itemRows = tx
+      .select({
+        id: sequenceEditorialItems.id,
+        sequenceId: sequenceEditorialItems.sequenceId,
+        trackIndex: sequenceEditorialItems.trackIndex,
+      })
+      .from(sequenceEditorialItems)
+      .where(eq(sequenceEditorialItems.id, itemId))
+      .all() as unknown as { id: number; sequenceId: number; trackIndex: number }[];
+    const item = itemRows[0];
+    if (!item || item.sequenceId !== sequenceId) return { changed: false };
+
+    // Siblings on the same track, ordered — the move is a pure adjacent swap
+    const siblings = tx
+      .select({
+        id: sequenceEditorialItems.id,
+        orderIndex: sequenceEditorialItems.orderIndex,
+      })
+      .from(sequenceEditorialItems)
+      .where(
+        and(
+          eq(sequenceEditorialItems.sequenceId, sequenceId),
+          eq(sequenceEditorialItems.trackIndex, item.trackIndex)
+        )
+      )
+      .orderBy(asc(sequenceEditorialItems.orderIndex))
+      .all() as unknown as { id: number; orderIndex: number }[];
+
+    const idx = siblings.findIndex((s) => s.id === itemId);
+    if (idx === -1) return { changed: false };
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= siblings.length) return { changed: false };
+
+    const a = siblings[idx];
+    const b = siblings[targetIdx];
+
+    tx.update(sequenceEditorialItems)
+      .set({ orderIndex: b.orderIndex, updatedAt: now })
+      .where(eq(sequenceEditorialItems.id, a.id))
+      .run();
+    tx.update(sequenceEditorialItems)
+      .set({ orderIndex: a.orderIndex, updatedAt: now })
+      .where(eq(sequenceEditorialItems.id, b.id))
+      .run();
+
+    return { changed: true };
+  });
+
+  if (result.changed) {
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/editorial`);
+  }
+
+  redirect(returnTo);
+}
+
+// ---------------------------------------------------------------------------
 // moveEditorialItem — non-ripple move of a shot-backed item (PHASEC.NLE.C.M1)
 // Writes startSeconds only. Does not touch orderIndex, durationSeconds,
 // trims, shotId, or trackIndex, and never creates/deletes a gap item —

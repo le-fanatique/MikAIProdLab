@@ -9,6 +9,7 @@ import EditorialTimeline, {
 } from "@/components/EditorialTimeline";
 import SequencePreviewPlayer from "@/components/SequencePreviewPlayer";
 import { initializeEditorialTimeline } from "@/actions/shots";
+import { moveEditorialItemOrder } from "@/actions/editorialTimeline";
 
 export type EditorialWorkspaceShot = EditorialTimelineShot;
 
@@ -108,6 +109,19 @@ export default function EditorialWorkspace({
     return it.durationSeconds;
   }
 
+  // Move up/down (BASIC.EDITORIAL.2) — same sequence, same track, adjacent
+  // swap only. editorialItems is already ordered trackIndex asc, orderIndex
+  // asc, so filtering by trackIndex preserves the relative order.
+  const selectedItemSiblings = selectedItem
+    ? editorialItems.filter((it) => it.trackIndex === selectedItem.trackIndex)
+    : [];
+  const selectedItemPos = selectedItem
+    ? selectedItemSiblings.findIndex((it) => it.id === selectedItem.id)
+    : -1;
+  const canMoveItemUp = selectedItemPos > 0;
+  const canMoveItemDown =
+    selectedItemPos !== -1 && selectedItemPos < selectedItemSiblings.length - 1;
+
   return (
     <>
       {/* ── Sequence Viewer — dominant, on top ───────────────────── */}
@@ -205,6 +219,44 @@ export default function EditorialWorkspace({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {selectedItem && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Order</span>
+          <form action={moveEditorialItemOrder}>
+            <input type="hidden" name="projectId" value={String(projectId)} />
+            <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+            <input type="hidden" name="itemId" value={String(selectedItem.id)} />
+            <input type="hidden" name="direction" value="up" />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <button
+              type="submit"
+              disabled={!canMoveItemUp}
+              title="Move Up"
+              aria-label="Move Up"
+              className="rounded border border-[#232629] text-[#6e767d] px-2 py-1 text-[10px] hover:border-[#3a4046] hover:text-[#a4abb2] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              ↑ Move up
+            </button>
+          </form>
+          <form action={moveEditorialItemOrder}>
+            <input type="hidden" name="projectId" value={String(projectId)} />
+            <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+            <input type="hidden" name="itemId" value={String(selectedItem.id)} />
+            <input type="hidden" name="direction" value="down" />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <button
+              type="submit"
+              disabled={!canMoveItemDown}
+              title="Move Down"
+              aria-label="Move Down"
+              className="rounded border border-[#232629] text-[#6e767d] px-2 py-1 text-[10px] hover:border-[#3a4046] hover:text-[#a4abb2] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              ↓ Move down
+            </button>
+          </form>
         </div>
       )}
 

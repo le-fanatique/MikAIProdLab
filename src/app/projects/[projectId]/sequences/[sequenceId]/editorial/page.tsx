@@ -63,6 +63,7 @@ export default async function SequenceEditorialPage({ params }: Props) {
       id: item.id,
       type: item.type,
       orderIndex: item.orderIndex,
+      trackIndex: item.trackIndex,
       durationSeconds: item.durationSeconds,
       trimInSeconds: item.trimInSeconds,
       trimOutSeconds: item.trimOutSeconds,
