@@ -17,7 +17,9 @@
     "setup:windows": "powershell -ExecutionPolicy Bypass -File ./setup-windows.ps1",
     "doctor:windows": "powershell -ExecutionPolicy Bypass -File ./doctor.ps1",
     "dev:all": "node scripts/run-prod-lab.mjs dev",
-    "prod:all": "node scripts/run-prod-lab.mjs prod"
+    "prod:all": "node scripts/run-prod-lab.mjs prod",
+    "ai:init": "node scripts/agents-init.mjs",
+    "ai:review": "node scripts/agents-review-instructions.mjs"
   },
   "engines": {
     "node": ">=22 <23",

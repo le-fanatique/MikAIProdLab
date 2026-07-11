@@ -60,3 +60,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# .agents/ live workflow files (SUPERVISION.LOOP.1) — per-ticket scratch
+# state, regenerated from .agents/templates/*, not tracked. See
+# .agents/README.md.
+.agents/current_task.md
+.agents/claude_report.md
+.agents/codex_review.md
+.agents/codex_verdict.json
+.agents/claude_followup.md
+.agents/user_arbitration.md
