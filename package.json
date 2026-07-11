@@ -19,7 +19,8 @@
     "dev:all": "node scripts/run-prod-lab.mjs dev",
     "prod:all": "node scripts/run-prod-lab.mjs prod",
     "ai:init": "node scripts/agents-init.mjs",
-    "ai:review": "node scripts/agents-review-instructions.mjs"
+    "ai:review": "node scripts/agents-review-instructions.mjs",
+    "storage:audit": "node scripts/storage-audit.mjs"
   },
   "engines": {
     "node": ">=22 <23",
