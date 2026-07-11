@@ -39,6 +39,7 @@ import {
   serializeResultEditorialSnapshot,
   serializeResultWarnings,
 } from "@/types/sequenceResult";
+import { outdateFilmResultsForProject } from "./filmResults";
 
 async function assertSequenceOwnership(projectId: number, sequenceId: number): Promise<boolean> {
   const [sequence] = await db
@@ -134,6 +135,13 @@ export async function setActiveSequenceResult(
     return { ok: false, error: "Result not found in this sequence." };
   }
 
+  // FILM.RESULT.1.A: the project's Film Result manifest (if any) is built
+  // from active Sequence Results — changing which one is active for this
+  // sequence means any existing Film Result is no longer a faithful
+  // description of what would currently be assembled. Non-fatal: a
+  // Film Result doesn't have to exist for this to be a no-op.
+  await outdateFilmResultsForProject(projectId);
+
   revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
   return { ok: true };
 }
@@ -164,6 +172,10 @@ export async function archiveSequenceResult(
     .update(sequenceResults)
     .set({ status: "archived", updatedAt: new Date().toISOString() })
     .where(eq(sequenceResults.id, resultId));
+
+  // FILM.RESULT.1.A: archiving may have removed the sequence's only active
+  // result — outdate any Film Result that assumed it was still there.
+  await outdateFilmResultsForProject(projectId);
 
   revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
   return { ok: true };
@@ -200,6 +212,11 @@ export async function outdateSequenceResultsForSequence(
       )
     )
     .returning({ id: sequenceResults.id });
+
+  // FILM.RESULT.1.A: a structural change big enough to outdate this
+  // sequence's own results (e.g. EDITORIAL.INSERT.1's shot insertion)
+  // also invalidates any Film Result that included them.
+  await outdateFilmResultsForProject(projectId);
 
   revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
   return { ok: true, count: rows.length };

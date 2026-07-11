@@ -405,3 +405,60 @@ export const sequenceResults = sqliteTable(
 
 export type SequenceResult = typeof sequenceResults.$inferSelect;
 export type NewSequenceResult = typeof sequenceResults.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Film results — the published, playable output of a whole Project,
+// assembled from its sequences' active Sequence Results
+// (FILM.RESULT.1.A, see docs/EDITORIAL_ARCH_SEQUENCE_RESULT.md §2/§9's
+// "Project → Sequences → Sequence Results → Film Result" vision).
+//
+// Same shape/conventions as sequence_results, one level up: several rows
+// per project (every "create draft" is a new row), at most one meant to be
+// "active" at a time (applicative uniqueness — same demote-then-promote
+// transaction pattern as setActiveSequenceResult, see
+// src/actions/filmResults.ts), JSON-in-TEXT for the manifest/snapshot/
+// warnings columns.
+//
+// This ticket does not render a video — videoPath stays null until a
+// future FILM.RESULT.1.B actually assembles one; a Film Result here is a
+// manifest-only "draft" describing which Sequence Results *would* be used.
+// ---------------------------------------------------------------------------
+
+export const filmResults = sqliteTable(
+  "film_results",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    projectId: int("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    status: text("status", {
+      enum: ["draft", "published", "active", "archived", "outdated"],
+    })
+      .notNull()
+      .default("draft"),
+    videoPath: text("video_path"),
+    durationSeconds: real("duration_seconds"),
+    // JSON: FilmResultManifest — see src/types/filmResult.ts
+    sequenceResultManifest: text("sequence_result_manifest"),
+    // JSON: FilmProjectSnapshot — a fingerprint of which Sequence Results
+    // (by id/status) this Film Result was built from, for a future
+    // staleness check analogous to OPENREEL.CONFLICT.1's editorialSnapshot.
+    projectSnapshot: text("project_snapshot"),
+    notes: text("notes"),
+    // JSON: string[]
+    warnings: text("warnings"),
+    publishedAt: text("published_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    index("film_results_project_idx").on(table.projectId, table.status),
+  ]
+);
+
+export type FilmResult = typeof filmResults.$inferSelect;
+export type NewFilmResult = typeof filmResults.$inferInsert;

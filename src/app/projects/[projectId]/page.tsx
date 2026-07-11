@@ -7,9 +7,19 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
+import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
+import SequenceResultActionForm from "@/components/SequenceResultActionForm";
+import CreateFilmResultDraftButton from "@/components/CreateFilmResultDraftButton";
 import { deleteProject } from "@/actions/projects";
+import { listFilmResults, setActiveFilmResult, archiveFilmResult } from "@/actions/filmResults";
+import { refImageUrl } from "@/lib/refImageUrl";
+import {
+  parseFilmResultManifest,
+  parseFilmResultWarnings,
+  filmManifestSourceModeLabel,
+} from "@/types/filmResult";
 
 function SectionLabel({ label, action }: { label: string; action?: ReactNode }) {
   return (
@@ -55,6 +65,19 @@ export default async function ProjectPage({ params }: Props) {
 
   const deleteAction = deleteProject.bind(null, id);
 
+  const filmResultsList = await listFilmResults(id);
+  // Same display convention as the Sequence Result viewer (EDITORIAL.INSERT.1):
+  // show the active one, else fall back to the most recent outdated one
+  // rather than dropping to the empty state — the old result is still
+  // playable/inspectable, just clearly flagged stale.
+  const activeFilmResult =
+    filmResultsList.find((r) => r.status === "active") ??
+    filmResultsList.find((r) => r.status === "outdated") ??
+    null;
+  const previousFilmResults = filmResultsList.filter((r) => r.id !== activeFilmResult?.id);
+  const activeFilmResultManifest = activeFilmResult ? parseFilmResultManifest(activeFilmResult.sequenceResultManifest) : null;
+  const activeFilmResultWarnings = activeFilmResult ? parseFilmResultWarnings(activeFilmResult.warnings) : [];
+
   return (
     <div>
       <Breadcrumb
@@ -93,6 +116,161 @@ export default async function ProjectPage({ params }: Props) {
           </>
         }
       />
+
+      {/* ── Film Result ───────────────────────────────────── */}
+      <SectionLabel
+        label="Film Result"
+        action={<CreateFilmResultDraftButton projectId={id} />}
+      />
+
+      <Card className="mb-6">
+        {activeFilmResult ? (
+          <div className="flex flex-col gap-3">
+            {activeFilmResult.videoPath ? (
+              <video
+                src={refImageUrl(activeFilmResult.videoPath)}
+                controls
+                className="w-full rounded border border-[#2c3035]"
+              />
+            ) : (
+              <p className="text-xs text-[#4b5158]">This Film Result has no rendered video yet.</p>
+            )}
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="text-[#4b5158]">Status</span>
+                <StatusBadge status={activeFilmResult.status} />
+              </span>
+              {activeFilmResult.durationSeconds != null && (
+                <span>
+                  <span className="text-[#4b5158]">Duration </span>
+                  <span className="text-[#a4abb2]">{activeFilmResult.durationSeconds.toFixed(1)}s</span>
+                </span>
+              )}
+              {activeFilmResult.publishedAt && (
+                <span>
+                  <span className="text-[#4b5158]">Published </span>
+                  <span className="text-[#a4abb2]">{new Date(activeFilmResult.publishedAt).toLocaleString()}</span>
+                </span>
+              )}
+            </div>
+            {activeFilmResult.status === "outdated" && (
+              <p className="text-xs text-[#cda24f]">
+                This result is outdated because a sequence result changed after it was published.
+                Create a new Film Result Draft to update it.
+              </p>
+            )}
+            {activeFilmResult.notes && (
+              <p className="text-xs text-[#6e767d]">{activeFilmResult.notes}</p>
+            )}
+            {activeFilmResultWarnings.length > 0 && (
+              <ul className="flex flex-col gap-1 text-xs text-[#cda24f]">
+                {activeFilmResultWarnings.map((w, i) => (
+                  <li key={i}>⚠ {w}</li>
+                ))}
+              </ul>
+            )}
+
+            {activeFilmResultManifest && (
+              <div className="border-t border-[#232629] pt-3 mt-1">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158] mb-2">
+                  Sequences included
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {activeFilmResultManifest.sequences.map((s) => (
+                    <div key={s.sequenceId} className="flex items-center gap-3 text-xs">
+                      <span className="text-[#a4abb2] flex-1 truncate">{s.sequenceTitle ?? `Sequence ${s.sequenceId}`}</span>
+                      <span className="text-[#4b5158] w-16 shrink-0">{filmManifestSourceModeLabel(s.sequenceResultSourceMode)}</span>
+                      <span className="text-[#4b5158] w-16 shrink-0 text-right font-mono">
+                        {s.durationSeconds != null ? `${s.durationSeconds.toFixed(1)}s` : "—"}
+                      </span>
+                      <span className={`w-32 shrink-0 text-right ${s.included ? "text-[#6b9e72]" : "text-[#cf7b6b]"}`}>
+                        {s.included
+                          ? "Included"
+                          : s.missingReason?.toLowerCase().includes("outdated")
+                            ? "Outdated Result"
+                            : "Missing Result"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState
+            title="No film result created yet."
+            description="Publish active sequence results first, then create a Film Result."
+          />
+        )}
+      </Card>
+
+      {previousFilmResults.length > 0 && (
+        <>
+          <SectionLabel label="Previous Film Results" />
+          <div className="rounded-lg border border-[#232629] overflow-hidden mb-6">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#232629] bg-[#141618]">
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                    Status
+                  </th>
+                  <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] w-20">
+                    Dur.
+                  </th>
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+                    Created
+                  </th>
+                  <th className="px-4 py-3 w-40" />
+                </tr>
+              </thead>
+              <tbody>
+                {previousFilmResults.map((r) => {
+                  const setActiveAction = async () => {
+                    "use server";
+                    await setActiveFilmResult(id, r.id);
+                  };
+                  const archiveAction = async () => {
+                    "use server";
+                    await archiveFilmResult(id, r.id);
+                  };
+                  return (
+                    <tr key={r.id} className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors">
+                      <td className="px-4 py-3">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
+                        {r.durationSeconds != null ? `${r.durationSeconds.toFixed(1)}s` : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-[#6e767d] text-xs">
+                        {new Date(r.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-3">
+                          {r.status !== "archived" && (
+                            <SequenceResultActionForm
+                              action={setActiveAction}
+                              label="Set Active"
+                              className="text-[#5b93d6] hover:text-[#8fbbe8] transition-colors text-xs"
+                            />
+                          )}
+                          {r.status !== "archived" && (
+                            <SequenceResultActionForm
+                              action={archiveAction}
+                              label="Archive"
+                              confirmMessage="Archive this film result?"
+                              className="text-[#cf7b6b]/70 hover:text-[#cf7b6b] transition-colors text-xs"
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* ── Overview ──────────────────────────────────────── */}
       {(project.pitch || project.story) && (
