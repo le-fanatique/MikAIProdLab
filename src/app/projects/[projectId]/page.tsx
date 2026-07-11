@@ -189,12 +189,28 @@ export default async function ProjectPage({ params }: Props) {
                   <span className="text-[#a4abb2]">{new Date(activeFilmResult.publishedAt).toLocaleString()}</span>
                 </span>
               )}
+              {activeFilmResultManifest && (
+                <span>
+                  <span className="text-[#4b5158]">Sequences </span>
+                  <span className="text-[#a4abb2]">
+                    {activeFilmResultManifest.sequences.filter((s) => s.included).length}/{activeFilmResultManifest.sequences.length} included
+                  </span>
+                </span>
+              )}
             </div>
             {activeFilmResult.status === "outdated" && (
-              <p className="text-xs text-[#cda24f]">
-                This result is outdated because a sequence result changed after it was published.
-                Create a new Film Result Draft to update it.
-              </p>
+              <div className="rounded border border-[#cda24f]/30 bg-[#cda24f]/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-[#cda24f]">
+                  This result is outdated — one or more Sequence Results have changed since it was published.
+                </p>
+                <RenderFilmResultButton
+                  projectId={id}
+                  hasExistingFilmResult={filmResultsList.length > 0}
+                  missingOrOutdatedCount={renderPreviewMissingCount}
+                  totalSequenceCount={renderPreviewTotalCount}
+                  label="Render New Film Result"
+                />
+              </div>
             )}
             {activeFilmResult.notes && (
               <p className="text-xs text-[#6e767d]">{activeFilmResult.notes}</p>
@@ -218,12 +234,13 @@ export default async function ProjectPage({ params }: Props) {
                   Sequences included ({activeFilmResultManifest.sequences.filter((s) => s.included).length}/{activeFilmResultManifest.sequences.length})
                 </p>
                 <div className="flex flex-col gap-1.5">
-                  {activeFilmResultManifest.sequences.map((s) => (
+                  {activeFilmResultManifest.sequences.map((s, i) => (
                     <Link
                       key={s.sequenceId}
                       href={`/projects/${id}/sequences/${s.sequenceId}`}
                       className="flex items-center gap-3 text-xs rounded px-2 py-1 -mx-2 hover:bg-[#212529] transition-colors"
                     >
+                      <span className="text-[#4b5158] w-6 shrink-0 font-mono">{String(i + 1).padStart(2, "0")}</span>
                       <span className="text-[#a4abb2] flex-1 truncate">{s.sequenceTitle ?? `Sequence ${s.sequenceId}`}</span>
                       <span className="text-[#4b5158] w-16 shrink-0">{filmManifestSourceModeLabel(s.sequenceResultSourceMode)}</span>
                       <span className="text-[#4b5158] w-16 shrink-0 text-right font-mono">
@@ -233,7 +250,7 @@ export default async function ProjectPage({ params }: Props) {
                         {s.included
                           ? "Included"
                           : s.missingReason?.toLowerCase().includes("outdated")
-                            ? "Outdated Result"
+                            ? "Outdated"
                             : "Missing Result"}
                       </span>
                     </Link>
@@ -291,23 +308,34 @@ export default async function ProjectPage({ params }: Props) {
                           {new Date(r.createdAt).toLocaleString()}
                         </td>
                         <td className="px-4 py-3">
-                          {r.status !== "archived" ? (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <SequenceResultActionForm
-                                action={setActiveAction}
-                                label="Set Active"
-                                className="rounded border border-[#5b93d6]/30 text-[#5b93d6] hover:border-[#5b93d6]/60 hover:text-[#8fbbe8] transition-colors text-xs px-2 py-1"
-                              />
-                              <SequenceResultActionForm
-                                action={archiveAction}
-                                label="Archive"
-                                confirmMessage="Archive this film result?"
-                                className="rounded border border-[#cf7b6b]/30 text-[#cf7b6b]/80 hover:border-[#cf7b6b]/60 hover:text-[#cf7b6b] transition-colors text-xs px-2 py-1"
-                              />
-                            </div>
-                          ) : (
-                            <div className="text-right text-[10px] text-[#4b5158] uppercase tracking-wider">Archived</div>
-                          )}
+                          <div className="flex items-center justify-end gap-1.5">
+                            {r.videoPath && (
+                              <Link
+                                href={refImageUrl(r.videoPath)}
+                                target="_blank"
+                                className="rounded border border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors text-xs px-2 py-1"
+                              >
+                                Play
+                              </Link>
+                            )}
+                            {r.status !== "archived" ? (
+                              <>
+                                <SequenceResultActionForm
+                                  action={setActiveAction}
+                                  label="Set Active"
+                                  className="rounded border border-[#5b93d6]/30 text-[#5b93d6] hover:border-[#5b93d6]/60 hover:text-[#8fbbe8] transition-colors text-xs px-2 py-1"
+                                />
+                                <SequenceResultActionForm
+                                  action={archiveAction}
+                                  label="Archive"
+                                  confirmMessage="Archive this film result?"
+                                  className="rounded border border-[#cf7b6b]/30 text-[#cf7b6b]/80 hover:border-[#cf7b6b]/60 hover:text-[#cf7b6b] transition-colors text-xs px-2 py-1"
+                                />
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-[#4b5158] uppercase tracking-wider">Archived</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

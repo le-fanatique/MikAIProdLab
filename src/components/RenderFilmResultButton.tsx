@@ -11,6 +11,8 @@ type Props = {
   /** Sequences that currently have no active/non-outdated Sequence Result — surfaced in the confirm dialog so the user knows the render would be incomplete before triggering it. */
   missingOrOutdatedCount: number;
   totalSequenceCount: number;
+  /** Overrides the computed default label — e.g. FILM.RESULT.3's outdated-alert call-to-action ("Render New Film Result"), which reuses this exact button/action rather than introducing a new one. */
+  label?: string;
 };
 
 export default function RenderFilmResultButton({
@@ -18,12 +20,13 @@ export default function RenderFilmResultButton({
   hasExistingFilmResult,
   missingOrOutdatedCount,
   totalSequenceCount,
+  label: labelOverride,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<{ ok: boolean; message: string; warnings?: string[] } | null>(null);
 
-  const label = hasExistingFilmResult ? "Render Again" : "Render Film Result";
+  const label = labelOverride ?? (hasExistingFilmResult ? "Render Again" : "Render Film Result");
 
   function handleRender() {
     const lines = ["Render a new Film Result from the current active Sequence Results?"];
