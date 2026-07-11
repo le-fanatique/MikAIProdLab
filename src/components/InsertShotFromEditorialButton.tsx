@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   insertShotInSequenceFromEditorialContext,
   generateInsertedShotBriefFromNeighbors,
 } from "@/actions/editorialInsert";
-import { deleteEditorialGap } from "@/actions/editorialTimeline";
 
 // Kept in sync by hand with the server action's own default (a "use
 // server" file may only export async functions, so the constant can't be
@@ -20,14 +19,6 @@ type Props = {
   insertBeforeShotId?: number | null;
   /** "Insert Shot Here" between/after rows, "Insert New Shot" at the end of the list. */
   label?: string;
-  /**
-   * BASIC.EDITORIAL.3 "Replace with New Shot": when set, the gap with this
-   * editorial item id is deleted right after the new shot is created
-   * successfully — never before, and never if creation fails. Requires
-   * `returnTo` (the gap deletion action redirects there).
-   */
-  replaceGapItemId?: number | null;
-  returnTo?: string;
 };
 
 type FormState = "closed" | "open";
@@ -38,11 +29,8 @@ export default function InsertShotFromEditorialButton({
   insertAfterShotId = null,
   insertBeforeShotId = null,
   label = "Insert Shot Here",
-  replaceGapItemId = null,
-  returnTo,
 }: Props) {
   const router = useRouter();
-  const [, startGapDeleteTransition] = useTransition();
   const [formState, setFormState] = useState<FormState>("closed");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -118,21 +106,6 @@ export default function InsertShotFromEditorialButton({
       });
       reset();
       setFormState("closed");
-
-      // Replace-gap flow: only delete the gap after the new shot exists —
-      // never before, and never on failure. This redirects, which reloads
-      // the page and supersedes the router.refresh() below.
-      if (replaceGapItemId != null) {
-        const gapFd = new FormData();
-        gapFd.set("projectId", String(projectId));
-        gapFd.set("sequenceId", String(sequenceId));
-        gapFd.set("itemId", String(replaceGapItemId));
-        gapFd.set("returnTo", returnTo ?? `/projects/${projectId}/sequences/${sequenceId}/editorial`);
-        startGapDeleteTransition(() => {
-          deleteEditorialGap(gapFd);
-        });
-      }
-
       router.refresh();
     } else {
       setResult({ ok: false, message: res.error });

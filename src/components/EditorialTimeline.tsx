@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { updateSequenceShotDurations, updateShotTrim } from "@/actions/shots";
 import {
-  resizeEditorialItemRightEdge,
   updateEditorialItemTrim,
   resetAllEditorialItemTrims,
 } from "@/actions/editorialTimeline";
@@ -105,18 +104,6 @@ type TrimDragState = {
   trackWidth: number;
 };
 
-/** Right-edge non-ripple resize drag state (items mode, shot with video). */
-type RightResizeDragState = {
-  itemId: number;
-  pointerStartX: number;
-  trimIn: number;
-  trimOut: number;
-  videoDuration: number;
-  nextGapDuration: number | null; // null = no gap after (extend blocked)
-  initialTotalDur: number;
-  trackWidth: number;
-};
-
 type TrimRange = { trimIn: number; trimOut: number };
 
 function parseRaw(raw: string): number | null {
@@ -193,14 +180,7 @@ export default function EditorialTimeline({
 
   const dragRef = useRef<DragState | null>(null);
   const trimDragRef = useRef<TrimDragState | null>(null);
-  const rightResizeRef = useRef<RightResizeDragState | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
-
-  // Ghost gap preview: shown during right-edge drag in items mode
-  const [ghostRightResize, setGhostRightResize] = useState<{
-    itemId: number;
-    gapSeconds: number; // positive = creates gap, negative = consumes gap
-  } | null>(null);
 
   // Real video durations read client-side from metadata
   const [videoDurations, setVideoDurations] = useState<Record<number, number>>({});
@@ -404,39 +384,6 @@ export default function EditorialTimeline({
     };
   }
 
-  /** Right-edge non-ripple resize: start drag on the right handle of an item shot with video. */
-  function startItemRightResize(
-    e: React.PointerEvent<HTMLDivElement>,
-    item: EditorialItemView
-  ) {
-    const vd = videoDurations[item.id];
-    const current = itemTrimCurrent(item);
-    if (vd === undefined || vd <= 0 || !current || !trackRef.current) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-
-    // Find next item gap duration
-    const itemIndex = items!.indexOf(item);
-    const nextItem = items![itemIndex + 1];
-    const nextGapDuration =
-      nextItem && nextItem.type === "gap"
-        ? (nextItem.durationSeconds ?? itemEffectiveDuration(nextItem))
-        : null;
-
-    rightResizeRef.current = {
-      itemId: item.id,
-      pointerStartX: e.clientX,
-      trimIn: current.trimIn,
-      trimOut: current.trimOut,
-      videoDuration: round1(vd),
-      nextGapDuration,
-      initialTotalDur: itemsTotal,
-      trackWidth: trackRef.current.clientWidth,
-    };
-    setGhostRightResize(null);
-  }
-
   // Effective item duration, draft-aware for live width preview during drag
   const itemEff = (item: EditorialItemView): number => {
     const draft = trimDrafts[item.id];
@@ -469,52 +416,10 @@ export default function EditorialTimeline({
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    // ── Right-edge non-ripple resize (items mode) ──
-    const rs = rightResizeRef.current;
-    if (rs && rs.initialTotalDur > 0) {
-      const deltaSec =
-        ((e.clientX - rs.pointerStartX) / rs.trackWidth) * rs.initialTotalDur;
-      const rawTrimOut = snap(rs.trimOut + deltaSec);
-
-      // Clamp: left side — trimIn + MIN_TRIM_GAP
-      let clampedOut = Math.max(rawTrimOut, rs.trimIn + MIN_TRIM_GAP);
-      // Clamp: right side — videoDuration
-      clampedOut = Math.min(clampedOut, rs.videoDuration);
-
-      // Extend blocked by gap boundary
-      if (rs.nextGapDuration !== null) {
-        // Max extension = old trimOut + nextGapDuration
-        const maxExtend = rs.trimOut + rs.nextGapDuration;
-        clampedOut = Math.min(clampedOut, maxExtend);
-      } else {
-        // No gap after: cannot extend beyond original trimOut
-        clampedOut = Math.min(clampedOut, rs.trimOut);
-      }
-
-      clampedOut = round1(clampedOut);
-
-      // Live preview (BASIC.EDITORIAL.4): the dragged shot's own segment
-      // must resize in step with the pointer, not just the ghost gap next
-      // to it — itemEff()/widthPct already read trimDrafts, so setting it
-      // here is enough to drive both the shot's width and the effective
-      // duration total shown in the header, with no new state model.
-      setTrimDrafts((prev) => ({
-        ...prev,
-        [rs.itemId]: { trimIn: rs.trimIn, trimOut: clampedOut },
-      }));
-
-      // Show ghost gap
-      const deltaGap = rs.trimOut - clampedOut; // positive = shrink (creates gap), negative = extend (consumes)
-      if (Math.abs(deltaGap) > 0.05) {
-        setGhostRightResize({ itemId: rs.itemId, gapSeconds: deltaGap });
-      } else {
-        setGhostRightResize(null);
-      }
-
-      return;
-    }
-
-    // Trim handle drag (shots with video) — legacy / left-edge items mode
+    // Trim handle drag (shots with video) — both edges, legacy lane and
+    // items mode alike. No gap is ever created, extended, consumed or
+    // deleted from a trim drag (BASIC.EDITORIAL.5) — trimOut/trimIn are
+    // the only fields touched, bounded by videoDuration and MIN_TRIM_GAP.
     const ts = trimDragRef.current;
     if (ts && ts.initialTotalDur > 0) {
       const deltaSec =
@@ -551,37 +456,8 @@ export default function EditorialTimeline({
   }
 
   function handlePointerUp() {
-    // ── Save right-edge resize ──
-    const rs = rightResizeRef.current;
-    if (rs && trackRef.current) {
-      // Recalculate final trimOut from current ghost state
-      const gapSec = ghostRightResize?.itemId === rs.itemId ? ghostRightResize.gapSeconds : 0;
-      const newTrimOut = round1(rs.trimOut - gapSec);
-
-      if (Math.abs(newTrimOut - rs.trimOut) > 0.1) {
-        const fd = new FormData();
-        fd.set("projectId", String(projectId));
-        fd.set("sequenceId", String(sequenceId));
-        fd.set("itemId", String(rs.itemId));
-        fd.set("newTrimOutSeconds", newTrimOut.toString());
-        fd.set("returnTo", returnTo);
-        startTrimTransition(() => {
-          resizeEditorialItemRightEdge(fd);
-        });
-      }
-      // The server action (or the no-op case above) is the source of
-      // truth going forward — drop the live-preview draft so the segment
-      // reflects the reloaded props rather than a stale local value.
-      setTrimDrafts((prev) => {
-        const next = { ...prev };
-        delete next[rs.itemId];
-        return next;
-      });
-    }
-    setGhostRightResize(null);
     dragRef.current = null;
     trimDragRef.current = null;
-    rightResizeRef.current = null;
   }
 
   function startTrimDrag(
@@ -808,17 +684,10 @@ export default function EditorialTimeline({
                           role="slider"
                           tabIndex={0}
                           aria-label="Trim out handle"
+                          title="Trim out"
                           className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
                           style={{ width: "10px" }}
-                          onPointerDown={(e) => startItemRightResize(e, item)}
-                          title={
-                            (() => {
-                              const idx = items!.indexOf(item);
-                              const nxt = items![idx + 1];
-                              if (nxt && nxt.type === "gap") return "Trim out — shortens the shot or extends into the next gap";
-                              return "Trim out — shortens the shot, creates a gap after it";
-                            })()
-                          }
+                          onPointerDown={(e) => startItemTrimDrag(e, item, "out")}
                         >
                           <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
                         </div>
@@ -832,26 +701,6 @@ export default function EditorialTimeline({
                         <div className="w-0.5 h-5 rounded-full bg-[#4b5158]" />
                       </div>
                     ))}
-
-                  {/* Ghost gap overlay when dragging right edge of previous item */}
-                  {ghostRightResize?.itemId === item.id && (
-                    <div
-                      className="absolute right-0 top-0 bottom-0 flex flex-col items-center justify-center pointer-events-none z-20"
-                      style={{
-                        width: `${Math.max(Math.abs(ghostRightResize.gapSeconds) / itemsTotal * 100, 2)}%`,
-                        right: "-1px",
-                        backgroundColor: ghostRightResize.gapSeconds > 0
-                          ? "rgba(75, 81, 88, 0.35)"
-                          : "rgba(91, 147, 214, 0.15)",
-                      }}
-                    >
-                      <span className="text-[9px] font-mono text-[#a4abb2] leading-none">
-                        {ghostRightResize.gapSeconds > 0
-                          ? `Creates ${ghostRightResize.gapSeconds.toFixed(1)}s gap`
-                          : `Consumes ${Math.abs(ghostRightResize.gapSeconds).toFixed(1)}s gap`}
-                      </span>
-                    </div>
-                  )}
                 </div>
               );
             })}

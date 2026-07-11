@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { updateSequenceShotOrder, createPlaceholderShot, updateShotTrim } from "@/actions/shots";
+import { updateSequenceShotOrder, updateShotTrim } from "@/actions/shots";
 
 type EditorialShot = {
   id: number;
@@ -272,32 +272,6 @@ export default function EditorialShotList({
           <p className="text-xs text-[#4b5158] py-2">No shots in this sequence yet.</p>
         )}
       </div>
-
-      {/* ── Add placeholder ── */}
-      <form
-        action={createPlaceholderShot}
-        className="flex items-center gap-2 border-t border-[#1a1d20] pt-3"
-      >
-        <input type="hidden" name="projectId" value={String(projectId)} />
-        <input type="hidden" name="sequenceId" value={String(sequenceId)} />
-        <input type="hidden" name="returnTo" value={returnTo} />
-        <span className="text-xs text-[#6e767d]">Add Placeholder Shot</span>
-        <input
-          type="number"
-          name="durationSeconds"
-          step="0.1"
-          min="0.1"
-          defaultValue="2.0"
-          className="w-20 rounded bg-[#0d0e10] border border-[#2c3035] px-2 py-1 text-xs text-[#e7e9ec] text-right focus:outline-none focus:border-[#3a4046] transition-colors tabular-nums font-mono"
-        />
-        <span className="text-[10px] text-[#4b5158]">s</span>
-        <button
-          type="submit"
-          className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-        >
-          Add
-        </button>
-      </form>
     </div>
   );
 }

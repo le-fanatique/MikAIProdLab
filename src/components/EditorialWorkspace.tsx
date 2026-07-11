@@ -127,19 +127,6 @@ export default function EditorialWorkspace({
   const canMoveItemDown =
     selectedItemPos !== -1 && selectedItemPos < selectedItemSiblings.length - 1;
 
-  // Replace-gap anchor (BASIC.EDITORIAL.3): reuses the existing Insert New
-  // Shot workflow, anchored on whichever editorial neighbor is a shot, so
-  // the new shot lands adjacent to the gap's position on both the shots
-  // table and the editorial layer (see insertShotInSequenceFromEditorialContext).
-  const selectedGapPrevShotId =
-    selectedItem?.type === "gap" && selectedItemPos > 0
-      ? selectedItemSiblings[selectedItemPos - 1].shotId
-      : null;
-  const selectedGapNextShotId =
-    selectedItem?.type === "gap" && selectedItemPos !== -1 && selectedItemPos < selectedItemSiblings.length - 1
-      ? selectedItemSiblings[selectedItemPos + 1].shotId
-      : null;
-
   return (
     <>
       {/* ── Sequence Viewer — dominant, on top ───────────────────── */}
@@ -217,15 +204,6 @@ export default function EditorialWorkspace({
                   Delete gap
                 </button>
               </form>
-              <InsertShotFromEditorialButton
-                projectId={projectId}
-                sequenceId={sequenceId}
-                insertAfterShotId={selectedGapPrevShotId}
-                insertBeforeShotId={selectedGapPrevShotId === null ? selectedGapNextShotId : undefined}
-                label="Replace with New Shot"
-                replaceGapItemId={selectedItem.id}
-                returnTo={returnTo}
-              />
             </>
           ) : (
             <>
@@ -272,12 +250,26 @@ export default function EditorialWorkspace({
                 </form>
               )}
               {selectedItem.shotId !== null && (
-                <Link
-                  href={`/projects/${projectId}/sequences/${sequenceId}/shots/${selectedItem.shotId}`}
-                  className="ml-auto shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                >
-                  Open Shot Detail →
-                </Link>
+                <>
+                  <InsertShotFromEditorialButton
+                    projectId={projectId}
+                    sequenceId={sequenceId}
+                    insertBeforeShotId={selectedItem.shotId}
+                    label="Insert Shot Before"
+                  />
+                  <InsertShotFromEditorialButton
+                    projectId={projectId}
+                    sequenceId={sequenceId}
+                    insertAfterShotId={selectedItem.shotId}
+                    label="Insert Shot After"
+                  />
+                  <Link
+                    href={`/projects/${projectId}/sequences/${sequenceId}/shots/${selectedItem.shotId}`}
+                    className="ml-auto shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                  >
+                    Open Shot Detail →
+                  </Link>
+                </>
               )}
             </>
           )}
