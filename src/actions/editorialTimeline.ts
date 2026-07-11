@@ -90,6 +90,153 @@ export async function updateEditorialItemTrim(formData: FormData): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// resetAllEditorialItemTrims — clears trims on every "shot" item in the
+// sequence (BASIC.EDITORIAL.3). Restores each shot's source/editorial
+// duration. Gap items are never touched or deleted — the schema cannot
+// reliably tell a deliberate gap from one created by a trim, so gap removal
+// stays an explicit, separate action (deleteEditorialGap).
+// ---------------------------------------------------------------------------
+
+export async function resetAllEditorialItemTrims(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const returnToRaw = formData.get("returnTo");
+  const returnTo =
+    typeof returnToRaw === "string" && returnToRaw.trim().startsWith("/")
+      ? returnToRaw.trim()
+      : `/projects/${projectId}/sequences/${sequenceId}/editorial`;
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0
+  ) {
+    redirect(returnTo);
+  }
+
+  const [sequence] = await db
+    .select({ id: sequences.id, projectId: sequences.projectId })
+    .from(sequences)
+    .where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) {
+    redirect(returnTo);
+  }
+
+  const now = new Date().toISOString();
+  const trimmedItems = await db
+    .select({ id: sequenceEditorialItems.id })
+    .from(sequenceEditorialItems)
+    .where(
+      and(
+        eq(sequenceEditorialItems.sequenceId, sequenceId),
+        eq(sequenceEditorialItems.type, "shot")
+      )
+    );
+
+  if (trimmedItems.length > 0) {
+    await db
+      .update(sequenceEditorialItems)
+      .set({ trimInSeconds: null, trimOutSeconds: null, updatedAt: now })
+      .where(
+        and(
+          eq(sequenceEditorialItems.sequenceId, sequenceId),
+          eq(sequenceEditorialItems.type, "shot")
+        )
+      );
+
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/editorial`);
+  }
+
+  redirect(returnTo);
+}
+
+// ---------------------------------------------------------------------------
+// deleteEditorialGap — removes exactly one gap item (BASIC.EDITORIAL.3).
+// Shot items and their durations are never touched. Neighboring items are
+// not deleted; they simply become adjacent once the gap row is gone, since
+// the timeline is derived from array order and cumulative durations, not
+// from a stored absolute position.
+// ---------------------------------------------------------------------------
+
+export async function deleteEditorialGap(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const itemId = parseInt(formData.get("itemId") as string, 10);
+  const returnToRaw = formData.get("returnTo");
+  const returnTo =
+    typeof returnToRaw === "string" && returnToRaw.trim().startsWith("/")
+      ? returnToRaw.trim()
+      : `/projects/${projectId}/sequences/${sequenceId}/editorial`;
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(itemId) || itemId <= 0
+  ) {
+    redirect(returnTo);
+  }
+
+  const now = new Date().toISOString();
+  const result = db.transaction((tx) => {
+    const seqRows = tx
+      .select({ id: sequences.id, projectId: sequences.projectId })
+      .from(sequences)
+      .where(eq(sequences.id, sequenceId))
+      .all() as unknown as { id: number; projectId: number }[];
+    const seq = seqRows[0];
+    if (!seq || seq.projectId !== projectId) return { changed: false };
+
+    const itemRows = tx
+      .select({
+        id: sequenceEditorialItems.id,
+        sequenceId: sequenceEditorialItems.sequenceId,
+        type: sequenceEditorialItems.type,
+        trackIndex: sequenceEditorialItems.trackIndex,
+      })
+      .from(sequenceEditorialItems)
+      .where(eq(sequenceEditorialItems.id, itemId))
+      .all() as unknown as { id: number; sequenceId: number; type: string; trackIndex: number }[];
+    const item = itemRows[0];
+    if (!item || item.sequenceId !== sequenceId) return { changed: false };
+    if (item.type !== "gap") return { changed: false };
+
+    tx.delete(sequenceEditorialItems).where(eq(sequenceEditorialItems.id, itemId)).run();
+
+    // Normalize orderIndex 0..n-1 on the affected track — same convention
+    // as resizeEditorialItemRightEdge, keeps indices contiguous.
+    const remaining = tx
+      .select({ id: sequenceEditorialItems.id, orderIndex: sequenceEditorialItems.orderIndex })
+      .from(sequenceEditorialItems)
+      .where(
+        and(
+          eq(sequenceEditorialItems.sequenceId, sequenceId),
+          eq(sequenceEditorialItems.trackIndex, item.trackIndex)
+        )
+      )
+      .orderBy(asc(sequenceEditorialItems.orderIndex))
+      .all() as unknown as { id: number; orderIndex: number }[];
+
+    for (let i = 0; i < remaining.length; i++) {
+      if (remaining[i].orderIndex !== i) {
+        tx.update(sequenceEditorialItems)
+          .set({ orderIndex: i, updatedAt: now })
+          .where(eq(sequenceEditorialItems.id, remaining[i].id))
+          .run();
+      }
+    }
+
+    return { changed: true };
+  });
+
+  if (result.changed) {
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}`);
+    revalidatePath(`/projects/${projectId}/sequences/${sequenceId}/editorial`);
+  }
+
+  redirect(returnTo);
+}
+
+// ---------------------------------------------------------------------------
 // resizeEditorialItemRightEdge — non-ripple right-edge resize (editorial)
 // Shrink → create/extend next gap ; Extend → consume next gap
 // Shot items with video only. Left handle untouched.

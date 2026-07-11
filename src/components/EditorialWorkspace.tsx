@@ -9,7 +9,12 @@ import EditorialTimeline, {
 } from "@/components/EditorialTimeline";
 import SequencePreviewPlayer from "@/components/SequencePreviewPlayer";
 import { initializeEditorialTimeline } from "@/actions/shots";
-import { moveEditorialItemOrder } from "@/actions/editorialTimeline";
+import {
+  moveEditorialItemOrder,
+  updateEditorialItemTrim,
+  deleteEditorialGap,
+} from "@/actions/editorialTimeline";
+import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
 
 export type EditorialWorkspaceShot = EditorialTimelineShot;
 
@@ -122,6 +127,19 @@ export default function EditorialWorkspace({
   const canMoveItemDown =
     selectedItemPos !== -1 && selectedItemPos < selectedItemSiblings.length - 1;
 
+  // Replace-gap anchor (BASIC.EDITORIAL.3): reuses the existing Insert New
+  // Shot workflow, anchored on whichever editorial neighbor is a shot, so
+  // the new shot lands adjacent to the gap's position on both the shots
+  // table and the editorial layer (see insertShotInSequenceFromEditorialContext).
+  const selectedGapPrevShotId =
+    selectedItem?.type === "gap" && selectedItemPos > 0
+      ? selectedItemSiblings[selectedItemPos - 1].shotId
+      : null;
+  const selectedGapNextShotId =
+    selectedItem?.type === "gap" && selectedItemPos !== -1 && selectedItemPos < selectedItemSiblings.length - 1
+      ? selectedItemSiblings[selectedItemPos + 1].shotId
+      : null;
+
   return (
     <>
       {/* ── Sequence Viewer — dominant, on top ───────────────────── */}
@@ -180,6 +198,34 @@ export default function EditorialWorkspace({
                   ? `${selectedItem.durationSeconds.toFixed(1)}s`
                   : "—"}
               </span>
+              <form
+                action={deleteEditorialGap}
+                onSubmit={(e) => {
+                  if (!window.confirm("Delete this gap? This cannot be undone.")) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                <input type="hidden" name="projectId" value={String(projectId)} />
+                <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+                <input type="hidden" name="itemId" value={String(selectedItem.id)} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <button
+                  type="submit"
+                  className="rounded border border-[#3d2323] text-[#cf7b6b] px-2 py-1 text-[10px] hover:border-[#cf7b6b] hover:bg-[#cf7b6b]/10 transition-colors"
+                >
+                  Delete gap
+                </button>
+              </form>
+              <InsertShotFromEditorialButton
+                projectId={projectId}
+                sequenceId={sequenceId}
+                insertAfterShotId={selectedGapPrevShotId}
+                insertBeforeShotId={selectedGapPrevShotId === null ? selectedGapNextShotId : undefined}
+                label="Replace with New Shot"
+                replaceGapItemId={selectedItem.id}
+                returnTo={returnTo}
+              />
             </>
           ) : (
             <>
@@ -208,6 +254,21 @@ export default function EditorialWorkspace({
                   Trim {selectedItem.trimInSeconds!.toFixed(1)}s →{" "}
                   {selectedItem.trimOutSeconds!.toFixed(1)}s
                 </span>
+              )}
+              {itemHasTrim(selectedItem) && (
+                <form action={updateEditorialItemTrim}>
+                  <input type="hidden" name="projectId" value={String(projectId)} />
+                  <input type="hidden" name="sequenceId" value={String(sequenceId)} />
+                  <input type="hidden" name="itemId" value={String(selectedItem.id)} />
+                  <input type="hidden" name="clearTrim" value="1" />
+                  <input type="hidden" name="returnTo" value={returnTo} />
+                  <button
+                    type="submit"
+                    className="text-[10px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
+                  >
+                    Reset trim
+                  </button>
+                </form>
               )}
               {selectedItem.shotId !== null && (
                 <Link

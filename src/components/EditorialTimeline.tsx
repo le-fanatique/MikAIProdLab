@@ -2,7 +2,11 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { updateSequenceShotDurations, updateShotTrim } from "@/actions/shots";
-import { resizeEditorialItemRightEdge, updateEditorialItemTrim } from "@/actions/editorialTimeline";
+import {
+  resizeEditorialItemRightEdge,
+  updateEditorialItemTrim,
+  resetAllEditorialItemTrims,
+} from "@/actions/editorialTimeline";
 
 // Editorial status colors
 const COLOR_APPROVED = "#6b9e72";
@@ -303,6 +307,19 @@ export default function EditorialTimeline({
     });
   }
 
+  // No nested <form>: this lives inside the Apply Durations form, so the
+  // call stays imperative like the other trim saves.
+  function resetAllTrims() {
+    if (!window.confirm("Reset all trims on this timeline? Gaps are kept.")) return;
+    const fd = new FormData();
+    fd.set("projectId", String(projectId));
+    fd.set("sequenceId", String(sequenceId));
+    fd.set("returnTo", returnTo);
+    startTrimTransition(() => {
+      resetAllEditorialItemTrims(fd);
+    });
+  }
+
   function resetTrim(shotId: number) {
     setTrimDrafts((prev) => {
       const next = { ...prev };
@@ -439,6 +456,7 @@ export default function EditorialTimeline({
   const missingVideoCount = itemsMode
     ? items!.filter((it) => it.type === "shot" && (it.isPlaceholder || !it.hasApprovedVideo)).length
     : 0;
+  const hasAnyItemTrim = itemsMode ? items!.some((it) => itemHasValidTrim(it)) : false;
 
   // ── Pointer handlers ──────────────────────────────────────────────
 
@@ -605,6 +623,18 @@ export default function EditorialTimeline({
             <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
           )}
         </div>
+        {itemsMode && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={resetAllTrims}
+              disabled={!hasAnyItemTrim || isSavingTrim}
+              className="text-xs text-[#4b5158] hover:text-[#cf7b6b] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reset all trims
+            </button>
+          </div>
+        )}
         {!itemsMode && (
           <div className="flex items-center gap-2 shrink-0">
             <button
