@@ -12,6 +12,7 @@ import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import CreateFilmResultDraftButton from "@/components/CreateFilmResultDraftButton";
+import RenderFilmResultButton from "@/components/RenderFilmResultButton";
 import { deleteProject } from "@/actions/projects";
 import { listFilmResults, setActiveFilmResult, archiveFilmResult } from "@/actions/filmResults";
 import { refImageUrl } from "@/lib/refImageUrl";
@@ -120,7 +121,12 @@ export default async function ProjectPage({ params }: Props) {
       {/* ── Film Result ───────────────────────────────────── */}
       <SectionLabel
         label="Film Result"
-        action={<CreateFilmResultDraftButton projectId={id} />}
+        action={
+          <div className="flex items-center gap-2">
+            <CreateFilmResultDraftButton projectId={id} />
+            <RenderFilmResultButton projectId={id} />
+          </div>
+        }
       />
 
       <Card className="mb-6">

@@ -61,7 +61,13 @@ function candidateAbsolutePaths(relativeUploadsPath: string): string[] {
   ];
 }
 
-async function resolveExistingAbsolutePath(relativeUploadsPath: string): Promise<string | null> {
+/**
+ * Exported for reuse by FILM.RESULT.1.B's renderer (src/lib/film/
+ * renderFilmResult.ts), which resolves Sequence Result video paths — the
+ * exact same "uploads/-relative string -> real file on disk" problem, one
+ * level up.
+ */
+export async function resolveExistingAbsolutePath(relativeUploadsPath: string): Promise<string | null> {
   for (const candidate of candidateAbsolutePaths(relativeUploadsPath)) {
     try {
       const stat = await fs.stat(candidate);
@@ -92,12 +98,19 @@ function outputAbsolutePathFor(sequenceId: number, uuid: string): { relative: st
 // only reflects DB state, not filesystem reality — see basicCutManifest.ts).
 // ---------------------------------------------------------------------------
 
-type ResolvedSegment =
+/**
+ * Exported (type + the "video" variant's shape) for reuse by FILM.RESULT.1.B's
+ * renderer, which builds a list of "video"-kind segments only — one per
+ * included Sequence Result, no placeholder/gap kinds needed at the film
+ * level (V1 excludes non-renderable sequences instead of rendering a
+ * black placeholder for them).
+ */
+export type ResolvedSegment =
   | { kind: "video"; itemId: number; absolutePath: string; trimInSeconds: number; durationSeconds: number; hasAudio: boolean }
   | { kind: "placeholder"; itemId: number; durationSeconds: number }
   | { kind: "gap"; durationSeconds: number };
 
-async function sourceHasAudioStream(absolutePath: string): Promise<boolean> {
+export async function sourceHasAudioStream(absolutePath: string): Promise<boolean> {
   try {
     const probe = (await runFfprobeJson(absolutePath)) as { streams?: Array<{ codec_type?: string }> };
     return Array.isArray(probe.streams) && probe.streams.some((s) => s.codec_type === "audio");
