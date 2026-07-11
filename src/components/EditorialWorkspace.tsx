@@ -264,9 +264,10 @@ export default function EditorialWorkspace({
                   <input type="hidden" name="returnTo" value={returnTo} />
                   <button
                     type="submit"
-                    className="text-[10px] text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
+                    title="Reset trim — restores the shot's source/target duration"
+                    className="rounded border border-[#3d3423] text-[#cda24f] px-2 py-1 text-[10px] hover:border-[#cda24f] hover:bg-[#cda24f]/10 transition-colors"
                   >
-                    Reset trim
+                    ↺ Reset trim
                   </button>
                 </form>
               )}

@@ -493,6 +493,16 @@ export default function EditorialTimeline({
 
       clampedOut = round1(clampedOut);
 
+      // Live preview (BASIC.EDITORIAL.4): the dragged shot's own segment
+      // must resize in step with the pointer, not just the ghost gap next
+      // to it — itemEff()/widthPct already read trimDrafts, so setting it
+      // here is enough to drive both the shot's width and the effective
+      // duration total shown in the header, with no new state model.
+      setTrimDrafts((prev) => ({
+        ...prev,
+        [rs.itemId]: { trimIn: rs.trimIn, trimOut: clampedOut },
+      }));
+
       // Show ghost gap
       const deltaGap = rs.trimOut - clampedOut; // positive = shrink (creates gap), negative = extend (consumes)
       if (Math.abs(deltaGap) > 0.05) {
@@ -559,6 +569,14 @@ export default function EditorialTimeline({
           resizeEditorialItemRightEdge(fd);
         });
       }
+      // The server action (or the no-op case above) is the source of
+      // truth going forward — drop the live-preview draft so the segment
+      // reflects the reloaded props rather than a stale local value.
+      setTrimDrafts((prev) => {
+        const next = { ...prev };
+        delete next[rs.itemId];
+        return next;
+      });
     }
     setGhostRightResize(null);
     dragRef.current = null;
@@ -629,9 +647,10 @@ export default function EditorialTimeline({
               type="button"
               onClick={resetAllTrims}
               disabled={!hasAnyItemTrim || isSavingTrim}
-              className="text-xs text-[#4b5158] hover:text-[#cf7b6b] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Reset all trims on this timeline. Gaps are kept."
+              className="rounded border border-[#3d3423] text-[#cda24f] px-2.5 py-1 text-xs hover:border-[#cda24f] hover:bg-[#cda24f]/10 transition-colors disabled:opacity-60 disabled:border-[#2c3035] disabled:text-[#6e767d] disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
-              Reset all trims
+              ↺ Reset all trims
             </button>
           </div>
         )}
@@ -778,6 +797,7 @@ export default function EditorialTimeline({
                           role="slider"
                           tabIndex={0}
                           aria-label="Trim in handle"
+                          title="Trim in"
                           className="absolute left-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
                           style={{ width: "10px" }}
                           onPointerDown={(e) => startItemTrimDrag(e, item, "in")}
@@ -787,7 +807,7 @@ export default function EditorialTimeline({
                         <div
                           role="slider"
                           tabIndex={0}
-                          aria-label="Resize right edge"
+                          aria-label="Trim out handle"
                           className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
                           style={{ width: "10px" }}
                           onPointerDown={(e) => startItemRightResize(e, item)}
@@ -795,8 +815,8 @@ export default function EditorialTimeline({
                             (() => {
                               const idx = items!.indexOf(item);
                               const nxt = items![idx + 1];
-                              if (nxt && nxt.type === "gap") return "Resize right edge — consumes gap";
-                              return "Resize right edge — creates gap";
+                              if (nxt && nxt.type === "gap") return "Trim out — shortens the shot or extends into the next gap";
+                              return "Trim out — shortens the shot, creates a gap after it";
                             })()
                           }
                         >
@@ -950,6 +970,7 @@ export default function EditorialTimeline({
                           role="slider"
                           tabIndex={0}
                           aria-label="Trim in handle"
+                          title="Trim in"
                           className="absolute left-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
                           style={{ width: "10px" }}
                           onPointerDown={(e) => startTrimDrag(e, shot, "in")}
@@ -960,6 +981,7 @@ export default function EditorialTimeline({
                           role="slider"
                           tabIndex={0}
                           aria-label="Trim out handle"
+                          title="Trim out"
                           className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
                           style={{ width: "10px" }}
                           onPointerDown={(e) => startTrimDrag(e, shot, "out")}
