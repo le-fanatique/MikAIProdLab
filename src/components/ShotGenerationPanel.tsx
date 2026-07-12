@@ -19,6 +19,7 @@ import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPane
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
+import InlineShotPromptEditor from "@/components/InlineShotPromptEditor";
 import ShotPanelImagePreviewForm from "@/components/ShotPanelImagePreviewForm";
 import type { ShotPanelImageNode } from "@/components/ShotPanelImagePreviewForm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
@@ -65,6 +66,8 @@ type Props = {
   attachError?: string | null;
   approvedVideo?: boolean;
   approveError?: string | null;
+  shotPromptSaved?: boolean;
+  shotPromptError?: string | null;
 };
 
 export default async function ShotGenerationPanel({
@@ -85,6 +88,8 @@ export default async function ShotGenerationPanel({
   attachError,
   approvedVideo,
   approveError,
+  shotPromptSaved,
+  shotPromptError,
 }: Props) {
   const [shot] = await db.select().from(shots).where(eq(shots.id, shid));
   if (!shot) return null;
@@ -510,11 +515,20 @@ export default async function ShotGenerationPanel({
             compiled={compiledShotPrompt}
             workflowKind={workflow.kind}
           />
+          <InlineShotPromptEditor
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            currentShotPrompt={shot.shotPrompt}
+            returnTo={returnTo}
+            saved={shotPromptSaved}
+            error={shotPromptError}
+          />
           <Link
             href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
             className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
           >
-            Edit Shot Prompt →
+            Open Shot Detail →
           </Link>
         </div>
 

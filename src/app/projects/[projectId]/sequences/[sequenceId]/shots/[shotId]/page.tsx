@@ -795,6 +795,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               attachError={attachError ?? null}
               approvedVideo={approvedVideo === "1"}
               approveError={approveError ?? null}
+              shotPromptSaved={shotPromptSaved === "1"}
+              shotPromptError={shotPromptError ?? null}
             />
           ) : (
             <WorkflowSelectorPanel

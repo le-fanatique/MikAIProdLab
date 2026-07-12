@@ -45,7 +45,7 @@ export default function PromptComposerPanel({
       ) : (
         <>
           {ingredients && ingredients.length > 0 && (
-            <details className="mb-2">
+            <details className="mb-2" open>
               <summary className="cursor-pointer select-none text-[10px] font-medium uppercase tracking-wider text-[#4b5158] transition-colors hover:text-[#6e767d]">
                 Sources used
               </summary>

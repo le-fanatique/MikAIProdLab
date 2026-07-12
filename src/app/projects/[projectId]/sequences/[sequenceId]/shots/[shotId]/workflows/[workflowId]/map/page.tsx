@@ -33,6 +33,8 @@ import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPrevi
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
+import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
+import { type FillSource } from "@/lib/textInputKind";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -129,6 +131,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       assetName: assets.name,
       assetType: assets.type,
       assetDescription: assets.description,
+      assetNotes: assets.notes,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -184,6 +187,85 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
     hasPromptSegments: hasRealPromptSegments,
   });
+
+  // Fill sources for the "Fill" dropdown on text inputs (PROMPTUX.1) —
+  // mirrors ShotGenerationPanel's calculation exactly, so the standalone
+  // /map page and the Generate side panel offer the same named sources.
+  const composedShotPrompt = composeShotPrompt({
+    project: { name: project.name, pitch: project.pitch },
+    sequence: {
+      title: sequence.title,
+      mood: sequence.mood,
+      locationHint: sequence.locationHint,
+      summary: sequence.summary,
+      narrativePurpose: sequence.narrativePurpose,
+    },
+    shot: {
+      shotCode: shot.shotCode,
+      title: shot.title,
+      durationSeconds: shot.durationSeconds,
+      description: shot.description,
+      actionPitch: shot.actionPitch,
+      cameraPitch: shot.cameraPitch,
+      framing: shot.framing,
+      cameraMovement: shot.cameraMovement,
+    },
+    castAssets: assignedRows.map((r) => ({
+      name: r.assetName,
+      type: r.assetType,
+      description: r.assetDescription,
+      notes: r.assetNotes,
+    })),
+    shotRefImages: shotRefImages.map((img) => ({
+      imageRole: img.imageRole,
+      label: img.label,
+      sourceFilename: img.sourceFilename,
+    })),
+    castAssetRefImages: castAssetRefImages.map((img) => {
+      const row = assignedRows.find((r) => r.assetId === img.assetId);
+      return {
+        assetName: row?.assetName ?? "",
+        assetType: row?.assetType ?? "",
+        imageRole: img.imageRole,
+        label: img.label,
+        sourceFilename: img.sourceFilename,
+      };
+    }),
+  });
+
+  const actionCamera = [shot.actionPitch, shot.cameraPitch]
+    .filter((v): v is string => Boolean(v?.trim()))
+    .map((v) => v.trim())
+    .join("\n");
+
+  const STYLE_KINDS: FillSource["kinds"] = ["generic", "positive", "style"];
+
+  const fillSources: FillSource[] = [
+    shot.shotPrompt?.trim()
+      ? { id: "shotPrompt", label: "Shot Prompt", text: shot.shotPrompt.trim() }
+      : null,
+    compiledShotPrompt.text.trim() && compiledShotPrompt.text.trim() !== (shot.shotPrompt?.trim() ?? "")
+      ? { id: "compiledPrompt", label: "Compiled Prompt", text: compiledShotPrompt.text.trim() }
+      : null,
+    hasRealPromptSegments && compiledPrompt.text.trim()
+      ? { id: "segments", label: "Prompt Segments", text: compiledPrompt.text.trim() }
+      : null,
+    shot.description?.trim()
+      ? { id: "description", label: "Shot Description", text: shot.description.trim() }
+      : null,
+    actionCamera
+      ? { id: "actionCamera", label: "Action + Camera", text: actionCamera }
+      : null,
+    composedShotPrompt.hasContent
+      ? { id: "casting", label: "Casting-aware Prompt", text: composedShotPrompt.proposalText, kinds: STYLE_KINDS }
+      : null,
+    project.story?.trim()
+      ? { id: "projectStory", label: "Project Story", text: project.story.trim(), kinds: STYLE_KINDS }
+      : null,
+    sequence.summary?.trim()
+      ? { id: "sequenceSummary", label: "Sequence Summary", text: sequence.summary.trim(), kinds: STYLE_KINDS }
+      : null,
+  ].filter((s): s is FillSource => s !== null);
 
   const availableImages = buildRuntimeImageOptions(
     shotRefImages,
@@ -333,6 +415,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
               basePath={basePath}
+              fillSources={fillSources}
             />
           )}
         </Card>
