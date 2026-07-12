@@ -100,13 +100,18 @@ export default async function RootLayout({
       <head>
         {/* Anti-flash: applies the saved theme (Mikros or a custom
             variant) before first paint (THEME.MIKROS.1 / THEME.MIKROS.2 /
-            THEME.MIKROS.4). Static script, no interpolated user input —
-            reads two fixed localStorage keys and only ever writes CSS
-            custom properties via style.setProperty(), never innerHTML,
-            never a <style> tag, never a URL. The mix/derive math and the
-            font stack/validation are a hand-kept-in-sync copy of
-            mixHex()/deriveFullPalette()/fontFamilyStack()/
-            isValidFontFamilyName() in src/lib/mikrosTheme.ts (a plain
+            THEME.MIKROS.4 / THEME.MIKROS.5). Static script, no
+            interpolated user input — reads two fixed localStorage keys
+            and only ever writes CSS custom properties via
+            style.setProperty(), never innerHTML, never a <style> tag,
+            never a remote URL (the logo's data: URL is re-validated here
+            — syntax AND decoded magic bytes, see validLogo() below —
+            before being wrapped in url(), same as an uploaded PNG/JPEG/
+            WebP would be rendered as a CSS background anywhere else). The
+            mix/derive math and the font/logo stack/validation are a
+            hand-kept-in-sync copy of mixHex()/deriveFullPalette()/
+            fontFamilyStack()/isValidFontFamilyName()/isValidLogoDataUrl()/
+            sniffImageMimeFromBytes() in src/lib/mikrosTheme.ts (a plain
             <script> tag can't import a module), so any change to those
             formulas must be mirrored here by hand. */}
         <script
@@ -118,6 +123,24 @@ export default async function RootLayout({
                 var el = document.documentElement;
                 var HEX_RE = /^#[0-9a-fA-F]{6}$/;
                 var FONT_RE = /^[A-Za-z0-9 -]{1,40}$/;
+                var LOGO_RE = /^data:image\\/(png|jpeg|webp);base64,([A-Za-z0-9+\\/]+=?=?)$/;
+                var LOGO_MAX_LEN = Math.ceil((512 * 1024 * 4) / 3) + 100;
+                var LOGO_SNIFF_CHARS = 16;
+                function sniffMime(bytes) {
+                  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+                  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+                  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+                  return null;
+                }
+                function decodeBase64Prefix(payload) {
+                  if (payload.length < LOGO_SNIFF_CHARS) return null;
+                  try {
+                    var binary = atob(payload.slice(0, LOGO_SNIFF_CHARS));
+                    var bytes = new Uint8Array(binary.length);
+                    for (var bi = 0; bi < binary.length; bi++) bytes[bi] = binary.charCodeAt(bi);
+                    return bytes;
+                  } catch (e) { return null; }
+                }
                 var FONT_STACKS = {
                   'Londrina Solid': 'var(--font-londrina-solid), Impact, "Arial Narrow", sans-serif',
                   'Poppins': 'var(--font-poppins), var(--font-sans), Arial, Helvetica, sans-serif',
@@ -128,6 +151,15 @@ export default async function RootLayout({
                 };
                 function validFontName(v) {
                   return typeof v === 'string' && FONT_RE.test(v.trim());
+                }
+                function validLogo(v) {
+                  if (typeof v !== 'string' || v.length > LOGO_MAX_LEN) return false;
+                  var m = LOGO_RE.exec(v);
+                  if (!m) return false;
+                  var bytes = decodeBase64Prefix(m[2]);
+                  if (!bytes) return false;
+                  var sniffed = sniffMime(bytes);
+                  return sniffed !== null && sniffed === ('image/' + m[1]);
                 }
                 function fontStack(name) {
                   return FONT_STACKS[name] || ('"' + name + '", system-ui, sans-serif');
@@ -142,7 +174,7 @@ export default async function RootLayout({
                   var bl = Math.round(ab * w + bb * (1 - w));
                   return '#' + ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0');
                 }
-                function applyPalette(base, displayFont, bodyFont) {
+                function applyPalette(base, displayFont, bodyFont, logo) {
                   el.classList.add('theme-mikros');
                   var full = {
                     '--mikros-canvas': base.canvas, '--mikros-surface': base.surface,
@@ -159,6 +191,10 @@ export default async function RootLayout({
                     '--mikros-font-sans': fontStack(bodyFont)
                   };
                   for (var k in full) el.style.setProperty(k, full[k]);
+                  if (logo) {
+                    el.style.setProperty('--mikros-logo-url', 'url("' + logo + '")');
+                    el.classList.add('theme-mikros-logo');
+                  }
                 }
                 if (mode === 'mikros') {
                   el.classList.add('theme-mikros');
@@ -179,7 +215,8 @@ export default async function RootLayout({
                     if (ok) {
                       var displayFont = validFontName(t.displayFont) ? t.displayFont.trim() : 'Londrina Solid';
                       var bodyFont = validFontName(t.bodyFont) ? t.bodyFont.trim() : 'Poppins';
-                      applyPalette(t.tokens, displayFont, bodyFont);
+                      var logo = validLogo(t.logo) ? t.logo : null;
+                      applyPalette(t.tokens, displayFont, bodyFont, logo);
                     }
                     break;
                   }

@@ -202,3 +202,22 @@ html.theme-mikros h1 {
   font-weight: 400;
   letter-spacing: 0.01em;
 }
+
+/* ============================================================
+   Custom theme logo (THEME.MIKROS.5)
+
+   The "M" mark in TopBar (.mikai-logo-mark) is always rendered — this rule
+   only swaps its background/text visibility, it never injects the uploaded
+   image as markup. --mikros-logo-url holds a pre-validated url("data:...")
+   value (see applyLogoToElement in mikrosTheme.ts); theme-mikros-logo is
+   only ever added alongside theme-mikros when that value is actually set,
+   so Default and the official Custom preset (no logo saved) are both
+   completely unaffected — the "M" keeps rendering exactly as before.
+   ============================================================ */
+html.theme-mikros.theme-mikros-logo .mikai-logo-mark {
+  background-image: var(--mikros-logo-url);
+  background-size: cover;
+  background-position: center;
+  background-color: transparent;
+  color: transparent;
+}

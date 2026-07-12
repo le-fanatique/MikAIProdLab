@@ -105,12 +105,108 @@ export function fontFamilyStack(name: string): string {
   return KNOWN_FONT_STACKS[name] ?? `"${name}", system-ui, sans-serif`;
 }
 
+/**
+ * Custom logo (THEME.MIKROS.5). Stored as a validated data: URL, never a
+ * remote URL and never SVG (no active/scriptable content). The only DOM
+ * write site is a CSS custom property consumed by a plain background-image
+ * declaration in globals.css — never innerHTML, never a <style> tag, so a
+ * malformed or hostile value can at worst fail to render, never execute.
+ */
+export const THEME_LOGO_CLASS = "theme-mikros-logo";
+export const MIKROS_LOGO_ACCEPTED_MIME = ["image/png", "image/jpeg", "image/webp"] as const;
+export const MIKROS_LOGO_MAX_BYTES = 512 * 1024; // 512 KB, matches the ticket's documented limit
+export const MIKROS_LOGO_MAX_DIMENSION_PX = 512;
+
+/** data:image/(png|jpeg|webp);base64,<payload> — strict prefix, base64 alphabet only, capped length (accounts for base64's ~1.37x inflation over MIKROS_LOGO_MAX_BYTES, plus slack for the prefix). Syntactic only — see isValidLogoDataUrl for the real content check. */
+const LOGO_DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+=?=?)$/;
+const LOGO_DATA_URL_MAX_LENGTH = Math.ceil((MIKROS_LOGO_MAX_BYTES * 4) / 3) + 100;
+
+/**
+ * Sniffs the real image format from its leading bytes — independent of the
+ * (spoofable) File.type reported by the browser/OS. Returns null for
+ * anything else, including SVG (which has no binary magic number and is
+ * never accepted regardless).
+ */
+export function sniffImageMimeFromBytes(bytes: Uint8Array): (typeof MIKROS_LOGO_ACCEPTED_MIME)[number] | null {
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return "image/png";
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && // "RIFF"
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50 // "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+/**
+ * Decodes only the leading base64 characters of a payload into raw bytes —
+ * enough for sniffImageMimeFromBytes's longest check (WebP, 12 bytes) — via
+ * the browser's native atob(). A prefix slice on a multiple of 4 characters
+ * is always independently valid base64 (padding, if any, only ever appears
+ * at the very end of the *full* payload, never inside this leading chunk),
+ * so this never needs the rest of a potentially ~700 KB string decoded just
+ * to check a handful of header bytes. Returns null if the payload is too
+ * short to contain a real image header, or isn't valid base64 at all.
+ */
+const LOGO_SNIFF_BASE64_CHARS = 16; // 16 base64 chars -> 12 decoded bytes
+function decodeBase64Prefix(base64Payload: string): Uint8Array | null {
+  if (base64Payload.length < LOGO_SNIFF_BASE64_CHARS) return null;
+  try {
+    const binary = atob(base64Payload.slice(0, LOGO_SNIFF_BASE64_CHARS));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Full validation of a stored/uploaded logo value: syntactic data: URL
+ * shape AND actual decoded content. A syntactically valid but non-image
+ * payload (e.g. "data:image/png;base64,AAAA", or any base64 blob that
+ * simply isn't real PNG/JPEG/WebP bytes) is rejected here, not just at
+ * upload time — this is the single check reused by loadCustomThemes(),
+ * applyLogoToElement() and (as a hand-kept-in-sync copy) the anti-flash
+ * script, so a corrupted localStorage value can never mask the "M" with a
+ * blank/broken logo.
+ */
+export function isValidLogoDataUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > LOGO_DATA_URL_MAX_LENGTH) return false;
+  const match = LOGO_DATA_URL_RE.exec(value);
+  if (!match) return false;
+  const declaredMime = `image/${match[1]}` as (typeof MIKROS_LOGO_ACCEPTED_MIME)[number];
+  const payload = match[2];
+  const bytes = decodeBase64Prefix(payload);
+  if (!bytes) return false;
+  const sniffed = sniffImageMimeFromBytes(bytes);
+  return sniffed !== null && sniffed === declaredMime;
+}
+
+export function applyLogoToElement(el: HTMLElement, logo: string | null): void {
+  if (logo && isValidLogoDataUrl(logo)) {
+    el.style.setProperty("--mikros-logo-url", `url("${logo}")`);
+    el.classList.add(THEME_LOGO_CLASS);
+  } else {
+    el.style.removeProperty("--mikros-logo-url");
+    el.classList.remove(THEME_LOGO_CLASS);
+  }
+}
+
 export type CustomTheme = {
   id: string;
   name: string;
   tokens: MikrosPalette;
   displayFont: string;
   bodyFont: string;
+  /** null = no custom logo, falls back to the "M" mark. */
+  logo: string | null;
 };
 
 /** "default" | "mikros" | "custom:<id>" */
@@ -209,8 +305,11 @@ export function clearPaletteOverrides(el: HTMLElement): void {
     // stylesheet defaults for typography too, same "remove inline override"
     // mechanism as every color above.
     "--mikros-font-display", "--mikros-font-sans",
+    // THEME.MIKROS.5 — reset also drops any custom logo back to the "M" mark.
+    "--mikros-logo-url",
   ];
   for (const prop of props) el.style.removeProperty(prop);
+  el.classList.remove(THEME_LOGO_CLASS);
 }
 
 /** Defensive parse — drops malformed entries instead of throwing, never crashes the caller. */
@@ -251,12 +350,17 @@ export function loadCustomThemes(): CustomTheme[] {
       const rawBodyFont = (entry as { bodyFont?: unknown }).bodyFont;
       const displayFont = isValidFontFamilyName(rawDisplayFont) ? rawDisplayFont.trim() : MIKROS_DEFAULT_DISPLAY_FONT;
       const bodyFont = isValidFontFamilyName(rawBodyFont) ? rawBodyFont.trim() : MIKROS_DEFAULT_BODY_FONT;
+      // Logo is additive too (THEME.MIKROS.5): a missing/invalid/corrupted
+      // logo never rejects the theme, it just falls back to the "M" mark.
+      const rawLogo = (entry as { logo?: unknown }).logo;
+      const logo = isValidLogoDataUrl(rawLogo) ? rawLogo : null;
       result.push({
         id: (entry as { id: string }).id,
         name: (entry as { name: string }).name,
         tokens,
         displayFont,
         bodyFont,
+        logo,
       });
     }
     return result;
@@ -265,11 +369,13 @@ export function loadCustomThemes(): CustomTheme[] {
   }
 }
 
-export function saveCustomThemes(themes: CustomTheme[]): void {
+/** Returns false (instead of throwing) when localStorage is unavailable or full — callers surface this to the user rather than pretending the save succeeded. */
+export function saveCustomThemes(themes: CustomTheme[]): boolean {
   try {
     localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(themes));
+    return true;
   } catch {
-    // localStorage unavailable or full — the in-memory list still works for this page view
+    return false;
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import {
   MIKROS_TOKEN_KEYS,
   MIKROS_TOKEN_LABELS,
@@ -8,6 +8,9 @@ import {
   MIKROS_DEFAULT_DISPLAY_FONT,
   MIKROS_DEFAULT_BODY_FONT,
   MIKROS_FONT_CHOICES,
+  MIKROS_LOGO_ACCEPTED_MIME,
+  MIKROS_LOGO_MAX_BYTES,
+  MIKROS_LOGO_MAX_DIMENSION_PX,
   THEME_MODE_STORAGE_KEY,
   THEME_CLASS,
   CUSTOM_MODE_PREFIX,
@@ -18,12 +21,15 @@ import {
   customModeValue,
   applyPaletteToElement,
   applyFontsToElement,
+  applyLogoToElement,
   clearPaletteOverrides,
   loadCustomThemes,
   saveCustomThemes,
   generateThemeId,
   isValidHexColor,
   isValidFontFamilyName,
+  isValidLogoDataUrl,
+  sniffImageMimeFromBytes,
 } from "@/lib/mikrosTheme";
 
 const FONT_OTHER = "__other__";
@@ -34,13 +40,14 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
   const id = customModeId(mode);
   if (mode === "mikros") {
     el.classList.add(THEME_CLASS);
-    clearPaletteOverrides(el); // official charter — no inline overrides
+    clearPaletteOverrides(el); // official charter — no inline overrides (colors, fonts, logo)
   } else if (id !== null) {
     const theme = customThemes.find((t) => t.id === id);
     if (theme) {
       el.classList.add(THEME_CLASS);
       applyPaletteToElement(el, theme.tokens);
       applyFontsToElement(el, theme.displayFont, theme.bodyFont);
+      applyLogoToElement(el, theme.logo);
     } else {
       // Referenced theme no longer exists (deleted elsewhere/corrupted) — safest fallback
       el.classList.remove(THEME_CLASS);
@@ -83,6 +90,13 @@ export default function ThemeModeToggle() {
   const [bodyFontIsOther, setBodyFontIsOther] = useState(false);
   const [otherFontText, setOtherFontText] = useState<Record<FontRole, string>>({ display: "", body: "" });
   const [fontErrors, setFontErrors] = useState<Partial<Record<FontRole, string>>>({});
+
+  // Custom logo (THEME.MIKROS.5) — null means "no logo, fall back to the M
+  // mark". Unlike hex/font drafts, there is no separate raw/committed split:
+  // a rejected file never reaches draftLogo at all (see handleLogoFileChange).
+  const [draftLogo, setDraftLogo] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   const [saveNameOpen, setSaveNameOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -133,6 +147,8 @@ export default function ThemeModeToggle() {
       setBodyFontIsOther(false);
       setOtherFontText({ display: "", body: "" });
       setFontErrors({});
+      setDraftLogo(null);
+      setLogoError(null);
     }
   }
 
@@ -217,6 +233,69 @@ export default function ThemeModeToggle() {
     }
   }
 
+  /**
+   * Reads a File as an ArrayBuffer, sniffs its real format from magic
+   * bytes (independent of the browser-reported, spoofable File.type),
+   * checks its pixel dimensions, and only then produces a validated
+   * data: URL. Rejects anything that isn't genuinely PNG/JPEG/WebP
+   * (SVG has no binary magic number and is always rejected here),
+   * anything over the size/dimension limits, or anything unreadable.
+   * Never touches innerHTML, a <style> tag or a remote URL.
+   */
+  async function readAndValidateLogoFile(file: File): Promise<string> {
+    if (file.size > MIKROS_LOGO_MAX_BYTES) {
+      throw new Error(`File is too large (max ${Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB).`);
+    }
+    const buffer = await file.arrayBuffer();
+    const sniffed = sniffImageMimeFromBytes(new Uint8Array(buffer));
+    if (!sniffed || !(MIKROS_LOGO_ACCEPTED_MIME as readonly string[]).includes(sniffed)) {
+      throw new Error("Only PNG, JPEG or WebP images are accepted (SVG is not supported).");
+    }
+    const blob = new Blob([buffer], { type: sniffed });
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("This file could not be read."));
+      reader.readAsDataURL(blob);
+    });
+    const dims = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error("This image could not be decoded."));
+      img.src = dataUrl;
+    });
+    if (dims.width > MIKROS_LOGO_MAX_DIMENSION_PX || dims.height > MIKROS_LOGO_MAX_DIMENSION_PX) {
+      throw new Error(`Image is too large (max ${MIKROS_LOGO_MAX_DIMENSION_PX}×${MIKROS_LOGO_MAX_DIMENSION_PX}px).`);
+    }
+    if (!isValidLogoDataUrl(dataUrl)) {
+      throw new Error("This image could not be processed.");
+    }
+    return dataUrl;
+  }
+
+  async function handleLogoFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // always allow re-selecting the same file afterwards
+    if (!file) return;
+    setLogoError(null);
+    setLogoBusy(true);
+    try {
+      const dataUrl = await readAndValidateLogoFile(file);
+      setDraftLogo(dataUrl);
+      applyLogoToElement(document.documentElement, dataUrl);
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : "This file could not be used.");
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  function handleResetLogo() {
+    setDraftLogo(null);
+    setLogoError(null);
+    applyLogoToElement(document.documentElement, null);
+  }
+
   function handleResetPalette() {
     setDraftPalette(MIKROS_DEFAULT_PALETTE);
     setRawHex({});
@@ -227,7 +306,9 @@ export default function ThemeModeToggle() {
     setBodyFontIsOther(false);
     setOtherFontText({ display: "", body: "" });
     setFontErrors({});
-    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography)
+    setDraftLogo(null);
+    setLogoError(null);
+    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography + logo)
   }
 
   function handleSaveAsCustom() {
@@ -253,28 +334,34 @@ export default function ThemeModeToggle() {
       tokens: draftPalette,
       displayFont: draftDisplayFont,
       bodyFont: draftBodyFont,
+      logo: draftLogo,
     };
     const next = [...customThemes, theme];
     setCustomThemes(next);
-    saveCustomThemes(next);
-    setSaveNameOpen(false);
-    setSaveName("");
-    setSaveError(null);
     const nextMode = customModeValue(theme.id);
     setMode(nextMode);
     applyMode(nextMode, next);
     persistMode(nextMode);
+    setSaveNameOpen(false);
+    setSaveName("");
+    // The theme is applied and kept in memory for this page view either way
+    // (above) — a storage failure (quota full / unavailable) only means it
+    // won't survive a reload, which we surface rather than pretend worked.
+    if (saveCustomThemes(next)) {
+      setSaveError(null);
+    } else {
+      setSaveError("Saved for this session, but browser storage is full — it will not survive a reload.");
+    }
   }
 
   function handleDeleteCustom(id: string) {
     if (!window.confirm("Delete this custom theme? This cannot be undone.")) return;
-    setDeleteError(null);
     const next = customThemes.filter((t) => t.id !== id);
     setCustomThemes(next);
-    saveCustomThemes(next);
     if (customModeId(mode) === id) {
       handleModeChange("mikros");
     }
+    setDeleteError(saveCustomThemes(next) ? null : "Deleted for this session, but browser storage could not be updated.");
   }
 
   const isMikros = mode === "mikros";
@@ -497,6 +584,46 @@ export default function ThemeModeToggle() {
             <p className="text-[10px] text-[#4b5158]">
               A font not installed on this device falls back to the system default automatically.
               ↺ Reset Custom palette also restores the official fonts.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Custom logo</span>
+              {draftLogo && (
+                <button
+                  type="button"
+                  onClick={handleResetLogo}
+                  className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors"
+                >
+                  ↺ Reset custom logo
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <div
+                className="w-8 h-8 rounded-md bg-[#5b93d6] flex items-center justify-center text-[10px] font-bold text-white leading-none select-none shrink-0 overflow-hidden bg-cover bg-center"
+                style={draftLogo ? { backgroundImage: `url("${draftLogo}")`, color: "transparent" } : undefined}
+                aria-hidden="true"
+              >
+                M
+              </div>
+              <label className="flex-1">
+                <span className="sr-only">Upload a custom logo (PNG, JPEG or WebP)</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleLogoFileChange}
+                  disabled={logoBusy}
+                  className="w-full text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
+                />
+              </label>
+            </div>
+            {logoError && <p className="text-[10px] text-[#cf7b6b]">{logoError}</p>}
+            <p className="text-[10px] text-[#4b5158]">
+              PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
+              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Replaces the “M”
+              mark in the top bar for this theme only.
             </p>
           </div>
 
