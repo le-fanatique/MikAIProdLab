@@ -45,3 +45,129 @@ body {
     height: calc(100dvh - var(--app-header-height, 80px));
   }
 }
+
+/* ============================================================
+   Mikros optional visual theme (THEME.MIKROS.1)
+
+   Scoped entirely under html.theme-mikros. Default mode (no class
+   on <html>) is byte-for-byte unaffected by anything below.
+
+   Mechanism: MikAI's palette is built from a small set of literal
+   Tailwind arbitrary-value colors (e.g. bg-[#0d0e10]) reused across
+   hundreds of components rather than semantic classes bound to the
+   --color-* tokens above (those tokens exist but are not yet
+   consumed anywhere). Retheming every call site is out of scope
+   ("aucune refonte complete des composants"), so this overrides the
+   compiled Tailwind utility selectors themselves, scoped under
+   html.theme-mikros — same visual result, zero component edits,
+   using CSS custom properties as the single source of truth for the
+   Mikros palette (the "tokens centralises" the ticket asks for).
+
+   Palette source: .agents/design-references/mikros/README.md
+   ============================================================ */
+
+html.theme-mikros {
+  --mikros-canvas: #150f22;
+  --mikros-surface: #1e1733;
+  --mikros-raised: #271f40;
+  --mikros-elevated: #2f2650;
+
+  --mikros-border-subtle: #362a55;
+  --mikros-border: #453a68;
+  --mikros-border-strong: #5c4f8a;
+
+  --mikros-text-disabled: #8a7fb0;
+  --mikros-text-tertiary: #a89bcf;
+  --mikros-text-secondary: #d3c9f0;
+  --mikros-text-primary: #ffffff;
+
+  --mikros-accent: #9079f2;
+  --mikros-accent-hover: #b3a3f7;
+
+  /* body{} reads these two root tokens directly */
+  --background: var(--mikros-canvas);
+  --foreground: var(--mikros-text-primary);
+}
+
+/* Structural surfaces */
+html.theme-mikros .bg-\[\#0d0e10\] { background-color: var(--mikros-canvas); }
+html.theme-mikros .bg-\[\#0e1013\] { background-color: var(--mikros-surface); }
+html.theme-mikros .bg-\[\#141618\] { background-color: var(--mikros-surface); }
+html.theme-mikros .bg-\[\#1a1d20\] { background-color: var(--mikros-raised); }
+html.theme-mikros .bg-\[\#212529\] { background-color: var(--mikros-elevated); }
+html.theme-mikros .bg-\[\#232629\] { background-color: var(--mikros-border-subtle); }
+html.theme-mikros .bg-\[\#2c3035\] { background-color: var(--mikros-border); }
+
+/* Borders */
+html.theme-mikros .border-\[\#1a1d20\] { border-color: var(--mikros-raised); }
+html.theme-mikros .border-\[\#1e2124\] { border-color: var(--mikros-raised); }
+html.theme-mikros .border-\[\#232629\] { border-color: var(--mikros-border-subtle); }
+html.theme-mikros .border-\[\#2c3035\] { border-color: var(--mikros-border); }
+html.theme-mikros .border-\[\#3a4046\] { border-color: var(--mikros-border-strong); }
+
+/* Text */
+html.theme-mikros .text-\[\#4b5158\] { color: var(--mikros-text-disabled); }
+html.theme-mikros .text-\[\#6e767d\] { color: var(--mikros-text-tertiary); }
+html.theme-mikros .text-\[\#a4abb2\] { color: var(--mikros-text-secondary); }
+html.theme-mikros .text-\[\#e7e9ec\] { color: var(--mikros-text-primary); }
+html.theme-mikros .bg-\[\#e7e9ec\] { background-color: var(--mikros-text-primary); }
+html.theme-mikros .text-\[\#2c3035\] { color: var(--mikros-border); }
+html.theme-mikros .text-\[\#3a4046\] { color: var(--mikros-border-strong); }
+
+/* Accent — the primary visual signature of the theme: MikAI's blue accent
+   becomes Mikros violet everywhere it already appears (links, focus
+   borders, primary buttons, badges) without touching any component. */
+html.theme-mikros .text-\[\#5b93d6\] { color: var(--mikros-accent); }
+html.theme-mikros .text-\[\#8fbbe8\] { color: var(--mikros-accent-hover); }
+html.theme-mikros .bg-\[\#5b93d6\] { background-color: var(--mikros-accent); }
+html.theme-mikros .border-\[\#5b93d6\] { border-color: var(--mikros-accent); }
+html.theme-mikros .bg-\[\#5b93d6\]\/10 { background-color: color-mix(in srgb, var(--mikros-accent) 10%, transparent); }
+html.theme-mikros .bg-\[\#5b93d6\]\/30 { background-color: color-mix(in srgb, var(--mikros-accent) 30%, transparent); }
+html.theme-mikros .bg-\[\#5b93d6\]\/40 { background-color: color-mix(in srgb, var(--mikros-accent) 40%, transparent); }
+html.theme-mikros .bg-\[\#5b93d6\]\/50 { background-color: color-mix(in srgb, var(--mikros-accent) 50%, transparent); }
+html.theme-mikros .border-\[\#5b93d6\]\/20 { border-color: color-mix(in srgb, var(--mikros-accent) 20%, transparent); }
+html.theme-mikros .border-\[\#5b93d6\]\/30 { border-color: color-mix(in srgb, var(--mikros-accent) 30%, transparent); }
+html.theme-mikros .border-\[\#5b93d6\]\/40 { border-color: color-mix(in srgb, var(--mikros-accent) 40%, transparent); }
+html.theme-mikros .border-\[\#5b93d6\]\/50 { border-color: color-mix(in srgb, var(--mikros-accent) 50%, transparent); }
+html.theme-mikros .border-\[\#5b93d6\]\/60 { border-color: color-mix(in srgb, var(--mikros-accent) 60%, transparent); }
+
+/* Focus rings driven by the same accent-colored border classes above
+   already cover focus states (focus:border-[#3a4046]/[#5b93d6] etc.) —
+   no separate override needed.
+
+   Semantic status colors (success/warning/danger green-amber-red) are
+   intentionally left unchanged: the ticket preserves readability of
+   dense tables/forms, and remapping error/success colors to violet
+   would remove a meaningful signal rather than reinforce hierarchy. */
+
+/* Decorative accents — sparse, only on header/presentation surfaces
+   (see mikai-top-bar / mikai-page-header / mikai-appearance-preview
+   class hooks added to their respective components). Static, no
+   animation — nothing here needs a prefers-reduced-motion guard. */
+html.theme-mikros .mikai-top-bar {
+  overflow: hidden;
+  background-image: url("/theme/mikros/brush-accent.png");
+  background-repeat: no-repeat;
+  background-position: right -20px top -40px;
+  background-size: 140px auto;
+}
+
+html.theme-mikros .mikai-page-header {
+  position: relative;
+}
+html.theme-mikros .mikai-page-header::after {
+  content: "";
+  display: block;
+  margin-top: 0.75rem;
+  height: 3px;
+  width: 64px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--mikros-accent), transparent);
+}
+
+html.theme-mikros .mikai-appearance-preview {
+  background-image: url("/theme/mikros/appearance-preview.png");
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: cover;
+}

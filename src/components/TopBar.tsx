@@ -30,7 +30,7 @@ export default function TopBar({ tree }: Props) {
   const isSettings = pathname.startsWith("/settings");
 
   return (
-    <header className="h-11 flex items-center gap-3 px-4 border-b border-[#232629] bg-[#141618] shrink-0">
+    <header className="mikai-top-bar h-11 flex items-center gap-3 px-4 border-b border-[#232629] bg-[#141618] shrink-0">
       {/* Logo */}
       <Link href="/projects" className="flex items-center gap-2.5 shrink-0">
         <div className="w-6 h-6 rounded-md bg-[#5b93d6] flex items-center justify-center text-[10px] font-bold text-white leading-none select-none">

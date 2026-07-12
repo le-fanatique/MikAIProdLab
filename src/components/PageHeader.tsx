@@ -9,7 +9,7 @@ type Props = {
 
 export default function PageHeader({ title, badge, meta, actions }: Props) {
   return (
-    <div className="flex items-start justify-between gap-4 mb-8">
+    <div className="mikai-page-header flex items-start justify-between gap-4 mb-8">
       <div>
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-2xl font-semibold tracking-tight text-[#e7e9ec]">{title}</h1>

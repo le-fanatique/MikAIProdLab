@@ -72,6 +72,18 @@ export default async function RootLayout({
       lang="en"
       className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}
     >
+      <head>
+        {/* Anti-flash: applies the saved Mikros theme class before first
+            paint (THEME.MIKROS.1). Static script, no user input — reads a
+            single fixed localStorage key. Mirrors ThemeModeToggle.tsx's
+            own read/write of the same key. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{if(localStorage.getItem('mikai.themeMode')==='mikros'){document.documentElement.classList.add('theme-mikros');}}catch(e){}})();",
+          }}
+        />
+      </head>
       <body className="h-full bg-[#0d0e10] text-[#a4abb2] antialiased flex flex-col overflow-hidden">
         {/* Top bar — persistent across all routes */}
         <TopBar tree={tree} />

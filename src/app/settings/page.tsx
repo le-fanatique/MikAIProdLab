@@ -10,6 +10,7 @@ import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
 import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
 import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
 import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
+import ThemeModeToggle from "@/components/ThemeModeToggle";
 import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
@@ -82,6 +83,15 @@ export default async function SettingsPage({ searchParams }: Props) {
     <div>
       <Breadcrumb crumbs={[{ label: "Settings" }]} />
       <PageHeader title="Settings" />
+
+      {/* ── Appearance ─────────────────────────────────────── */}
+      <SectionLabel label="Appearance" />
+
+      <Card title="Appearance" className="mb-6">
+        <div className="mikai-appearance-preview rounded border border-[#232629] p-4">
+          <ThemeModeToggle />
+        </div>
+      </Card>
 
       {/* ── Language Model ─────────────────────────────────── */}
       <SectionLabel label="Language Model" />
