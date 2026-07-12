@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { db } from "@/db";
 import { projects, sequences, shots, assets, sequenceAssets } from "@/db/schema";
-import { eq, and, notInArray, asc } from "drizzle-orm";
+import { eq, and, notInArray, inArray, asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -22,6 +22,8 @@ import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
 import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
 import Collapsible from "@/components/Collapsible";
+import SequenceContextInlineEditor from "@/components/SequenceContextInlineEditor";
+import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import { getLLMSettings, getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
@@ -155,6 +157,91 @@ export default async function SequencePage({ params, searchParams }: Props) {
   const previousResults = sequenceResults.filter((r) => r.id !== activeResult?.id);
   const activeResultWarnings = activeResult ? parseResultWarnings(activeResult.warnings) : [];
 
+  // ── Capture destinations for the active Sequence Result player (UX.POLISH.2) ──
+  // Mirrors Shot Detail's own capture-destination build exactly (same
+  // component, same project-wide shot/asset query) — a Sequence Result has
+  // no single "current shot", so this sequence's own shots are listed
+  // first inside "Other Shots" rather than faked as "Current Shot".
+  // sourceShotId/sourceSequenceId only need to be A valid shot owned by
+  // this project for captureVideoFrame's ownership check — the real
+  // destination is always the one explicitly picked from the dropdown.
+  const resultVideoExt = activeResult?.videoPath?.split(".").pop()?.toLowerCase() ?? "";
+  const resultVideoIsPlayable =
+    activeResult?.videoPath != null && ["mp4", "webm", "mov"].includes(resultVideoExt);
+
+  let sequenceResultCaptureDestinations: CaptureDestination[] = [];
+  let sequenceResultSourceShotId: number | null = null;
+
+  if (resultVideoIsPlayable && shotList.length > 0) {
+    sequenceResultSourceShotId = shotList[0].id;
+
+    const otherSequences = await db
+      .select({ id: sequences.id, title: sequences.title })
+      .from(sequences)
+      .where(eq(sequences.projectId, pid))
+      .orderBy(asc(sequences.id));
+
+    const otherSequenceIds = otherSequences.filter((s) => s.id !== sid).map((s) => s.id);
+
+    const otherProjectShots = otherSequenceIds.length > 0
+      ? await db
+          .select({
+            id: shots.id,
+            sequenceId: shots.sequenceId,
+            title: shots.title,
+            description: shots.description,
+          })
+          .from(shots)
+          .where(inArray(shots.sequenceId, otherSequenceIds))
+          .orderBy(asc(shots.orderIndex))
+      : [];
+
+    const allProjectAssets = await db
+      .select({ id: assets.id, name: assets.name, type: assets.type })
+      .from(assets)
+      .where(eq(assets.projectId, pid))
+      .orderBy(asc(assets.type), asc(assets.name));
+
+    // This sequence's own shots first
+    for (const s of shotList) {
+      sequenceResultCaptureDestinations.push({
+        id: `shot:${s.id}`,
+        type: "shot",
+        shotId: s.id,
+        sequenceId: sid,
+        label: s.title,
+        subtitle: sequence.title,
+        groupLabel: "Other Shots",
+      });
+    }
+
+    // Then the rest of the project, grouped by sequence order
+    for (const seq of otherSequences) {
+      for (const s of otherProjectShots.filter((sh) => sh.sequenceId === seq.id)) {
+        sequenceResultCaptureDestinations.push({
+          id: `shot:${s.id}`,
+          type: "shot",
+          shotId: s.id,
+          sequenceId: seq.id,
+          label: `${seq.title} / ${s.title}`,
+          subtitle: s.description?.slice(0, 80) ?? undefined,
+          groupLabel: "Other Shots",
+        });
+      }
+    }
+
+    for (const asset of allProjectAssets) {
+      sequenceResultCaptureDestinations.push({
+        id: `asset:${asset.id}`,
+        type: "asset",
+        assetId: asset.id,
+        label: asset.name,
+        subtitle: asset.type,
+        groupLabel: "Assets",
+      });
+    }
+  }
+
   return (
     <div>
       <Breadcrumb
@@ -228,11 +315,22 @@ npx -y pnpm@9.0.0 dev`}
         {activeResult ? (
           <div className="flex flex-col gap-3">
             {activeResult.videoPath ? (
-              <video
-                src={refImageUrl(activeResult.videoPath)}
-                controls
-                className="w-full max-w-xl rounded border border-[#2c3035]"
-              />
+              resultVideoIsPlayable && sequenceResultSourceShotId !== null ? (
+                <VideoFrameReviewPlayer
+                  src={refImageUrl(activeResult.videoPath)}
+                  projectId={pid}
+                  sequenceId={sid}
+                  shotId={sequenceResultSourceShotId}
+                  defaultFps={24}
+                  captureDestinations={sequenceResultCaptureDestinations}
+                />
+              ) : (
+                <video
+                  src={refImageUrl(activeResult.videoPath)}
+                  controls
+                  className="w-full max-w-xl rounded border border-[#2c3035]"
+                />
+              )
             ) : (
               <p className="text-xs text-[#4b5158]">No video file recorded for this result yet.</p>
             )}
@@ -361,33 +459,15 @@ npx -y pnpm@9.0.0 dev`}
         <>
           <SectionLabel label="Context" />
           <Card className="mb-6">
-            <div className="flex flex-col gap-3">
-              {sequence.summary && (
-                <p className="text-sm text-[#a4abb2] leading-relaxed">{sequence.summary}</p>
-              )}
-              {(sequence.narrativePurpose || sequence.mood || sequence.locationHint) && (
-                <div className="flex flex-wrap gap-4 text-xs">
-                  {sequence.narrativePurpose && (
-                    <span>
-                      <span className="text-[#4b5158]">Purpose </span>
-                      <span className="text-[#6e767d]">{sequence.narrativePurpose}</span>
-                    </span>
-                  )}
-                  {sequence.mood && (
-                    <span>
-                      <span className="text-[#4b5158]">Mood </span>
-                      <span className="text-[#6e767d]">{sequence.mood}</span>
-                    </span>
-                  )}
-                  {sequence.locationHint && (
-                    <span>
-                      <span className="text-[#4b5158]">Location </span>
-                      <span className="text-[#6e767d]">{sequence.locationHint}</span>
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+            <SequenceContextInlineEditor
+              sequenceId={sid}
+              projectId={pid}
+              summary={sequence.summary}
+              description={sequence.description}
+              narrativePurpose={sequence.narrativePurpose}
+              mood={sequence.mood}
+              locationHint={sequence.locationHint}
+            />
           </Card>
         </>
       )}
@@ -554,6 +634,18 @@ npx -y pnpm@9.0.0 dev`}
       {/* ── Production ────────────────────────────────────────────── */}
       <SectionLabel label="Production" />
 
+      <div className="mb-6">
+        <Collapsible label="Casting Suggestions">
+          <CastingSuggestionsPanel
+            projectId={pid}
+            sequenceId={sid}
+            castingsApplied={Number.isFinite(castingsApplied) ? castingsApplied : null}
+            castingsError={castingsError ?? null}
+            isConfigured={!!llmSettings.model.trim()}
+          />
+        </Collapsible>
+      </div>
+
       <Card title="Assets" className="mb-6">
         <SequenceAssetsPanel
           assignedItems={assignedItems}
@@ -586,16 +678,6 @@ npx -y pnpm@9.0.0 dev`}
           createError={createError ?? null}
           hasSequencePrompt={Boolean(sequence.sequencePrompt?.trim())}
           existingShotsCount={shotList.length}
-        />
-      </Card>
-
-      <Card title="Casting Suggestions" className="mb-6">
-        <CastingSuggestionsPanel
-          projectId={pid}
-          sequenceId={sid}
-          castingsApplied={Number.isFinite(castingsApplied) ? castingsApplied : null}
-          castingsError={castingsError ?? null}
-          isConfigured={!!llmSettings.model.trim()}
         />
       </Card>
 

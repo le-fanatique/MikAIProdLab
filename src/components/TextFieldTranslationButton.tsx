@@ -85,7 +85,7 @@ export default function TextFieldTranslationButton({
             type="button"
             onClick={() => { setMenuOpen(true); setError(null); }}
             disabled={disabled || isLoading}
-            className="text-[10px] text-[#4b5158] hover:text-[#8fbbe8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Translate
           </button>
@@ -97,7 +97,7 @@ export default function TextFieldTranslationButton({
                 type="button"
                 onClick={() => handleTranslate(lang.value)}
                 disabled={disabled || isLoading}
-                className="rounded border border-[#2c3035] text-[10px] text-[#a4abb2] px-2 py-0.5 hover:border-[#3a4046] hover:text-[#e7e9ec] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="rounded border border-[#3d3423] text-[10px] text-[#cda24f] px-2 py-0.5 hover:border-[#cda24f] hover:text-[#e0bc72] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {loadingLanguage === lang.value ? "Translating..." : lang.label}
               </button>

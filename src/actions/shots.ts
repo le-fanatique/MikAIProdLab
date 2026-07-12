@@ -120,6 +120,47 @@ export async function updateShot(
   redirect(`/projects/${projectId}/sequences/${sequenceId}`);
 }
 
+/**
+ * Narrow, non-redirecting update for the three Narrative Context fields
+ * shown on Shot Detail (UX.POLISH.2) — mirrors updateSequenceContext's
+ * pattern exactly. updateShot (above) requires a non-empty title and
+ * overwrites shotCode/duration/continuity/camera together, and always
+ * redirects to Sequence Detail — unsuitable for an inline save that must
+ * stay on Shot Detail and touch only description/actionPitch/cameraPitch.
+ */
+export async function updateShotNarrativeContext(
+  shotId: number,
+  sequenceId: number,
+  projectId: number,
+  data: {
+    description: string | null;
+    actionPitch: string | null;
+    cameraPitch: string | null;
+  }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const [shot] = await db
+      .select({ id: shots.id, sequenceId: shots.sequenceId })
+      .from(shots)
+      .where(eq(shots.id, shotId));
+    if (!shot || shot.sequenceId !== sequenceId) return { ok: false, error: "Shot not found." };
+
+    const [sequence] = await db
+      .select({ id: sequences.id, projectId: sequences.projectId })
+      .from(sequences)
+      .where(eq(sequences.id, sequenceId));
+    if (!sequence || sequence.projectId !== projectId) return { ok: false, error: "Sequence not found." };
+
+    await db
+      .update(shots)
+      .set({ ...data, updatedAt: new Date().toISOString() })
+      .where(eq(shots.id, shotId));
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save. Please try again." };
+  }
+}
+
 export async function deleteShot(
   id: number,
   sequenceId: number,

@@ -10,6 +10,7 @@ import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import AssetsLLMExtractPanel from "@/components/AssetsLLMExtractPanel";
+import Collapsible from "@/components/Collapsible";
 import { deleteAsset } from "@/actions/assets";
 import { getLLMSettings } from "@/lib/settings";
 
@@ -193,16 +194,20 @@ export default async function AssetsPage({ params, searchParams }: Props) {
       )}
 
       {/* ── LLM Assist ───────────────────────────────────────────────── */}
-      <SectionLabel label="Extract Asset Drafts" />
-      <Card title="Extract Asset Drafts" className="mb-6">
-        <AssetsLLMExtractPanel
-          projectId={pid}
-          existingAssetNames={assetList.map((a) => a.name)}
-          createdCount={Number.isFinite(createdCount) ? createdCount : null}
-          createError={createError ?? null}
-          isConfigured={!!llmSettings.model.trim()}
-        />
-      </Card>
+      <div className="mt-6 mb-6">
+        <Collapsible
+          label="Extract Asset Drafts"
+          defaultOpen={Boolean((Number.isFinite(createdCount) && createdCount) || createError)}
+        >
+          <AssetsLLMExtractPanel
+            projectId={pid}
+            existingAssetNames={assetList.map((a) => a.name)}
+            createdCount={Number.isFinite(createdCount) ? createdCount : null}
+            createError={createError ?? null}
+            isConfigured={!!llmSettings.model.trim()}
+          />
+        </Collapsible>
+      </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-4">
         <Link

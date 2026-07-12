@@ -234,27 +234,52 @@ export default async function ProjectPage({ params }: Props) {
                   Sequences included ({activeFilmResultManifest.sequences.filter((s) => s.included).length}/{activeFilmResultManifest.sequences.length})
                 </p>
                 <div className="flex flex-col gap-1.5">
-                  {activeFilmResultManifest.sequences.map((s, i) => (
-                    <Link
-                      key={s.sequenceId}
-                      href={`/projects/${id}/sequences/${s.sequenceId}`}
-                      className="flex items-center gap-3 text-xs rounded px-2 py-1 -mx-2 hover:bg-[#212529] transition-colors"
-                    >
-                      <span className="text-[#4b5158] w-6 shrink-0 font-mono">{String(i + 1).padStart(2, "0")}</span>
-                      <span className="text-[#a4abb2] flex-1 truncate">{s.sequenceTitle ?? `Sequence ${s.sequenceId}`}</span>
-                      <span className="text-[#4b5158] w-16 shrink-0">{filmManifestSourceModeLabel(s.sequenceResultSourceMode)}</span>
-                      <span className="text-[#4b5158] w-16 shrink-0 text-right font-mono">
-                        {s.durationSeconds != null ? `${s.durationSeconds.toFixed(1)}s` : "—"}
-                      </span>
-                      <span className={`w-32 shrink-0 text-right ${s.included ? "text-[#6b9e72]" : "text-[#cf7b6b]"}`}>
-                        {s.included
-                          ? "Included"
-                          : s.missingReason?.toLowerCase().includes("outdated")
-                            ? "Outdated"
-                            : "Missing Result"}
-                      </span>
-                    </Link>
-                  ))}
+                  {activeFilmResultManifest.sequences.map((s, i) => {
+                    const rowInner = (
+                      <>
+                        <span className="text-[#4b5158] w-6 shrink-0 font-mono">{String(i + 1).padStart(2, "0")}</span>
+                        <span className="text-[#a4abb2] flex-1 truncate">{s.sequenceTitle ?? `Sequence ${s.sequenceId}`}</span>
+                        <span className="text-[#4b5158] w-16 shrink-0">{filmManifestSourceModeLabel(s.sequenceResultSourceMode)}</span>
+                        <span className="text-[#4b5158] w-16 shrink-0 text-right font-mono">
+                          {s.durationSeconds != null ? `${s.durationSeconds.toFixed(1)}s` : "—"}
+                        </span>
+                        <span className={`w-32 shrink-0 text-right ${s.included ? "text-[#6b9e72]" : "text-[#cf7b6b]"}`}>
+                          {s.included
+                            ? "Included"
+                            : s.missingReason?.toLowerCase().includes("outdated")
+                              ? "Outdated"
+                              : "Missing Result"}
+                        </span>
+                      </>
+                    );
+
+                    if (s.included) {
+                      return (
+                        <Link
+                          key={s.sequenceId}
+                          href={`/projects/${id}/sequences/${s.sequenceId}`}
+                          className="flex items-center gap-3 text-xs rounded px-2 py-1 -mx-2 hover:bg-[#212529] transition-colors"
+                        >
+                          {rowInner}
+                        </Link>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={s.sequenceId}
+                        className="flex items-center gap-3 text-xs rounded px-2 py-1 -mx-2"
+                      >
+                        {rowInner}
+                        <Link
+                          href={`/projects/${id}/sequences/${s.sequenceId}`}
+                          className="shrink-0 text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                        >
+                          Update Sequence →
+                        </Link>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

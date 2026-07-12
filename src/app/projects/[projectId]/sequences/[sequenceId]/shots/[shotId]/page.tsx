@@ -32,6 +32,7 @@ import ShotGenerationPanel from "@/components/ShotGenerationPanel";
 import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
+import ShotNarrativeContextEditor from "@/components/ShotNarrativeContextEditor";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -263,6 +264,13 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     .where(eq(generationJobs.shotId, shid))
     .orderBy(desc(generationJobs.createdAt))
     .limit(24);
+
+  // UX.POLISH.2: drop noisy terminal "done" jobs from the visible history —
+  // display-only filter, no DB row is touched. Approved outputs remain
+  // reachable via the Approved Output section (shots.approvedVideoPath /
+  // reference images), and active/actionable jobs (queued, running,
+  // pending, uploading, failed, timeout) are never filtered here.
+  const visibleGenerationJobRows = generationJobRows.filter((j) => j.status !== "done");
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 
@@ -568,15 +576,14 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               {(shot.description || shot.actionPitch || shot.cameraPitch) && (
                 <>
                   <div className="border-t border-[#1a1d20]" />
-                  {shot.description && (
-                    <Field label="Description" value={shot.description} />
-                  )}
-                  {shot.actionPitch && (
-                    <Field label="Action Pitch" value={shot.actionPitch} />
-                  )}
-                  {shot.cameraPitch && (
-                    <Field label="Camera Pitch" value={shot.cameraPitch} />
-                  )}
+                  <ShotNarrativeContextEditor
+                    shotId={shid}
+                    sequenceId={sid}
+                    projectId={pid}
+                    description={shot.description}
+                    actionPitch={shot.actionPitch}
+                    cameraPitch={shot.cameraPitch}
+                  />
                 </>
               )}
             </div>
@@ -748,7 +755,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             projectId={pid}
             sequenceId={sid}
             shotId={shid}
-            jobs={generationJobRows}
+            jobs={visibleGenerationJobRows}
             retryError={retryError ?? null}
             deleteError={deleteError ?? null}
             deleteSuccess={deleteSuccess ?? null}
