@@ -71,6 +71,14 @@ export default async function RootLayout({
     <html
       lang="en"
       className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}
+      // The anti-flash script below adds "theme-mikros" to this element
+      // before hydration when Mikros is the saved mode (THEME.MIKROS.1) —
+      // that class is intentionally absent from the SSR-rendered
+      // className, so React's hydration diff on this one attribute must
+      // be suppressed rather than "fixed" by rendering the class server-
+      // side (the server has no access to localStorage). Scoped to this
+      // element only — no other hydration checks are affected.
+      suppressHydrationWarning
     >
       <head>
         {/* Anti-flash: applies the saved Mikros theme class before first
