@@ -14,6 +14,7 @@ import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import CreateFilmResultDraftButton from "@/components/CreateFilmResultDraftButton";
 import RenderFilmResultButton from "@/components/RenderFilmResultButton";
 import Collapsible from "@/components/Collapsible";
+import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import { deleteProject } from "@/actions/projects";
 import { listFilmResults, setActiveFilmResult, archiveFilmResult } from "@/actions/filmResults";
 import { buildFilmResultManifest, computeFilmResultTotalDuration, FilmResultManifestError } from "@/lib/film/filmResultManifest";
@@ -79,6 +80,16 @@ export default async function ProjectPage({ params }: Props) {
     null;
   const previousFilmResults = filmResultsList.filter((r) => r.id !== activeFilmResult?.id);
   const activeFilmResultManifest = activeFilmResult ? parseFilmResultManifest(activeFilmResult.sequenceResultManifest) : null;
+
+  // UX.POLISH.3: frame-aware playback for the Film Result video. A Film
+  // Result aggregates multiple sequences with no single source shot, so
+  // captureDestinations is always empty here — VideoFrameReviewPlayer
+  // hides its entire capture UI (Capture Frame + Capture Destination) in
+  // that case, leaving only frame-by-frame navigation and the frame
+  // counter. Same playable-extension check as Sequence Result/Shot Detail.
+  const filmResultVideoExt = activeFilmResult?.videoPath?.split(".").pop()?.toLowerCase() ?? "";
+  const filmResultVideoIsPlayable =
+    activeFilmResult?.videoPath != null && ["mp4", "webm", "mov"].includes(filmResultVideoExt);
   const activeFilmResultWarnings = activeFilmResult ? parseFilmResultWarnings(activeFilmResult.warnings) : [];
   const expectedDurationSeconds = activeFilmResultManifest ? computeFilmResultTotalDuration(activeFilmResultManifest) : null;
 
@@ -158,11 +169,20 @@ export default async function ProjectPage({ params }: Props) {
         {activeFilmResult ? (
           <div className="flex flex-col gap-3">
             {activeFilmResult.videoPath ? (
-              <video
-                src={refImageUrl(activeFilmResult.videoPath)}
-                controls
-                className="w-full max-w-xl rounded border border-[#2c3035]"
-              />
+              filmResultVideoIsPlayable ? (
+                <VideoFrameReviewPlayer
+                  src={refImageUrl(activeFilmResult.videoPath)}
+                  projectId={id}
+                  defaultFps={24}
+                  captureDestinations={[]}
+                />
+              ) : (
+                <video
+                  src={refImageUrl(activeFilmResult.videoPath)}
+                  controls
+                  className="w-full max-w-xl rounded border border-[#2c3035]"
+                />
+              )
             ) : (
               <p className="text-xs text-[#4b5158]">This Film Result has no rendered video yet.</p>
             )}

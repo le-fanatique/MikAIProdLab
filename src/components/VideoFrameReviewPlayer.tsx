@@ -25,8 +25,14 @@ export type CaptureDestination =
 
 type Props = {
   src: string;
-  shotId: number;
-  sequenceId: number;
+  /**
+   * Optional (UX.POLISH.3): a multi-sequence aggregate like a Film Result
+   * has no single source shot. Only meaningful when captureDestinations is
+   * non-empty — the capture section (and therefore any code path that
+   * reads these) is not rendered at all otherwise.
+   */
+  shotId?: number;
+  sequenceId?: number;
   projectId: number;
   defaultFps?: number;
   captureDestinations: CaptureDestination[];
@@ -257,6 +263,14 @@ export default function VideoFrameReviewPlayer({
   async function handleCapture() {
     if (!hasMetadata || totalFrames <= 0) {
       setCaptureError("Video metadata is not ready yet.");
+      return;
+    }
+
+    // Defensive — the capture button only renders when captureDestinations
+    // is non-empty, which is the only case shotId/sequenceId are expected
+    // to be set. Narrows them from `number | undefined` for the call below.
+    if (shotId === undefined || sequenceId === undefined) {
+      setCaptureError("Capture is not available for this player.");
       return;
     }
 
@@ -492,11 +506,15 @@ export default function VideoFrameReviewPlayer({
         )}
       </form>
 
-      {/* Capture section */}
-      <div className="border-t border-[#1e2124] pt-3 flex flex-col gap-2">
+      {/* Capture section — omitted entirely when no destination exists
+          (UX.POLISH.3: Film Result has no natural shot/asset source, so it
+          passes an empty captureDestinations array). Existing callers
+          (Shot Detail, Sequence Result) always pass at least one
+          destination, so this is backward-compatible for them. */}
+      {captureDestinations.length > 0 && (
+        <div className="border-t border-[#1e2124] pt-3 flex flex-col gap-2">
 
-        {/* Destination selector */}
-        {captureDestinations.length > 0 && (
+          {/* Destination selector */}
           <div className="flex flex-col gap-1.5">
             <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">
               Capture Destination
@@ -538,33 +556,33 @@ export default function VideoFrameReviewPlayer({
               </p>
             )}
           </div>
-        )}
 
-        {/* Feedback */}
-        {captureMessage && (
-          <div className="rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-3 py-2">
-            <p className="text-xs text-[#6b9e72]">{captureMessage}</p>
-          </div>
-        )}
-        {captureError && (
-          <div className="rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-3 py-2">
-            <p className="text-xs text-[#cf7b6b]">{captureError}</p>
-          </div>
-        )}
+          {/* Feedback */}
+          {captureMessage && (
+            <div className="rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-3 py-2">
+              <p className="text-xs text-[#6b9e72]">{captureMessage}</p>
+            </div>
+          )}
+          {captureError && (
+            <div className="rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-3 py-2">
+              <p className="text-xs text-[#cf7b6b]">{captureError}</p>
+            </div>
+          )}
 
-        <button
-          type="button"
-          onClick={handleCapture}
-          disabled={isCaptureInProgress || !controlsReady}
-          className={
-            isCaptureInProgress || !controlsReady
-              ? "rounded border border-[#1e2124] text-[#4b5158] px-3 py-1.5 text-xs cursor-not-allowed"
-              : "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-          }
-        >
-          {isCaptureInProgress ? "Capturing…" : "Capture Frame"}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleCapture}
+            disabled={isCaptureInProgress || !controlsReady}
+            className={
+              isCaptureInProgress || !controlsReady
+                ? "rounded border border-[#1e2124] text-[#4b5158] px-3 py-1.5 text-xs cursor-not-allowed"
+                : "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            }
+          >
+            {isCaptureInProgress ? "Capturing…" : "Capture Frame"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
