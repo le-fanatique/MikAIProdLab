@@ -60,6 +60,31 @@ function formatTimecode(frame: number, fps: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
 }
 
+/**
+ * Best-effort, read-only audio-track detection (PLAYER.AUDIO.1). There is
+ * no single reliable cross-browser API for "does this <video> have an
+ * audio track" — this tries the ones that exist (Firefox's mozHasAudio,
+ * Chrome/Edge's experimental audioTracks, Safari's
+ * webkitAudioDecodedByteCount, which only becomes meaningful once some
+ * audio has actually been decoded during playback) and returns null
+ * ("unknown, not yet determined") rather than guessing, so callers never
+ * hide the audio controls on a false negative — only a definitive false
+ * hides them.
+ */
+function detectHasAudio(video: HTMLVideoElement): boolean | null {
+  const v = video as HTMLVideoElement & {
+    audioTracks?: { length: number };
+    mozHasAudio?: boolean;
+    webkitAudioDecodedByteCount?: number;
+  };
+  if (typeof v.mozHasAudio === "boolean") return v.mozHasAudio;
+  if (v.audioTracks) return v.audioTracks.length > 0;
+  if (typeof v.webkitAudioDecodedByteCount === "number" && v.webkitAudioDecodedByteCount > 0) {
+    return true;
+  }
+  return null;
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -120,6 +145,16 @@ export default function VideoFrameReviewPlayer({
   const [captureMessage, setCaptureMessage] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
 
+  // Audio (PLAYER.AUDIO.1) — same <video> element, native audio track.
+  // Starts unmuted (no autoplay is used anywhere in this component, so
+  // there is no browser policy reason to start muted). hasAudio is a
+  // tri-state: null = not yet determined (controls stay visible — see
+  // detectHasAudio), true/false once known.
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [hasAudio, setHasAudio] = useState<boolean | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -149,6 +184,20 @@ export default function VideoFrameReviewPlayer({
     setHasMetadata(true);
     setTotalFrames(nextTotalFrames);
     setCurrentFrame(nextCurrentFrame);
+
+    const detected = detectHasAudio(video);
+    if (detected !== null) setHasAudio(detected);
+  }
+
+  /** Refines audio-track detection during playback, for browsers (Safari)
+   *  where it's only knowable once some audio has actually decoded. A
+   *  no-op once hasAudio is already determined. */
+  function handleTimeUpdateForAudioDetection() {
+    if (hasAudio !== null) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const detected = detectHasAudio(video);
+    if (detected !== null) setHasAudio(detected);
   }
 
   // Stable RAF callback — reads from refs to avoid stale closures
@@ -179,6 +228,8 @@ export default function VideoFrameReviewPlayer({
     totalFramesRef.current = 0;
     setCurrentFrame(0);
     setMetadataError(null);
+    setHasAudio(null);
+    setPlaybackError(null);
 
     if (video.readyState >= 1) {
       syncMetadata();
@@ -193,6 +244,17 @@ export default function VideoFrameReviewPlayer({
       }
     };
   }, []);
+
+  // Keep the native element's audio state in sync with our controls —
+  // volume/muted have no JSX attribute equivalent that React can control
+  // reliably post-mount, so they're set imperatively here, same pattern as
+  // the rest of this player's DOM-driven state.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = muted;
+    video.volume = volume;
+  }, [muted, volume]);
 
   function handlePlay() {
     setIsPlaying(true);
@@ -377,11 +439,13 @@ export default function VideoFrameReviewPlayer({
         ref={videoRef}
         src={src}
         preload="metadata"
+        playsInline
         className="w-full rounded border border-[#2c3035]"
         onLoadedMetadata={syncMetadata}
         onDurationChange={syncMetadata}
         onLoadedData={syncMetadata}
         onCanPlay={syncMetadata}
+        onTimeUpdate={handleTimeUpdateForAudioDetection}
         onPlay={handlePlay}
         onPause={handlePause}
         onEnded={handlePause}
@@ -392,6 +456,13 @@ export default function VideoFrameReviewPlayer({
       {metadataError && (
         <div className="rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-3 py-2">
           <p className="text-xs text-[#cf7b6b]">{metadataError}</p>
+        </div>
+      )}
+
+      {/* Playback (autoplay-restriction) error — e.g. play() rejected */}
+      {playbackError && (
+        <div className="rounded border border-[#cda24f]/30 bg-[#2e2410] px-3 py-2">
+          <p className="text-xs text-[#cda24f]">{playbackError}</p>
         </div>
       )}
 
@@ -424,7 +495,19 @@ export default function VideoFrameReviewPlayer({
           onClick={() => {
             const v = videoRef.current;
             if (!v) return;
-            if (v.paused) { v.play(); } else { v.pause(); }
+            if (v.paused) {
+              setPlaybackError(null);
+              // play() can reject under browser autoplay-restriction edge
+              // cases even on a user-gesture click (e.g. Safari private
+              // mode) — always handle the rejection so it never surfaces
+              // as an unhandled-promise console error.
+              v.play().catch(() => {
+                setIsPlaying(false);
+                setPlaybackError("Playback was blocked by the browser. Click Play again to start.");
+              });
+            } else {
+              v.pause();
+            }
           }}
           className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
         >
@@ -446,6 +529,43 @@ export default function VideoFrameReviewPlayer({
         >
           +1 Frame
         </button>
+
+        {/* Audio controls — hidden only on a *confirmed* no-audio-track
+            media (hasAudio === false); shown while unknown (hasAudio ===
+            null) since hiding on a false negative would be more
+            misleading than showing controls that happen to do nothing. */}
+        {hasAudio !== false ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMuted((m) => !m)}
+              aria-pressed={muted}
+              aria-label={muted ? "Unmute" : "Mute"}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              {muted ? "Unmute" : "Mute"}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => {
+                const next = parseFloat(e.target.value);
+                setVolume(next);
+                if (next > 0 && muted) setMuted(false);
+              }}
+              aria-label="Volume"
+              className="w-20 accent-[#6b9e72] cursor-pointer"
+            />
+          </div>
+        ) : (
+          <span className="text-[10px] text-[#4b5158] italic" aria-live="polite">
+            No audio track
+          </span>
+        )}
+
         <div className="flex items-center gap-1.5 ml-auto">
           <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">FPS</span>
           <select
