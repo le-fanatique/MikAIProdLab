@@ -81,14 +81,70 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Anti-flash: applies the saved Mikros theme class before first
-            paint (THEME.MIKROS.1). Static script, no user input — reads a
-            single fixed localStorage key. Mirrors ThemeModeToggle.tsx's
-            own read/write of the same key. */}
+        {/* Anti-flash: applies the saved theme (Mikros or a custom
+            variant) before first paint (THEME.MIKROS.1 / THEME.MIKROS.2).
+            Static script, no interpolated user input — reads two fixed
+            localStorage keys and only ever writes CSS custom properties,
+            never innerHTML. The mix/derive math is a hand-kept-in-sync
+            copy of mixHex()/deriveFullPalette() in src/lib/mikrosTheme.ts
+            (a plain <script> tag can't import a module), so any change to
+            those formulas must be mirrored here by hand. */}
         <script
           dangerouslySetInnerHTML={{
-            __html:
-              "(function(){try{if(localStorage.getItem('mikai.themeMode')==='mikros'){document.documentElement.classList.add('theme-mikros');}}catch(e){}})();",
+            __html: `(function(){
+              try {
+                var mode = localStorage.getItem('mikai.themeMode');
+                if (!mode) return;
+                var el = document.documentElement;
+                var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+                function mix(a, b, w) {
+                  if (!HEX_RE.test(a) || !HEX_RE.test(b)) return a;
+                  var an = parseInt(a.slice(1), 16), bn = parseInt(b.slice(1), 16);
+                  var ar = (an >> 16) & 255, ag = (an >> 8) & 255, ab = an & 255;
+                  var br = (bn >> 16) & 255, bg = (bn >> 8) & 255, bb = bn & 255;
+                  var r = Math.round(ar * w + br * (1 - w));
+                  var g = Math.round(ag * w + bg * (1 - w));
+                  var bl = Math.round(ab * w + bb * (1 - w));
+                  return '#' + ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0');
+                }
+                function applyPalette(base) {
+                  el.classList.add('theme-mikros');
+                  var full = {
+                    '--mikros-canvas': base.canvas, '--mikros-surface': base.surface,
+                    '--mikros-raised': base.raised, '--mikros-border': base.border,
+                    '--mikros-text-primary': base.textPrimary, '--mikros-text-secondary': base.textSecondary,
+                    '--mikros-accent': base.accent, '--mikros-accent-hover': base.accentHover,
+                    '--mikros-elevated': mix(base.raised, base.border, 0.6),
+                    '--mikros-border-subtle': mix(base.border, base.canvas, 0.55),
+                    '--mikros-border-strong': mix(base.border, base.textPrimary, 0.55),
+                    '--mikros-text-tertiary': mix(base.textSecondary, base.canvas, 0.7),
+                    '--mikros-text-disabled': mix(base.textSecondary, base.canvas, 0.45),
+                    '--background': base.canvas, '--foreground': base.textPrimary
+                  };
+                  for (var k in full) el.style.setProperty(k, full[k]);
+                }
+                if (mode === 'mikros') {
+                  el.classList.add('theme-mikros');
+                } else if (mode.indexOf('custom:') === 0) {
+                  var id = mode.slice(7);
+                  var raw = localStorage.getItem('mikai.customThemes');
+                  if (!raw) return;
+                  var list = JSON.parse(raw);
+                  if (!Array.isArray(list)) return;
+                  var keys = ['canvas','surface','raised','border','textPrimary','textSecondary','accent','accentHover'];
+                  for (var i = 0; i < list.length; i++) {
+                    var t = list[i];
+                    if (!t || t.id !== id || !t.tokens) continue;
+                    var ok = true;
+                    for (var j = 0; j < keys.length; j++) {
+                      if (!HEX_RE.test(t.tokens[keys[j]])) { ok = false; break; }
+                    }
+                    if (ok) { applyPalette(t.tokens); }
+                    break;
+                  }
+                }
+              } catch (e) {}
+            })();`,
           }}
         />
       </head>
