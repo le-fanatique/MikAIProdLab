@@ -87,6 +87,13 @@ html.theme-mikros {
   /* body{} reads these two root tokens directly */
   --background: var(--mikros-canvas);
   --foreground: var(--mikros-text-primary);
+
+  /* Typography pairing (THEME.MIKROS.3) — Londrina Solid for big/display
+     titles, Poppins for running text and UI. IBM Plex Mono is untouched:
+     .font-mono elements set their own font-family and are never targeted
+     below. System fallbacks cover the rare case the webfont fails to load. */
+  --mikros-font-display: var(--font-londrina-solid), Impact, "Arial Narrow", sans-serif;
+  --mikros-font-sans: var(--font-poppins), var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 /* Structural surfaces */
@@ -170,4 +177,28 @@ html.theme-mikros .mikai-appearance-preview {
   background-repeat: no-repeat;
   background-position: left center;
   background-size: cover;
+}
+
+/* ============================================================
+   Mikros/Custom typography pairing (THEME.MIKROS.3)
+
+   Poppins replaces IBM Plex Sans as the running-text/UI font for the
+   whole theme (body inherits to everything except elements that opt
+   into monospace). Londrina Solid is reserved for h1 — the only large,
+   sparse "page title" element in this codebase (PageHeader and the
+   standalone new/edit page headers all render a single <h1> with the
+   same text-2xl treatment) — so no small label, dense table cell or
+   error message is ever affected. .font-mono / --font-mono are not
+   touched anywhere here: IBM Plex Mono keeps rendering hex values,
+   timecodes and code exactly as in Default.
+   ============================================================ */
+
+html.theme-mikros body {
+  font-family: var(--mikros-font-sans);
+}
+
+html.theme-mikros h1 {
+  font-family: var(--mikros-font-display);
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }

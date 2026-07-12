@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono, Londrina_Solid, Poppins } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
@@ -19,6 +19,23 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
+});
+
+// Custom/Mikros theme typography (THEME.MIKROS.3) — self-hosted via
+// next/font like the pair above, but only ever *consumed* under
+// html.theme-mikros in globals.css. Default keeps IBM Plex Sans exactly
+// as before: loading these variables on <html> has no visual effect
+// without the theme's scoped font-family rules.
+const londrinaSolid = Londrina_Solid({
+  variable: "--font-londrina-solid",
+  subsets: ["latin"],
+  weight: "400",
+});
+
+const poppins = Poppins({
+  variable: "--font-poppins",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -70,7 +87,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}
+      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} ${londrinaSolid.variable} ${poppins.variable} h-full`}
       // The anti-flash script below adds "theme-mikros" to this element
       // before hydration when Mikros is the saved mode (THEME.MIKROS.1) —
       // that class is intentionally absent from the SSR-rendered
