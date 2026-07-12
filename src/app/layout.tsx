@@ -99,13 +99,16 @@ export default async function RootLayout({
     >
       <head>
         {/* Anti-flash: applies the saved theme (Mikros or a custom
-            variant) before first paint (THEME.MIKROS.1 / THEME.MIKROS.2).
-            Static script, no interpolated user input — reads two fixed
-            localStorage keys and only ever writes CSS custom properties,
-            never innerHTML. The mix/derive math is a hand-kept-in-sync
-            copy of mixHex()/deriveFullPalette() in src/lib/mikrosTheme.ts
-            (a plain <script> tag can't import a module), so any change to
-            those formulas must be mirrored here by hand. */}
+            variant) before first paint (THEME.MIKROS.1 / THEME.MIKROS.2 /
+            THEME.MIKROS.4). Static script, no interpolated user input —
+            reads two fixed localStorage keys and only ever writes CSS
+            custom properties via style.setProperty(), never innerHTML,
+            never a <style> tag, never a URL. The mix/derive math and the
+            font stack/validation are a hand-kept-in-sync copy of
+            mixHex()/deriveFullPalette()/fontFamilyStack()/
+            isValidFontFamilyName() in src/lib/mikrosTheme.ts (a plain
+            <script> tag can't import a module), so any change to those
+            formulas must be mirrored here by hand. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){
@@ -114,6 +117,21 @@ export default async function RootLayout({
                 if (!mode) return;
                 var el = document.documentElement;
                 var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+                var FONT_RE = /^[A-Za-z0-9 -]{1,40}$/;
+                var FONT_STACKS = {
+                  'Londrina Solid': 'var(--font-londrina-solid), Impact, "Arial Narrow", sans-serif',
+                  'Poppins': 'var(--font-poppins), var(--font-sans), Arial, Helvetica, sans-serif',
+                  'IBM Plex Sans': 'var(--font-sans), Arial, Helvetica, sans-serif',
+                  'Arial': 'Arial, Helvetica, sans-serif',
+                  'Georgia': 'Georgia, "Times New Roman", serif',
+                  'system-ui': 'system-ui, -apple-system, "Segoe UI", sans-serif'
+                };
+                function validFontName(v) {
+                  return typeof v === 'string' && FONT_RE.test(v.trim());
+                }
+                function fontStack(name) {
+                  return FONT_STACKS[name] || ('"' + name + '", system-ui, sans-serif');
+                }
                 function mix(a, b, w) {
                   if (!HEX_RE.test(a) || !HEX_RE.test(b)) return a;
                   var an = parseInt(a.slice(1), 16), bn = parseInt(b.slice(1), 16);
@@ -124,7 +142,7 @@ export default async function RootLayout({
                   var bl = Math.round(ab * w + bb * (1 - w));
                   return '#' + ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0');
                 }
-                function applyPalette(base) {
+                function applyPalette(base, displayFont, bodyFont) {
                   el.classList.add('theme-mikros');
                   var full = {
                     '--mikros-canvas': base.canvas, '--mikros-surface': base.surface,
@@ -136,7 +154,9 @@ export default async function RootLayout({
                     '--mikros-border-strong': mix(base.border, base.textPrimary, 0.55),
                     '--mikros-text-tertiary': mix(base.textSecondary, base.canvas, 0.7),
                     '--mikros-text-disabled': mix(base.textSecondary, base.canvas, 0.45),
-                    '--background': base.canvas, '--foreground': base.textPrimary
+                    '--background': base.canvas, '--foreground': base.textPrimary,
+                    '--mikros-font-display': fontStack(displayFont),
+                    '--mikros-font-sans': fontStack(bodyFont)
                   };
                   for (var k in full) el.style.setProperty(k, full[k]);
                 }
@@ -156,7 +176,11 @@ export default async function RootLayout({
                     for (var j = 0; j < keys.length; j++) {
                       if (!HEX_RE.test(t.tokens[keys[j]])) { ok = false; break; }
                     }
-                    if (ok) { applyPalette(t.tokens); }
+                    if (ok) {
+                      var displayFont = validFontName(t.displayFont) ? t.displayFont.trim() : 'Londrina Solid';
+                      var bodyFont = validFontName(t.bodyFont) ? t.bodyFont.trim() : 'Poppins';
+                      applyPalette(t.tokens, displayFont, bodyFont);
+                    }
                     break;
                   }
                 }

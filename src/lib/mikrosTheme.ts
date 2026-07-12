@@ -57,10 +57,60 @@ export const THEME_MODE_STORAGE_KEY = "mikai.themeMode";
 export const CUSTOM_THEMES_STORAGE_KEY = "mikai.customThemes";
 export const THEME_CLASS = "theme-mikros";
 
+/**
+ * Typography pairing (THEME.MIKROS.4). Fonts are stored as plain family
+ * names (never a URL, never raw CSS) and only ever reach the DOM through
+ * style.setProperty() on a known custom property — there is no dynamic
+ * <style>/innerHTML injection anywhere in this module or in the anti-flash
+ * script, so a family name can never execute arbitrary CSS or fetch a
+ * remote resource.
+ */
+export const MIKROS_DEFAULT_DISPLAY_FONT = "Londrina Solid";
+export const MIKROS_DEFAULT_BODY_FONT = "Poppins";
+
+export const MIKROS_FONT_CHOICES = [
+  "Londrina Solid",
+  "Poppins",
+  "IBM Plex Sans",
+  "Arial",
+  "Georgia",
+  "system-ui",
+] as const;
+
+/** Reliable stacks for the curated choices — reuse the webfonts already self-hosted by next/font where available, with sane system fallbacks otherwise. */
+const KNOWN_FONT_STACKS: Record<string, string> = {
+  "Londrina Solid": 'var(--font-londrina-solid), Impact, "Arial Narrow", sans-serif',
+  Poppins: "var(--font-poppins), var(--font-sans), Arial, Helvetica, sans-serif",
+  "IBM Plex Sans": "var(--font-sans), Arial, Helvetica, sans-serif",
+  Arial: "Arial, Helvetica, sans-serif",
+  Georgia: 'Georgia, "Times New Roman", serif',
+  "system-ui": 'system-ui, -apple-system, "Segoe UI", sans-serif',
+};
+
+/** Letters, digits, spaces and hyphens only — enough for every real font name (curated or locally installed), never CSS syntax, quotes or a URL. */
+const FONT_NAME_RE = /^[A-Za-z0-9 -]{1,40}$/;
+
+export function isValidFontFamilyName(value: unknown): value is string {
+  return typeof value === "string" && FONT_NAME_RE.test(value.trim());
+}
+
+/**
+ * Resolves a stored/selected font name to a full CSS font-family value.
+ * Curated names reuse their self-hosted webfont; anything else is treated
+ * as a font the user has installed locally — quoted as a plain family name
+ * (charset restricted by isValidFontFamilyName, so this can never break out
+ * into other CSS or reference a URL) with a generic system fallback.
+ */
+export function fontFamilyStack(name: string): string {
+  return KNOWN_FONT_STACKS[name] ?? `"${name}", system-ui, sans-serif`;
+}
+
 export type CustomTheme = {
   id: string;
   name: string;
   tokens: MikrosPalette;
+  displayFont: string;
+  bodyFont: string;
 };
 
 /** "default" | "mikros" | "custom:<id>" */
@@ -142,6 +192,12 @@ export function applyPaletteToElement(el: HTMLElement, base: MikrosPalette): voi
   }
 }
 
+/** Sets the two theme-scoped font custom properties (THEME.MIKROS.4) — same mechanism as applyPaletteToElement, kept separate since fonts are edited/previewed independently of colors. */
+export function applyFontsToElement(el: HTMLElement, displayFont: string, bodyFont: string): void {
+  el.style.setProperty("--mikros-font-display", fontFamilyStack(displayFont));
+  el.style.setProperty("--mikros-font-sans", fontFamilyStack(bodyFont));
+}
+
 export function clearPaletteOverrides(el: HTMLElement): void {
   const props = [
     "--mikros-canvas", "--mikros-surface", "--mikros-raised", "--mikros-border",
@@ -149,6 +205,10 @@ export function clearPaletteOverrides(el: HTMLElement): void {
     "--mikros-elevated", "--mikros-border-subtle", "--mikros-border-strong",
     "--mikros-text-tertiary", "--mikros-text-disabled",
     "--background", "--foreground",
+    // THEME.MIKROS.4 — reset restores the official Londrina Solid / Poppins
+    // stylesheet defaults for typography too, same "remove inline override"
+    // mechanism as every color above.
+    "--mikros-font-display", "--mikros-font-sans",
   ];
   for (const prop of props) el.style.removeProperty(prop);
 }
@@ -184,7 +244,20 @@ export function loadCustomThemes(): CustomTheme[] {
         tokens[key] = v;
       }
       if (!valid) continue;
-      result.push({ id: (entry as { id: string }).id, name: (entry as { name: string }).name, tokens });
+      // Fonts are additive (THEME.MIKROS.4): unlike hex tokens, a missing or
+      // invalid font never rejects the whole theme — older custom themes
+      // saved before this ticket simply fall back to the official pairing.
+      const rawDisplayFont = (entry as { displayFont?: unknown }).displayFont;
+      const rawBodyFont = (entry as { bodyFont?: unknown }).bodyFont;
+      const displayFont = isValidFontFamilyName(rawDisplayFont) ? rawDisplayFont.trim() : MIKROS_DEFAULT_DISPLAY_FONT;
+      const bodyFont = isValidFontFamilyName(rawBodyFont) ? rawBodyFont.trim() : MIKROS_DEFAULT_BODY_FONT;
+      result.push({
+        id: (entry as { id: string }).id,
+        name: (entry as { name: string }).name,
+        tokens,
+        displayFont,
+        bodyFont,
+      });
     }
     return result;
   } catch {

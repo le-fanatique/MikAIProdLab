@@ -5,6 +5,9 @@ import {
   MIKROS_TOKEN_KEYS,
   MIKROS_TOKEN_LABELS,
   MIKROS_DEFAULT_PALETTE,
+  MIKROS_DEFAULT_DISPLAY_FONT,
+  MIKROS_DEFAULT_BODY_FONT,
+  MIKROS_FONT_CHOICES,
   THEME_MODE_STORAGE_KEY,
   THEME_CLASS,
   CUSTOM_MODE_PREFIX,
@@ -14,12 +17,17 @@ import {
   customModeId,
   customModeValue,
   applyPaletteToElement,
+  applyFontsToElement,
   clearPaletteOverrides,
   loadCustomThemes,
   saveCustomThemes,
   generateThemeId,
   isValidHexColor,
+  isValidFontFamilyName,
 } from "@/lib/mikrosTheme";
+
+const FONT_OTHER = "__other__";
+type FontRole = "display" | "body";
 
 function applyMode(mode: string, customThemes: CustomTheme[]) {
   const el = document.documentElement;
@@ -32,6 +40,7 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
     if (theme) {
       el.classList.add(THEME_CLASS);
       applyPaletteToElement(el, theme.tokens);
+      applyFontsToElement(el, theme.displayFont, theme.bodyFont);
     } else {
       // Referenced theme no longer exists (deleted elsewhere/corrupted) — safest fallback
       el.classList.remove(THEME_CLASS);
@@ -64,6 +73,17 @@ export default function ThemeModeToggle() {
   // undefined for a key means "display draftPalette's value".
   const [rawHex, setRawHex] = useState<Partial<Record<MikrosTokenKey, string>>>({});
   const [hexErrors, setHexErrors] = useState<Partial<Record<MikrosTokenKey, string>>>({});
+
+  // Typography (THEME.MIKROS.4) — same draft/raw/error split as the palette
+  // above. draftDisplayFont/draftBodyFont are always a valid family name
+  // (curated or free-text) and are what gets saved into a custom theme.
+  const [draftDisplayFont, setDraftDisplayFont] = useState<string>(MIKROS_DEFAULT_DISPLAY_FONT);
+  const [draftBodyFont, setDraftBodyFont] = useState<string>(MIKROS_DEFAULT_BODY_FONT);
+  const [displayFontIsOther, setDisplayFontIsOther] = useState(false);
+  const [bodyFontIsOther, setBodyFontIsOther] = useState(false);
+  const [otherFontText, setOtherFontText] = useState<Record<FontRole, string>>({ display: "", body: "" });
+  const [fontErrors, setFontErrors] = useState<Partial<Record<FontRole, string>>>({});
+
   const [saveNameOpen, setSaveNameOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -107,6 +127,12 @@ export default function ThemeModeToggle() {
       setDraftPalette(MIKROS_DEFAULT_PALETTE);
       setRawHex({});
       setHexErrors({});
+      setDraftDisplayFont(MIKROS_DEFAULT_DISPLAY_FONT);
+      setDraftBodyFont(MIKROS_DEFAULT_BODY_FONT);
+      setDisplayFontIsOther(false);
+      setBodyFontIsOther(false);
+      setOtherFontText({ display: "", body: "" });
+      setFontErrors({});
     }
   }
 
@@ -143,17 +169,72 @@ export default function ThemeModeToggle() {
     }
   }
 
+  /** Commits a known-valid font family (curated choice, or a validated free-text name) to the live typography + DOM. */
+  function commitFontChange(role: FontRole, value: string) {
+    if (role === "display") {
+      setDraftDisplayFont(value);
+      applyFontsToElement(document.documentElement, value, draftBodyFont);
+    } else {
+      setDraftBodyFont(value);
+      applyFontsToElement(document.documentElement, draftDisplayFont, value);
+    }
+  }
+
+  /** Curated <select> — picking a real choice always commits immediately; picking "Other" just reveals the free-text field without changing the live font yet. */
+  function handleFontSelectChange(role: FontRole, value: string) {
+    if (value === FONT_OTHER) {
+      if (role === "display") {
+        setDisplayFontIsOther(true);
+        setOtherFontText((prev) => ({ ...prev, display: draftDisplayFont }));
+      } else {
+        setBodyFontIsOther(true);
+        setOtherFontText((prev) => ({ ...prev, body: draftBodyFont }));
+      }
+      return;
+    }
+    if (role === "display") setDisplayFontIsOther(false);
+    else setBodyFontIsOther(false);
+    setFontErrors((prev) => ({ ...prev, [role]: undefined }));
+    commitFontChange(role, value);
+  }
+
+  /**
+   * Free-text "installed locally" font field — mirrors handleHexTextChange:
+   * an invalid name is never applied to the DOM/draft (so it can never be
+   * saved either); it only updates what's displayed, plus a visible error,
+   * until corrected. Never touches a <style> tag, innerHTML or a URL.
+   */
+  function handleFontTextChange(role: FontRole, value: string) {
+    setOtherFontText((prev) => ({ ...prev, [role]: value }));
+    if (isValidFontFamilyName(value)) {
+      setFontErrors((prev) => ({ ...prev, [role]: undefined }));
+      commitFontChange(role, value.trim());
+    } else {
+      setFontErrors((prev) => ({
+        ...prev,
+        [role]: "Use letters, numbers, spaces or hyphens only (max 40 characters).",
+      }));
+    }
+  }
+
   function handleResetPalette() {
     setDraftPalette(MIKROS_DEFAULT_PALETTE);
     setRawHex({});
     setHexErrors({});
-    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults
+    setDraftDisplayFont(MIKROS_DEFAULT_DISPLAY_FONT);
+    setDraftBodyFont(MIKROS_DEFAULT_BODY_FONT);
+    setDisplayFontIsOther(false);
+    setBodyFontIsOther(false);
+    setOtherFontText({ display: "", body: "" });
+    setFontErrors({});
+    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography)
   }
 
   function handleSaveAsCustom() {
     const hasPendingInvalidHex = Object.values(hexErrors).some((e) => e !== undefined);
-    if (hasPendingInvalidHex) {
-      setSaveError("Fix the invalid color value(s) above before saving.");
+    const hasPendingInvalidFont = Object.values(fontErrors).some((e) => e !== undefined);
+    if (hasPendingInvalidHex || hasPendingInvalidFont) {
+      setSaveError("Fix the invalid value(s) above before saving.");
       return;
     }
     const name = saveName.trim();
@@ -166,7 +247,13 @@ export default function ThemeModeToggle() {
       setSaveError("A custom theme with this name already exists.");
       return;
     }
-    const theme: CustomTheme = { id: generateThemeId(), name, tokens: draftPalette };
+    const theme: CustomTheme = {
+      id: generateThemeId(),
+      name,
+      tokens: draftPalette,
+      displayFont: draftDisplayFont,
+      bodyFont: draftBodyFont,
+    };
     const next = [...customThemes, theme];
     setCustomThemes(next);
     saveCustomThemes(next);
@@ -334,6 +421,85 @@ export default function ThemeModeToggle() {
             })}
           </div>
 
+          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
+            <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Typography</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-font-display" className="text-[10px] text-[#6e767d]">
+                  Display font
+                </label>
+                <select
+                  id="mikros-font-display"
+                  value={displayFontIsOther ? FONT_OTHER : draftDisplayFont}
+                  onChange={(e) => handleFontSelectChange("display", e.target.value)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                >
+                  {MIKROS_FONT_CHOICES.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                  <option value={FONT_OTHER}>Other (installed font)…</option>
+                </select>
+                {displayFontIsOther && (
+                  <input
+                    type="text"
+                    value={otherFontText.display}
+                    onChange={(e) => handleFontTextChange("display", e.target.value)}
+                    placeholder="e.g. Helvetica Neue"
+                    aria-label="Display font family name"
+                    aria-invalid={fontErrors.display !== undefined}
+                    className={`rounded border bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none ${
+                      fontErrors.display
+                        ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
+                        : "border-[#2c3035] focus:border-[#3a4046]"
+                    }`}
+                  />
+                )}
+                {fontErrors.display && <p className="text-[10px] text-[#cf7b6b]">{fontErrors.display}</p>}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-font-body" className="text-[10px] text-[#6e767d]">
+                  Body font
+                </label>
+                <select
+                  id="mikros-font-body"
+                  value={bodyFontIsOther ? FONT_OTHER : draftBodyFont}
+                  onChange={(e) => handleFontSelectChange("body", e.target.value)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                >
+                  {MIKROS_FONT_CHOICES.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                  <option value={FONT_OTHER}>Other (installed font)…</option>
+                </select>
+                {bodyFontIsOther && (
+                  <input
+                    type="text"
+                    value={otherFontText.body}
+                    onChange={(e) => handleFontTextChange("body", e.target.value)}
+                    placeholder="e.g. Helvetica Neue"
+                    aria-label="Body font family name"
+                    aria-invalid={fontErrors.body !== undefined}
+                    className={`rounded border bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none ${
+                      fontErrors.body
+                        ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
+                        : "border-[#2c3035] focus:border-[#3a4046]"
+                    }`}
+                  />
+                )}
+                {fontErrors.body && <p className="text-[10px] text-[#cf7b6b]">{fontErrors.body}</p>}
+              </div>
+            </div>
+            <p className="text-[10px] text-[#4b5158]">
+              A font not installed on this device falls back to the system default automatically.
+              ↺ Reset Custom palette also restores the official fonts.
+            </p>
+          </div>
+
           <div className="border-t border-[#1e2124] pt-3">
             {!saveNameOpen ? (
               <button
@@ -363,7 +529,10 @@ export default function ThemeModeToggle() {
                   <button
                     type="button"
                     onClick={handleSaveAsCustom}
-                    disabled={Object.values(hexErrors).some((e) => e !== undefined)}
+                    disabled={
+                      Object.values(hexErrors).some((e) => e !== undefined) ||
+                      Object.values(fontErrors).some((e) => e !== undefined)
+                    }
                     className="rounded border border-[#9079F2]/50 text-[#9079F2] px-3 py-1.5 text-xs hover:border-[#9079F2] hover:bg-[#9079F2]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
                     Save
