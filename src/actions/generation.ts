@@ -245,6 +245,7 @@ export async function runWorkflowGeneration(args: {
     shotPrompt: shot.shotPrompt,
     compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
     hasPromptSegments: hasRealPromptSegments,
+    hasMissingTiming: compiledPrompt.hasMissingTiming,
   });
 
   const availableImages = buildRuntimeImageOptions(

@@ -192,6 +192,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     shotPrompt: shot.shotPrompt,
     compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
     hasPromptSegments: hasRealPromptSegments,
+    hasMissingTiming: compiledPrompt.hasMissingTiming,
   });
 
   // Fill sources for the "Fill" dropdown on text inputs (PROMPTUX.1) —

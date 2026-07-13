@@ -169,6 +169,7 @@ export default async function ShotGenerationPanel({
     shotPrompt: shot.shotPrompt,
     compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
     hasPromptSegments: hasRealPromptSegments,
+    hasMissingTiming: compiledPrompt.hasMissingTiming,
   });
 
   const composedShotPrompt =
