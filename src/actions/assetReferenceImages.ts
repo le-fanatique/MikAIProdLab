@@ -9,15 +9,23 @@ import {
   SaveReferenceImageError,
 } from "@/lib/uploadImage";
 
-const IMAGE_ROLES = [
-  "reference",
-  "keyframe",
-  "style",
+// ASSET.BIBLE.2 — legacy values kept exactly as before (never rewritten),
+// MVP roles added alongside. "lighting"/"style"/"other" are shared between
+// the two lists, not duplicated.
+const LEGACY_IMAGE_ROLES = ["reference", "keyframe", "character", "environment"] as const;
+const MVP_IMAGE_ROLES = [
+  "identity",
+  "full_body",
+  "expression",
+  "pose",
+  "costume",
+  "environment_view",
   "lighting",
-  "character",
-  "environment",
+  "prop_state",
+  "style",
   "other",
 ] as const;
+const IMAGE_ROLES = [...LEGACY_IMAGE_ROLES, ...MVP_IMAGE_ROLES] as const;
 
 type ImageRole = (typeof IMAGE_ROLES)[number];
 
@@ -64,6 +72,12 @@ export async function createAssetReferenceImage(
   const imageRoleRaw = getString(formData, "imageRole");
   const imageRole = imageRoleRaw && isImageRole(imageRoleRaw) ? imageRoleRaw : null;
   const notes = normalizeOptionalString(getString(formData, "notes"));
+  // ASSET.BIBLE.2 — additive metadata, independent of label/notes.
+  const variantState = normalizeOptionalString(getString(formData, "variantState"));
+  const usageNotes = normalizeOptionalString(getString(formData, "usageNotes"));
+  // Never approved implicitly on upload — approval is always a separate,
+  // explicit action (setAssetReferenceImageApproval or the edit form's
+  // checkbox), never a side effect of adding an image.
 
   let imagePath: string;
   let sourceFilename: string | null;
@@ -92,6 +106,9 @@ export async function createAssetReferenceImage(
       label,
       imageRole,
       notes,
+      variantState,
+      usageNotes,
+      approvedForGeneration: false,
     });
   } catch {
     await deleteStoredReferenceImage(imagePath);
@@ -123,6 +140,14 @@ export async function updateAssetReferenceImage(
   const imageRoleRaw = getString(formData, "imageRole");
   const imageRole = imageRoleRaw && isImageRole(imageRoleRaw) ? imageRoleRaw : null;
   const notes = normalizeOptionalString(getString(formData, "notes"));
+  // ASSET.BIBLE.2 — additive metadata, independent of label/notes.
+  const variantState = normalizeOptionalString(getString(formData, "variantState"));
+  const usageNotes = normalizeOptionalString(getString(formData, "usageNotes"));
+  // Explicit checkbox on the edit form — an unchecked box submits nothing,
+  // so its absence means false, exactly mirroring what the user sees. A
+  // file replacement in this same submit never changes this value on its
+  // own: it only changes if the user explicitly (un)checks the box.
+  const approvedForGeneration = formData.get("approvedForGeneration") === "on";
 
   const imageFile = formData.get("imageFile");
   const hasNewFile =
@@ -153,6 +178,9 @@ export async function updateAssetReferenceImage(
         label,
         imageRole,
         notes,
+        variantState,
+        usageNotes,
+        approvedForGeneration,
         imagePath: newImagePath,
         sourceFilename: newSourceFilename,
         updatedAt: new Date().toISOString(),
@@ -190,6 +218,38 @@ export async function deleteAssetReferenceImage(
   await db.delete(assetReferenceImages).where(eq(assetReferenceImages.id, imageId));
 
   await deleteStoredReferenceImage(existing.imagePath);
+
+  redirect(`/projects/${projectId}/assets/${assetId}`);
+}
+
+// ── Explicit approval toggle (ASSET.BIBLE.2) ──────────────────────────────
+// The single dedicated entry point for changing approvedForGeneration from
+// Asset Detail's reference image list — never touched implicitly by upload
+// or by replacing a file. `approved` is the exact next value the user chose
+// (a toggle button always sends the opposite of the currently-displayed
+// state, never inferred).
+export async function setAssetReferenceImageApproval(
+  imageId: number,
+  assetId: number,
+  projectId: number,
+  approved: boolean
+) {
+  const [existing] = await db
+    .select({ assetId: assetReferenceImages.assetId })
+    .from(assetReferenceImages)
+    .where(eq(assetReferenceImages.id, imageId));
+
+  if (!existing || existing.assetId !== assetId) {
+    redirect(`/projects/${projectId}/assets/${assetId}?error=not_found`);
+  }
+
+  const asset = await verifyAsset(assetId, projectId);
+  if (!asset) redirect(`/projects/${projectId}/assets/${assetId}?error=not_found`);
+
+  await db
+    .update(assetReferenceImages)
+    .set({ approvedForGeneration: approved, updatedAt: new Date().toISOString() })
+    .where(eq(assetReferenceImages.id, imageId));
 
   redirect(`/projects/${projectId}/assets/${assetId}`);
 }

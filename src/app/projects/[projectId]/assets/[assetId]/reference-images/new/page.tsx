@@ -23,15 +23,26 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_found: "Asset not found.",
 };
 
+// ASSET.BIBLE.2 — MVP roles for Seedance; legacy values kept selectable
+// (grouped separately below) so existing images always display their real
+// stored role instead of silently falling back to blank.
 const ROLE_OPTIONS = [
-  { value: "", label: "None" },
-  { value: "reference", label: "Reference" },
-  { value: "keyframe", label: "Keyframe" },
-  { value: "style", label: "Style" },
+  { value: "identity", label: "Identity" },
+  { value: "full_body", label: "Full Body" },
+  { value: "expression", label: "Expression" },
+  { value: "pose", label: "Pose" },
+  { value: "costume", label: "Costume" },
+  { value: "environment_view", label: "Environment View" },
   { value: "lighting", label: "Lighting" },
-  { value: "character", label: "Character" },
-  { value: "environment", label: "Environment" },
+  { value: "prop_state", label: "Prop State" },
+  { value: "style", label: "Style" },
   { value: "other", label: "Other" },
+];
+const LEGACY_ROLE_OPTIONS = [
+  { value: "reference", label: "Reference (legacy)" },
+  { value: "keyframe", label: "Keyframe (legacy)" },
+  { value: "character", label: "Character (legacy)" },
+  { value: "environment", label: "Environment (legacy)" },
 ];
 
 const inputClass =
@@ -101,12 +112,32 @@ export default async function NewAssetReferenceImagePage({ params, searchParams 
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Role</label>
           <select name="imageRole" defaultValue="" className={inputClass}>
-            {ROLE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
+            <option value="">None</option>
+            <optgroup label="Roles">
+              {ROLE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Legacy">
+              {LEGACY_ROLE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className={labelClass}>Variant / State</label>
+          <input
+            type="text"
+            name="variantState"
+            placeholder="e.g. Injured, Night version, Damaged"
+            className={inputClass}
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -118,6 +149,21 @@ export default async function NewAssetReferenceImagePage({ params, searchParams 
             className={inputClass + " resize-y"}
           />
         </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className={labelClass}>Usage Notes</label>
+          <textarea
+            name="usageNotes"
+            rows={3}
+            placeholder="How/when this image should be used for generation..."
+            className={inputClass + " resize-y"}
+          />
+        </div>
+
+        <p className="text-xs text-[#4b5158]">
+          New images start as <span className="text-[#cda24f]">Not approved</span>. Approve them
+          from Asset Detail once you&apos;ve reviewed the upload.
+        </p>
 
         <div className="flex items-center gap-3 pt-2">
           <button

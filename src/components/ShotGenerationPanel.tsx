@@ -158,6 +158,8 @@ export default async function ShotGenerationPanel({
             label: assetReferenceImages.label,
             imageRole: assetReferenceImages.imageRole,
             sourceFilename: assetReferenceImages.sourceFilename,
+            variantState: assetReferenceImages.variantState,
+            approvedForGeneration: assetReferenceImages.approvedForGeneration,
           })
           .from(assetReferenceImages)
           .where(inArray(assetReferenceImages.assetId, assignedAssetIds))

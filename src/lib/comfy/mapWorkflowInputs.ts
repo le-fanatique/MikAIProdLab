@@ -10,6 +10,12 @@ export type RuntimeImageOption = {
   role: string | null;
   assetName?: string;
   assetType?: string;
+  // ASSET.BIBLE.2 — only ever set for source === "asset" (shot reference
+  // images have no variant/approval columns); undefined, not false/null,
+  // when not applicable, so callers can distinguish "not an asset image"
+  // from "an asset image not yet approved".
+  variantState?: string | null;
+  approved?: boolean;
 };
 
 export type RuntimeShotReferenceImage = {
@@ -27,6 +33,9 @@ export type RuntimeAssetReferenceImage = {
   label: string | null;
   imageRole: string | null;
   sourceFilename: string | null;
+  // ASSET.BIBLE.2
+  variantState: string | null;
+  approvedForGeneration: boolean;
 };
 
 export type RuntimeAssignedAsset = {
@@ -86,6 +95,8 @@ export function buildRuntimeImageOptions(
       role: image.imageRole,
       assetName: assigned.assetName,
       assetType: assigned.assetType,
+      variantState: image.variantState,
+      approved: image.approvedForGeneration,
     });
   }
 

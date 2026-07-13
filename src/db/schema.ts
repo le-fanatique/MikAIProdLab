@@ -230,10 +230,39 @@ export const assetReferenceImages = sqliteTable("asset_reference_images", {
   imagePath: text("image_path").notNull(),
   sourceFilename: text("source_filename"),
   label: text("label"),
+  // ASSET.BIBLE.2 — widened to the Seedance MVP role list while keeping every
+  // legacy value readable (this column has no DB CHECK constraint, so
+  // widening it is purely a TypeScript-level change; existing rows with a
+  // legacy value are never rewritten).
   imageRole: text("image_role", {
-    enum: ["reference", "keyframe", "style", "lighting", "character", "environment", "other"],
+    enum: [
+      // legacy (pre-ASSET.BIBLE.2)
+      "reference",
+      "keyframe",
+      "character",
+      "environment",
+      // MVP roles (ASSET.BIBLE.2) — "lighting", "style", "other" already
+      // existed above and are reused as-is, not duplicated here.
+      "identity",
+      "full_body",
+      "expression",
+      "pose",
+      "costume",
+      "environment_view",
+      "lighting",
+      "prop_state",
+      "style",
+      "other",
+    ],
   }),
   notes: text("notes"),
+  // ASSET.BIBLE.2 — Seedance-specific metadata, additive and independent of
+  // `label`/`notes` above.
+  variantState: text("variant_state"),
+  usageNotes: text("usage_notes"),
+  approvedForGeneration: int("approved_for_generation", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),

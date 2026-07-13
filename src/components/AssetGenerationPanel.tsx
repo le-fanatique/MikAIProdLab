@@ -76,6 +76,8 @@ export default async function AssetGenerationPanel({
       label: assetReferenceImages.label,
       imageRole: assetReferenceImages.imageRole,
       sourceFilename: assetReferenceImages.sourceFilename,
+      variantState: assetReferenceImages.variantState,
+      approvedForGeneration: assetReferenceImages.approvedForGeneration,
     })
     .from(assetReferenceImages)
     .where(eq(assetReferenceImages.assetId, aid))
@@ -89,6 +91,8 @@ export default async function AssetGenerationPanel({
     role: image.imageRole,
     assetName: asset.name,
     assetType: asset.type,
+    variantState: image.variantState,
+    approved: image.approvedForGeneration,
   }));
 
   const assetPromptText = [asset.description, asset.notes]
@@ -193,6 +197,8 @@ export default async function AssetGenerationPanel({
         imagePath: img.imagePath,
         label: img.label,
         role: img.role ?? undefined,
+        variantState: img.variantState,
+        approved: img.approved,
       })),
     };
   });

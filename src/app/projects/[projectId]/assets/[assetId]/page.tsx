@@ -13,7 +13,7 @@ import WorkflowSelectorPanel from "@/components/WorkflowSelectorPanel";
 import AssetGenerationPanel from "@/components/AssetGenerationPanel";
 import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { deleteAsset } from "@/actions/assets";
-import { deleteAssetReferenceImage } from "@/actions/assetReferenceImages";
+import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/actions/assetReferenceImages";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel from "@/components/AssetDescriptionEnhancePanel";
@@ -320,6 +320,9 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           }
           getDeleteAction={(imageId) =>
             deleteAssetReferenceImage.bind(null, imageId, aid, pid)
+          }
+          getApprovalAction={(imageId, nextApproved) =>
+            setAssetReferenceImageApproval.bind(null, imageId, aid, pid, nextApproved)
           }
         />
       </Card>

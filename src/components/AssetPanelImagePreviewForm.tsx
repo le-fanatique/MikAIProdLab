@@ -10,6 +10,9 @@ export type AssetPanelImageOption = {
   imagePath: string;
   label: string;
   role: string | null | undefined;
+  // ASSET.BIBLE.2 — undefined for non-asset sources, which don't have these.
+  variantState?: string | null;
+  approved?: boolean;
 };
 
 export type AssetPanelImageNode = {
@@ -77,11 +80,15 @@ export default function AssetPanelImagePreviewForm({
         const { nodeId, displayLabel, isDup, isSuggestion, images } = node;
         const currentValue = selectedByNode[nodeId] ?? "";
 
-        const pickerItems = images.map((img) => ({
-          id: img.id,
-          imagePath: img.imagePath,
-          label: img.role ? img.role : img.label,
-        }));
+        const pickerItems = images.map((img) => {
+          // ASSET.BIBLE.2 — surface role/variant/approval in the visible
+          // label (the only text this compact grid can show per thumbnail),
+          // so an unapproved image is never picked as if it were vetted.
+          const base = img.role ? img.role : img.label;
+          const withVariant = img.variantState ? `${base} · ${img.variantState}` : base;
+          const label = img.approved === false ? `⚠ ${withVariant} (unapproved)` : withVariant;
+          return { id: img.id, imagePath: img.imagePath, label };
+        });
 
         return (
           <div key={nodeId} className="flex flex-col gap-2">

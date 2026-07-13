@@ -12,6 +12,13 @@ type ReferenceImageItem = {
   label: string | null;
   imageRole: string | null;
   notes: string | null;
+  // ASSET.BIBLE.2 — optional: only ever populated by the Asset Detail
+  // caller. Shot Detail reuses this same panel for shot_reference_images,
+  // which has no variant/usage/approval columns, so these are simply
+  // omitted there (never rendered, never assumed present).
+  variantState?: string | null;
+  usageNotes?: string | null;
+  approvedForGeneration?: boolean;
 };
 
 type Props = {
@@ -19,6 +26,9 @@ type Props = {
   addHref: string;
   getEditHref: (imageId: number) => string;
   getDeleteAction: (imageId: number) => () => Promise<void>;
+  // ASSET.BIBLE.2 — explicit approve/unapprove action. Omitted entirely by
+  // Shot Detail; when omitted, no approval UI renders at all.
+  getApprovalAction?: (imageId: number, nextApproved: boolean) => () => Promise<void>;
 };
 
 export default function ReferenceImagesPanel({
@@ -26,6 +36,7 @@ export default function ReferenceImagesPanel({
   addHref,
   getEditHref,
   getDeleteAction,
+  getApprovalAction,
 }: Props) {
   if (images.length === 0) {
     return (
@@ -73,13 +84,46 @@ export default function ReferenceImagesPanel({
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs text-[#e7e9ec] truncate">{displayName}</p>
                   <ReferenceImageRoleBadge role={image.imageRole} />
+                  {image.variantState && (
+                    <span className="inline-flex items-center rounded border border-[#3a4046] px-1.5 py-0.5 text-[10px] font-medium text-[#6e767d]">
+                      {image.variantState}
+                    </span>
+                  )}
+                  {/* ASSET.BIBLE.2 — readable at a glance, no menu to open. */}
+                  {image.approvedForGeneration !== undefined && (
+                    <span
+                      className={
+                        image.approvedForGeneration
+                          ? "inline-flex items-center rounded border border-[#6b9e72]/40 bg-[#6b9e72]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#6b9e72]"
+                          : "inline-flex items-center rounded border border-[#cda24f]/40 bg-[#cda24f]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#cda24f]"
+                      }
+                    >
+                      {image.approvedForGeneration ? "Approved" : "Not approved"}
+                    </span>
+                  )}
                 </div>
                 {image.notes && (
                   <p className="text-[11px] text-[#6e767d] leading-relaxed line-clamp-2">
                     {image.notes}
                   </p>
                 )}
+                {image.usageNotes && (
+                  <p className="text-[11px] text-[#6e767d] leading-relaxed line-clamp-2">
+                    <span className="text-[#4b5158]">Usage: </span>
+                    {image.usageNotes}
+                  </p>
+                )}
                 <div className="flex items-center gap-3 pt-0.5">
+                  {getApprovalAction && image.approvedForGeneration !== undefined && (
+                    <form action={getApprovalAction(image.id, !image.approvedForGeneration)}>
+                      <button
+                        type="submit"
+                        className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                      >
+                        {image.approvedForGeneration ? "Unapprove" : "Approve"}
+                      </button>
+                    </form>
+                  )}
                   <Link
                     href={getEditHref(image.id)}
                     className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
