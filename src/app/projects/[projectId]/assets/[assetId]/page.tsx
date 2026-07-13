@@ -270,6 +270,9 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             assetId={aid}
             description={asset.description}
             notes={asset.notes}
+            visualIdentity={asset.visualIdentity}
+            usageRules={asset.usageRules}
+            forbiddenVariations={asset.forbiddenVariations}
             returnTo={detailsReturnTo}
           />
           <p className="mt-3 border-t border-[#1e2124] pt-3 text-xs text-[#4b5158]">

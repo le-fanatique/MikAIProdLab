@@ -90,6 +90,12 @@ export const assets = sqliteTable("assets", {
   }).notNull(),
   description: text("description"),
   notes: text("notes"),
+  // Asset Bible (ASSET.BIBLE.1) — optional textual guidance for the future
+  // Prompt Compiler. Deliberately separate from description/notes, which
+  // remain the free-form text used as the asset image generation prompt.
+  visualIdentity: text("visual_identity"),
+  usageRules: text("usage_rules"),
+  forbiddenVariations: text("forbidden_variations"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

@@ -265,15 +265,20 @@ export async function applyBatchAssetDescriptionDraftsInline(input: {
   return { ok: true, applied, errors };
 }
 
-// ── Inline asset details update (description + notes together, no redirect) ───
+// ── Inline asset details update (description + notes + Asset Bible fields,
+//    no redirect) ─────────────────────────────────────────────────────────
 
 export async function updateAssetDetailsInline(input: {
   assetId: number;
   projectId: number;
   description: string;
   notes: string;
+  // Asset Bible (ASSET.BIBLE.1) — optional, independent of description/notes.
+  visualIdentity: string;
+  usageRules: string;
+  forbiddenVariations: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { assetId, projectId, description, notes } = input;
+  const { assetId, projectId, description, notes, visualIdentity, usageRules, forbiddenVariations } = input;
 
   const [existing] = await db
     .select({ projectId: assets.projectId })
@@ -289,6 +294,9 @@ export async function updateAssetDetailsInline(input: {
     .set({
       description: description.trim() || null,
       notes: notes.trim() || null,
+      visualIdentity: visualIdentity.trim() || null,
+      usageRules: usageRules.trim() || null,
+      forbiddenVariations: forbiddenVariations.trim() || null,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(assets.id, assetId));
