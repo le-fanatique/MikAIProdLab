@@ -23,6 +23,8 @@ type JobData = {
   updatedAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  /** GEN.SEEDANCE.1 — serialized GenerationSnapshot JSON, or null for jobs created before this ticket / that failed before one could be built. */
+  payloadSnapshot: string | null;
 };
 
 type Props = {
@@ -198,6 +200,26 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
                 {job.promptId}
               </p>
             </div>
+          )}
+
+          {/* Payload snapshot (GEN.SEEDANCE.1) — the exact JSON that was
+              queued, plus selections/expansion/warnings, remains accessible
+              after Generate even if the library workflow changes later. */}
+          {job.payloadSnapshot && (
+            <details className="rounded border border-[#232629]">
+              <summary className="cursor-pointer select-none px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-[#6e767d] hover:text-[#a4abb2] transition-colors">
+                Queued Payload Snapshot
+              </summary>
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-[#232629] bg-[#0d0e10] px-3 py-2 text-[10px] font-mono text-[#6e767d]">
+                {(() => {
+                  try {
+                    return JSON.stringify(JSON.parse(job.payloadSnapshot), null, 2);
+                  } catch {
+                    return job.payloadSnapshot;
+                  }
+                })()}
+              </pre>
+            </details>
           )}
 
           {/* Error message */}

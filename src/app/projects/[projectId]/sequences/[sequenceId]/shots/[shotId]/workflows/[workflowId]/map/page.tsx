@@ -21,16 +21,20 @@ import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
+import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
 import {
-  buildRuntimeImageOptions,
-  mapWorkflowInputs,
-} from "@/lib/comfy/mapWorkflowInputs";
-import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
+  buildGenerationPayload,
+  detectDynamicBatchUiInfo,
+} from "@/lib/comfy/buildGenerationPayload";
+import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
+import DynamicBatchImageList from "@/components/DynamicBatchImageList";
+import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
+import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -279,24 +283,95 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     }))
   );
 
-  const mappings =
-    parsed !== null
-      ? mapWorkflowInputs(parsed.inputs, compiledShotPrompt.text, availableImages, textOverrideByNodeId)
-      : [];
+  const basePath = `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`;
 
-  const payloadPreview =
+  // --- Dynamic Batch UI info (GEN.SEEDANCE.1) — this page previously never
+  // detected or expanded Dynamic Batch at all, so its preview silently
+  // showed the unexpanded workflow and Generate would fail server-side with
+  // no indication why. Now uses the exact same canonical helpers as
+  // ShotGenerationPanel/AssetGenerationPanel. ---
+  const batchUiInfo = parsed !== null ? detectDynamicBatchUiInfo(workflow.workflowJson) : { kind: "none" as const };
+  const batchDetectionOk = batchUiInfo.kind === "ready";
+  const batchNodeId = batchUiInfo.kind === "ready" ? batchUiInfo.batchNodeId : "";
+  let batchPreview: BatchExpansionPreview | null = null;
+  let batchError: { kind: "detection"; message: string } | null = null;
+  const batchTemplateChainNodeIds = batchUiInfo.kind === "ready" ? batchUiInfo.templateChainNodeIds : [];
+
+  if (batchUiInfo.kind === "ready") {
+    batchPreview = {
+      batchTitle: batchUiInfo.batchTitle,
+      templateChainTitles: batchUiInfo.templateChainTitles,
+      selectedImageCount: 0,
+      clonedNodeCount: 0,
+    };
+  } else if (batchUiInfo.kind === "error") {
+    batchError = { kind: "detection", message: batchUiInfo.message };
+  }
+
+  let batchSelectedIds: string[] = [];
+  if (batchDetectionOk) {
+    const raw = currentSearchParams[`batchImages_${batchNodeId}`] ?? "";
+    batchSelectedIds = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (batchPreview) {
+      batchPreview.selectedImageCount = batchSelectedIds.length;
+      batchPreview.clonedNodeCount = batchSelectedIds.length * batchPreview.templateChainTitles.length;
+    }
+  }
+
+  const resolvedBatchImages: DynamicBatchExpansionImage[] = batchSelectedIds
+    .map((id) => availableImages.find((img) => img.id === id))
+    .filter((img): img is NonNullable<typeof img> => img !== undefined)
+    .map((img) => ({ id: img.id, imagePath: img.imagePath }));
+
+  const built =
     parsed !== null
-      ? patchWorkflowPayload(workflow.workflowJson, mappings, {
+      ? buildGenerationPayload({
+          workflowJson: workflow.workflowJson,
+          inputs: parsed.inputs,
+          suggestedText: compiledShotPrompt.text,
+          availableImages,
+          textOverrideByNodeId,
           selectedImageByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
+          batchSelectedImages: resolvedBatchImages,
         })
       : null;
+
+  const mappings = built?.ok ? built.mappings : [];
+  const displayMappings = built?.ok ? built.displayMappings : mappings;
+
+  // Same "no misleading intermediate payload" rule as the panels: when a
+  // Dynamic Batch node exists and nothing is selected yet, show no preview
+  // rather than the unexpanded/incomplete one.
+  const payloadPreview = built?.ok ? built.patch : null;
+  if (built && !built.ok && !batchError && built.error !== "Add at least one image to Dynamic Image Batch before generating.") {
+    batchError = { kind: "detection", message: built.error };
+  }
+
+  // Build available images as BatchImageGroups for DynamicBatchImageList
+  const batchImageGroups: BatchImageGroup[] = [];
+  if (batchDetectionOk) {
+    const shotItems = availableImages.filter((img) => img.source === "shot").map((img) => ({
+      id: img.id,
+      imagePath: img.imagePath,
+      label: img.label,
+      source: img.source,
+      assetName: img.assetName,
+    }));
+    const assetItems = availableImages.filter((img) => img.source === "asset").map((img) => ({
+      id: img.id,
+      imagePath: img.imagePath,
+      label: img.assetName ? `${img.assetName}${img.role ? " · " + img.role : ""}` : (img.role ?? img.label),
+      source: img.source,
+      assetName: img.assetName,
+    }));
+    if (shotItems.length > 0) batchImageGroups.push({ groupLabel: "Shot Sources", items: shotItems });
+    if (assetItems.length > 0) batchImageGroups.push({ groupLabel: "Cast Sources", items: assetItems });
+  }
 
   const shotLabel = shot.shotCode
     ? `${shot.shotCode} — ${shot.title}`
     : shot.title;
-
-  const basePath = `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`;
 
   const selectionParams = new URLSearchParams();
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
@@ -307,6 +382,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   }
   for (const [nodeId, value] of Object.entries(textOverrideByNodeId)) {
     selectionParams.set(`textNode_${nodeId}`, value);
+  }
+  if (batchDetectionOk && batchSelectedIds.length > 0) {
+    selectionParams.set(`batchImages_${batchNodeId}`, batchSelectedIds.join(","));
   }
   const selectionQuery = selectionParams.toString();
   const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
@@ -422,12 +500,54 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           )}
         </Card>
 
-        {mappings.some((m) => m.mappingKind === "image") && (
+        {displayMappings.some((m) => m.mappingKind === "image") && (
           <Card title="Image Inputs">
             <WorkflowImageSelectionForm
               basePath={basePath}
-              mappings={mappings}
+              mappings={displayMappings}
               selectedImageByNodeId={selectedImageByNodeId}
+            />
+          </Card>
+        )}
+
+        {/* ── Dynamic Image Batch (GEN.SEEDANCE.1) ─────────────
+            Previously absent from this page entirely — a workflow with a
+            Dynamic Batch node had no way to select batch images here, and
+            Generate would fail server-side with no visible reason. ─────── */}
+        {batchDetectionOk && (
+          <Card title="Dynamic Image Batch">
+            <DynamicBatchImageList
+              batchNodeId={batchNodeId}
+              preview={batchPreview}
+              error={batchError}
+              availableImages={batchImageGroups}
+              selectedImageIds={batchSelectedIds}
+              passthroughParams={currentSearchParams}
+              basePath={basePath}
+              contextType="shot"
+              projectId={pid}
+              workflowId={String(wid)}
+              shotId={shid}
+              sequenceId={sid}
+            />
+          </Card>
+        )}
+
+        {batchError && !batchDetectionOk && (
+          <Card title="Dynamic Image Batch">
+            <DynamicBatchImageList
+              batchNodeId=""
+              preview={null}
+              error={batchError}
+              availableImages={[]}
+              selectedImageIds={[]}
+              passthroughParams={currentSearchParams}
+              basePath={basePath}
+              contextType="shot"
+              projectId={pid}
+              workflowId={String(wid)}
+              shotId={shid}
+              sequenceId={sid}
             />
           </Card>
         )}
@@ -478,6 +598,21 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                       value={value}
                     />
                   ))}
+                  {/* GEN.SEEDANCE.1 — previously never submitted, so Generate
+                      silently dropped any staged text override. */}
+                  {Object.entries(textOverrideByNodeId).map(([nodeId, value]) => (
+                    <input
+                      key={`text-${nodeId}`}
+                      type="hidden"
+                      name={`textNode_${nodeId}`}
+                      value={value}
+                    />
+                  ))}
+                  {/* GEN.SEEDANCE.1 — Dynamic Batch selection, same sync
+                      mechanism as the panels (URL + sessionStorage). */}
+                  {batchDetectionOk && (
+                    <DynamicBatchFormSync batchNodeId={batchNodeId} workflowId={String(wid)} />
+                  )}
 
                   <WorkflowGenerateActions
                     initialJsonText={payloadPreview.patchedJsonText}

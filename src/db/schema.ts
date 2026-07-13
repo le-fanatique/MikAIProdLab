@@ -318,6 +318,14 @@ export const generationJobs = sqliteTable(
     clientId: text("client_id"),
     outputPath: text("output_path"),
     errorMessage: text("error_message"),
+    // GEN.SEEDANCE.1 — serialized GenerationSnapshot (see
+    // src/lib/comfy/generationSnapshot.ts): workflow id, context, selections
+    // and their order, Dynamic Batch expansion info, warnings, final
+    // prompt/inputs, override indication and the exact queued payload.
+    // Never a binary file — text/JSON only. Nullable: jobs created before
+    // this ticket, and jobs that fail before a snapshot could be built,
+    // simply have none.
+    payloadSnapshot: text("payload_snapshot"),
     startedAt: text("started_at"),
     completedAt: text("completed_at"),
     createdAt: text("created_at")

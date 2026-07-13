@@ -15,6 +15,17 @@ function formatValuePreview(value: unknown): string {
 export default function WorkflowPayloadPreviewPanel({ result }: Props) {
   return (
     <div className="flex flex-col gap-5">
+      {/* GEN.SEEDANCE.1 — this is the pre-queue runtime preview, not the
+          final payload: local image paths shown below are rewritten to
+          ComfyUI-uploaded filenames only when you click Generate, and the
+          exact payload actually queued is captured in the job snapshot
+          afterwards. Editing "Advanced Payload Editor" replaces this
+          computed mapping with your own JSON as an explicit override. */}
+      <p className="text-[10px] text-[#4b5158] leading-relaxed">
+        Runtime preview — not the final payload. Local image paths are uploaded and rewritten to
+        ComfyUI filenames only at Generate time; the exact queued JSON is saved with the job.
+      </p>
+
       {/* Patches */}
       {result.patches.length === 0 ? (
         <EmptyState

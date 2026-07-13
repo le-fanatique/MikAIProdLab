@@ -24,14 +24,17 @@ import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/com
 import {
   buildRuntimeImageOptions,
   getRuntimeImageLabel,
-  mapWorkflowInputs,
   type RuntimeImageOption,
 } from "@/lib/comfy/mapWorkflowInputs";
-import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
-import { expandDynamicBatchWorkflow, type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
+import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
+import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
+import {
+  serializeGenerationSnapshot,
+  type GenerationSnapshot,
+} from "@/lib/comfy/generationSnapshot";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,6 +130,8 @@ export async function runWorkflowGeneration(args: {
   workflowId: number;
   selectedImageByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
+  textOverrideByNodeId?: Record<string, string>;
+  /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
   patchedJsonOverride?: Record<string, unknown>;
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
 }): Promise<RunWorkflowGenerationResult> {
@@ -232,7 +237,7 @@ export async function runWorkflowGeneration(args: {
           )
       : [];
 
-  // --- 5. Recompute prompt + mappings + payload (mirrors map page) ---
+  // --- 5. Recompute prompt + canonical payload (mirrors map page / panels — GEN.SEEDANCE.1) ---
   const compiledPrompt = compilePromptSegments(segmentList);
   const hasRealPromptSegments = segmentList.length > 0;
   const compiledShotPrompt = compileShotPrompt({
@@ -252,22 +257,13 @@ export async function runWorkflowGeneration(args: {
     }))
   );
 
-  const mappings = mapWorkflowInputs(
-    parsed.inputs,
-    compiledShotPrompt.text,
-    availableImages
-  );
-
-  // --- 5a. Dynamic Batch Expansion (WFBUILD.1A) ---
-  // Run before patchWorkflowPayload so template chain clones are already in place.
-  let expandedWorkflowJson = workflow.workflowJson;
-
-  // Collect batch images: read from args.batchImagesByNodeId
+  // Collect batch images: read from args.batchImagesByNodeId (only one
+  // Dynamic Batch node is supported in V1), resolve placeholder ids to
+  // actual imagePaths using availableImages, preserving selection order.
   const batchEntry = args.batchImagesByNodeId
     ? Object.entries(args.batchImagesByNodeId)[0]
     : undefined;
 
-  // Resolve placeholder image ids → actual imagePaths using availableImages
   const resolvedBatchImages: DynamicBatchExpansionImage[] = [];
   if (batchEntry) {
     for (const placeholder of batchEntry[1]) {
@@ -282,39 +278,23 @@ export async function runWorkflowGeneration(args: {
     }
   }
 
-  const expansion = expandDynamicBatchWorkflow({
+  const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,
-    selectedImages: resolvedBatchImages,
-  });
-
-  if (!expansion.ok) {
-    // null error = no batch node → proceed normally
-    if (expansion.error !== undefined) {
-      // DynamicBatchExpansionResult with ok:false always has error: string
-      return { ok: false, error: (expansion as { ok: false; error: string }).error };
-    }
-  } else {
-    expandedWorkflowJson = expansion.workflowJson;
-  }
-
-  // Filter out template chain image mappings to avoid double-patching
-  // (clones already have their LoadImage patched during expansion)
-  const filteredMappings = expansion.ok && expansion.ok === true
-    ? mappings.filter((m) => {
-        if (m.mappingKind !== "image") return true;
-        // If the image mapping's nodeId is in the template chain, skip it
-        // (the original template chain LoadImage stays untouched)
-        const expanded = expansion as Extract<typeof expansion, { ok: true }>;
-        return !expanded.templateChainNodeIds.includes(m.input.nodeId);
-      })
-    : mappings;
-
-  const preview = patchWorkflowPayload(expandedWorkflowJson, filteredMappings, {
+    inputs: parsed.inputs,
+    suggestedText: compiledShotPrompt.text,
+    availableImages,
+    textOverrideByNodeId: args.textOverrideByNodeId,
     selectedImageByNodeId: args.selectedImageByNodeId,
     scalarOverrideByNodeId: args.scalarOverrideByNodeId,
+    batchSelectedImages: resolvedBatchImages,
   });
 
-  const finalPatchedJson: Record<string, unknown> = args.patchedJsonOverride ?? preview.patchedJson;
+  if (!built.ok) {
+    return { ok: false, error: built.error };
+  }
+
+  const overrideUsed = args.patchedJsonOverride !== undefined;
+  const finalPatchedJson: Record<string, unknown> = args.patchedJsonOverride ?? built.patch.patchedJson;
 
   if (Object.keys(finalPatchedJson).length === 0) {
     return {
@@ -342,7 +322,9 @@ export async function runWorkflowGeneration(args: {
 
   const jobId = inserted.id;
 
-  // --- 7. Prepare payload — upload local images to ComfyUI ---
+  // --- 7. Prepare payload — upload local images to ComfyUI. Its output
+  //        (prepared.workflow) is the *sole* input to queueComfyPrompt
+  //        below — no second, divergent recomputation happens after this. ---
   try {
     await db
       .update(generationJobs)
@@ -350,6 +332,44 @@ export async function runWorkflowGeneration(args: {
       .where(eq(generationJobs.id, jobId));
 
     const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
+
+    // --- 7a. Snapshot (GEN.SEEDANCE.1) — created before queueing, from the
+    //        exact payload about to be sent, so it stays accurate even if
+    //        the queue call itself fails or the library workflow changes later. ---
+    const snapshot: GenerationSnapshot = {
+      workflowId,
+      contextType: "shot",
+      contextId: shotId,
+      createdAt: new Date().toISOString(),
+      selections: {
+        selectedImageByNodeId: args.selectedImageByNodeId ?? {},
+        scalarOverrideByNodeId: args.scalarOverrideByNodeId ?? {},
+        textOverrideByNodeId: args.textOverrideByNodeId ?? {},
+        batchSelectedImageIds: resolvedBatchImages.map((img) => img.id),
+      },
+      dynamicBatch: {
+        active: built.expansion.templateChainNodeIds.length > 0,
+        batchNodeId: built.expansion.batchNodeId || null,
+        templateChainNodeIds: built.expansion.templateChainNodeIds,
+        expandedNodeIds: built.expansion.expandedNodeIds,
+        batchInputKeys: built.expansion.batchInputKeys,
+        selectedImageCount: built.expansion.preview.selectedImageCount,
+        clonedNodeCount: built.expansion.preview.clonedNodeCount,
+      },
+      promptText: compiledShotPrompt.text,
+      overrideUsed,
+      // REVISE (GEN.SEEDANCE.1) — prepared.warnings (e.g. "local images were
+      // uploaded to ComfyUI and LoadImage inputs rewritten") were previously
+      // dropped; the snapshot must reflect every warning produced across the
+      // whole pipeline, not just the pre-upload patch step.
+      warnings: [...new Set([...built.patch.warnings, ...prepared.warnings])],
+      uploadedImages: prepared.uploadedImages,
+      queuedWorkflow: prepared.workflow,
+    };
+    await db
+      .update(generationJobs)
+      .set({ payloadSnapshot: serializeGenerationSnapshot(snapshot), updatedAt: new Date().toISOString() })
+      .where(eq(generationJobs.id, jobId));
 
     // --- 8. Queue prompt ---
     await maybeUnloadOllamaBeforeComfy();
@@ -414,6 +434,19 @@ export async function runWorkflowGenerationFromForm(
     scalarOverrideByNodeId[nodeId] = value;
   }
 
+  // GEN.SEEDANCE.1 — text overrides staged in the panel UI were previously
+  // never sent to the server, so Generate silently recomputed the prompt
+  // from DB state, dropping the user's staged text. Collected here exactly
+  // like scalarNode_/imageNode_.
+  const textOverrideByNodeId: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("textNode_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("textNode_".length).trim();
+    if (!nodeId) continue;
+    textOverrideByNodeId[nodeId] = value;
+  }
+
   // --- Collect dynamic batch images (WFBUILD.1A) ---
   const batchImagesByNodeId: Record<string, DynamicBatchExpansionImage[]> = {};
   for (const [key, value] of formData.entries()) {
@@ -431,7 +464,16 @@ export async function runWorkflowGenerationFromForm(
     }));
   }
 
-  const rawPatchedJsonOverride = (formData.get("patchedJsonOverride") as string | null)?.trim() || null;
+  // GEN.SEEDANCE.1 — the Advanced Payload Editor textarea is always present
+  // in the DOM, so patchedJsonOverride is always submitted; it is only
+  // treated as an explicit override when patchedJsonOverrideActive is also
+  // present (only rendered once the user has actually edited the JSON —
+  // see EditablePatchedJsonPanel). Otherwise the freshly computed canonical
+  // payload from runWorkflowGeneration is used, never a stale/unedited echo.
+  const overrideActive = (formData.get("patchedJsonOverrideActive") as string | null) === "1";
+  const rawPatchedJsonOverride = overrideActive
+    ? (formData.get("patchedJsonOverride") as string | null)?.trim() || null
+    : null;
   let patchedJsonOverride: Record<string, unknown> | undefined;
   if (rawPatchedJsonOverride) {
     try {
@@ -453,6 +495,7 @@ export async function runWorkflowGenerationFromForm(
     workflowId,
     selectedImageByNodeId,
     scalarOverrideByNodeId,
+    textOverrideByNodeId,
     patchedJsonOverride,
     batchImagesByNodeId,
   });
@@ -503,6 +546,8 @@ export async function runAssetGeneration(input: {
   workflowId: number;
   selectedImageByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
+  textOverrideByNodeId?: Record<string, string>;
+  /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
   patchedJsonOverride?: Record<string, unknown>;
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
 }): Promise<{ ok: true; jobId: number } | { ok: false; error: string }> {
@@ -572,12 +617,8 @@ export async function runAssetGeneration(input: {
     notes: asset.notes,
   });
 
-  // --- 9. Map inputs + patch payload ---
-  const mappings = mapWorkflowInputs(parsed.inputs, assetPromptText, availableImages);
-
-  // --- 9a. Dynamic Batch Expansion (WFBUILD.1A) ---
-  let expandedWorkflowJson = workflow.workflowJson;
-
+  // --- 9. Canonical payload (GEN.SEEDANCE.1 — expand -> filter -> patch, same
+  //        function as the shot path, the panels and /map). ---
   const assetBatchEntry = input.batchImagesByNodeId
     ? Object.entries(input.batchImagesByNodeId)[0]
     : undefined;
@@ -596,33 +637,23 @@ export async function runAssetGeneration(input: {
     }
   }
 
-  const assetExpansion = expandDynamicBatchWorkflow({
+  const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,
-    selectedImages: assetResolvedBatchImages,
-  });
-
-  if (!assetExpansion.ok) {
-    if (assetExpansion.error !== undefined) {
-      return { ok: false, error: (assetExpansion as { ok: false; error: string }).error };
-    }
-  } else {
-    expandedWorkflowJson = assetExpansion.workflowJson;
-  }
-
-  const assetFilteredMappings = assetExpansion.ok && assetExpansion.ok === true
-    ? mappings.filter((m) => {
-        if (m.mappingKind !== "image") return true;
-        const expanded = assetExpansion as Extract<typeof assetExpansion, { ok: true }>;
-        return !expanded.templateChainNodeIds.includes(m.input.nodeId);
-      })
-    : mappings;
-
-  const preview = patchWorkflowPayload(expandedWorkflowJson, assetFilteredMappings, {
+    inputs: parsed.inputs,
+    suggestedText: assetPromptText,
+    availableImages,
+    textOverrideByNodeId: input.textOverrideByNodeId,
     selectedImageByNodeId: input.selectedImageByNodeId,
     scalarOverrideByNodeId: input.scalarOverrideByNodeId,
+    batchSelectedImages: assetResolvedBatchImages,
   });
 
-  const finalPatchedJson: Record<string, unknown> = input.patchedJsonOverride ?? preview.patchedJson;
+  if (!built.ok) {
+    return { ok: false, error: built.error };
+  }
+
+  const overrideUsed = input.patchedJsonOverride !== undefined;
+  const finalPatchedJson: Record<string, unknown> = input.patchedJsonOverride ?? built.patch.patchedJson;
 
   if (Object.keys(finalPatchedJson).length === 0) {
     return {
@@ -651,7 +682,8 @@ export async function runAssetGeneration(input: {
 
   const jobId = inserted.id;
 
-  // --- 11. Upload references + queue ---
+  // --- 11. Upload references + queue. prepared.workflow is the sole input
+  //         to queueComfyPrompt — no second, divergent recomputation. ---
   try {
     await db
       .update(generationJobs)
@@ -659,6 +691,42 @@ export async function runAssetGeneration(input: {
       .where(eq(generationJobs.id, jobId));
 
     const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
+
+    // --- 11a. Snapshot (GEN.SEEDANCE.1) ---
+    const snapshot: GenerationSnapshot = {
+      workflowId,
+      contextType: "asset",
+      contextId: assetId,
+      createdAt: new Date().toISOString(),
+      selections: {
+        selectedImageByNodeId: input.selectedImageByNodeId ?? {},
+        scalarOverrideByNodeId: input.scalarOverrideByNodeId ?? {},
+        textOverrideByNodeId: input.textOverrideByNodeId ?? {},
+        batchSelectedImageIds: assetResolvedBatchImages.map((img) => img.id),
+      },
+      dynamicBatch: {
+        active: built.expansion.templateChainNodeIds.length > 0,
+        batchNodeId: built.expansion.batchNodeId || null,
+        templateChainNodeIds: built.expansion.templateChainNodeIds,
+        expandedNodeIds: built.expansion.expandedNodeIds,
+        batchInputKeys: built.expansion.batchInputKeys,
+        selectedImageCount: built.expansion.preview.selectedImageCount,
+        clonedNodeCount: built.expansion.preview.clonedNodeCount,
+      },
+      promptText: assetPromptText,
+      overrideUsed,
+      // REVISE (GEN.SEEDANCE.1) — prepared.warnings (e.g. "local images were
+      // uploaded to ComfyUI and LoadImage inputs rewritten") were previously
+      // dropped; the snapshot must reflect every warning produced across the
+      // whole pipeline, not just the pre-upload patch step.
+      warnings: [...new Set([...built.patch.warnings, ...prepared.warnings])],
+      uploadedImages: prepared.uploadedImages,
+      queuedWorkflow: prepared.workflow,
+    };
+    await db
+      .update(generationJobs)
+      .set({ payloadSnapshot: serializeGenerationSnapshot(snapshot), updatedAt: new Date().toISOString() })
+      .where(eq(generationJobs.id, jobId));
 
     await maybeUnloadOllamaBeforeComfy();
     const queued = await queueComfyPrompt({
@@ -715,6 +783,16 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     scalarOverrideByNodeId[nodeId] = value;
   }
 
+  // GEN.SEEDANCE.1 — collected exactly like the shot path (see comment there).
+  const textOverrideByNodeId: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("textNode_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("textNode_".length).trim();
+    if (!nodeId) continue;
+    textOverrideByNodeId[nodeId] = value;
+  }
+
   // --- Collect dynamic batch images (WFBUILD.1A) ---
   const assetBatchImagesByNodeId: Record<string, DynamicBatchExpansionImage[]> = {};
   for (const [key, value] of formData.entries()) {
@@ -730,7 +808,11 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     }));
   }
 
-  const rawPatchedJsonOverride = (formData.get("patchedJsonOverride") as string | null)?.trim() || null;
+  // GEN.SEEDANCE.1 — see the identical comment in runWorkflowGenerationFromForm.
+  const overrideActive = (formData.get("patchedJsonOverrideActive") as string | null) === "1";
+  const rawPatchedJsonOverride = overrideActive
+    ? (formData.get("patchedJsonOverride") as string | null)?.trim() || null
+    : null;
   let patchedJsonOverride: Record<string, unknown> | undefined;
   if (rawPatchedJsonOverride) {
     try {
@@ -752,6 +834,7 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     workflowId,
     selectedImageByNodeId,
     scalarOverrideByNodeId,
+    textOverrideByNodeId,
     patchedJsonOverride,
     batchImagesByNodeId: assetBatchImagesByNodeId,
   });

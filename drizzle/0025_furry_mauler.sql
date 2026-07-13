@@ -1,0 +1,1 @@
+ALTER TABLE `generation_jobs` ADD `payload_snapshot` text;

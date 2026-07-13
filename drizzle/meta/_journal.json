@@ -176,6 +176,13 @@
       "when": 1783955426745,
       "tag": "0024_crazy_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1783958339392,
+      "tag": "0025_furry_mauler",
+      "breakpoints": true
     }
   ]
 }

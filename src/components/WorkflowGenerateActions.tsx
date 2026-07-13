@@ -50,7 +50,10 @@ export default function WorkflowGenerateActions({ initialJsonText, buttonLabel }
           </p>
         )}
 
-        {/* Always in DOM so the form submits patchedJsonOverride; display:none when collapsed */}
+        {/* Always in DOM so the form submits patchedJsonOverride; display:none
+            when collapsed. GEN.SEEDANCE.1: its value is only treated as an
+            override server-side when the user actually edited it — see
+            EditablePatchedJsonPanel's patchedJsonOverrideActive hidden field. */}
         <div className={isExpanded ? "" : "hidden"}>
           <EditablePatchedJsonPanel
             initialJsonText={initialJsonText}

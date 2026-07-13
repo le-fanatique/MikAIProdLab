@@ -35,6 +35,8 @@ type JobRow = Pick<
   | "updatedAt"
   | "startedAt"
   | "completedAt"
+  // GEN.SEEDANCE.1 — read-only addition, no change to polling/status logic.
+  | "payloadSnapshot"
 >;
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,7 @@ function serializeJob(job: JobRow) {
     updatedAt: job.updatedAt,
     startedAt: job.startedAt ?? null,
     completedAt: job.completedAt ?? null,
+    payloadSnapshot: job.payloadSnapshot ?? null,
   };
 }
 
@@ -82,6 +85,7 @@ async function updateJobFields(
       updatedAt: generationJobs.updatedAt,
       startedAt: generationJobs.startedAt,
       completedAt: generationJobs.completedAt,
+      payloadSnapshot: generationJobs.payloadSnapshot,
     });
   return updated;
 }
@@ -165,6 +169,7 @@ export async function GET(
       updatedAt: generationJobs.updatedAt,
       startedAt: generationJobs.startedAt,
       completedAt: generationJobs.completedAt,
+      payloadSnapshot: generationJobs.payloadSnapshot,
     })
     .from(generationJobs)
     .where(eq(generationJobs.id, jobId));

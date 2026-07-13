@@ -404,7 +404,20 @@ export function expandDynamicBatchWorkflow(params: {
   // --- 8. Clone chain once per image ---
   for (let i = 0; i < selectedImages.length; i++) {
     const image = selectedImages[i];
-    const inputName = buildIncrementedInputName(batch.templateInputKey, i);
+    let inputName: string;
+    try {
+      inputName = buildIncrementedInputName(batch.templateInputKey, i);
+    } catch (err) {
+      // buildIncrementedInputName throws when templateInputKey has no
+      // numeric suffix (e.g. "image" instead of "image1") — surfaced here
+      // as a clean, explicit diagnostic instead of an uncaught exception,
+      // so a workflow with this misconfiguration fails clearly before
+      // queue rather than crashing the caller.
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Dynamic batch input naming pattern is not supported.",
+      };
+    }
     batchInputKeys.push(inputName);
 
     if (batchNode.inputs && batchNode.inputs[inputName] !== undefined) {
