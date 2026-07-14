@@ -138,7 +138,8 @@ export default function ResizableRightPanelShell({ children }: Props) {
           aria-controls={PANEL_ID}
           aria-label="Open chat"
           title="Open chat"
-          className="fixed bottom-6 right-6 z-30 flex items-center justify-center w-11 h-11 rounded-full border border-[#2c3035] bg-[#141618] text-[#a4abb2] shadow-lg hover:border-[#5b93d6]/50 hover:text-[#e7e9ec] transition-colors"
+          className="fixed bottom-6 right-6 z-30 flex items-center justify-center w-11 h-11 rounded-full border border-[#2c3035] text-[#a4abb2] shadow-lg hover:border-[#5b93d6]/50 hover:text-[#e7e9ec] transition-colors"
+          style={{ backgroundColor: "var(--mikros-topbar, #141618)" }}
         >
           <ChatIcon />
         </button>

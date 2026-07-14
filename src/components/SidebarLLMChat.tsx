@@ -1052,9 +1052,10 @@ export default function SidebarLLMChat() {
         // ── Closed state ──────────────────────────────────────────────
         <button
           onClick={() => setIsOpen(true)}
+          aria-expanded={false}
           className="w-full text-left px-3 py-2 rounded hover:bg-[#1a1d20] transition-colors"
         >
-          <div className="text-[11px] font-medium text-[#a4abb2]">Chat</div>
+          <div className="text-[11px] font-medium text-[#a4abb2]">LLM Chat</div>
           <div className="text-[10px] text-[#6e767d]">
             {effectiveProvider
               ? `via ${PROVIDER_DISPLAY[effectiveProvider] ?? effectiveProvider}`
