@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SidebarLLMChat from "@/components/SidebarLLMChat";
 import ResizableRightPanelShell from "@/components/ResizableRightPanelShell";
+import Collapsible from "@/components/Collapsible";
 
 type SidebarShot = { id: number; shotCode: string | null; title: string; orderIndex: number };
 type SidebarSequence = { id: number; title: string; orderIndex: number; shots: SidebarShot[] };
@@ -99,9 +100,14 @@ export default function RightPanel({ tree }: Props) {
         <QuickLink href="/settings" label="General" />
         <QuickLink href="/settings/workflows" label="Workflow Library" />
         <div className="border-t border-[#232629] mx-3 my-3" />
-        <SectionLabel label="Coming later" />
-        <QuickLink href="#" label="Export / Muse Studio" disabled />
-        <QuickLink href="#" label="Team & Sharing" disabled />
+        <div className="px-3 mt-4 first:mt-0">
+          <Collapsible label="Coming later">
+            <div className="-mx-3">
+              <QuickLink href="#" label="Export / Muse Studio" disabled />
+              <QuickLink href="#" label="Team & Sharing" disabled />
+            </div>
+          </Collapsible>
+        </div>
       </RightPanelShell>
     );
   }
@@ -124,13 +130,18 @@ export default function RightPanel({ tree }: Props) {
 
         <div className="border-t border-[#232629] mx-3 my-3" />
 
-        <SectionLabel label="Actions" />
-        <QuickLink href={`${shotBase}/edit`} label="Edit Shot" />
-        <QuickLink href={`${shotBase}/workflows`} label="Workflows →" />
-        <QuickLink
-          href={`/projects/${project.id}/sequences/${sequence.id}`}
-          label={`← ${sequence.title}`}
-        />
+        <div className="px-3 mt-4 first:mt-0">
+          <Collapsible label="Actions">
+            <div className="-mx-3">
+              <QuickLink href={`${shotBase}/edit`} label="Edit Shot" />
+              <QuickLink href={`${shotBase}/workflows`} label="Workflows →" />
+              <QuickLink
+                href={`/projects/${project.id}/sequences/${sequence.id}`}
+                label={`← ${sequence.title}`}
+              />
+            </div>
+          </Collapsible>
+        </div>
 
         <div className="border-t border-[#232629] mx-3 my-3" />
 
@@ -168,16 +179,21 @@ export default function RightPanel({ tree }: Props) {
 
         <div className="border-t border-[#232629] mx-3 my-3" />
 
-        <SectionLabel label="Actions" />
-        <QuickLink
-          href={`/projects/${project.id}/sequences/${sequence.id}/shots/new`}
-          label="+ New Shot"
-        />
-        <QuickLink
-          href={`/projects/${project.id}/sequences/${sequence.id}/edit`}
-          label="Edit Sequence"
-        />
-        <QuickLink href={`/projects/${project.id}`} label={`← ${project.name}`} />
+        <div className="px-3 mt-4 first:mt-0">
+          <Collapsible label="Actions">
+            <div className="-mx-3">
+              <QuickLink
+                href={`/projects/${project.id}/sequences/${sequence.id}/shots/new`}
+                label="+ New Shot"
+              />
+              <QuickLink
+                href={`/projects/${project.id}/sequences/${sequence.id}/edit`}
+                label="Edit Sequence"
+              />
+              <QuickLink href={`/projects/${project.id}`} label={`← ${project.name}`} />
+            </div>
+          </Collapsible>
+        </div>
 
         {sequence.shots.length > 0 && (
           <>
@@ -210,14 +226,24 @@ export default function RightPanel({ tree }: Props) {
 
         <div className="border-t border-[#232629] mx-3 my-3" />
 
-        <SectionLabel label="Actions" />
-        <QuickLink href={`/projects/${project.id}/assets/new`} label="+ New Asset" />
-        <QuickLink href={`/projects/${project.id}`} label={`← ${project.name}`} />
+        <div className="px-3 mt-4 first:mt-0">
+          <Collapsible label="Actions">
+            <div className="-mx-3">
+              <QuickLink href={`/projects/${project.id}/assets/new`} label="+ New Asset" />
+              <QuickLink href={`/projects/${project.id}`} label={`← ${project.name}`} />
+            </div>
+          </Collapsible>
+        </div>
 
         <div className="border-t border-[#232629] mx-3 my-3" />
-        <SectionLabel label="Coming later" />
-        <QuickLink href="#" label="Asset Library Import" disabled />
-        <QuickLink href="#" label="Batch Generate References" disabled />
+        <div className="px-3 mt-4 first:mt-0">
+          <Collapsible label="Coming later">
+            <div className="-mx-3">
+              <QuickLink href="#" label="Asset Library Import" disabled />
+              <QuickLink href="#" label="Batch Generate References" disabled />
+            </div>
+          </Collapsible>
+        </div>
       </RightPanelShell>
     );
   }
@@ -238,11 +264,16 @@ export default function RightPanel({ tree }: Props) {
 
         <div className="border-t border-[#232629] mx-3 my-3" />
 
-        <SectionLabel label="Actions" />
-        <QuickLink href={`/projects/${project.id}/sequences/new`} label="+ New Sequence" />
-        <QuickLink href={`/projects/${project.id}/story`} label="Story" />
-        <QuickLink href={`/projects/${project.id}/assets`} label="Assets" />
-        <QuickLink href={`/projects/${project.id}/edit`} label="Edit Project" />
+        <div className="px-3 mt-4 first:mt-0">
+          <Collapsible label="Actions">
+            <div className="-mx-3">
+              <QuickLink href={`/projects/${project.id}/sequences/new`} label="+ New Sequence" />
+              <QuickLink href={`/projects/${project.id}/story`} label="Story" />
+              <QuickLink href={`/projects/${project.id}/assets`} label="Assets" />
+              <QuickLink href={`/projects/${project.id}/edit`} label="Edit Project" />
+            </div>
+          </Collapsible>
+        </div>
 
         {project.sequences.length > 0 && (
           <>
