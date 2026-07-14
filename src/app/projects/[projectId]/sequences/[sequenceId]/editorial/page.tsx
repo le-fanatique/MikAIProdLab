@@ -10,6 +10,8 @@ import Card from "@/components/Card";
 import EditorialShotList from "@/components/EditorialShotList";
 import EditorialWorkspace from "@/components/EditorialWorkspace";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
+import { buildAdvancedEditorHref } from "@/lib/editorial/advancedEditorLink";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,19 @@ export default async function SequenceEditorialPage({ params }: Props) {
 
   const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sid));
   if (!sequence || sequence.projectId !== pid) notFound();
+
+  // EDITORIAL.NAV.1: full Sequence list of the project, for the top
+  // selector — reuses the `sequences` table already imported here, no new
+  // DB access pattern.
+  const projectSequences = await db
+    .select({ id: sequences.id, title: sequences.title, sequenceCode: sequences.sequenceCode })
+    .from(sequences)
+    .where(eq(sequences.projectId, pid))
+    .orderBy(asc(sequences.orderIndex));
+
+  const mikaiOrigin = await getMikAIPublicBaseUrl();
+  const sidecarOrigin = await getOpenReelSidecarUrl();
+  const advancedEditorHref = buildAdvancedEditorHref({ mikaiOrigin, sidecarOrigin, projectId: pid, sequenceId: sid });
 
   const shotList = await db
     .select()
@@ -92,12 +107,22 @@ export default async function SequenceEditorialPage({ params }: Props) {
       <PageHeader
         title="Sequence Editorial"
         actions={
-          <Link
-            href={`/projects/${pid}/sequences/${sid}`}
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
-          >
-            ← Sequence
-          </Link>
+          <>
+            <Link
+              href={advancedEditorHref}
+              target="_blank"
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
+              title="Opens the OpenReel sidecar editor in a new tab and loads this sequence"
+            >
+              Open in Advanced Editor
+            </Link>
+            <Link
+              href={`/projects/${pid}/sequences/${sid}`}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
+            >
+              ← Sequence
+            </Link>
+          </>
         }
       />
 
@@ -105,6 +130,30 @@ export default async function SequenceEditorialPage({ params }: Props) {
         {sequence.sequenceCode ? `${sequence.sequenceCode} · ` : ""}
         {sequence.title}
       </p>
+
+      {/* ── Sequence selector — EDITORIAL.NAV.1 ─────────────────────
+          Plain server-rendered links, no client state: switching
+          sequence is a full route navigation, so the timeline, Shot
+          list and fallback controls below always reload fresh for the
+          selected sequence — no stale visual state to manage. */}
+      {projectSequences.length > 0 && (
+        <nav aria-label="Sequences" className="flex flex-wrap gap-1.5 mb-4">
+          {projectSequences.map((s) => (
+            <Link
+              key={s.id}
+              href={`/projects/${pid}/sequences/${s.id}/editorial`}
+              className={`rounded border px-2.5 py-1 text-xs font-mono transition-colors ${
+                s.id === sid
+                  ? "border-[#5b93d6]/50 bg-[#5b93d6]/10 text-[#8fbbe8]"
+                  : "border-[#2c3035] text-[#6e767d] hover:border-[#3a4046] hover:text-[#a4abb2]"
+              }`}
+              title={s.title}
+            >
+              {s.sequenceCode ?? s.title}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {/* EDITORIAL.UX.1: Publish/Advanced Editor/Export live on the
           Sequence page now — this page stays reachable for the per-shot
