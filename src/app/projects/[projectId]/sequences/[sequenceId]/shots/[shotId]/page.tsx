@@ -7,6 +7,7 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
+import Collapsible from "@/components/Collapsible";
 import CastingPanel from "@/components/CastingPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
@@ -675,34 +676,41 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         )}
 
         {/* ── Continuity ────────────────────────────────────────────── */}
+        {/* UX.1.SHOTDETAIL.1: collapsed by default — secondary detail, not
+            needed for the primary creative decision, still one click away. */}
         {hasContinuity && (
-          <Card title="Continuity">
-            <div className="flex flex-col gap-4">
-              {shot.continuityIn && (
-                <Field label="Continuity In" value={shot.continuityIn} />
-              )}
-              {shot.continuityOut && (
-                <Field label="Continuity Out" value={shot.continuityOut} />
-              )}
-              {shot.continuityNotes && (
-                <Field label="Continuity Notes" value={shot.continuityNotes} />
-              )}
-            </div>
-          </Card>
+          <Collapsible label="Continuity">
+            <Card title="Continuity">
+              <div className="flex flex-col gap-4">
+                {shot.continuityIn && (
+                  <Field label="Continuity In" value={shot.continuityIn} />
+                )}
+                {shot.continuityOut && (
+                  <Field label="Continuity Out" value={shot.continuityOut} />
+                )}
+                {shot.continuityNotes && (
+                  <Field label="Continuity Notes" value={shot.continuityNotes} />
+                )}
+              </div>
+            </Card>
+          </Collapsible>
         )}
 
         {/* ── Camera ────────────────────────────────────────────────── */}
+        {/* UX.1.SHOTDETAIL.1: collapsed by default, same rationale as Continuity. */}
         {hasCamera && (
-          <Card title="Camera">
-            <div className="flex flex-col gap-4">
-              {shot.framing && (
-                <Field label="Framing" value={shot.framing} />
-              )}
-              {shot.cameraMovement && (
-                <Field label="Camera Movement" value={shot.cameraMovement} />
-              )}
-            </div>
-          </Card>
+          <Collapsible label="Camera">
+            <Card title="Camera">
+              <div className="flex flex-col gap-4">
+                {shot.framing && (
+                  <Field label="Framing" value={shot.framing} />
+                )}
+                {shot.cameraMovement && (
+                  <Field label="Camera Movement" value={shot.cameraMovement} />
+                )}
+              </div>
+            </Card>
+          </Collapsible>
         )}
 
         {!hasNarrativeContext && !hasContinuity && !hasCamera && (
@@ -809,20 +817,25 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         )}
 
         {/* ── References ────────────────────────────────────────────── */}
+        {/* UX.1.SHOTDETAIL.1: collapsed by default — the tool stays fully
+            reachable, but doesn't compete with Narrative Context/Casting/
+            prompt surfaces for default visual weight. */}
         <SectionLabel label="References" />
 
-        <Card title="Reference Images">
-          <ReferenceImagesPanel
-            images={refImages}
-            addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
-            getEditHref={(imageId) =>
-              `/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${imageId}/edit`
-            }
-            getDeleteAction={(imageId) =>
-              deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
-            }
-          />
-        </Card>
+        <Collapsible label={`Reference Images${refImages.length > 0 ? ` (${refImages.length})` : ""}`}>
+          <Card title="Reference Images">
+            <ReferenceImagesPanel
+              images={refImages}
+              addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
+              getEditHref={(imageId) =>
+                `/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${imageId}/edit`
+              }
+              getDeleteAction={(imageId) =>
+                deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
+              }
+            />
+          </Card>
+        </Collapsible>
 
         {/* ── Generation ────────────────────────────────────────────── */}
         <SectionLabel label="Generation" />
@@ -850,17 +863,27 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           </div>
         )}
 
-        <Card title="Generation Jobs">
-          <GenerationJobsPanel
-            projectId={pid}
-            sequenceId={sid}
-            shotId={shid}
-            jobs={visibleGenerationJobRows}
-            retryError={retryError ?? null}
-            deleteError={deleteError ?? null}
-            deleteSuccess={deleteSuccess ?? null}
-          />
-        </Card>
+        {/* UX.1.SHOTDETAIL.1: Generation Jobs history collapsed by default —
+            the primary "Generate Content" action above stays fully visible;
+            only the job history list is deferred. Auto-opens when a retry/
+            delete action just produced feedback, so that feedback is never
+            hidden behind a closed toggle. */}
+        <Collapsible
+          label={`Generation Jobs${visibleGenerationJobRows.length > 0 ? ` (${visibleGenerationJobRows.length})` : ""}`}
+          defaultOpen={Boolean(retryError || deleteError || deleteSuccess)}
+        >
+          <Card title="Generation Jobs">
+            <GenerationJobsPanel
+              projectId={pid}
+              sequenceId={sid}
+              shotId={shid}
+              jobs={visibleGenerationJobRows}
+              retryError={retryError ?? null}
+              deleteError={deleteError ?? null}
+              deleteSuccess={deleteSuccess ?? null}
+            />
+          </Card>
+        </Collapsible>
 
       </div>
 
