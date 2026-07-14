@@ -17,6 +17,7 @@ import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/act
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel from "@/components/AssetDescriptionEnhancePanel";
+import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 
 type Props = {
@@ -117,6 +118,10 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const rawDetailsUpdated = resolvedSearchParams["detailsUpdated"];
   const detailsUpdated =
     rawDetailsUpdated === "1" || (Array.isArray(rawDetailsUpdated) && rawDetailsUpdated[0] === "1");
+
+  const rawBibleUpdated = resolvedSearchParams["bibleUpdated"];
+  const bibleUpdated =
+    rawBibleUpdated === "1" || (Array.isArray(rawBibleUpdated) && rawBibleUpdated[0] === "1");
 
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
@@ -301,6 +306,23 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           hasExistingNotes={Boolean(asset.notes?.trim())}
           isConfigured={!!llmSettings.model.trim()}
           hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
+        />
+      </Card>
+
+      <Card title="Enhance Asset Bible">
+        {bibleUpdated && (
+          <p className="mb-3 text-xs text-[#6b9e72]">Asset Bible updated.</p>
+        )}
+        <AssetBibleEnhancePanel
+          projectId={pid}
+          assetId={aid}
+          description={asset.description}
+          notes={asset.notes}
+          visualIdentity={asset.visualIdentity}
+          usageRules={asset.usageRules}
+          forbiddenVariations={asset.forbiddenVariations}
+          isConfigured={!!llmSettings.model.trim()}
+          returnTo={`/projects/${pid}/assets/${aid}`}
         />
       </Card>
 

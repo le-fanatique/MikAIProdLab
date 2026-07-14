@@ -238,6 +238,13 @@ export type GeneratedAssetDescriptionDraft = {
   notesDraft: string;
 };
 
+/** Draft output for "Enhance Asset Bible" (AI.ASSET.BIBLE.1) */
+export type GeneratedAssetBibleDraft = {
+  visualIdentity: string;
+  usageRules: string;
+  forbiddenVariations: string;
+};
+
 // ---------------------------------------------------------------------------
 // Preview state (used by Client Components in V0.4)
 // ---------------------------------------------------------------------------
