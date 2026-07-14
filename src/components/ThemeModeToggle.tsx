@@ -31,6 +31,7 @@ import {
   isValidLogoDataUrl,
   sniffImageMimeFromBytes,
 } from "@/lib/mikrosTheme";
+import { parseMikrosThemeImportJson } from "@/lib/mikrosThemeImport";
 
 const FONT_OTHER = "__other__";
 type FontRole = "display" | "body";
@@ -97,6 +98,13 @@ export default function ThemeModeToggle() {
   const [draftLogo, setDraftLogo] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
+
+  // Palette JSON import (THEME.CUSTOM.IMPORT.1) — pre-fills draftPalette
+  // (and, if provided, the not-yet-open save name) but never touches
+  // fonts, logo or localStorage. Same "always allow re-selecting the same
+  // file" pattern as the logo input below.
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   const [saveNameOpen, setSaveNameOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -290,6 +298,40 @@ export default function ThemeModeToggle() {
     }
   }
 
+  /**
+   * Reads the selected file's text, parses it with the pure JSON parser,
+   * and — only on success — pre-fills the eight palette fields and applies
+   * them to the live preview, exactly like a manual color-picker edit.
+   * Fonts, logo and any other draft are left untouched. Nothing is written
+   * to localStorage here; only "Save as custom" persists anything.
+   */
+  async function handleImportFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // always allow re-selecting the same file afterwards
+    if (!file) return;
+    setImportError(null);
+    setImportBusy(true);
+    try {
+      const text = await file.text();
+      const result = parseMikrosThemeImportJson(text);
+      if (!result.ok) {
+        setImportError(result.error);
+        return;
+      }
+      setDraftPalette(result.tokens);
+      setRawHex({});
+      setHexErrors({});
+      applyPaletteToElement(document.documentElement, result.tokens);
+      if (result.name) {
+        setSaveName((prev) => (prev.trim() ? prev : result.name!));
+      }
+    } catch {
+      setImportError("This file could not be read.");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
   function handleResetLogo() {
     setDraftLogo(null);
     setLogoError(null);
@@ -470,6 +512,24 @@ export default function ThemeModeToggle() {
             >
               ↺ Reset Custom palette
             </button>
+          </div>
+
+          <div className="flex flex-col gap-1.5 border-b border-[#1e2124] pb-3">
+            <label className="flex items-center gap-2">
+              <span className="text-[10px] text-[#6e767d] whitespace-nowrap">Import palette JSON</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={handleImportFileChange}
+                disabled={importBusy}
+                aria-label="Import palette JSON"
+                className="flex-1 text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
+              />
+            </label>
+            {importError && <p className="text-[10px] text-[#cf7b6b]">{importError}</p>}
+            <p className="text-[10px] text-[#4b5158]">
+              Pre-fills the eight fields below from a JSON file — adjust them, then use Save as custom to keep it.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
