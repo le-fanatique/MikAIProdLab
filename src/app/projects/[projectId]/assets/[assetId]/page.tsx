@@ -6,6 +6,7 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
+import Collapsible from "@/components/Collapsible";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import DeleteButton from "@/components/DeleteButton";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
@@ -287,44 +288,57 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       </section>
 
       {/* ── AI Assist ─────────────────────────────────────── */}
+      {/* UX.1.ASSETDETAIL.1: both AI-assist panels collapsed by default —
+          they stay fully reachable but no longer compete with Details/
+          References/Generation for default visual weight. Each auto-opens
+          only when it has its own feedback to show (update banner or
+          error), reusing the existing query-param signals already computed
+          above — no new state introduced. */}
       <SectionLabel label="AI Assist" />
-      <Card title="Enhance Description">
-        {descriptionUpdated && (
-          <p className="mb-3 text-xs text-[#6b9e72]">Description updated.</p>
-        )}
-        {notesUpdated && (
-          <p className="mb-3 text-xs text-[#6b9e72]">Notes updated.</p>
-        )}
-        {assetDescriptionError && (
-          <p className="mb-3 text-xs text-[#c97c7c]">Unable to update asset description.</p>
-        )}
-        <AssetDescriptionEnhancePanel
-          projectId={pid}
-          assetId={aid}
-          returnTo={`/projects/${pid}/assets/${aid}`}
-          hasExistingDescription={Boolean(asset.description?.trim())}
-          hasExistingNotes={Boolean(asset.notes?.trim())}
-          isConfigured={!!llmSettings.model.trim()}
-          hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
-        />
-      </Card>
+      <Collapsible
+        label="Enhance Description"
+        defaultOpen={descriptionUpdated || notesUpdated || Boolean(assetDescriptionError)}
+      >
+        <Card title="Enhance Description">
+          {descriptionUpdated && (
+            <p className="mb-3 text-xs text-[#6b9e72]">Description updated.</p>
+          )}
+          {notesUpdated && (
+            <p className="mb-3 text-xs text-[#6b9e72]">Notes updated.</p>
+          )}
+          {assetDescriptionError && (
+            <p className="mb-3 text-xs text-[#c97c7c]">Unable to update asset description.</p>
+          )}
+          <AssetDescriptionEnhancePanel
+            projectId={pid}
+            assetId={aid}
+            returnTo={`/projects/${pid}/assets/${aid}`}
+            hasExistingDescription={Boolean(asset.description?.trim())}
+            hasExistingNotes={Boolean(asset.notes?.trim())}
+            isConfigured={!!llmSettings.model.trim()}
+            hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
+          />
+        </Card>
+      </Collapsible>
 
-      <Card title="Enhance Asset Bible">
-        {bibleUpdated && (
-          <p className="mb-3 text-xs text-[#6b9e72]">Asset Bible updated.</p>
-        )}
-        <AssetBibleEnhancePanel
-          projectId={pid}
-          assetId={aid}
-          description={asset.description}
-          notes={asset.notes}
-          visualIdentity={asset.visualIdentity}
-          usageRules={asset.usageRules}
-          forbiddenVariations={asset.forbiddenVariations}
-          isConfigured={!!llmSettings.model.trim()}
-          returnTo={`/projects/${pid}/assets/${aid}`}
-        />
-      </Card>
+      <Collapsible label="Enhance Asset Bible" defaultOpen={bibleUpdated}>
+        <Card title="Enhance Asset Bible">
+          {bibleUpdated && (
+            <p className="mb-3 text-xs text-[#6b9e72]">Asset Bible updated.</p>
+          )}
+          <AssetBibleEnhancePanel
+            projectId={pid}
+            assetId={aid}
+            description={asset.description}
+            notes={asset.notes}
+            visualIdentity={asset.visualIdentity}
+            usageRules={asset.usageRules}
+            forbiddenVariations={asset.forbiddenVariations}
+            isConfigured={!!llmSettings.model.trim()}
+            returnTo={`/projects/${pid}/assets/${aid}`}
+          />
+        </Card>
+      </Collapsible>
 
       {/* ── References ────────────────────────────────────── */}
       <SectionLabel label="References" />
