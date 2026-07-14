@@ -100,20 +100,25 @@ export default async function RootLayout({
       <head>
         {/* Anti-flash: applies the saved theme (Mikros or a custom
             variant) before first paint (THEME.MIKROS.1 / THEME.MIKROS.2 /
-            THEME.MIKROS.4 / THEME.MIKROS.5). Static script, no
-            interpolated user input — reads two fixed localStorage keys
-            and only ever writes CSS custom properties via
+            THEME.MIKROS.4 / THEME.MIKROS.5 / THEME.CUSTOM.IMPORT.1 retake).
+            Static script, no interpolated user input — reads two fixed
+            localStorage keys and only ever writes CSS custom properties via
             style.setProperty(), never innerHTML, never a <style> tag,
-            never a remote URL (the logo's data: URL is re-validated here
-            — syntax AND decoded magic bytes, see validLogo() below —
-            before being wrapped in url(), same as an uploaded PNG/JPEG/
-            WebP would be rendered as a CSS background anywhere else). The
-            mix/derive math and the font/logo stack/validation are a
-            hand-kept-in-sync copy of mixHex()/deriveFullPalette()/
-            fontFamilyStack()/isValidFontFamilyName()/isValidLogoDataUrl()/
+            never a remote URL (the logo's/each texture's data: URL is
+            re-validated here — syntax AND decoded magic bytes, see
+            validImage() below — before being wrapped in url(), same as an
+            uploaded PNG/JPEG/WebP would be rendered as a CSS background
+            anywhere else). The mix/derive math and the font/logo/texture
+            stack/validation are a hand-kept-in-sync copy of
+            mixHex()/deriveFullPalette()/fontFamilyStack()/
+            isValidFontFamilyName()/isValidLogoDataUrl()/
             sniffImageMimeFromBytes() in src/lib/mikrosTheme.ts (a plain
             <script> tag can't import a module), so any change to those
-            formulas must be mirrored here by hand. */}
+            formulas must be mirrored here by hand. Textures are restored
+            only for a saved custom:<id> theme that actually has one — the
+            official Mikros preset (mode === 'mikros') never gets a texture
+            class/property here, matching applyMode()/clearPaletteOverrides()
+            in ThemeModeToggle.tsx. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){
@@ -152,7 +157,7 @@ export default async function RootLayout({
                 function validFontName(v) {
                   return typeof v === 'string' && FONT_RE.test(v.trim());
                 }
-                function validLogo(v) {
+                function validImage(v) {
                   if (typeof v !== 'string' || v.length > LOGO_MAX_LEN) return false;
                   var m = LOGO_RE.exec(v);
                   if (!m) return false;
@@ -174,7 +179,7 @@ export default async function RootLayout({
                   var bl = Math.round(ab * w + bb * (1 - w));
                   return '#' + ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0');
                 }
-                function applyPalette(base, displayFont, bodyFont, logo) {
+                function applyPalette(base, displayFont, bodyFont, logo, topBarTexture, previewTexture) {
                   el.classList.add('theme-mikros');
                   var full = {
                     '--mikros-canvas': base.canvas, '--mikros-surface': base.surface,
@@ -194,6 +199,18 @@ export default async function RootLayout({
                   if (logo) {
                     el.style.setProperty('--mikros-logo-url', 'url("' + logo + '")');
                     el.classList.add('theme-mikros-logo');
+                  }
+                  // Textures (THEME.CUSTOM.IMPORT.1 retake) — only ever
+                  // reached for a saved custom:<id> theme (see below), never
+                  // for the bare 'mikros' branch, so the official preset
+                  // stays texture-free here too.
+                  if (topBarTexture) {
+                    el.style.setProperty('--mikros-topbar-texture-url', 'url("' + topBarTexture + '")');
+                    el.classList.add('theme-mikros-topbar-texture');
+                  }
+                  if (previewTexture) {
+                    el.style.setProperty('--mikros-preview-texture-url', 'url("' + previewTexture + '")');
+                    el.classList.add('theme-mikros-preview-texture');
                   }
                 }
                 if (mode === 'mikros') {
@@ -215,8 +232,10 @@ export default async function RootLayout({
                     if (ok) {
                       var displayFont = validFontName(t.displayFont) ? t.displayFont.trim() : 'Londrina Solid';
                       var bodyFont = validFontName(t.bodyFont) ? t.bodyFont.trim() : 'Poppins';
-                      var logo = validLogo(t.logo) ? t.logo : null;
-                      applyPalette(t.tokens, displayFont, bodyFont, logo);
+                      var logo = validImage(t.logo) ? t.logo : null;
+                      var topBarTexture = validImage(t.topBarTexture) ? t.topBarTexture : null;
+                      var previewTexture = validImage(t.previewTexture) ? t.previewTexture : null;
+                      applyPalette(t.tokens, displayFont, bodyFont, logo, topBarTexture, previewTexture);
                     }
                     break;
                   }

@@ -199,6 +199,39 @@ export function applyLogoToElement(el: HTMLElement, logo: string | null): void {
   }
 }
 
+/**
+ * Optional decorative textures (THEME.CUSTOM.IMPORT.1 retake) — the Top bar
+ * brush accent and the Appearance preview background are no longer applied
+ * automatically by globals.css. Same validated-data-URL-gated-class
+ * mechanism as applyLogoToElement/THEME_LOGO_CLASS above, reusing the exact
+ * same accepted formats/size/dimension limits and magic-byte sniffing as
+ * the logo ("comme le logo"), so this never introduces a second image
+ * validation path. Each texture has its own class/property and is applied
+ * independently — resetting one never touches the other.
+ */
+export const THEME_TOPBAR_TEXTURE_CLASS = "theme-mikros-topbar-texture";
+export const THEME_PREVIEW_TEXTURE_CLASS = "theme-mikros-preview-texture";
+
+export function applyTopBarTextureToElement(el: HTMLElement, texture: string | null): void {
+  if (texture && isValidLogoDataUrl(texture)) {
+    el.style.setProperty("--mikros-topbar-texture-url", `url("${texture}")`);
+    el.classList.add(THEME_TOPBAR_TEXTURE_CLASS);
+  } else {
+    el.style.removeProperty("--mikros-topbar-texture-url");
+    el.classList.remove(THEME_TOPBAR_TEXTURE_CLASS);
+  }
+}
+
+export function applyPreviewTextureToElement(el: HTMLElement, texture: string | null): void {
+  if (texture && isValidLogoDataUrl(texture)) {
+    el.style.setProperty("--mikros-preview-texture-url", `url("${texture}")`);
+    el.classList.add(THEME_PREVIEW_TEXTURE_CLASS);
+  } else {
+    el.style.removeProperty("--mikros-preview-texture-url");
+    el.classList.remove(THEME_PREVIEW_TEXTURE_CLASS);
+  }
+}
+
 export type CustomTheme = {
   id: string;
   name: string;
@@ -207,6 +240,10 @@ export type CustomTheme = {
   bodyFont: string;
   /** null = no custom logo, falls back to the "M" mark. */
   logo: string | null;
+  /** null = no custom Top bar texture — the bar renders with no background image. */
+  topBarTexture: string | null;
+  /** null = no custom Appearance preview texture — the card renders with no background image. */
+  previewTexture: string | null;
 };
 
 /** "default" | "mikros" | "custom:<id>" */
@@ -307,9 +344,13 @@ export function clearPaletteOverrides(el: HTMLElement): void {
     "--mikros-font-display", "--mikros-font-sans",
     // THEME.MIKROS.5 — reset also drops any custom logo back to the "M" mark.
     "--mikros-logo-url",
+    // THEME.CUSTOM.IMPORT.1 retake — reset also drops both decorative
+    // textures, so the official Custom preset (and Default) always render
+    // texture-free, exactly like the logo above.
+    "--mikros-topbar-texture-url", "--mikros-preview-texture-url",
   ];
   for (const prop of props) el.style.removeProperty(prop);
-  el.classList.remove(THEME_LOGO_CLASS);
+  el.classList.remove(THEME_LOGO_CLASS, THEME_TOPBAR_TEXTURE_CLASS, THEME_PREVIEW_TEXTURE_CLASS);
 }
 
 /** Defensive parse — drops malformed entries instead of throwing, never crashes the caller. */
@@ -354,6 +395,14 @@ export function loadCustomThemes(): CustomTheme[] {
       // logo never rejects the theme, it just falls back to the "M" mark.
       const rawLogo = (entry as { logo?: unknown }).logo;
       const logo = isValidLogoDataUrl(rawLogo) ? rawLogo : null;
+      // Both decorative textures are additive too (THEME.CUSTOM.IMPORT.1
+      // retake): a missing/invalid/corrupted texture never rejects the
+      // theme — older themes saved before this ticket simply fall back to
+      // null (no texture), same as a fresh theme that never had one.
+      const rawTopBarTexture = (entry as { topBarTexture?: unknown }).topBarTexture;
+      const topBarTexture = isValidLogoDataUrl(rawTopBarTexture) ? rawTopBarTexture : null;
+      const rawPreviewTexture = (entry as { previewTexture?: unknown }).previewTexture;
+      const previewTexture = isValidLogoDataUrl(rawPreviewTexture) ? rawPreviewTexture : null;
       result.push({
         id: (entry as { id: string }).id,
         name: (entry as { name: string }).name,
@@ -361,6 +410,8 @@ export function loadCustomThemes(): CustomTheme[] {
         displayFont,
         bodyFont,
         logo,
+        topBarTexture,
+        previewTexture,
       });
     }
     return result;

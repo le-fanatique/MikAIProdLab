@@ -22,6 +22,8 @@ import {
   applyPaletteToElement,
   applyFontsToElement,
   applyLogoToElement,
+  applyTopBarTextureToElement,
+  applyPreviewTextureToElement,
   clearPaletteOverrides,
   loadCustomThemes,
   saveCustomThemes,
@@ -31,7 +33,7 @@ import {
   isValidLogoDataUrl,
   sniffImageMimeFromBytes,
 } from "@/lib/mikrosTheme";
-import { parseMikrosThemeImportJson } from "@/lib/mikrosThemeImport";
+import { parseMikrosThemeImportJson, type MikrosThemeImportResult } from "@/lib/mikrosThemeImport";
 
 const FONT_OTHER = "__other__";
 type FontRole = "display" | "body";
@@ -49,6 +51,8 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
       applyPaletteToElement(el, theme.tokens);
       applyFontsToElement(el, theme.displayFont, theme.bodyFont);
       applyLogoToElement(el, theme.logo);
+      applyTopBarTextureToElement(el, theme.topBarTexture);
+      applyPreviewTextureToElement(el, theme.previewTexture);
     } else {
       // Referenced theme no longer exists (deleted elsewhere/corrupted) — safest fallback
       el.classList.remove(THEME_CLASS);
@@ -99,6 +103,18 @@ export default function ThemeModeToggle() {
   const [logoError, setLogoError] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
 
+  // Decorative textures (THEME.CUSTOM.IMPORT.1 retake) — same null-means-
+  // "no texture, render nothing" contract as draftLogo above. Each texture
+  // has its own error/busy state so one field's upload never affects the
+  // other's; neither is ever applied to the official Custom preset or
+  // Default, and neither is persisted before "Save as custom".
+  const [draftTopBarTexture, setDraftTopBarTexture] = useState<string | null>(null);
+  const [topBarTextureError, setTopBarTextureError] = useState<string | null>(null);
+  const [topBarTextureBusy, setTopBarTextureBusy] = useState(false);
+  const [draftPreviewTexture, setDraftPreviewTexture] = useState<string | null>(null);
+  const [previewTextureError, setPreviewTextureError] = useState<string | null>(null);
+  const [previewTextureBusy, setPreviewTextureBusy] = useState(false);
+
   // Palette JSON import (THEME.CUSTOM.IMPORT.1) — pre-fills draftPalette
   // (and, if provided, the not-yet-open save name) but never touches
   // fonts, logo or localStorage. Same "always allow re-selecting the same
@@ -106,10 +122,25 @@ export default function ThemeModeToggle() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
 
+  // Paste JSON panel (THEME.CUSTOM.IMPORT.1 — Correction produit avant
+  // commit) — same parser/rules as the file import above, applied only on
+  // an explicit "Apply JSON" click. Always starts empty; nothing is ever
+  // pre-filled into this textarea automatically.
+  const [pasteJsonText, setPasteJsonText] = useState("");
+  const [pasteJsonError, setPasteJsonError] = useState<string | null>(null);
+
   const [saveNameOpen, setSaveNameOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Editing an existing saved theme (THEME.CUSTOM.IMPORT.1 retake — theme
+  // editing) — null means "building a brand new theme" (existing
+  // behavior). When set to a saved theme's id, Save as custom updates that
+  // theme in place by id instead of appending a new one, and the editor
+  // panel below is shown even though `mode` may not be the bare "mikros"
+  // preset. Any mode switch away (handleModeChange) always clears this.
+  const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
 
   useEffect(() => {
     let savedMode = "default";
@@ -145,6 +176,10 @@ export default function ThemeModeToggle() {
     persistMode(next);
     setSaveNameOpen(false);
     setSaveError(null);
+    // Switching to any radio option (Default, the official preset, or a
+    // different saved theme) always abandons an in-progress edit — Cancel
+    // reuses this same path by switching to "mikros".
+    setEditingThemeId(null);
     if (next === "mikros") {
       setDraftPalette(MIKROS_DEFAULT_PALETTE);
       setRawHex({});
@@ -157,6 +192,10 @@ export default function ThemeModeToggle() {
       setFontErrors({});
       setDraftLogo(null);
       setLogoError(null);
+      setDraftTopBarTexture(null);
+      setTopBarTextureError(null);
+      setDraftPreviewTexture(null);
+      setPreviewTextureError(null);
     }
   }
 
@@ -249,8 +288,12 @@ export default function ThemeModeToggle() {
    * (SVG has no binary magic number and is always rejected here),
    * anything over the size/dimension limits, or anything unreadable.
    * Never touches innerHTML, a <style> tag or a remote URL.
+   *
+   * Shared by the logo upload and both decorative texture uploads — same
+   * accepted formats and size/dimension limits for all three ("comme le
+   * logo"), so there is only ever one image-validation implementation.
    */
-  async function readAndValidateLogoFile(file: File): Promise<string> {
+  async function readAndValidateImageFile(file: File): Promise<string> {
     if (file.size > MIKROS_LOGO_MAX_BYTES) {
       throw new Error(`File is too large (max ${Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB).`);
     }
@@ -288,7 +331,7 @@ export default function ThemeModeToggle() {
     setLogoError(null);
     setLogoBusy(true);
     try {
-      const dataUrl = await readAndValidateLogoFile(file);
+      const dataUrl = await readAndValidateImageFile(file);
       setDraftLogo(dataUrl);
       applyLogoToElement(document.documentElement, dataUrl);
     } catch (err) {
@@ -298,13 +341,70 @@ export default function ThemeModeToggle() {
     }
   }
 
+  async function handleTopBarTextureFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // always allow re-selecting the same file afterwards
+    if (!file) return;
+    setTopBarTextureError(null);
+    setTopBarTextureBusy(true);
+    try {
+      const dataUrl = await readAndValidateImageFile(file);
+      setDraftTopBarTexture(dataUrl);
+      applyTopBarTextureToElement(document.documentElement, dataUrl);
+    } catch (err) {
+      setTopBarTextureError(err instanceof Error ? err.message : "This file could not be used.");
+    } finally {
+      setTopBarTextureBusy(false);
+    }
+  }
+
+  function handleResetTopBarTexture() {
+    setDraftTopBarTexture(null);
+    setTopBarTextureError(null);
+    applyTopBarTextureToElement(document.documentElement, null);
+  }
+
+  async function handlePreviewTextureFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // always allow re-selecting the same file afterwards
+    if (!file) return;
+    setPreviewTextureError(null);
+    setPreviewTextureBusy(true);
+    try {
+      const dataUrl = await readAndValidateImageFile(file);
+      setDraftPreviewTexture(dataUrl);
+      applyPreviewTextureToElement(document.documentElement, dataUrl);
+    } catch (err) {
+      setPreviewTextureError(err instanceof Error ? err.message : "This file could not be used.");
+    } finally {
+      setPreviewTextureBusy(false);
+    }
+  }
+
+  function handleResetPreviewTexture() {
+    setDraftPreviewTexture(null);
+    setPreviewTextureError(null);
+    applyPreviewTextureToElement(document.documentElement, null);
+  }
+
   /**
-   * Reads the selected file's text, parses it with the pure JSON parser,
-   * and — only on success — pre-fills the eight palette fields and applies
-   * them to the live preview, exactly like a manual color-picker edit.
-   * Fonts, logo and any other draft are left untouched. Nothing is written
-   * to localStorage here; only "Save as custom" persists anything.
+   * Shared success path for both the file import and the Paste JSON panel:
+   * pre-fills the eight palette fields and applies them to the live
+   * preview, exactly like a manual color-picker edit. Fonts, logo and any
+   * other draft are left untouched. Never writes to localStorage; only
+   * "Save as custom" persists anything.
    */
+  function applyImportedPalette(result: Extract<MikrosThemeImportResult, { ok: true }>) {
+    setDraftPalette(result.tokens);
+    setRawHex({});
+    setHexErrors({});
+    applyPaletteToElement(document.documentElement, result.tokens);
+    if (result.name) {
+      setSaveName((prev) => (prev.trim() ? prev : result.name!));
+    }
+  }
+
+  /** Reads the selected file's text and parses it with the shared JSON parser. */
   async function handleImportFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // always allow re-selecting the same file afterwards
@@ -318,18 +418,28 @@ export default function ThemeModeToggle() {
         setImportError(result.error);
         return;
       }
-      setDraftPalette(result.tokens);
-      setRawHex({});
-      setHexErrors({});
-      applyPaletteToElement(document.documentElement, result.tokens);
-      if (result.name) {
-        setSaveName((prev) => (prev.trim() ? prev : result.name!));
-      }
+      applyImportedPalette(result);
     } catch {
       setImportError("This file could not be read.");
     } finally {
       setImportBusy(false);
     }
+  }
+
+  /** "Apply JSON" in the Paste JSON panel — applies nothing until this is clicked, and preserves the current draft on error. */
+  function handlePasteJsonApply() {
+    const result = parseMikrosThemeImportJson(pasteJsonText);
+    if (!result.ok) {
+      setPasteJsonError(result.error);
+      return;
+    }
+    setPasteJsonError(null);
+    applyImportedPalette(result);
+  }
+
+  function handlePasteJsonClear() {
+    setPasteJsonText("");
+    setPasteJsonError(null);
   }
 
   function handleResetLogo() {
@@ -350,7 +460,11 @@ export default function ThemeModeToggle() {
     setFontErrors({});
     setDraftLogo(null);
     setLogoError(null);
-    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography + logo)
+    setDraftTopBarTexture(null);
+    setTopBarTextureError(null);
+    setDraftPreviewTexture(null);
+    setPreviewTextureError(null);
+    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography + logo + textures)
   }
 
   function handleSaveAsCustom() {
@@ -365,27 +479,41 @@ export default function ThemeModeToggle() {
       setSaveError("Enter a name for this theme.");
       return;
     }
-    const isDuplicate = customThemes.some((t) => t.name.toLowerCase() === name.toLowerCase());
+    // When editing, the theme keeps its own name from the duplicate check —
+    // only a genuinely different existing theme sharing that name blocks the save.
+    const isDuplicate = customThemes.some(
+      (t) => t.id !== editingThemeId && t.name.toLowerCase() === name.toLowerCase()
+    );
     if (isDuplicate) {
       setSaveError("A custom theme with this name already exists.");
       return;
     }
-    const theme: CustomTheme = {
-      id: generateThemeId(),
+
+    const draftValues = {
       name,
       tokens: draftPalette,
       displayFont: draftDisplayFont,
       bodyFont: draftBodyFont,
       logo: draftLogo,
+      topBarTexture: draftTopBarTexture,
+      previewTexture: draftPreviewTexture,
     };
-    const next = [...customThemes, theme];
+
+    // Updates the existing theme by id (no duplicate created) or appends a
+    // brand new one — the only two cases, selected by editingThemeId.
+    const next = editingThemeId
+      ? customThemes.map((t) => (t.id === editingThemeId ? { ...draftValues, id: t.id } : t))
+      : [...customThemes, { ...draftValues, id: generateThemeId() }];
+    const savedId = editingThemeId ?? next[next.length - 1].id;
+
     setCustomThemes(next);
-    const nextMode = customModeValue(theme.id);
+    const nextMode = customModeValue(savedId);
     setMode(nextMode);
     applyMode(nextMode, next);
     persistMode(nextMode);
     setSaveNameOpen(false);
     setSaveName("");
+    setEditingThemeId(null);
     // The theme is applied and kept in memory for this page view either way
     // (above) — a storage failure (quota full / unavailable) only means it
     // won't survive a reload, which we surface rather than pretend worked.
@@ -406,8 +534,49 @@ export default function ThemeModeToggle() {
     setDeleteError(saveCustomThemes(next) ? null : "Deleted for this session, but browser storage could not be updated.");
   }
 
+  /**
+   * "Edit" on a saved theme — loads every one of its values (palette,
+   * fonts, logo, both textures) into the same drafts the editor panel
+   * already uses, selects it as the active mode (so the editor is visible
+   * even though it isn't the bare official "mikros" preset), and opens the
+   * name field pre-filled with its current name. Nothing is persisted
+   * here — only Save as custom (now updating this id) writes anything.
+   */
+  function handleEditTheme(theme: CustomTheme) {
+    setEditingThemeId(theme.id);
+    setDraftPalette(theme.tokens);
+    setRawHex({});
+    setHexErrors({});
+    const isCuratedDisplay = (MIKROS_FONT_CHOICES as readonly string[]).includes(theme.displayFont);
+    const isCuratedBody = (MIKROS_FONT_CHOICES as readonly string[]).includes(theme.bodyFont);
+    setDraftDisplayFont(theme.displayFont);
+    setDraftBodyFont(theme.bodyFont);
+    setDisplayFontIsOther(!isCuratedDisplay);
+    setBodyFontIsOther(!isCuratedBody);
+    setOtherFontText({
+      display: isCuratedDisplay ? "" : theme.displayFont,
+      body: isCuratedBody ? "" : theme.bodyFont,
+    });
+    setFontErrors({});
+    setDraftLogo(theme.logo);
+    setLogoError(null);
+    setDraftTopBarTexture(theme.topBarTexture);
+    setTopBarTextureError(null);
+    setDraftPreviewTexture(theme.previewTexture);
+    setPreviewTextureError(null);
+    setSaveName(theme.name);
+    setSaveError(null);
+    setSaveNameOpen(true);
+    const nextMode = customModeValue(theme.id);
+    setMode(nextMode);
+    applyMode(nextMode, customThemes);
+    persistMode(nextMode);
+  }
+
   const isMikros = mode === "mikros";
   const activeCustomId = customModeId(mode);
+  const isEditingTheme = editingThemeId !== null;
+  const showEditor = isMikros || isEditingTheme;
 
   return (
     <fieldset className="flex flex-col gap-4">
@@ -486,24 +655,33 @@ export default function ThemeModeToggle() {
             {customThemes.map((theme) => (
               <div key={theme.id} className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-[#a4abb2]">{theme.name}</span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCustom(theme.id)}
-                  className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
-                >
-                  Delete
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleEditTheme(theme)}
+                    className="text-[#4b5158] hover:text-[#a4abb2] transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCustom(theme.id)}
+                    className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {isMikros && (
+      {showEditor && (
         <div className="flex flex-col gap-3 rounded border border-[#2c3035] p-3">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">
-              Custom palette
+              {isEditingTheme ? `Editing “${saveName || "custom theme"}”` : "Custom palette"}
             </span>
             <button
               type="button"
@@ -531,6 +709,51 @@ export default function ThemeModeToggle() {
               Pre-fills the eight fields below from a JSON file — adjust them, then use Save as custom to keep it.
             </p>
           </div>
+
+          <details className="flex flex-col gap-2 border-b border-[#1e2124] pb-3">
+            <summary className="text-[10px] text-[#6e767d] cursor-pointer select-none hover:text-[#a4abb2] transition-colors">
+              Paste JSON
+            </summary>
+            <div className="flex flex-col gap-2 pt-1">
+              <label htmlFor="mikros-paste-json" className="sr-only">
+                Palette JSON text
+              </label>
+              <textarea
+                id="mikros-paste-json"
+                value={pasteJsonText}
+                onChange={(e) => {
+                  setPasteJsonText(e.target.value);
+                  setPasteJsonError(null);
+                }}
+                rows={6}
+                placeholder='{"name": "Annecy Paper", "tokens": {"canvas": "#ECE5D8", ...}}'
+                aria-label="Palette JSON text"
+                aria-invalid={pasteJsonError !== null}
+                className={`rounded border bg-[#0e1013] text-xs text-[#e7e9ec] font-mono px-2 py-1.5 focus:outline-none resize-y ${
+                  pasteJsonError
+                    ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
+                    : "border-[#2c3035] focus:border-[#3a4046]"
+                }`}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePasteJsonApply}
+                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                >
+                  Apply JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePasteJsonClear}
+                  className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+              {pasteJsonError && <p className="text-[10px] text-[#cf7b6b]">{pasteJsonError}</p>}
+            </div>
+          </details>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {MIKROS_TOKEN_KEYS.map((key) => {
@@ -687,6 +910,68 @@ export default function ThemeModeToggle() {
             </p>
           </div>
 
+          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Top bar texture</span>
+              {draftTopBarTexture && (
+                <button
+                  type="button"
+                  onClick={handleResetTopBarTexture}
+                  className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors"
+                >
+                  ↺ Reset Top bar texture
+                </button>
+              )}
+            </div>
+            <label className="flex-1">
+              <span className="sr-only">Upload a Top bar texture (PNG, JPEG or WebP)</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleTopBarTextureFileChange}
+                disabled={topBarTextureBusy}
+                className="w-full text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
+              />
+            </label>
+            {topBarTextureError && <p className="text-[10px] text-[#cf7b6b]">{topBarTextureError}</p>}
+            <p className="text-[10px] text-[#4b5158]">
+              PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
+              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Empty by default —
+              no texture is applied unless a file is chosen here.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Appearance preview texture</span>
+              {draftPreviewTexture && (
+                <button
+                  type="button"
+                  onClick={handleResetPreviewTexture}
+                  className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors"
+                >
+                  ↺ Reset Appearance preview texture
+                </button>
+              )}
+            </div>
+            <label className="flex-1">
+              <span className="sr-only">Upload an Appearance preview texture (PNG, JPEG or WebP)</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handlePreviewTextureFileChange}
+                disabled={previewTextureBusy}
+                className="w-full text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
+              />
+            </label>
+            {previewTextureError && <p className="text-[10px] text-[#cf7b6b]">{previewTextureError}</p>}
+            <p className="text-[10px] text-[#4b5158]">
+              PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
+              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Empty by default —
+              no texture is applied unless a file is chosen here.
+            </p>
+          </div>
+
           <div className="border-t border-[#1e2124] pt-3">
             {!saveNameOpen ? (
               <button
@@ -722,14 +1007,20 @@ export default function ThemeModeToggle() {
                     }
                     className="rounded border border-[#9079F2]/50 text-[#9079F2] px-3 py-1.5 text-xs hover:border-[#9079F2] hover:bg-[#9079F2]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
-                    Save
+                    {isEditingTheme ? "Update theme" : "Save"}
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setSaveNameOpen(false);
-                      setSaveName("");
-                      setSaveError(null);
+                      if (isEditingTheme) {
+                        // Abandon the unsaved edit and return to the official
+                        // Custom preset — same reset path as picking "Custom".
+                        handleModeChange("mikros");
+                      } else {
+                        setSaveNameOpen(false);
+                        setSaveName("");
+                        setSaveError(null);
+                      }
                     }}
                     className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
                   >

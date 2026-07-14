@@ -151,14 +151,6 @@ html.theme-mikros .border-\[\#5b93d6\]\/60 { border-color: color-mix(in srgb, va
    (see mikai-top-bar / mikai-page-header / mikai-appearance-preview
    class hooks added to their respective components). Static, no
    animation — nothing here needs a prefers-reduced-motion guard. */
-html.theme-mikros .mikai-top-bar {
-  overflow: hidden;
-  background-image: url("/theme/mikros/brush-accent.png");
-  background-repeat: no-repeat;
-  background-position: right -20px top -40px;
-  background-size: 140px auto;
-}
-
 html.theme-mikros .mikai-page-header {
   position: relative;
 }
@@ -172,8 +164,44 @@ html.theme-mikros .mikai-page-header::after {
   background: linear-gradient(90deg, var(--mikros-accent), transparent);
 }
 
-html.theme-mikros .mikai-appearance-preview {
-  background-image: url("/theme/mikros/appearance-preview.png");
+/* ============================================================
+   Optional decorative textures (THEME.CUSTOM.IMPORT.1 retake)
+
+   Neither texture is applied by default anymore — the two static PNG
+   URLs above were removed. A texture only ever renders when its
+   validated data: URL has been set on --mikros-topbar-texture-url /
+   --mikros-preview-texture-url AND the matching class below is present
+   (see applyTopBarTextureToElement / applyPreviewTextureToElement in
+   mikrosTheme.ts, added alongside theme-mikros only when a saved Custom
+   theme actually has that texture — same "class only added when the
+   value is genuinely set" mechanism as theme-mikros-logo). Default and
+   the official Custom preset (bare html.theme-mikros, no texture class)
+   are therefore always texture-free. The PNG files under
+   public/theme/mikros/ remain in the repo as local design references,
+   just no longer wired into any active CSS rule.
+
+   Top bar texture sizing (retake fix): the rule below used to size the
+   image at a fixed 140px, offset up/right of the bar — a leftover from
+   when this was a small decorative corner accent, not a user-facing
+   texture. It made an uploaded texture look tiny and cropped out of
+   frame. `background-size: cover` + centered position now fill the
+   whole .mikai-top-bar surface. This is a plain CSS background on the
+   header element itself — TopBar.tsx's actual content (logo, breadcrumb,
+   Settings link) is real DOM content painted on top of a background by
+   the browser regardless, so no z-index/stacking rule is needed to keep
+   it legible; overflow: hidden only guards against a texture image with
+   an unusual aspect ratio bleeding past the bar's fixed h-11 height.
+   ============================================================ */
+html.theme-mikros.theme-mikros-topbar-texture .mikai-top-bar {
+  overflow: hidden;
+  background-image: var(--mikros-topbar-texture-url);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+
+html.theme-mikros.theme-mikros-preview-texture .mikai-appearance-preview {
+  background-image: var(--mikros-preview-texture-url);
   background-repeat: no-repeat;
   background-position: left center;
   background-size: cover;
