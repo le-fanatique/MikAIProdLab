@@ -1,20 +1,17 @@
 # MikAI Project State
 
-Last updated: 2026-07-11
+Last updated: 2026-07-14
 
 ## Repository Heads
 
-- MikAI: `26f237b — Add file-based Codex supervision loop`
-- OpenReel sidecar: `09a4a23 — Insert MikAI shots from OpenReel`
+- MikAI: `c37e603 — Add audio controls to VideoFrameReviewPlayer`
+- OpenReel sidecar: `e1c36d1 — fix: make MikAI Bridge panel collapsible`
 
-Verification on 2026-07-11:
+Verification on 2026-07-13:
 
-- MikAI HEAD matches expected.
-- OpenReel sidecar HEAD matches expected.
-- OpenReel sidecar working tree is clean.
-- MikAI working tree has one unrelated untracked local directory:
-  `.agents/skills/`. Leave it untouched unless a future ticket explicitly
-  scopes it.
+- MikAI committed HEAD is `c37e603`; its working tree has persistent
+  `AGENTS.md` workflow change plus unrelated `.agents/skills/` and `.vscode/`.
+- OpenReel sidecar remains at committed HEAD `e1c36d1`.
 
 ## Product Shape
 
@@ -78,6 +75,9 @@ The `/nle-prototype` route is secondary/debug.
 - Apply Patch start-only.
 - Publish Sequence Result to MikAI.
 - Insert New Shot at Playhead.
+- Push production target duration to MikAI without invalidating existing
+  Sequence/Film Results.
+- Collapsible MikAI Bridge panel.
 - Stale HTTP 409.
 - Reload from MikAI.
 
@@ -99,6 +99,17 @@ The `/nle-prototype` route is secondary/debug.
   - `npm run ai:init`
   - `npm run ai:review`
 
+## Current Seedance State
+
+- Latest committed MikAI HEAD for this session: `46f46ef`.
+- The previous repository-head lines above are historical handoff metadata;
+  this checkpoint is the authoritative current state.
+- The Seedance MVP block is complete through `GEN.SEEDANCE.3`.
+- `GEN.SEEDANCE.3` found no real First/Last Frame workflow in the current
+  library, so no active profile was invented.
+- `THEME.TOPBAR.MASK.1` is complete: dedicated TopBar color with alpha-mask
+  texture rendering.
+
 ## Known Limits
 
 - The supervision loop is file-based. Codex review is manual in the connected
@@ -112,6 +123,11 @@ The `/nle-prototype` route is secondary/debug.
 - Some legacy OpenReel patches without snapshots can still be accepted with
   warnings for backward compatibility.
 - Runtime media/storage cleanup remains future work.
+- Recent completed polish includes `THEME.MIKROS.1` through `.5` (Custom
+  palette, fonts and logo) and `PLAYER.AUDIO.1` (audio controls in the
+  frame-aware player).
+- Active implementation ticket: `UX.AUDIT.1`, a read-only ergonomics and
+  information-architecture audit before the next major product redesign.
 
 ## Last Validated Baseline
 
@@ -120,6 +136,9 @@ Latest reported validation before this handoff:
 - `npx tsc --noEmit`: clean.
 - `npm run build`: clean.
 - `npm run ai:review`: validates Git failure handling and staged diff surface.
+- `PLAYER.AUDIO.1`: `npx tsc --noEmit`, `npm run build`, and
+  `git diff --check` clean; audio controls validated on Film Result, Sequence
+  Result, and Shot Detail surfaces.
 
 For this handoff ticket itself, validation is documentation-only:
 
