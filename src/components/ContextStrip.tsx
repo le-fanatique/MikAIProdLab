@@ -9,7 +9,7 @@ type SidebarProject = { id: number; name: string; status: string; sequences: Sid
 
 type Props = { tree: SidebarProject[] };
 
-type Tab = { label: string; href: string; active: boolean; disabled?: boolean };
+type Tab = { label: string; href: string; active: boolean; disabled?: boolean; title?: string };
 
 function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
   const segs = pathname.split("/").filter(Boolean);
@@ -39,50 +39,27 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
   const pid = project.id;
   const hasSeq = segs[2] === "sequences" && segs[3];
   const sequenceId = hasSeq ? parseInt(segs[3]) : null;
-  const hasShot = hasSeq && segs[4] === "shots" && segs[5];
-  const shotId = hasShot ? parseInt(segs[5]) : null;
 
-  // Sequence context but no shot — no strip (project tabs would show with no active tab)
-  if (hasSeq && !shotId) return null;
+  // EDITORIAL.SHORTCUT.1: the same Project-level navigation (Overview,
+  // Story, Assets, Editorial, Project Style) is now shown at every level
+  // — Project, Sequence, Shot and Shot Workflows — so `Editorial` stays
+  // reachable without a route change breaking the active-tab logic below.
+  // The Shot-level sibling-shot list and the `Workflows` tab are gone
+  // from this strip (Shot Detail and Workflow pages keep their own
+  // dedicated navigation to those functions — see RightPanel/ContextStrip
+  // callers, unchanged).
+  //
+  // Editorial points at the current Sequence when one is in the URL
+  // (Sequence Detail, Shot Detail, Shot Workflows), or at the project's
+  // first Sequence in order when browsing at Project level. `tree`'s
+  // `sequences` arrays are already ordered by `orderIndex` (see
+  // layout.tsx's query), so `project.sequences[0]` is that first Sequence.
+  const editorialSequenceId =
+    sequenceId ?? (project.sequences.length > 0 ? project.sequences[0].id : null);
+  const editorialHref =
+    editorialSequenceId != null ? `/projects/${pid}/sequences/${editorialSequenceId}/editorial` : "#";
+  const editorialDisabled = editorialSequenceId == null;
 
-  // Shot context — show sibling shots for quick nav + Workflows tab
-  if (shotId && sequenceId) {
-    const sequence = project.sequences.find((s) => s.id === sequenceId);
-    if (sequence && sequence.shots.length > 1) {
-      const shotBase = (shid: number) =>
-        `/projects/${pid}/sequences/${sequenceId}/shots/${shid}`;
-      const shotTabs: Tab[] = sequence.shots.map((sh) => ({
-        label: sh.shotCode ?? sh.title,
-        href: shotBase(sh.id),
-        active: sh.id === shotId && !pathname.startsWith(shotBase(shotId) + "/workflows"),
-      }));
-      const workflowsHref = `/projects/${pid}/sequences/${sequenceId}/shots/${shotId}/workflows`;
-      return [
-        ...shotTabs,
-        {
-          label: "Workflows",
-          href: workflowsHref,
-          active: pathname.startsWith(workflowsHref),
-        },
-      ];
-    }
-    // Single shot — just Workflows tab
-    const workflowsHref = `/projects/${pid}/sequences/${sequenceId}/shots/${shotId}/workflows`;
-    return [
-      {
-        label: "Shot",
-        href: `/projects/${pid}/sequences/${sequenceId}/shots/${shotId}`,
-        active: !pathname.startsWith(workflowsHref),
-      },
-      {
-        label: "Workflows",
-        href: workflowsHref,
-        active: pathname.startsWith(workflowsHref),
-      },
-    ];
-  }
-
-  // Project context (not in sequence/shot)
   return [
     {
       label: "Overview",
@@ -101,6 +78,13 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
       label: "Assets",
       href: `/projects/${pid}/assets`,
       active: pathname.startsWith(`/projects/${pid}/assets`),
+    },
+    {
+      label: "Editorial",
+      href: editorialHref,
+      active: !editorialDisabled && pathname === editorialHref,
+      disabled: editorialDisabled,
+      title: editorialDisabled ? "Create a Sequence to use Editorial." : undefined,
     },
     {
       label: "Project Style",
@@ -123,6 +107,7 @@ export default function ContextStrip({ tree }: Props) {
         tab.disabled ? (
           <div
             key={tab.label}
+            title={tab.title}
             className="flex items-center px-3 text-[11px] text-[#3a4046] cursor-not-allowed select-none shrink-0"
           >
             {tab.label}
