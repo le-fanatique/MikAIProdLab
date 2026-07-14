@@ -8,23 +8,17 @@ import {
   deleteStoredReferenceImage,
   SaveReferenceImageError,
 } from "@/lib/uploadImage";
+import { isReferenceImageRoleAvailableFor } from "@/lib/referenceImageRoles";
 
-const IMAGE_ROLES = [
-  "reference",
-  "keyframe",
-  "first_frame",
-  "last_frame",
-  "style",
-  "lighting",
-  "character",
-  "environment",
-  "other",
-] as const;
-
-type ImageRole = (typeof IMAGE_ROLES)[number];
+// REFROLE.MVP.1 — validated against the shared catalogue
+// (src/lib/referenceImageRoles.ts) instead of a locally duplicated
+// whitelist. The literal type still comes from the schema's own inferred
+// insert type (single source of truth for typing); the catalogue is the
+// single source of truth for which values are actually accepted.
+type ImageRole = NonNullable<typeof shotReferenceImages.$inferInsert.imageRole>;
 
 function isImageRole(value: string): value is ImageRole {
-  return (IMAGE_ROLES as readonly string[]).includes(value);
+  return isReferenceImageRoleAvailableFor(value, "shot");
 }
 
 function getString(formData: FormData, key: string): string {

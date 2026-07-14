@@ -256,6 +256,13 @@ export const assetReferenceImages = sqliteTable("asset_reference_images", {
       // only (this column has no DB CHECK constraint); no migration.
       "first_frame",
       "last_frame",
+      // REFROLE.MVP.1 — general roles from the shared catalogue
+      // (src/lib/referenceImageRoles.ts). TypeScript-level widening only.
+      "storyboard_frame",
+      "continuity_anchor",
+      "camera",
+      "motion",
+      "rhythm",
       "other",
     ],
   }),
@@ -288,8 +295,10 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
   sourceFilename: text("source_filename"),
   label: text("label"),
   imageRole: text("image_role", {
-    // GEN.SEEDANCE.3 — "first_frame"/"last_frame" added, TypeScript-level
-    // widening only (no DB CHECK constraint on this column); no migration.
+    // GEN.SEEDANCE.3 — "first_frame"/"last_frame" added; REFROLE.MVP.1 —
+    // remaining general roles from the shared catalogue
+    // (src/lib/referenceImageRoles.ts) added. TypeScript-level widening
+    // only (no DB CHECK constraint on this column); no migration.
     enum: [
       "reference",
       "keyframe",
@@ -299,6 +308,11 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
       "environment",
       "first_frame",
       "last_frame",
+      "storyboard_frame",
+      "continuity_anchor",
+      "camera",
+      "motion",
+      "rhythm",
       "other",
     ],
   }),

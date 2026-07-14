@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { uploadShotSourceFromPanel } from "@/actions/panelUpload";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
+import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 
 export type ShotPanelImageOption = {
   id: string;
@@ -84,19 +85,25 @@ export default function ShotPanelImagePreviewForm({
         const shotImages = images.filter((img) => img.source === "shot");
         const assetImages = images.filter((img) => img.source === "asset");
 
-        const shotItems = shotImages.map((img) => ({
-          id: img.id,
-          imagePath: img.imagePath,
-          label: img.role ? img.role : img.label,
-        }));
+        const shotItems = shotImages.map((img) => {
+          const roleLabel = getReferenceImageRoleLabel(img.role);
+          return {
+            id: img.id,
+            imagePath: img.imagePath,
+            label: roleLabel ? roleLabel : img.label,
+          };
+        });
 
-        const assetItems = assetImages.map((img) => ({
-          id: img.id,
-          imagePath: img.imagePath,
-          label: img.assetName
-            ? `${img.assetName}${img.role ? " · " + img.role : ""}`
-            : (img.role ?? img.label),
-        }));
+        const assetItems = assetImages.map((img) => {
+          const roleLabel = getReferenceImageRoleLabel(img.role);
+          return {
+            id: img.id,
+            imagePath: img.imagePath,
+            label: img.assetName
+              ? `${img.assetName}${roleLabel ? " · " + roleLabel : ""}`
+              : (roleLabel ?? img.label),
+          };
+        });
 
         return (
           <div key={nodeId} className="flex flex-col gap-2">

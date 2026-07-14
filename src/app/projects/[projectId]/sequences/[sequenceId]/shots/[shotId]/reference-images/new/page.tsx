@@ -6,6 +6,7 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import { createShotReferenceImage } from "@/actions/shotReferenceImages";
+import { getReferenceImageRoleGroups } from "@/lib/referenceImageRoles";
 
 export const dynamic = "force-dynamic";
 
@@ -23,18 +24,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_found: "Shot not found.",
 };
 
-const ROLE_OPTIONS = [
-  { value: "", label: "None" },
-  { value: "reference", label: "Reference" },
-  { value: "keyframe", label: "Keyframe" },
-  { value: "first_frame", label: "First Frame" },
-  { value: "last_frame", label: "Last Frame" },
-  { value: "style", label: "Style" },
-  { value: "lighting", label: "Lighting" },
-  { value: "character", label: "Character" },
-  { value: "environment", label: "Environment" },
-  { value: "other", label: "Other" },
-];
+// REFROLE.MVP.1 — role options come from the shared catalogue
+// (src/lib/referenceImageRoles.ts), grouped by category.
+const ROLE_GROUPS = getReferenceImageRoleGroups("shot");
 
 const inputClass =
   "w-full rounded bg-[#1a1d20] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#4b5158] focus:outline-none focus:border-[#3a4046] transition-colors";
@@ -110,10 +102,15 @@ export default async function NewShotReferenceImagePage({ params, searchParams }
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Role</label>
           <select name="imageRole" defaultValue="" className={inputClass}>
-            {ROLE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
+            <option value="">None</option>
+            {ROLE_GROUPS.map((group) => (
+              <optgroup key={group.category} label={group.label}>
+                {group.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

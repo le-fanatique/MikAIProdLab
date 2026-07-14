@@ -1,5 +1,6 @@
 import type { WorkflowInputMapping, RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 
 type Props = {
   basePath: string;
@@ -23,11 +24,13 @@ function buildAutoLabel(availableImages: RuntimeImageOption[]): string {
   if (!availableImages.length) return "No images available";
   const first = availableImages[0];
   const base = `Auto · ${first.label}`;
-  return first.role ? `${base} · ${first.role}` : base;
+  const roleLabel = getReferenceImageRoleLabel(first.role);
+  return roleLabel ? `${base} · ${roleLabel}` : base;
 }
 
 function buildOptionLabel(img: RuntimeImageOption): string {
-  const withRole = img.role ? `${img.label} · ${img.role}` : img.label;
+  const roleLabel = getReferenceImageRoleLabel(img.role);
+  const withRole = roleLabel ? `${img.label} · ${roleLabel}` : img.label;
   const withVariant = img.variantState ? `${withRole} · ${img.variantState}` : withRole;
   // ASSET.BIBLE.2 — a native <select><option> can't hold a real badge, so
   // the "not approved" warning has to be plain text here too. Only ever
@@ -158,9 +161,9 @@ export default function WorkflowImageSelectionForm({
                           preview/suggestion. */}
                       {previewImage && previewImage.source === "asset" && (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {previewImage.role && (
+                          {getReferenceImageRoleLabel(previewImage.role) && (
                             <span className="inline-flex items-center rounded border border-[#3a4046] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-                              {previewImage.role.replace(/_/g, " ")}
+                              {getReferenceImageRoleLabel(previewImage.role)}
                             </span>
                           )}
                           {previewImage.variantState && (

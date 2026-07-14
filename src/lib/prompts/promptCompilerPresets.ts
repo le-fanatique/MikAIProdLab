@@ -14,6 +14,17 @@ import type {
   PromptCompilationContext,
   PromptCompilationSourceFlags,
 } from "./buildPromptCompilationContext";
+import {
+  isFirstFrameRole,
+  isLastFrameRole,
+} from "@/lib/referenceImageRoles";
+
+// REFROLE.MVP.1 — isFirstFrameRole/isLastFrameRole now live in the shared
+// reference-image role catalogue (src/lib/referenceImageRoles.ts) and are
+// re-exported here unchanged so every existing import site
+// (e.g. src/lib/comfy/workflowProfiles.ts) keeps working without edits —
+// one role contract, never two contradictory ones.
+export { isFirstFrameRole, isLastFrameRole };
 
 export type PromptCompilerPresetId =
   | "text-to-video"
@@ -209,21 +220,6 @@ const KEYFRAME_ROLE_ALIASES = new Set(["keyframe", "first frame", "first_frame",
 function isKeyframeRole(role: string | null): boolean {
   if (!role) return false;
   return KEYFRAME_ROLE_ALIASES.has(role.trim().toLowerCase());
-}
-
-/** Role strings that count as an explicit First Frame reference, matched case-insensitively. Never auto-assigned — only ever compared against a role the caller already set. */
-const FIRST_FRAME_ROLE_ALIASES = new Set(["first_frame", "first frame", "firstframe"]);
-/** Role strings that count as an explicit Last Frame reference, matched case-insensitively. */
-const LAST_FRAME_ROLE_ALIASES = new Set(["last_frame", "last frame", "lastframe"]);
-
-export function isFirstFrameRole(role: string | null): boolean {
-  if (!role) return false;
-  return FIRST_FRAME_ROLE_ALIASES.has(role.trim().toLowerCase());
-}
-
-export function isLastFrameRole(role: string | null): boolean {
-  if (!role) return false;
-  return LAST_FRAME_ROLE_ALIASES.has(role.trim().toLowerCase());
 }
 
 function hasValidDuration(context: PromptCompilationContext): boolean {

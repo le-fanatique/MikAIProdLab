@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { uploadAssetSourceFromPanel } from "@/actions/panelUpload";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
+import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 
 export type AssetPanelImageOption = {
   id: string;
@@ -84,7 +85,8 @@ export default function AssetPanelImagePreviewForm({
           // ASSET.BIBLE.2 — surface role/variant/approval in the visible
           // label (the only text this compact grid can show per thumbnail),
           // so an unapproved image is never picked as if it were vetted.
-          const base = img.role ? img.role : img.label;
+          const roleLabel = getReferenceImageRoleLabel(img.role);
+          const base = roleLabel ? roleLabel : img.label;
           const withVariant = img.variantState ? `${base} · ${img.variantState}` : base;
           const label = img.approved === false ? `⚠ ${withVariant} (unapproved)` : withVariant;
           return { id: img.id, imagePath: img.imagePath, label };

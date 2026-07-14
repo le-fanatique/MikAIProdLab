@@ -8,32 +8,17 @@ import {
   deleteStoredReferenceImage,
   SaveReferenceImageError,
 } from "@/lib/uploadImage";
+import { isReferenceImageRoleAvailableFor } from "@/lib/referenceImageRoles";
 
-// ASSET.BIBLE.2 — legacy values kept exactly as before (never rewritten),
-// MVP roles added alongside. "lighting"/"style"/"other" are shared between
-// the two lists, not duplicated.
-const LEGACY_IMAGE_ROLES = ["reference", "keyframe", "character", "environment"] as const;
-const MVP_IMAGE_ROLES = [
-  "identity",
-  "full_body",
-  "expression",
-  "pose",
-  "costume",
-  "environment_view",
-  // GEN.SEEDANCE.3
-  "first_frame",
-  "last_frame",
-  "lighting",
-  "prop_state",
-  "style",
-  "other",
-] as const;
-const IMAGE_ROLES = [...LEGACY_IMAGE_ROLES, ...MVP_IMAGE_ROLES] as const;
-
-type ImageRole = (typeof IMAGE_ROLES)[number];
+// REFROLE.MVP.1 — validated against the shared catalogue
+// (src/lib/referenceImageRoles.ts) instead of a locally duplicated
+// whitelist. The literal type still comes from the schema's own inferred
+// insert type (single source of truth for typing); the catalogue is the
+// single source of truth for which values are actually accepted.
+type ImageRole = NonNullable<typeof assetReferenceImages.$inferInsert.imageRole>;
 
 function isImageRole(value: string): value is ImageRole {
-  return (IMAGE_ROLES as readonly string[]).includes(value);
+  return isReferenceImageRoleAvailableFor(value, "asset");
 }
 
 function getString(formData: FormData, key: string): string {

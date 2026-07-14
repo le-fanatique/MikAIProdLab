@@ -51,6 +51,7 @@ import {
   resolveFirstLastFrameNodes,
 } from "@/lib/comfy/workflowProfiles";
 import WorkflowProfilePanel from "@/components/WorkflowProfilePanel";
+import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 
 type Props = {
   projectId: number;
@@ -531,13 +532,16 @@ export default async function ShotGenerationPanel({
       source: img.source,
       assetName: img.assetName,
     }));
-    const assetItems = availableImages.filter((img) => img.source === "asset").map((img) => ({
-      id: img.id,
-      imagePath: img.imagePath,
-      label: img.assetName ? `${img.assetName}${img.role ? " · " + img.role : ""}` : (img.role ?? img.label),
-      source: img.source,
-      assetName: img.assetName,
-    }));
+    const assetItems = availableImages.filter((img) => img.source === "asset").map((img) => {
+      const roleLabel = getReferenceImageRoleLabel(img.role);
+      return {
+        id: img.id,
+        imagePath: img.imagePath,
+        label: img.assetName ? `${img.assetName}${roleLabel ? " · " + roleLabel : ""}` : (roleLabel ?? img.label),
+        source: img.source,
+        assetName: img.assetName,
+      };
+    });
     if (shotItems.length > 0) batchImageGroups.push({ groupLabel: "Shot Sources", items: shotItems });
     if (assetItems.length > 0) batchImageGroups.push({ groupLabel: "Cast Sources", items: assetItems });
   }

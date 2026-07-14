@@ -7,6 +7,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import { updateAssetReferenceImage } from "@/actions/assetReferenceImages";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { getReferenceImageRoleGroups } from "@/lib/referenceImageRoles";
 
 export const dynamic = "force-dynamic";
 
@@ -23,29 +24,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_found: "Reference image not found.",
 };
 
-// ASSET.BIBLE.2 — MVP roles for Seedance; legacy values kept selectable
-// (grouped separately below) so existing images always display their real
+// REFROLE.MVP.1 — role options come from the shared catalogue
+// (src/lib/referenceImageRoles.ts), grouped by category. Legacy values
+// (reference, keyframe, character, environment) remain selectable in the
+// "Legacy / Other" group so existing images always display their real
 // stored role instead of silently falling back to blank.
-const ROLE_OPTIONS = [
-  { value: "identity", label: "Identity" },
-  { value: "full_body", label: "Full Body" },
-  { value: "expression", label: "Expression" },
-  { value: "pose", label: "Pose" },
-  { value: "costume", label: "Costume" },
-  { value: "environment_view", label: "Environment View" },
-  { value: "first_frame", label: "First Frame" },
-  { value: "last_frame", label: "Last Frame" },
-  { value: "lighting", label: "Lighting" },
-  { value: "prop_state", label: "Prop State" },
-  { value: "style", label: "Style" },
-  { value: "other", label: "Other" },
-];
-const LEGACY_ROLE_OPTIONS = [
-  { value: "reference", label: "Reference (legacy)" },
-  { value: "keyframe", label: "Keyframe (legacy)" },
-  { value: "character", label: "Character (legacy)" },
-  { value: "environment", label: "Environment (legacy)" },
-];
+const ROLE_GROUPS = getReferenceImageRoleGroups("asset");
 
 const inputClass =
   "w-full rounded bg-[#1a1d20] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#4b5158] focus:outline-none focus:border-[#3a4046] transition-colors";
@@ -130,20 +114,15 @@ export default async function EditAssetReferenceImagePage({ params, searchParams
           <label className={labelClass}>Role</label>
           <select name="imageRole" defaultValue={image.imageRole ?? ""} className={inputClass}>
             <option value="">None</option>
-            <optgroup label="Roles">
-              {ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Legacy">
-              {LEGACY_ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </optgroup>
+            {ROLE_GROUPS.map((group) => (
+              <optgroup key={group.category} label={group.label}>
+                {group.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
         </div>
 
