@@ -98,7 +98,9 @@ export default async function OutlinePage({ params, searchParams }: Props) {
                 <p className="text-sm text-[#a4abb2]">{project.pitch}</p>
               </div>
             ) : (
-              <p className="text-sm text-[#4b5158] italic">No pitch yet.</p>
+              <p className="text-sm text-[#4b5158] italic">
+                No pitch yet — write one in Story Workspace.
+              </p>
             )}
             {project.story && (
               <div>

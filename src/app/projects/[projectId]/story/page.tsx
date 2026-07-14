@@ -459,7 +459,9 @@ export default async function StoryPage({ params, searchParams }: Props) {
           {/* Summary row */}
           <div className="flex items-start justify-between gap-4">
             {assetRows.length === 0 ? (
-              <p className="text-sm text-[#4b5158] italic">No assets yet.</p>
+              <p className="text-sm text-[#4b5158] italic">
+                No assets yet — characters, locations, and props for this project.
+              </p>
             ) : (
               <p className="text-sm text-[#a4abb2]">
                 {ASSET_TYPE_ORDER.filter((t) => assetCountByType[t])

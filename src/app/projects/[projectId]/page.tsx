@@ -149,7 +149,175 @@ export default async function ProjectPage({ params }: Props) {
         }
       />
 
+      {/* ── Overview ──────────────────────────────────────── */}
+      {/* UX.1.PRODUCT.SURFACES.1: Overview now leads the page (moved ahead
+          of Film Result — see below) so a project reads first as "what am
+          I making" before "what has been rendered". For a brand-new
+          project with neither a pitch nor a story yet, this used to render
+          nothing at all between PageHeader and Sequences; it now shows a
+          short, explicit next step instead, so the first screen is never
+          just empty space. */}
+      <SectionLabel label="Overview" />
+      {project.pitch || project.story ? (
+        <>
+          {project.pitch && (
+            <p className="text-[#a4abb2] text-sm mb-4 leading-relaxed">{project.pitch}</p>
+          )}
+          {project.story && (
+            <div className="border-l-2 border-[#232629] pl-4 mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
+                Story
+              </p>
+              <p className="text-sm text-[#6e767d] whitespace-pre-wrap leading-relaxed line-clamp-3">
+                {project.story}
+              </p>
+              <Link
+                href={`/projects/${id}/story`}
+                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors mt-2 inline-block"
+              >
+                View full story →
+              </Link>
+            </div>
+          )}
+        </>
+      ) : (
+        <EmptyState
+          title="No pitch or story yet."
+          description="Start by writing this project's pitch and story in the Story Workspace."
+          action={
+            <Link
+              href={`/projects/${id}/story`}
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Open Story Workspace →
+            </Link>
+          }
+        />
+      )}
+
+      {/* ── Sequences ─────────────────────────────────────── */}
+      <SectionLabel
+        label="Sequences"
+        action={
+          <Link
+            href={`/projects/${id}/sequences/new`}
+            className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
+          >
+            + New Sequence
+          </Link>
+        }
+      />
+
+      {seqs.length === 0 ? (
+        <EmptyState
+          title="No sequences yet."
+          action={
+            <Link
+              href={`/projects/${id}/sequences/new`}
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Add the first sequence →
+            </Link>
+          }
+        />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {seqs.map((seq, i) => (
+            <Link
+              key={seq.id}
+              href={`/projects/${id}/sequences/${seq.id}`}
+              className="flex items-center gap-4 rounded-lg border border-[#232629] bg-[#1a1d20] px-5 py-3.5 hover:border-[#2c3035] hover:bg-[#212529] transition-colors group"
+            >
+              <span className="text-[#4b5158] text-sm font-mono w-6 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
+                  {seq.title}
+                </span>
+                {seq.summary && (
+                  <p className="text-xs text-[#6e767d] truncate mt-0.5">{seq.summary}</p>
+                )}
+                {(seq.mood || seq.locationHint) && (
+                  <div className="flex gap-3 mt-1">
+                    {seq.mood && (
+                      <span className="text-[10px] text-[#4b5158]">
+                        <span className="text-[#3a4046]">Mood </span>
+                        {seq.mood}
+                      </span>
+                    )}
+                    {seq.locationHint && (
+                      <span className="text-[10px] text-[#4b5158]">
+                        <span className="text-[#3a4046]">Location </span>
+                        {seq.locationHint}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <span className="text-[#3a4046] text-sm shrink-0 group-hover:text-[#6e767d] transition-colors">
+                →
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* ── Assets ────────────────────────────────────────── */}
+      <SectionLabel label="Assets" />
+      <div className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4">
+        <div>
+          <p className="text-sm text-[#a4abb2]">
+            {totalAssets === 0
+              ? "No assets yet."
+              : `${totalAssets} asset${totalAssets !== 1 ? "s" : ""}`}
+          </p>
+          {totalAssets === 0 && (
+            <p className="text-xs text-[#4b5158] mt-0.5">
+              Characters, locations, and props for this project.
+            </p>
+          )}
+        </div>
+        <Link
+          href={`/projects/${id}/assets`}
+          className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors shrink-0"
+        >
+          {totalAssets === 0 ? "Add Assets →" : "View Assets →"}
+        </Link>
+      </div>
+
+      {/* ── Production ────────────────────────────────────── */}
+      <SectionLabel label="Production" />
+      <div className="flex flex-col gap-2">
+        <Link
+          href={`/projects/${id}/story`}
+          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+        >
+          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+            Story Workspace
+          </span>
+          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
+            →
+          </span>
+        </Link>
+        <Link
+          href={`/projects/${id}/outline`}
+          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+        >
+          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+            Outline
+          </span>
+          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
+            →
+          </span>
+        </Link>
+      </div>
+
       {/* ── Film Result ───────────────────────────────────── */}
+      {/* UX.1.PRODUCT.SURFACES.1: moved below Overview/Sequences/Assets/
+          Production — Film Result is the assembled output the project is
+          building toward, not the entry point. Content, actions and the
+          empty-state copy below are unchanged from before this ticket. */}
       <SectionLabel
         label="Film Result"
         action={
@@ -391,150 +559,6 @@ export default async function ProjectPage({ params }: Props) {
           </Collapsible>
         </div>
       )}
-
-      {/* ── Overview ──────────────────────────────────────── */}
-      {(project.pitch || project.story) && (
-        <>
-          <SectionLabel label="Overview" />
-          {project.pitch && (
-            <p className="text-[#a4abb2] text-sm mb-4 leading-relaxed">{project.pitch}</p>
-          )}
-          {project.story && (
-            <div className="border-l-2 border-[#232629] pl-4 mb-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] mb-2">
-                Story
-              </p>
-              <p className="text-sm text-[#6e767d] whitespace-pre-wrap leading-relaxed line-clamp-3">
-                {project.story}
-              </p>
-              <Link
-                href={`/projects/${id}/story`}
-                className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors mt-2 inline-block"
-              >
-                View full story →
-              </Link>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ── Sequences ─────────────────────────────────────── */}
-      <SectionLabel
-        label="Sequences"
-        action={
-          <Link
-            href={`/projects/${id}/sequences/new`}
-            className="rounded bg-[#212529] text-[#a4abb2] px-3 py-1.5 text-sm hover:bg-[#2c3035] hover:text-[#e7e9ec] transition-colors"
-          >
-            + New Sequence
-          </Link>
-        }
-      />
-
-      {seqs.length === 0 ? (
-        <EmptyState
-          title="No sequences yet."
-          action={
-            <Link
-              href={`/projects/${id}/sequences/new`}
-              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-            >
-              Add the first sequence →
-            </Link>
-          }
-        />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {seqs.map((seq, i) => (
-            <Link
-              key={seq.id}
-              href={`/projects/${id}/sequences/${seq.id}`}
-              className="flex items-center gap-4 rounded-lg border border-[#232629] bg-[#1a1d20] px-5 py-3.5 hover:border-[#2c3035] hover:bg-[#212529] transition-colors group"
-            >
-              <span className="text-[#4b5158] text-sm font-mono w-6 shrink-0">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div className="min-w-0 flex-1">
-                <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
-                  {seq.title}
-                </span>
-                {seq.summary && (
-                  <p className="text-xs text-[#6e767d] truncate mt-0.5">{seq.summary}</p>
-                )}
-                {(seq.mood || seq.locationHint) && (
-                  <div className="flex gap-3 mt-1">
-                    {seq.mood && (
-                      <span className="text-[10px] text-[#4b5158]">
-                        <span className="text-[#3a4046]">Mood </span>
-                        {seq.mood}
-                      </span>
-                    )}
-                    {seq.locationHint && (
-                      <span className="text-[10px] text-[#4b5158]">
-                        <span className="text-[#3a4046]">Location </span>
-                        {seq.locationHint}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <span className="text-[#3a4046] text-sm shrink-0 group-hover:text-[#6e767d] transition-colors">
-                →
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* ── Assets ────────────────────────────────────────── */}
-      <SectionLabel label="Assets" />
-      <div className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-4">
-        <div>
-          <p className="text-sm text-[#a4abb2]">
-            {totalAssets === 0
-              ? "No assets yet."
-              : `${totalAssets} asset${totalAssets !== 1 ? "s" : ""}`}
-          </p>
-          {totalAssets === 0 && (
-            <p className="text-xs text-[#4b5158] mt-0.5">
-              Characters, locations, and props for this project.
-            </p>
-          )}
-        </div>
-        <Link
-          href={`/projects/${id}/assets`}
-          className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors shrink-0"
-        >
-          {totalAssets === 0 ? "Add Assets →" : "View Assets →"}
-        </Link>
-      </div>
-
-      {/* ── Production ────────────────────────────────────── */}
-      <SectionLabel label="Production" />
-      <div className="flex flex-col gap-2">
-        <Link
-          href={`/projects/${id}/story`}
-          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
-        >
-          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-            Story Workspace
-          </span>
-          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
-            →
-          </span>
-        </Link>
-        <Link
-          href={`/projects/${id}/outline`}
-          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
-        >
-          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-            Outline
-          </span>
-          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
-            →
-          </span>
-        </Link>
-      </div>
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link

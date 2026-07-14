@@ -79,7 +79,7 @@ export default async function AssetsPage({ params, searchParams }: Props) {
         actions={
           <Link
             href={`/projects/${pid}/assets/new`}
-            className="rounded bg-[#e7e9ec] text-[#0d0e10] px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+            className="rounded border border-[#2c3035] bg-[#2c3035] text-[#e7e9ec] px-4 py-2 text-sm font-medium hover:bg-[#3a4046] hover:border-[#3a4046] transition-colors"
           >
             + Add Asset
           </Link>
