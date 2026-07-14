@@ -46,6 +46,23 @@ function SectionLabel({ label, action }: { label: string; action?: ReactNode }) 
   );
 }
 
+/**
+ * Top-level workspace grouping — visually heavier than SectionLabel so
+ * "Production" and "Editorial" read as the two zones of this page, while
+ * SectionLabel keeps marking the sub-sections inside each zone
+ * (UX.3.PRODUCTION.WORKSPACE.1).
+ */
+function WorkspaceZoneLabel({ label, hint }: { label: string; hint?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 mt-10 mb-1 first:mt-0">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e7e9ec]">
+        {label}
+      </h2>
+      {hint}
+    </div>
+  );
+}
+
 export default async function SequencePage({ params, searchParams }: Props) {
   const { projectId, sequenceId } = await params;
   const resolvedSearchParams = await searchParams;
@@ -276,6 +293,29 @@ export default async function SequencePage({ params, searchParams }: Props) {
         }
       />
 
+      {/* ── Editorial zone ───────────────────────────────────────────
+          UX.3.PRODUCTION.WORKSPACE.1: Editorial Actions, Sequence Result
+          and Previous Results are montage/output concerns — grouped
+          under this zone with an explicit, secondary-styled link to the
+          dedicated Editorial Workspace route (unchanged, existing
+          /editorial page) for advanced trim, gaps and fallback controls. */}
+      <WorkspaceZoneLabel
+        label="Editorial"
+        hint={
+          <Link
+            href={`/projects/${pid}/sequences/${sid}/editorial`}
+            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors whitespace-nowrap"
+          >
+            Open Editorial Workspace →
+          </Link>
+        }
+      />
+      <p className="text-xs text-[#4b5158] mb-4">
+        Publish, the active Sequence Result, and the Advanced Editor
+        hand-off. Trim, gaps and fallback controls live in Editorial
+        Workspace.
+      </p>
+
       {/* ── Editorial Actions ─────────────────────────────────────── */}
       <SectionLabel label="Editorial Actions" />
       <Card className="mb-6">
@@ -454,6 +494,19 @@ npx -y pnpm@9.0.0 dev`}
         </div>
       )}
 
+      {/* ── Production zone ──────────────────────────────────────────
+          UX.3.PRODUCTION.WORKSPACE.1: Context, Shots, Timeline
+          (duration/structure controls), Casting, Assets, Sequence
+          Prompt and LLM Assist are the Sequence's production concerns.
+          "Insert Shot Here" stays inside the Shots table below (it
+          creates a real narrative Shot, not a montage item) even though
+          it originates from the editorial-insert action — moving it out
+          of the table would require splitting the per-row rendering and
+          its insertAfterShotId/insertBeforeShotId props from the row
+          they annotate, which risks breaking the row-adjacent insertion
+          UX for no scope benefit in this ticket. */}
+      <WorkspaceZoneLabel label="Production" />
+
       {/* ── Context ───────────────────────────────────────────────── */}
       {hasContext && (
         <>
@@ -631,10 +684,7 @@ npx -y pnpm@9.0.0 dev`}
         </>
       )}
 
-      {/* ── Production ────────────────────────────────────────────── */}
-      <SectionLabel label="Production" />
-
-      <div className="mb-6">
+      <div className="mb-6 mt-6">
         <Collapsible label="Casting Suggestions">
           <CastingSuggestionsPanel
             projectId={pid}
