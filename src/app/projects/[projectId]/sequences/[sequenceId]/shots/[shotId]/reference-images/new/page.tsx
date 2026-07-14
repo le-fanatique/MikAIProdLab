@@ -27,6 +27,8 @@ const ROLE_OPTIONS = [
   { value: "", label: "None" },
   { value: "reference", label: "Reference" },
   { value: "keyframe", label: "Keyframe" },
+  { value: "first_frame", label: "First Frame" },
+  { value: "last_frame", label: "Last Frame" },
   { value: "style", label: "Style" },
   { value: "lighting", label: "Lighting" },
   { value: "character", label: "Character" },

@@ -43,6 +43,7 @@ const PRESET_ORDER: PromptCompilerPresetId[] = [
   "animate-keyframe",
   "prompt-timeline",
   "reference-to-video",
+  "first-last-frame",
 ];
 
 type ReferenceCandidate = PromptCompilationReferenceImageInput & { refId: string };

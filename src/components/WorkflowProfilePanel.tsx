@@ -19,6 +19,10 @@ type Props = {
   selectedImageCount: number;
   dynamicBatchActive: boolean;
   dynamicBatchSelectedCount: number;
+  firstFrameSelectedImageId: string | null;
+  lastFrameSelectedImageId: string | null;
+  firstFrameSelectedImageRole: string | null;
+  lastFrameSelectedImageRole: string | null;
   children: ReactNode;
 };
 
@@ -47,6 +51,10 @@ export default function WorkflowProfilePanel({
   selectedImageCount,
   dynamicBatchActive,
   dynamicBatchSelectedCount,
+  firstFrameSelectedImageId,
+  lastFrameSelectedImageId,
+  firstFrameSelectedImageRole,
+  lastFrameSelectedImageRole,
   children,
 }: Props) {
   const [presetId, setPresetId] = useState<string | null>(null);
@@ -75,6 +83,10 @@ export default function WorkflowProfilePanel({
         selectedImageCount,
         dynamicBatchActive,
         dynamicBatchSelectedCount,
+        firstFrameSelectedImageId,
+        lastFrameSelectedImageId,
+        firstFrameSelectedImageRole,
+        lastFrameSelectedImageRole,
       }),
     [
       profile,
@@ -84,6 +96,10 @@ export default function WorkflowProfilePanel({
       selectedImageCount,
       dynamicBatchActive,
       dynamicBatchSelectedCount,
+      firstFrameSelectedImageId,
+      lastFrameSelectedImageId,
+      firstFrameSelectedImageRole,
+      lastFrameSelectedImageRole,
     ]
   );
 

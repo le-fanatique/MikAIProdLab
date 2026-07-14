@@ -252,6 +252,10 @@ export const assetReferenceImages = sqliteTable("asset_reference_images", {
       "lighting",
       "prop_state",
       "style",
+      // GEN.SEEDANCE.3 — First/Last Frame roles. TypeScript-level widening
+      // only (this column has no DB CHECK constraint); no migration.
+      "first_frame",
+      "last_frame",
       "other",
     ],
   }),
@@ -284,7 +288,19 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
   sourceFilename: text("source_filename"),
   label: text("label"),
   imageRole: text("image_role", {
-    enum: ["reference", "keyframe", "style", "lighting", "character", "environment", "other"],
+    // GEN.SEEDANCE.3 — "first_frame"/"last_frame" added, TypeScript-level
+    // widening only (no DB CHECK constraint on this column); no migration.
+    enum: [
+      "reference",
+      "keyframe",
+      "style",
+      "lighting",
+      "character",
+      "environment",
+      "first_frame",
+      "last_frame",
+      "other",
+    ],
   }),
   notes: text("notes"),
   createdAt: text("created_at")

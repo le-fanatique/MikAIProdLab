@@ -20,6 +20,9 @@ const MVP_IMAGE_ROLES = [
   "pose",
   "costume",
   "environment_view",
+  // GEN.SEEDANCE.3
+  "first_frame",
+  "last_frame",
   "lighting",
   "prop_state",
   "style",

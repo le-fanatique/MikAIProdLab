@@ -33,6 +33,8 @@ const ROLE_OPTIONS = [
   { value: "pose", label: "Pose" },
   { value: "costume", label: "Costume" },
   { value: "environment_view", label: "Environment View" },
+  { value: "first_frame", label: "First Frame" },
+  { value: "last_frame", label: "Last Frame" },
   { value: "lighting", label: "Lighting" },
   { value: "prop_state", label: "Prop State" },
   { value: "style", label: "Style" },

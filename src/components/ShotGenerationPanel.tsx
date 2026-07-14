@@ -45,7 +45,11 @@ import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import PromptCompilerHandoffGate from "@/components/PromptCompilerHandoffGate";
 import type { PromptCompilationReferenceImageInput } from "@/lib/prompts/buildPromptCompilationContext";
 import { resolvePromptCompilerTextNode } from "@/lib/prompts/promptCompilerHandoff";
-import { resolveWorkflowProfile, auditWorkflowNodes } from "@/lib/comfy/workflowProfiles";
+import {
+  resolveWorkflowProfile,
+  auditWorkflowNodes,
+  resolveFirstLastFrameNodes,
+} from "@/lib/comfy/workflowProfiles";
 import WorkflowProfilePanel from "@/components/WorkflowProfilePanel";
 
 type Props = {
@@ -419,13 +423,43 @@ export default async function ShotGenerationPanel({
   const workflowNodeState =
     parsed !== null
       ? auditWorkflowNodes(workflow.workflowJson, parsed)
-      : { hasTextPromptNode: false, imageInputCount: 0, dynamicBatchPresent: false };
+      : {
+          hasTextPromptNode: false,
+          imageInputCount: 0,
+          dynamicBatchPresent: false,
+          hasFirstFrameNode: false,
+          hasLastFrameNode: false,
+        };
   const promptCompilerTextNodeResolution = resolvePromptCompilerTextNode(promptCompilerTextNodeCandidates);
   const promptCompilerTextNodeMapping = promptCompilerTextNodeResolution.ok
     ? mappings.find((m) => m.input.nodeId === promptCompilerTextNodeResolution.nodeId)
     : undefined;
   const hasTextPromptValue = Boolean(promptCompilerTextNodeMapping?.suggestedText?.trim());
   const selectedImageCount = imageMappings.filter((m) => Boolean(selectedImageByNodeId[m.input.nodeId])).length;
+
+  // First/Last Frame mapping strictness (GEN.SEEDANCE.3) — resolves the two
+  // real, distinct image nodes by their exact title, then looks up what the
+  // user actually selected for each and that selection's own stored role.
+  // Never guesses, never auto-selects, never mutates a selection.
+  const workflowImageNodeCandidates = imageMappings.map((m) => ({
+    nodeId: m.input.nodeId,
+    label: m.input.label,
+    title: m.input.title,
+  }));
+  const { firstFrameNodeId, lastFrameNodeId } = resolveFirstLastFrameNodes(workflowImageNodeCandidates);
+  const imageRoleById = new Map(availableImages.map((img) => [img.id, img.role]));
+  const firstFrameSelectedImageId = firstFrameNodeId
+    ? selectedImageByNodeId[firstFrameNodeId] ?? null
+    : null;
+  const lastFrameSelectedImageId = lastFrameNodeId
+    ? selectedImageByNodeId[lastFrameNodeId] ?? null
+    : null;
+  const firstFrameSelectedImageRole = firstFrameSelectedImageId
+    ? imageRoleById.get(firstFrameSelectedImageId) ?? null
+    : null;
+  const lastFrameSelectedImageRole = lastFrameSelectedImageId
+    ? imageRoleById.get(lastFrameSelectedImageId) ?? null
+    : null;
 
   // Build panelImageNodes for the client image preview component
   const _labelCount: Record<string, number> = {};
@@ -628,6 +662,10 @@ export default async function ShotGenerationPanel({
           selectedImageCount={selectedImageCount}
           dynamicBatchActive={batchDetectionOk}
           dynamicBatchSelectedCount={batchSelectedIds.length}
+          firstFrameSelectedImageId={firstFrameSelectedImageId}
+          lastFrameSelectedImageId={lastFrameSelectedImageId}
+          firstFrameSelectedImageRole={firstFrameSelectedImageRole}
+          lastFrameSelectedImageRole={lastFrameSelectedImageRole}
         >
         <PromptCompilerHandoffGate
           shotId={shid}

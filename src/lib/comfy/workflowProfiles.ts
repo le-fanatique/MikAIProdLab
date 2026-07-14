@@ -29,7 +29,11 @@
 import type { ParsedWorkflow } from "./parseWorkflow";
 import { detectDynamicBatchUiInfo } from "./buildGenerationPayload";
 import type { PromptCompilerPresetId } from "@/lib/prompts/promptCompilerPresets";
-import { PROMPT_COMPILER_PRESETS } from "@/lib/prompts/promptCompilerPresets";
+import {
+  PROMPT_COMPILER_PRESETS,
+  isFirstFrameRole,
+  isLastFrameRole,
+} from "@/lib/prompts/promptCompilerPresets";
 
 export type WorkflowEngine = "seedance";
 
@@ -38,6 +42,7 @@ export type WorkflowGenerationMode =
   | "animate-keyframe"
   | "prompt-timeline"
   | "reference-to-video"
+  | "first-last-frame"
   | "generic";
 
 export type WorkflowProductionTier = "draft" | "standard" | "pro";
@@ -45,7 +50,7 @@ export type WorkflowProductionTier = "draft" | "standard" | "pro";
 export type WorkflowSupportedInputs = {
   textPrompt: boolean;
   dynamicImages: boolean;
-  /** Always false in this ticket — full First/Last Frame support is GEN.SEEDANCE.3, never claimed early. */
+  /** True only for a profile whose audited signature proves distinct First/Last Frame input nodes (GEN.SEEDANCE.3) — never claimed without a real, verified workflow. */
   firstFrame: boolean;
   lastFrame: boolean;
   referenceVideo: boolean;
@@ -172,6 +177,31 @@ export function resolveWorkflowProfile(workflowJson: string): WorkflowProfile | 
 }
 
 // ---------------------------------------------------------------------------
+// GEN.SEEDANCE.3 — First/Last Frame: no active profile.
+//
+// The ticket requires a First/Last Frame profile to be resolved only from
+// an unambiguous, stable signature already present in a real workflow's
+// JSON (mirroring how SEEDANCE_IMAGE_TO_VIDEO_PROFILE is keyed off
+// ByteDanceImageToVideoNode above). A full audit of every workflow in the
+// current Library (see the Claude report) found no node titled
+// "First Frame (Input)" or "Last Frame (Input)", and no class_type tied to
+// a First/Last-Frame-capable engine. No such workflow exists in this
+// environment, so no signature can be verified against real data.
+//
+// Per the ticket's explicit instruction ("ne pas inventer de profil actif"),
+// no resolver branch is added here. The full contract this ticket asks
+// for — the "first-last-frame" generationMode, the firstFrame/lastFrame
+// capability fields, auditWorkflowNodes()'s node detection, and
+// diagnoseWorkflowGeneration()'s expected-vs-actual/mapping checks below —
+// is implemented and tested against synthetic (but structurally identical
+// to the real convention) fixtures, exactly like GEN.SEEDANCE.2 already
+// did for Dynamic Batch. The moment a real First/Last Frame workflow with
+// a verified signature is added to the Library, a profile constant and one
+// `hasNodeWithClassType(...)` branch is all resolveWorkflowProfile needs —
+// no other code in this module changes.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Actual node state audit — compares against the profile's stable expectation
 // ---------------------------------------------------------------------------
 
@@ -179,6 +209,9 @@ export type WorkflowNodeState = {
   hasTextPromptNode: boolean;
   imageInputCount: number;
   dynamicBatchPresent: boolean;
+  /** True when exactly one image-kind input node is titled "First Frame (Input)". Never true for 0 or 2+ candidates — see resolveFirstLastFrameNodes(). */
+  hasFirstFrameNode: boolean;
+  hasLastFrameNode: boolean;
 };
 
 /**
@@ -189,12 +222,55 @@ export type WorkflowNodeState = {
  * performs against a resolved profile's stable `supportedInputs`/`limits`.
  */
 export function auditWorkflowNodes(workflowJson: string, parsed: ParsedWorkflow): WorkflowNodeState {
+  const imageInputs = parsed.inputs.filter((i) => i.kind === "image");
+  const candidates: WorkflowImageNodeCandidate[] = imageInputs.map((i) => ({
+    nodeId: i.nodeId,
+    label: i.label,
+    title: i.title,
+  }));
+  const { firstFrameNodeId, lastFrameNodeId } = resolveFirstLastFrameNodes(candidates);
+
   return {
     hasTextPromptNode: parsed.inputs.some(
       (i) => i.kind === "text" && i.label.trim().toLowerCase() === "text prompt"
     ),
-    imageInputCount: parsed.inputs.filter((i) => i.kind === "image").length,
+    imageInputCount: imageInputs.length,
     dynamicBatchPresent: detectDynamicBatchUiInfo(workflowJson).kind === "ready",
+    hasFirstFrameNode: firstFrameNodeId !== null,
+    hasLastFrameNode: lastFrameNodeId !== null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// First/Last Frame node resolution — identifies the real, distinct image
+// input nodes by their exact "(Input)"-stripped label, reusing
+// parseWorkflow.ts's existing title convention. Never guesses: a role is
+// only ever resolved when exactly one candidate node matches it.
+// ---------------------------------------------------------------------------
+
+export type WorkflowImageNodeCandidate = { nodeId: string; label: string; title: string };
+
+function resolveUniqueImageNodeByLabel(
+  candidates: WorkflowImageNodeCandidate[],
+  expectedLabel: string
+): string | null {
+  const matches = candidates.filter((c) => c.label.trim().toLowerCase() === expectedLabel);
+  return matches.length === 1 ? matches[0].nodeId : null;
+}
+
+/**
+ * Resolves the First Frame / Last Frame image input nodes among a
+ * workflow's image-kind mappings, by their "First Frame (Input)"/
+ * "Last Frame (Input)" titles (parseWorkflow.ts already strips the
+ * "(Input)" suffix into `label`). Returns null for either role when zero
+ * or more than one node matches — never picks one arbitrarily.
+ */
+export function resolveFirstLastFrameNodes(
+  candidates: WorkflowImageNodeCandidate[]
+): { firstFrameNodeId: string | null; lastFrameNodeId: string | null } {
+  return {
+    firstFrameNodeId: resolveUniqueImageNodeByLabel(candidates, "first frame"),
+    lastFrameNodeId: resolveUniqueImageNodeByLabel(candidates, "last frame"),
   };
 }
 
@@ -222,6 +298,12 @@ export type WorkflowGenerationDiagnosticInput = {
   selectedImageCount: number;
   dynamicBatchActive: boolean;
   dynamicBatchSelectedCount: number;
+  /** The image id currently selected for the resolved First Frame node, or null if the node wasn't resolved or nothing is selected yet. */
+  firstFrameSelectedImageId: string | null;
+  lastFrameSelectedImageId: string | null;
+  /** The stored role of whichever image is currently selected for the First Frame node — looked up from the real reference/asset data, never inferred. */
+  firstFrameSelectedImageRole: string | null;
+  lastFrameSelectedImageRole: string | null;
 };
 
 export type WorkflowGenerationDiagnosticsResult = {
@@ -324,6 +406,64 @@ export function diagnoseWorkflowGeneration(
     diagnostics.push({
       severity: "warning",
       message: "This workflow has a Dynamic Batch input that is not declared as supported by its profile.",
+    });
+  }
+
+  // First/Last Frame mapping strictness (GEN.SEEDANCE.3) — only ever runs
+  // for a profile that explicitly declares firstFrame/lastFrame support
+  // (currently none in the real Library, see module doc comment); a
+  // generic or Text-Prompt-only profile never triggers any of this.
+  if (profile.supportedInputs.firstFrame) {
+    if (!nodeState.hasFirstFrameNode) {
+      diagnostics.push({
+        severity: "blocking",
+        message:
+          'This workflow profile expects a "First Frame (Input)" node, but none was found. ' +
+          "The workflow may have been edited or renamed.",
+      });
+    } else if (input.firstFrameSelectedImageId === null) {
+      diagnostics.push({
+        severity: "blocking",
+        message: "First Frame requires a selected image.",
+      });
+    } else if (!isFirstFrameRole(input.firstFrameSelectedImageRole)) {
+      diagnostics.push({
+        severity: "blocking",
+        message: 'The image selected for First Frame does not have the "First Frame" role.',
+      });
+    }
+  }
+
+  if (profile.supportedInputs.lastFrame) {
+    if (!nodeState.hasLastFrameNode) {
+      diagnostics.push({
+        severity: "blocking",
+        message:
+          'This workflow profile expects a "Last Frame (Input)" node, but none was found. ' +
+          "The workflow may have been edited or renamed.",
+      });
+    } else if (input.lastFrameSelectedImageId === null) {
+      diagnostics.push({
+        severity: "blocking",
+        message: "Last Frame requires a selected image.",
+      });
+    } else if (!isLastFrameRole(input.lastFrameSelectedImageRole)) {
+      diagnostics.push({
+        severity: "blocking",
+        message: 'The image selected for Last Frame does not have the "Last Frame" role.',
+      });
+    }
+  }
+
+  if (
+    profile.supportedInputs.firstFrame &&
+    profile.supportedInputs.lastFrame &&
+    input.firstFrameSelectedImageId !== null &&
+    input.firstFrameSelectedImageId === input.lastFrameSelectedImageId
+  ) {
+    diagnostics.push({
+      severity: "blocking",
+      message: "First Frame and Last Frame must use two distinct images — the same image is currently selected for both.",
     });
   }
 

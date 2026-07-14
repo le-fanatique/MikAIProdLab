@@ -19,7 +19,8 @@ export type PromptCompilerPresetId =
   | "text-to-video"
   | "animate-keyframe"
   | "prompt-timeline"
-  | "reference-to-video";
+  | "reference-to-video"
+  | "first-last-frame";
 
 /** The four optional source groups a user can toggle, on top of the always-included `shot` group. */
 export type PromptCompilerSourceId =
@@ -135,6 +136,26 @@ export const PROMPT_COMPILER_PRESETS: Record<PromptCompilerPresetId, PromptCompi
       "every provided tag (e.g. @Image1, @Image2, ...) by its exact tag. " +
       "Never invent an image, role, or reference that was not provided.",
   },
+  "first-last-frame": {
+    id: "first-last-frame",
+    label: "First/Last Frame",
+    description:
+      "Generate a video draft describing the transformation from a First Frame reference to a Last Frame reference.",
+    sources: {
+      casting: "optional",
+      assetBibles: "recommended",
+      references: "required",
+      sequenceContext: "optional",
+      projectContext: "optional",
+    },
+    instructions:
+      "Preset: First/Last Frame. Describe the transformation across the " +
+      "shot's duration from the exact First Frame reference to the exact " +
+      "Last Frame reference, respecting their exact tags (e.g. @Image1 for " +
+      "the First Frame, @Image2 for the Last Frame, in the order provided). " +
+      "Never invent, swap, or duplicate either frame; the two frames must " +
+      "always remain distinct.",
+  },
 };
 
 export function getPromptCompilerPreset(id: PromptCompilerPresetId): PromptCompilerPreset {
@@ -190,6 +211,21 @@ function isKeyframeRole(role: string | null): boolean {
   return KEYFRAME_ROLE_ALIASES.has(role.trim().toLowerCase());
 }
 
+/** Role strings that count as an explicit First Frame reference, matched case-insensitively. Never auto-assigned — only ever compared against a role the caller already set. */
+const FIRST_FRAME_ROLE_ALIASES = new Set(["first_frame", "first frame", "firstframe"]);
+/** Role strings that count as an explicit Last Frame reference, matched case-insensitively. */
+const LAST_FRAME_ROLE_ALIASES = new Set(["last_frame", "last frame", "lastframe"]);
+
+export function isFirstFrameRole(role: string | null): boolean {
+  if (!role) return false;
+  return FIRST_FRAME_ROLE_ALIASES.has(role.trim().toLowerCase());
+}
+
+export function isLastFrameRole(role: string | null): boolean {
+  if (!role) return false;
+  return LAST_FRAME_ROLE_ALIASES.has(role.trim().toLowerCase());
+}
+
 function hasValidDuration(context: PromptCompilationContext): boolean {
   const duration = context.shot.durationSeconds;
   return typeof duration === "number" && Number.isFinite(duration) && duration > 0;
@@ -241,6 +277,26 @@ export function validatePresetRequirements(
         missing.push("Reference-to-Video requires at least one selected reference image.");
       }
       break;
+    case "first-last-frame": {
+      const firstFrameRef = context.references.find((r) => isFirstFrameRole(r.role));
+      const lastFrameRef = context.references.find((r) => isLastFrameRole(r.role));
+      if (!firstFrameRef) {
+        missing.push(
+          'First/Last Frame requires a selected reference image with an existing "First Frame" role.'
+        );
+      }
+      if (!lastFrameRef) {
+        missing.push(
+          'First/Last Frame requires a selected reference image with an existing "Last Frame" role.'
+        );
+      }
+      if (firstFrameRef && lastFrameRef && firstFrameRef.refId === lastFrameRef.refId) {
+        missing.push(
+          "First/Last Frame requires two distinct references — the same image cannot serve as both the First Frame and the Last Frame."
+        );
+      }
+      break;
+    }
   }
 
   return missing.length > 0 ? { ok: false, missing } : { ok: true };

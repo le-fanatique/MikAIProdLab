@@ -12,6 +12,8 @@ import {
 const IMAGE_ROLES = [
   "reference",
   "keyframe",
+  "first_frame",
+  "last_frame",
   "style",
   "lighting",
   "character",
