@@ -25,15 +25,29 @@ type Props = {
   searchParams: Promise<{ defaultsSaved?: string }>;
 };
 
-function SectionLabel({ label }: { label: string }) {
+function SectionLabel({ label, id }: { label: string; id?: string }) {
   return (
-    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
+    <div id={id} className="border-t border-[#232629] pt-4 mt-6 mb-4">
       <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
         {label}
       </span>
     </div>
   );
 }
+
+// UX.2.SETTINGS.NAV.1 — stable anchor ids, one per SectionLabel below.
+// Kept as a single source of truth so the nav links and the section ids
+// can never drift out of sync with each other.
+const SETTINGS_SECTIONS = [
+  { id: "settings-appearance", label: "Appearance" },
+  { id: "settings-language-model", label: "Language Model" },
+  { id: "settings-llm-chat", label: "LLM Chat" },
+  { id: "settings-comfyui", label: "ComfyUI" },
+  { id: "settings-generation-defaults", label: "Generation Defaults" },
+  { id: "settings-nomenclature", label: "Nomenclature" },
+  { id: "settings-integrations", label: "Integrations" },
+  { id: "settings-technical", label: "Technical" },
+] as const;
 
 export default async function SettingsPage({ searchParams }: Props) {
   const { defaultsSaved } = await searchParams;
@@ -84,8 +98,27 @@ export default async function SettingsPage({ searchParams }: Props) {
       <Breadcrumb crumbs={[{ label: "Settings" }]} />
       <PageHeader title="Settings" />
 
+      {/* UX.2.SETTINGS.NAV.1 — compact internal navigation. Plain native
+          anchor links (href="#...") to each section's id below; the
+          browser handles the scroll itself, no client-side logic needed.
+          Wraps onto multiple lines at narrow widths via flex-wrap. */}
+      <nav
+        aria-label="Settings sections"
+        className="flex flex-wrap gap-x-4 gap-y-1.5 mb-6 pb-4 border-b border-[#232629]"
+      >
+        {SETTINGS_SECTIONS.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors whitespace-nowrap"
+          >
+            {section.label}
+          </a>
+        ))}
+      </nav>
+
       {/* ── Appearance ─────────────────────────────────────── */}
-      <SectionLabel label="Appearance" />
+      <SectionLabel label="Appearance" id="settings-appearance" />
 
       <Card title="Appearance" className="mb-6">
         <div className="mikai-appearance-preview rounded border border-[#232629] p-4">
@@ -94,7 +127,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── Language Model ─────────────────────────────────── */}
-      <SectionLabel label="Language Model" />
+      <SectionLabel label="Language Model" id="settings-language-model" />
 
       <Card title="Language Model" className="mb-6">
         <div className="flex items-center justify-between mb-5">
@@ -149,7 +182,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── LLM Chat ─────────────────────────────────────────── */}
-      <SectionLabel label="LLM Chat" />
+      <SectionLabel label="LLM Chat" id="settings-llm-chat" />
 
       <Card title="Chat LLM Provider" className="mb-6">
         <ChatProviderSettingsForm
@@ -171,7 +204,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── ComfyUI ────────────────────────────────────────── */}
-      <SectionLabel label="ComfyUI" />
+      <SectionLabel label="ComfyUI" id="settings-comfyui" />
 
       <Card title="ComfyUI Connection" className="mb-6">
         <ComfyUISettingsForm
@@ -205,7 +238,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── Generation Defaults ────────────────────────────── */}
-      <SectionLabel label="Generation Defaults" />
+      <SectionLabel label="Generation Defaults" id="settings-generation-defaults" />
 
       {defaultsSaved === "1" && (
         <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
@@ -275,7 +308,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── Nomenclature ───────────────────────────────────── */}
-      <SectionLabel label="Nomenclature" />
+      <SectionLabel label="Nomenclature" id="settings-nomenclature" />
 
       <Card title="Code Templates" className="mb-6">
         <p className="text-xs text-[#6e767d] mb-4">
@@ -288,7 +321,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── Integrations ───────────────────────────────────── */}
-      <SectionLabel label="Integrations" />
+      <SectionLabel label="Integrations" id="settings-integrations" />
       <div className="flex flex-col gap-1 mb-6">
         <p className="text-xs text-[#6e767d]">
           Active:{" "}
@@ -307,7 +340,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       </Card>
 
       {/* ── Technical ──────────────────────────────────────── */}
-      <SectionLabel label="Technical" />
+      <SectionLabel label="Technical" id="settings-technical" />
 
       <Card title="Bundled FFmpeg" className="mb-6">
         <p className="text-xs text-[#6e767d] mb-4">
