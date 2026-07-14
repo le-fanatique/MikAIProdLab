@@ -574,7 +574,7 @@ npx -y pnpm@9.0.0 dev`}
                         </div>
                       </td>
                     </tr>
-                    <tr className="border-b border-[#1a1d20] last:border-0 bg-[#101214]">
+                    <tr className="border-b border-[#1a1d20] last:border-0 bg-[#2c3035]">
                       <td colSpan={6} className="px-4 py-1.5">
                         <InsertShotFromEditorialButton
                           projectId={pid}
@@ -587,7 +587,7 @@ npx -y pnpm@9.0.0 dev`}
                   </Fragment>
                 );
               })}
-              <tr className="last:border-0 bg-[#101214]">
+              <tr className="last:border-0 bg-[#2c3035]">
                 <td colSpan={6} className="px-4 py-1.5">
                   <InsertShotFromEditorialButton
                     projectId={pid}

@@ -73,7 +73,7 @@ export default function SequencesGenerationPanel({
       {/* Source / fallback indicator */}
       {hasOutline ? (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#5b93d6] bg-[#1a2535] border border-[#5b93d6]/20 px-2 py-0.5 rounded">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#5b93d6] bg-[#2c3035] border border-[#5b93d6]/20 px-2 py-0.5 rounded">
             Using Project Outline
           </span>
         </div>

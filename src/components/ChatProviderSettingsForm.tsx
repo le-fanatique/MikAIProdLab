@@ -118,7 +118,7 @@ export default function ChatProviderSettingsForm({
           className={
             isBusy
               ? "rounded bg-[#1a1d20] text-[#4b5158] px-4 py-2 text-sm cursor-not-allowed"
-              : "rounded bg-[#e7e9ec] text-[#0d0e10] px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+              : "rounded border border-[#2c3035] bg-[#2c3035] text-[#e7e9ec] px-4 py-2 text-sm font-medium hover:bg-[#3a4046] hover:border-[#3a4046] transition-colors"
           }
         >
           {saveStatus.status === "saving" ? "Saving..." : "Save Changes"}
