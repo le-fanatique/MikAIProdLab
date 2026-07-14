@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { updateShotPrompt } from "@/actions/shots";
 import { generatePromptCompilerDraft } from "@/actions/llm/promptCompiler";
 import {
@@ -14,6 +15,10 @@ import {
   type PromptCompilerPresetId,
   type PromptCompilerSourceId,
 } from "@/lib/prompts/promptCompilerPresets";
+import {
+  buildPromptCompilerHandoff,
+  getPromptCompilerHandoffStorageKey,
+} from "@/lib/prompts/promptCompilerHandoff";
 import {
   buildPromptCompilationContext,
   type PromptCompilationSourceFlags,
@@ -69,6 +74,7 @@ export default function PromptCompilerPanel({
   sequenceContext,
   projectContext,
 }: Props) {
+  const router = useRouter();
   const [presetId, setPresetId] = useState<PromptCompilerPresetId>("text-to-video");
   const preset = PROMPT_COMPILER_PRESETS[presetId];
 
@@ -165,6 +171,27 @@ export default function PromptCompilerPanel({
     : draftText;
 
   const canApply = hasDraft && !isStale && draftText.trim().length > 0;
+
+  function handleUseInGeneration() {
+    if (!canApply) return;
+    const handoff = buildPromptCompilerHandoff({
+      shotId,
+      draftText,
+      presetId,
+      sourceFlags,
+      fingerprint: currentFingerprint,
+      references: context.references,
+      availableReferenceRefIds: availableReferences.map((r) => r.refId),
+      createdAt: new Date().toISOString(),
+    });
+    try {
+      sessionStorage.setItem(getPromptCompilerHandoffStorageKey(shotId), JSON.stringify(handoff));
+    } catch {
+      // sessionStorage unavailable (private mode / disabled) — Replace/Append still work.
+      return;
+    }
+    router.push(`${returnTo}?generation=open`);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -372,6 +399,18 @@ export default function PromptCompilerPanel({
                 Append to Prompt
               </button>
             </form>
+            <button
+              type="button"
+              onClick={handleUseInGeneration}
+              disabled={!canApply}
+              className={
+                !canApply
+                  ? "rounded border border-[#2c3035] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed"
+                  : "rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+              }
+            >
+              Use in Generation
+            </button>
           </div>
         </div>
       )}

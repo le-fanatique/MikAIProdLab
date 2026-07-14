@@ -42,6 +42,8 @@ import { type FillSource } from "@/lib/textInputKind";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
+import PromptCompilerHandoffGate from "@/components/PromptCompilerHandoffGate";
+import type { PromptCompilationReferenceImageInput } from "@/lib/prompts/buildPromptCompilationContext";
 
 type Props = {
   projectId: number;
@@ -116,6 +118,9 @@ export default async function ShotGenerationPanel({
         assetType: assets.type,
         assetDescription: assets.description,
         assetNotes: assets.notes,
+        assetVisualIdentity: assets.visualIdentity,
+        assetUsageRules: assets.usageRules,
+        assetForbiddenVariations: assets.forbiddenVariations,
       })
       .from(shotAssets)
       .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -154,6 +159,7 @@ export default async function ShotGenerationPanel({
             imageRole: assetReferenceImages.imageRole,
             sourceFilename: assetReferenceImages.sourceFilename,
             variantState: assetReferenceImages.variantState,
+            usageNotes: assetReferenceImages.usageNotes,
             approvedForGeneration: assetReferenceImages.approvedForGeneration,
           })
           .from(assetReferenceImages)
@@ -171,6 +177,83 @@ export default async function ShotGenerationPanel({
     hasPromptSegments: hasRealPromptSegments,
     hasMissingTiming: compiledPrompt.hasMissingTiming,
   });
+
+  // ── Prompt Compiler handoff (PROMPT.COMPILER.3) — live snapshot the
+  // client-side PromptCompilerHandoffGate compares a stored handoff
+  // against. Built from the exact same real data already queried above;
+  // no additional DB reads. ──
+  const promptCompilerAvailableReferences: PromptCompilationReferenceImageInput[] = [
+    ...shotRefImages.map((img) => ({
+      refId: `shot-${img.id}`,
+      source: "shot" as const,
+      assetId: null,
+      assetName: null,
+      label: img.label,
+      role: img.imageRole,
+      variantState: null,
+      usageNotes: null,
+      approvedForGeneration: null,
+    })),
+    ...castAssetRefImages.map((img) => {
+      const asset = assignedRows.find((r) => r.assetId === img.assetId);
+      return {
+        refId: `asset-${img.assetId}-${img.id}`,
+        source: "asset" as const,
+        assetId: img.assetId,
+        assetName: asset?.assetName ?? null,
+        label: img.label,
+        role: img.imageRole,
+        variantState: img.variantState,
+        usageNotes: img.usageNotes,
+        approvedForGeneration: img.approvedForGeneration,
+      };
+    }),
+  ];
+
+  const promptCompilerLiveData = {
+    shot: {
+      title: shot.title,
+      description: shot.description,
+      actionPitch: shot.actionPitch,
+      cameraPitch: shot.cameraPitch,
+      durationSeconds: shot.durationSeconds,
+      shotPrompt: shot.shotPrompt,
+      compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
+      hasPromptSegments: hasRealPromptSegments,
+      hasMissingTiming: compiledPrompt.hasMissingTiming,
+    },
+    castAssets: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      description: r.assetDescription,
+      notes: r.assetNotes,
+    })),
+    assetBibles: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      visualIdentity: r.assetVisualIdentity,
+      usageRules: r.assetUsageRules,
+      forbiddenVariations: r.assetForbiddenVariations,
+    })),
+    sequenceContext: sequence
+      ? {
+          title: sequence.title,
+          summary: sequence.summary,
+          mood: sequence.mood,
+          locationHint: sequence.locationHint,
+          narrativePurpose: sequence.narrativePurpose,
+        }
+      : null,
+    projectContext: project
+      ? { name: project.name, pitch: project.pitch, story: project.story }
+      : null,
+    availableReferenceRefIds: promptCompilerAvailableReferences.map((r) => r.refId),
+    availableReferencesByRefId: Object.fromEntries(
+      promptCompilerAvailableReferences.map((r) => [r.refId, r])
+    ),
+  };
 
   const composedShotPrompt =
     project && sequence
@@ -315,6 +398,9 @@ export default async function ShotGenerationPanel({
 
   const mappings = built?.ok ? built.mappings : [];
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
+  const promptCompilerTextNodeCandidates = mappings
+    .filter((m) => m.mappingKind === "text")
+    .map((m) => ({ nodeId: m.input.nodeId, label: m.input.label, title: m.input.title }));
 
   // When Dynamic Batch is active, template-chain image inputs are replaced by the batch list.
   // Exclude them from classic UI display.
@@ -515,6 +601,13 @@ export default async function ShotGenerationPanel({
         </div>
 
         {/* Suggested Inputs */}
+        <PromptCompilerHandoffGate
+          shotId={shid}
+          basePath={basePath}
+          currentSearchParams={currentSearchParams}
+          textNodeCandidates={promptCompilerTextNodeCandidates}
+          liveData={promptCompilerLiveData}
+        >
         {parsed === null ? (
           <p className="text-sm text-[#cf7b6b]">Workflow JSON could not be parsed.</p>
         ) : (
@@ -655,6 +748,7 @@ export default async function ShotGenerationPanel({
             </form>
           </div>
         )}
+        </PromptCompilerHandoffGate>
 
         {/* Output */}
         {activeJobId !== null && (

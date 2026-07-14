@@ -39,6 +39,8 @@ import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/ac
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { type FillSource } from "@/lib/textInputKind";
+import PromptCompilerHandoffGate from "@/components/PromptCompilerHandoffGate";
+import type { PromptCompilationReferenceImageInput } from "@/lib/prompts/buildPromptCompilationContext";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -136,6 +138,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       assetType: assets.type,
       assetDescription: assets.description,
       assetNotes: assets.notes,
+      assetVisualIdentity: assets.visualIdentity,
+      assetUsageRules: assets.usageRules,
+      assetForbiddenVariations: assets.forbiddenVariations,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -176,6 +181,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
             imageRole: assetReferenceImages.imageRole,
             sourceFilename: assetReferenceImages.sourceFilename,
             variantState: assetReferenceImages.variantState,
+            usageNotes: assetReferenceImages.usageNotes,
             approvedForGeneration: assetReferenceImages.approvedForGeneration,
           })
           .from(assetReferenceImages)
@@ -194,6 +200,79 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     hasPromptSegments: hasRealPromptSegments,
     hasMissingTiming: compiledPrompt.hasMissingTiming,
   });
+
+  // ── Prompt Compiler handoff (PROMPT.COMPILER.3) — live snapshot the
+  // client-side PromptCompilerHandoffGate compares a stored handoff
+  // against. Built from the exact same real data already queried above;
+  // no additional DB reads. ──
+  const promptCompilerAvailableReferences: PromptCompilationReferenceImageInput[] = [
+    ...shotRefImages.map((img) => ({
+      refId: `shot-${img.id}`,
+      source: "shot" as const,
+      assetId: null,
+      assetName: null,
+      label: img.label,
+      role: img.imageRole,
+      variantState: null,
+      usageNotes: null,
+      approvedForGeneration: null,
+    })),
+    ...castAssetRefImages.map((img) => {
+      const asset = assignedRows.find((r) => r.assetId === img.assetId);
+      return {
+        refId: `asset-${img.assetId}-${img.id}`,
+        source: "asset" as const,
+        assetId: img.assetId,
+        assetName: asset?.assetName ?? null,
+        label: img.label,
+        role: img.imageRole,
+        variantState: img.variantState,
+        usageNotes: img.usageNotes,
+        approvedForGeneration: img.approvedForGeneration,
+      };
+    }),
+  ];
+
+  const promptCompilerLiveData = {
+    shot: {
+      title: shot.title,
+      description: shot.description,
+      actionPitch: shot.actionPitch,
+      cameraPitch: shot.cameraPitch,
+      durationSeconds: shot.durationSeconds,
+      shotPrompt: shot.shotPrompt,
+      compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
+      hasPromptSegments: hasRealPromptSegments,
+      hasMissingTiming: compiledPrompt.hasMissingTiming,
+    },
+    castAssets: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      description: r.assetDescription,
+      notes: r.assetNotes,
+    })),
+    assetBibles: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      visualIdentity: r.assetVisualIdentity,
+      usageRules: r.assetUsageRules,
+      forbiddenVariations: r.assetForbiddenVariations,
+    })),
+    sequenceContext: {
+      title: sequence.title,
+      summary: sequence.summary,
+      mood: sequence.mood,
+      locationHint: sequence.locationHint,
+      narrativePurpose: sequence.narrativePurpose,
+    },
+    projectContext: { name: project.name, pitch: project.pitch, story: project.story },
+    availableReferenceRefIds: promptCompilerAvailableReferences.map((r) => r.refId),
+    availableReferencesByRefId: Object.fromEntries(
+      promptCompilerAvailableReferences.map((r) => [r.refId, r])
+    ),
+  };
 
   // Fill sources for the "Fill" dropdown on text inputs (PROMPTUX.1) —
   // mirrors ShotGenerationPanel's calculation exactly, so the standalone
@@ -340,6 +419,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const mappings = built?.ok ? built.mappings : [];
   const displayMappings = built?.ok ? built.displayMappings : mappings;
+  const promptCompilerTextNodeCandidates = mappings
+    .filter((m) => m.mappingKind === "text")
+    .map((m) => ({ nodeId: m.input.nodeId, label: m.input.label, title: m.input.title }));
 
   // Same "no misleading intermediate payload" rule as the panels: when a
   // Dynamic Batch node exists and nothing is selected yet, show no preview
@@ -484,6 +566,13 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </div>
         </Card>
 
+        <PromptCompilerHandoffGate
+          shotId={shid}
+          basePath={basePath}
+          currentSearchParams={currentSearchParams}
+          textNodeCandidates={promptCompilerTextNodeCandidates}
+          liveData={promptCompilerLiveData}
+        >
         <Card title="Suggested Inputs">
           {parsed === null ? (
             <p className="text-sm text-[#cf7b6b]">
@@ -624,6 +713,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
             </Card>
           </>
         )}
+        </PromptCompilerHandoffGate>
 
         {/* ── Output ────────────────────────────────────────── */}
         {activeJobId !== null && (
