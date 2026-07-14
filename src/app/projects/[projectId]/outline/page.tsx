@@ -65,7 +65,8 @@ export default async function OutlinePage({ params, searchParams }: Props) {
         crumbs={[
           { label: "Projects", href: "/projects" },
           { label: project.name, href: `/projects/${pid}` },
-          { label: "Outline" },
+          { label: "Story Workspace", href: `/projects/${pid}/story` },
+          { label: "Outline Builder" },
         ]}
       />
 
@@ -242,10 +243,10 @@ export default async function OutlinePage({ params, searchParams }: Props) {
 
       <div className="mt-6 pt-4 border-t border-[#232629]">
         <Link
-          href={`/projects/${pid}`}
+          href={`/projects/${pid}/story`}
           className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
         >
-          ← Back to project
+          ← Back to Story Workspace
         </Link>
       </div>
     </div>

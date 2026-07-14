@@ -225,6 +225,11 @@ export default async function StoryPage({ params, searchParams }: Props) {
       <SectionLabel label="Outline" />
       <Card className="mb-6">
         <div className="flex flex-col gap-5">
+          <p className="text-xs text-[#6e767d] leading-relaxed -mt-1">
+            Edit the outline directly below. Open Outline Builder for
+            per-sequence narrative context (summary, mood, location) and
+            sequence removal.
+          </p>
           <OutlineEditorForm projectId={pid} initialOutline={project.outline} />
 
           <div className="border-t border-[#1a1d20] pt-4">

@@ -293,23 +293,23 @@ export default async function ProjectPage({ params }: Props) {
           href={`/projects/${id}/story`}
           className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
         >
-          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-            Story Workspace
-          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
+              Story Workspace
+            </span>
+            <span className="text-xs text-[#4b5158]">
+              Pitch, story, outline, sequences and assets
+            </span>
+          </div>
           <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
             →
           </span>
         </Link>
         <Link
           href={`/projects/${id}/outline`}
-          className="flex items-center justify-between rounded-lg border border-[#232629] bg-[#141618] px-5 py-3 hover:border-[#2c3035] hover:bg-[#1a1d20] transition-colors group"
+          className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors pl-1"
         >
-          <span className="text-sm text-[#a4abb2] group-hover:text-[#e7e9ec] transition-colors">
-            Outline
-          </span>
-          <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
-            →
-          </span>
+          Outline Builder — advanced per-sequence editing →
         </Link>
       </div>
 
