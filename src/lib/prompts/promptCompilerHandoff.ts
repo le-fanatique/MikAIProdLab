@@ -92,7 +92,7 @@ export function sanitizePromptCompilerHandoff(raw: unknown): PromptCompilerHando
 
   if (typeof raw.shotId !== "number" || !Number.isInteger(raw.shotId) || raw.shotId <= 0) return null;
   if (typeof raw.draftText !== "string") return null;
-  if (typeof raw.presetId !== "string" || !(raw.presetId in PROMPT_COMPILER_PRESETS)) return null;
+  if (typeof raw.presetId !== "string" || !Object.hasOwn(PROMPT_COMPILER_PRESETS, raw.presetId)) return null;
   if (typeof raw.fingerprint !== "string" || raw.fingerprint.length === 0) return null;
   if (typeof raw.createdAt !== "string") return null;
   if (!isRecord(raw.sourceFlags)) return null;

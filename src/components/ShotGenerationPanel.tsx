@@ -44,6 +44,9 @@ import type { BatchImageGroup, BatchExpansionPreview } from "@/components/Dynami
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import PromptCompilerHandoffGate from "@/components/PromptCompilerHandoffGate";
 import type { PromptCompilationReferenceImageInput } from "@/lib/prompts/buildPromptCompilationContext";
+import { resolvePromptCompilerTextNode } from "@/lib/prompts/promptCompilerHandoff";
+import { resolveWorkflowProfile, auditWorkflowNodes } from "@/lib/comfy/workflowProfiles";
+import WorkflowProfilePanel from "@/components/WorkflowProfilePanel";
 
 type Props = {
   projectId: number;
@@ -408,6 +411,22 @@ export default async function ShotGenerationPanel({
     ? imageMappings.filter((m) => !batchTemplateChainNodeIds.includes(m.input.nodeId))
     : imageMappings;
 
+  // ── Workflow profile (GEN.SEEDANCE.2) — resolved purely from a stable
+  // signature already in the stored JSON; never rewrites it, never touches
+  // selections. A generic workflow (profile === null) runs no specialized
+  // diagnostic below. ──
+  const workflowProfile = resolveWorkflowProfile(workflow.workflowJson);
+  const workflowNodeState =
+    parsed !== null
+      ? auditWorkflowNodes(workflow.workflowJson, parsed)
+      : { hasTextPromptNode: false, imageInputCount: 0, dynamicBatchPresent: false };
+  const promptCompilerTextNodeResolution = resolvePromptCompilerTextNode(promptCompilerTextNodeCandidates);
+  const promptCompilerTextNodeMapping = promptCompilerTextNodeResolution.ok
+    ? mappings.find((m) => m.input.nodeId === promptCompilerTextNodeResolution.nodeId)
+    : undefined;
+  const hasTextPromptValue = Boolean(promptCompilerTextNodeMapping?.suggestedText?.trim());
+  const selectedImageCount = imageMappings.filter((m) => Boolean(selectedImageByNodeId[m.input.nodeId])).length;
+
   // Build panelImageNodes for the client image preview component
   const _labelCount: Record<string, number> = {};
   for (const m of displayImageMappings) {
@@ -601,6 +620,15 @@ export default async function ShotGenerationPanel({
         </div>
 
         {/* Suggested Inputs */}
+        <WorkflowProfilePanel
+          shotId={shid}
+          profile={workflowProfile}
+          nodeState={workflowNodeState}
+          hasTextPromptValue={hasTextPromptValue}
+          selectedImageCount={selectedImageCount}
+          dynamicBatchActive={batchDetectionOk}
+          dynamicBatchSelectedCount={batchSelectedIds.length}
+        >
         <PromptCompilerHandoffGate
           shotId={shid}
           basePath={basePath}
@@ -749,6 +777,7 @@ export default async function ShotGenerationPanel({
           </div>
         )}
         </PromptCompilerHandoffGate>
+        </WorkflowProfilePanel>
 
         {/* Output */}
         {activeJobId !== null && (

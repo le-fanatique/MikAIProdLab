@@ -41,6 +41,9 @@ import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { type FillSource } from "@/lib/textInputKind";
 import PromptCompilerHandoffGate from "@/components/PromptCompilerHandoffGate";
 import type { PromptCompilationReferenceImageInput } from "@/lib/prompts/buildPromptCompilationContext";
+import { resolvePromptCompilerTextNode } from "@/lib/prompts/promptCompilerHandoff";
+import { resolveWorkflowProfile, auditWorkflowNodes } from "@/lib/comfy/workflowProfiles";
+import WorkflowProfilePanel from "@/components/WorkflowProfilePanel";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -423,6 +426,24 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     .filter((m) => m.mappingKind === "text")
     .map((m) => ({ nodeId: m.input.nodeId, label: m.input.label, title: m.input.title }));
 
+  // ── Workflow profile (GEN.SEEDANCE.2) — resolved purely from a stable
+  // signature already in the stored JSON; never rewrites it, never touches
+  // selections. A generic workflow (profile === null) runs no specialized
+  // diagnostic below. ──
+  const workflowProfile = resolveWorkflowProfile(workflow.workflowJson);
+  const workflowNodeState =
+    parsed !== null
+      ? auditWorkflowNodes(workflow.workflowJson, parsed)
+      : { hasTextPromptNode: false, imageInputCount: 0, dynamicBatchPresent: false };
+  const promptCompilerTextNodeResolution = resolvePromptCompilerTextNode(promptCompilerTextNodeCandidates);
+  const promptCompilerTextNodeMapping = promptCompilerTextNodeResolution.ok
+    ? mappings.find((m) => m.input.nodeId === promptCompilerTextNodeResolution.nodeId)
+    : undefined;
+  const hasTextPromptValue = Boolean(promptCompilerTextNodeMapping?.suggestedText?.trim());
+  const selectedImageCount = displayMappings.filter(
+    (m) => m.mappingKind === "image" && Boolean(selectedImageByNodeId[m.input.nodeId])
+  ).length;
+
   // Same "no misleading intermediate payload" rule as the panels: when a
   // Dynamic Batch node exists and nothing is selected yet, show no preview
   // rather than the unexpanded/incomplete one.
@@ -566,6 +587,15 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </div>
         </Card>
 
+        <WorkflowProfilePanel
+          shotId={shid}
+          profile={workflowProfile}
+          nodeState={workflowNodeState}
+          hasTextPromptValue={hasTextPromptValue}
+          selectedImageCount={selectedImageCount}
+          dynamicBatchActive={batchDetectionOk}
+          dynamicBatchSelectedCount={batchSelectedIds.length}
+        >
         <PromptCompilerHandoffGate
           shotId={shid}
           basePath={basePath}
@@ -714,6 +744,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </>
         )}
         </PromptCompilerHandoffGate>
+        </WorkflowProfilePanel>
 
         {/* ── Output ────────────────────────────────────────── */}
         {activeJobId !== null && (
