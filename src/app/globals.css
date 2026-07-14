@@ -191,13 +191,54 @@ html.theme-mikros .mikai-page-header::after {
    the browser regardless, so no z-index/stacking rule is needed to keep
    it legible; overflow: hidden only guards against a texture image with
    an unusual aspect ratio bleeding past the bar's fixed h-11 height.
+
+   Alpha mask, not a tint (THEME.TOPBAR.MASK.1 — replaces an earlier
+   grayscale/multiply attempt entirely): the texture's own RGB content is
+   never rendered at all. It is used purely as a shape stencil via
+   `mask-image`, forced to `mask-mode: alpha` so only its transparency
+   channel matters (a fully-opaque source like a JPEG, which has no alpha
+   channel, degrades safely to "mask everywhere" — a solid Top bar color
+   fill, never a luminance-based shape). Two flat color layers do the
+   actual rendering:
+     - `.mikai-top-bar` itself: `background-color: var(--mikros-canvas)`
+       — this is what shows through the texture's transparent regions.
+     - `.mikai-top-bar::before`: a solid `var(--mikros-topbar)` fill,
+       clipped to the texture's opaque regions by the mask.
+   `isolation: isolate` gives `.mikai-top-bar` its own stacking context so
+   the pseudo-element's `z-index: -1` reliably paints behind TopBar.tsx's
+   real content (logo, breadcrumb, Settings link) without needing any
+   change to TopBar.tsx itself — negative-z-index descendants always
+   paint before their stacking context's own in-flow content, regardless
+   of DOM order. `--mikros-topbar` is set by applyTopBarColorToElement in
+   mikrosTheme.ts, resolved from the theme's optional `topBarColor`
+   override (falls back to `tokens.surface` — see resolveTopBarColor) so
+   an older saved theme without this field renders exactly as it did
+   under the previous `background-color: surface` rule. `Appearance
+   preview texture` below is untouched by this ticket — no mask, no
+   change of any kind.
    ============================================================ */
 html.theme-mikros.theme-mikros-topbar-texture .mikai-top-bar {
+  position: relative;
+  isolation: isolate;
   overflow: hidden;
-  background-image: var(--mikros-topbar-texture-url);
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: cover;
+  background-color: var(--mikros-canvas);
+}
+html.theme-mikros.theme-mikros-topbar-texture .mikai-top-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--mikros-topbar);
+  -webkit-mask-image: var(--mikros-topbar-texture-url);
+  mask-image: var(--mikros-topbar-texture-url);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  -webkit-mask-mode: alpha;
+  mask-mode: alpha;
 }
 
 html.theme-mikros.theme-mikros-preview-texture .mikai-appearance-preview {

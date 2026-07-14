@@ -100,25 +100,30 @@ export default async function RootLayout({
       <head>
         {/* Anti-flash: applies the saved theme (Mikros or a custom
             variant) before first paint (THEME.MIKROS.1 / THEME.MIKROS.2 /
-            THEME.MIKROS.4 / THEME.MIKROS.5 / THEME.CUSTOM.IMPORT.1 retake).
-            Static script, no interpolated user input — reads two fixed
-            localStorage keys and only ever writes CSS custom properties via
-            style.setProperty(), never innerHTML, never a <style> tag,
-            never a remote URL (the logo's/each texture's data: URL is
-            re-validated here — syntax AND decoded magic bytes, see
-            validImage() below — before being wrapped in url(), same as an
-            uploaded PNG/JPEG/WebP would be rendered as a CSS background
-            anywhere else). The mix/derive math and the font/logo/texture
-            stack/validation are a hand-kept-in-sync copy of
-            mixHex()/deriveFullPalette()/fontFamilyStack()/
+            THEME.MIKROS.4 / THEME.MIKROS.5 / THEME.CUSTOM.IMPORT.1 retake /
+            THEME.TOPBAR.MASK.1). Static script, no interpolated user
+            input — reads two fixed localStorage keys and only ever writes
+            CSS custom properties via style.setProperty(), never innerHTML,
+            never a <style> tag, never a remote URL (the logo's/each
+            texture's data: URL is re-validated here — syntax AND decoded
+            magic bytes, see validImage() below — before being wrapped in
+            url(), same as an uploaded PNG/JPEG/WebP would be rendered as a
+            CSS background anywhere else). The mix/derive math and the
+            font/logo/texture stack/validation are a hand-kept-in-sync copy
+            of mixHex()/deriveFullPalette()/fontFamilyStack()/
             isValidFontFamilyName()/isValidLogoDataUrl()/
             sniffImageMimeFromBytes() in src/lib/mikrosTheme.ts (a plain
             <script> tag can't import a module), so any change to those
-            formulas must be mirrored here by hand. Textures are restored
-            only for a saved custom:<id> theme that actually has one — the
-            official Mikros preset (mode === 'mikros') never gets a texture
-            class/property here, matching applyMode()/clearPaletteOverrides()
-            in ThemeModeToggle.tsx. */}
+            formulas must be mirrored here by hand. Textures and the Top bar
+            color override are restored only for a saved custom:<id> theme
+            that actually has them — the official Mikros preset
+            (mode === 'mikros') never gets a texture class/property here,
+            matching applyMode()/clearPaletteOverrides() in
+            ThemeModeToggle.tsx. --mikros-topbar mirrors resolveTopBarColor()
+            (falls back to Surface) — the CSS mask rule in globals.css is
+            what actually renders the texture as a colorless alpha stencil;
+            this script only ever supplies the two flat colors and the
+            texture URL, never any RGB blending logic. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){
@@ -179,7 +184,7 @@ export default async function RootLayout({
                   var bl = Math.round(ab * w + bb * (1 - w));
                   return '#' + ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0');
                 }
-                function applyPalette(base, displayFont, bodyFont, logo, topBarTexture, previewTexture) {
+                function applyPalette(base, displayFont, bodyFont, logo, topBarTexture, previewTexture, topBarColor) {
                   el.classList.add('theme-mikros');
                   var full = {
                     '--mikros-canvas': base.canvas, '--mikros-surface': base.surface,
@@ -212,6 +217,11 @@ export default async function RootLayout({
                     el.style.setProperty('--mikros-preview-texture-url', 'url("' + previewTexture + '")');
                     el.classList.add('theme-mikros-preview-texture');
                   }
+                  // Top bar color (THEME.TOPBAR.MASK.1) — fill color for the
+                  // texture's alpha mask; falls back to Surface, mirroring
+                  // resolveTopBarColor() in mikrosTheme.ts, so an older theme
+                  // saved before this token existed renders identically.
+                  el.style.setProperty('--mikros-topbar', HEX_RE.test(topBarColor) ? topBarColor : base.surface);
                 }
                 if (mode === 'mikros') {
                   el.classList.add('theme-mikros');
@@ -235,7 +245,7 @@ export default async function RootLayout({
                       var logo = validImage(t.logo) ? t.logo : null;
                       var topBarTexture = validImage(t.topBarTexture) ? t.topBarTexture : null;
                       var previewTexture = validImage(t.previewTexture) ? t.previewTexture : null;
-                      applyPalette(t.tokens, displayFont, bodyFont, logo, topBarTexture, previewTexture);
+                      applyPalette(t.tokens, displayFont, bodyFont, logo, topBarTexture, previewTexture, t.topBarColor);
                     }
                     break;
                   }

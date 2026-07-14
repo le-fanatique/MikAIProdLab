@@ -24,6 +24,8 @@ import {
   applyLogoToElement,
   applyTopBarTextureToElement,
   applyPreviewTextureToElement,
+  applyTopBarColorToElement,
+  resolveTopBarColor,
   clearPaletteOverrides,
   loadCustomThemes,
   saveCustomThemes,
@@ -53,6 +55,7 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
       applyLogoToElement(el, theme.logo);
       applyTopBarTextureToElement(el, theme.topBarTexture);
       applyPreviewTextureToElement(el, theme.previewTexture);
+      applyTopBarColorToElement(el, theme.tokens, theme.topBarColor);
     } else {
       // Referenced theme no longer exists (deleted elsewhere/corrupted) — safest fallback
       el.classList.remove(THEME_CLASS);
@@ -114,6 +117,17 @@ export default function ThemeModeToggle() {
   const [draftPreviewTexture, setDraftPreviewTexture] = useState<string | null>(null);
   const [previewTextureError, setPreviewTextureError] = useState<string | null>(null);
   const [previewTextureBusy, setPreviewTextureBusy] = useState(false);
+
+  // Top bar color (THEME.TOPBAR.MASK.1) — a 9th editable color, edited with
+  // the exact same color-picker/hex-text/error pattern as the 8 tokens
+  // above, but kept as its own state trio since it lives outside
+  // MIKROS_TOKEN_KEYS (optional at the JSON/storage level, always a
+  // concrete valid hex string here in the draft). Seeded from the current
+  // Surface value on reset/new-theme ("valeur officielle initiale egale a
+  // surface"), then independently editable.
+  const [draftTopBarColor, setDraftTopBarColor] = useState<string>(MIKROS_DEFAULT_PALETTE.surface);
+  const [rawTopBarColorHex, setRawTopBarColorHex] = useState<string | undefined>(undefined);
+  const [topBarColorError, setTopBarColorError] = useState<string | undefined>(undefined);
 
   // Palette JSON import (THEME.CUSTOM.IMPORT.1) — pre-fills draftPalette
   // (and, if provided, the not-yet-open save name) but never touches
@@ -196,6 +210,9 @@ export default function ThemeModeToggle() {
       setTopBarTextureError(null);
       setDraftPreviewTexture(null);
       setPreviewTextureError(null);
+      setDraftTopBarColor(MIKROS_DEFAULT_PALETTE.surface);
+      setRawTopBarColorHex(undefined);
+      setTopBarColorError(undefined);
     }
   }
 
@@ -229,6 +246,30 @@ export default function ThemeModeToggle() {
         ...prev,
         [key]: "Enter a 6-digit hex color, e.g. #9079f2.",
       }));
+    }
+  }
+
+  /** Commits a known-valid Top bar color (picker or validated hex string) to the live preview + DOM. */
+  function commitTopBarColorChange(value: string) {
+    setDraftTopBarColor(value);
+    applyTopBarColorToElement(document.documentElement, draftPalette, value);
+  }
+
+  /** Native color picker — the browser only ever emits a valid 6-digit hex. */
+  function handleTopBarColorPickerChange(value: string) {
+    commitTopBarColorChange(value);
+    setRawTopBarColorHex(undefined);
+    setTopBarColorError(undefined);
+  }
+
+  /** Hex text field for Top bar color — same invalid-never-commits contract as handleHexTextChange. */
+  function handleTopBarColorTextChange(value: string) {
+    setRawTopBarColorHex(value);
+    if (isValidHexColor(value)) {
+      setTopBarColorError(undefined);
+      commitTopBarColorChange(value);
+    } else {
+      setTopBarColorError("Enter a 6-digit hex color, e.g. #9079f2.");
     }
   }
 
@@ -348,6 +389,10 @@ export default function ThemeModeToggle() {
     setTopBarTextureError(null);
     setTopBarTextureBusy(true);
     try {
+      // No color processing here (THEME.TOPBAR.MASK.1): the texture is used
+      // purely as an alpha mask by the CSS rule (mask-mode: alpha), so its
+      // RGB content is inert — only validation (magic bytes, size,
+      // dimensions) matters, same flow as the logo and the preview texture.
       const dataUrl = await readAndValidateImageFile(file);
       setDraftTopBarTexture(dataUrl);
       applyTopBarTextureToElement(document.documentElement, dataUrl);
@@ -390,9 +435,13 @@ export default function ThemeModeToggle() {
   /**
    * Shared success path for both the file import and the Paste JSON panel:
    * pre-fills the eight palette fields and applies them to the live
-   * preview, exactly like a manual color-picker edit. Fonts, logo and any
-   * other draft are left untouched. Never writes to localStorage; only
-   * "Save as custom" persists anything.
+   * preview, exactly like a manual color-picker edit. Fonts, logo and both
+   * textures are left untouched. Top bar color is always resolved on a
+   * successful import — `result.topBarColor` if the JSON provided one,
+   * otherwise the imported `tokens.surface` — so an older eight-token JSON
+   * (no `tokens.topBar`) never leaves a stale/mismatched Top bar color from
+   * a previous edit sitting on top of the newly-imported palette. Never
+   * writes to localStorage; only "Save as custom" persists anything.
    */
   function applyImportedPalette(result: Extract<MikrosThemeImportResult, { ok: true }>) {
     setDraftPalette(result.tokens);
@@ -402,6 +451,11 @@ export default function ThemeModeToggle() {
     if (result.name) {
       setSaveName((prev) => (prev.trim() ? prev : result.name!));
     }
+    const importedTopBarColor = result.topBarColor ?? result.tokens.surface;
+    setDraftTopBarColor(importedTopBarColor);
+    setRawTopBarColorHex(undefined);
+    setTopBarColorError(undefined);
+    applyTopBarColorToElement(document.documentElement, result.tokens, importedTopBarColor);
   }
 
   /** Reads the selected file's text and parses it with the shared JSON parser. */
@@ -464,7 +518,10 @@ export default function ThemeModeToggle() {
     setTopBarTextureError(null);
     setDraftPreviewTexture(null);
     setPreviewTextureError(null);
-    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography + logo + textures)
+    setDraftTopBarColor(MIKROS_DEFAULT_PALETTE.surface);
+    setRawTopBarColorHex(undefined);
+    setTopBarColorError(undefined);
+    clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography + logo + textures + topbar color)
   }
 
   function handleSaveAsCustom() {
@@ -488,6 +545,10 @@ export default function ThemeModeToggle() {
       setSaveError("A custom theme with this name already exists.");
       return;
     }
+    if (topBarColorError !== undefined) {
+      setSaveError("Fix the invalid value(s) above before saving.");
+      return;
+    }
 
     const draftValues = {
       name,
@@ -497,6 +558,7 @@ export default function ThemeModeToggle() {
       logo: draftLogo,
       topBarTexture: draftTopBarTexture,
       previewTexture: draftPreviewTexture,
+      topBarColor: draftTopBarColor,
     };
 
     // Updates the existing theme by id (no duplicate created) or appends a
@@ -564,6 +626,9 @@ export default function ThemeModeToggle() {
     setTopBarTextureError(null);
     setDraftPreviewTexture(theme.previewTexture);
     setPreviewTextureError(null);
+    setDraftTopBarColor(resolveTopBarColor(theme.tokens, theme.topBarColor));
+    setRawTopBarColorHex(undefined);
+    setTopBarColorError(undefined);
     setSaveName(theme.name);
     setSaveError(null);
     setSaveNameOpen(true);
@@ -789,6 +854,38 @@ export default function ThemeModeToggle() {
                 </div>
               );
             })}
+
+            <div className="flex flex-col gap-1">
+              <label htmlFor="mikros-topbar-color" className="text-[10px] text-[#6e767d]">
+                Top bar color
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="mikros-topbar-color"
+                  type="color"
+                  value={draftTopBarColor}
+                  onChange={(e) => handleTopBarColorPickerChange(e.target.value)}
+                  className="w-8 h-8 rounded border border-[#2c3035] bg-transparent cursor-pointer shrink-0"
+                  aria-label="Top bar color picker"
+                />
+                <input
+                  type="text"
+                  value={rawTopBarColorHex ?? draftTopBarColor}
+                  onChange={(e) => handleTopBarColorTextChange(e.target.value)}
+                  aria-label="Top bar color hex value"
+                  aria-invalid={topBarColorError !== undefined}
+                  className={`flex-1 rounded border bg-[#0e1013] text-xs text-[#e7e9ec] font-mono px-2 py-1.5 focus:outline-none ${
+                    topBarColorError
+                      ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
+                      : "border-[#2c3035] focus:border-[#3a4046]"
+                  }`}
+                />
+              </div>
+              {topBarColorError && <p className="text-[10px] text-[#cf7b6b]">{topBarColorError}</p>}
+              <p className="text-[10px] text-[#4b5158]">
+                Fill color used behind a Top bar texture (opaque areas). Starts equal to Surface.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
@@ -936,8 +1033,9 @@ export default function ThemeModeToggle() {
             {topBarTextureError && <p className="text-[10px] text-[#cf7b6b]">{topBarTextureError}</p>}
             <p className="text-[10px] text-[#4b5158]">
               PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
-              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Empty by default —
-              no texture is applied unless a file is chosen here.
+              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Used as a shape
+              mask only — opaque areas show Top bar color, transparent areas show Canvas, the texture&apos;s own
+              colors are ignored. Empty by default — no texture is applied unless a file is chosen here.
             </p>
           </div>
 
@@ -1003,7 +1101,8 @@ export default function ThemeModeToggle() {
                     onClick={handleSaveAsCustom}
                     disabled={
                       Object.values(hexErrors).some((e) => e !== undefined) ||
-                      Object.values(fontErrors).some((e) => e !== undefined)
+                      Object.values(fontErrors).some((e) => e !== undefined) ||
+                      topBarColorError !== undefined
                     }
                     className="rounded border border-[#9079F2]/50 text-[#9079F2] px-3 py-1.5 text-xs hover:border-[#9079F2] hover:bg-[#9079F2]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >

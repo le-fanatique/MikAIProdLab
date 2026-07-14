@@ -8,7 +8,7 @@
 import { MIKROS_TOKEN_KEYS, isValidHexColor, type MikrosPalette } from "@/lib/mikrosTheme";
 
 export type MikrosThemeImportResult =
-  | { ok: true; tokens: MikrosPalette; name: string | null }
+  | { ok: true; tokens: MikrosPalette; name: string | null; topBarColor: string | null }
   | { ok: false; error: string };
 
 // Generous cap against pathological input — a real 8-token file is a few
@@ -68,5 +68,18 @@ export function parseMikrosThemeImportJson(rawText: string): MikrosThemeImportRe
     name = trimmed.length > 0 ? trimmed.slice(0, MAX_IMPORT_NAME_LENGTH) : null;
   }
 
-  return { ok: true, tokens, name };
+  // Top bar color (THEME.TOPBAR.MASK.1) is an optional 9th field, deliberately
+  // outside MIKROS_TOKEN_KEYS: absent means "no override" (falls back to
+  // Surface elsewhere), exactly like an older JSON file that predates this
+  // token. If present, it must still be a valid hex — same per-field error
+  // contract as the eight required tokens.
+  let topBarColor: string | null = null;
+  if (Object.hasOwn(tokensObj, "topBar") && tokensObj.topBar !== undefined) {
+    if (!isValidHexColor(tokensObj.topBar)) {
+      return { ok: false, error: '"tokens.topBar" must be a 6-digit hex color, e.g. #9079f2.' };
+    }
+    topBarColor = tokensObj.topBar;
+  }
+
+  return { ok: true, tokens, name, topBarColor };
 }

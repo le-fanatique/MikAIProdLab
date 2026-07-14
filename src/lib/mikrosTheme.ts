@@ -232,6 +232,30 @@ export function applyPreviewTextureToElement(el: HTMLElement, texture: string | 
   }
 }
 
+/**
+ * Dedicated "Top bar color" token (THEME.TOPBAR.MASK.1) — a 9th editable
+ * color, independent of the 8 strict MIKROS_TOKEN_KEYS (which stay a
+ * closed, always-fully-required set for the JSON import contract). Stored
+ * nullable on CustomTheme/JSON for backward compatibility: `null` means
+ * "no explicit override", resolved dynamically to `tokens.surface` — never
+ * a stored/duplicated copy of it, so a later edit to Surface on an old
+ * theme that never set topBarColor still flows through correctly.
+ */
+export function resolveTopBarColor(tokens: MikrosPalette, topBarColor: string | null | undefined): string {
+  return topBarColor && isValidHexColor(topBarColor) ? topBarColor : tokens.surface;
+}
+
+/**
+ * Sets --mikros-topbar to the resolved Top bar color. Consumed by the
+ * Top bar texture's alpha-mask rule in globals.css as the mask's fill
+ * color (opaque texture regions) — never as a background-image tint, so
+ * the texture's own RGB content is fully ignored, only its alpha shape
+ * matters.
+ */
+export function applyTopBarColorToElement(el: HTMLElement, tokens: MikrosPalette, topBarColor: string | null): void {
+  el.style.setProperty("--mikros-topbar", resolveTopBarColor(tokens, topBarColor));
+}
+
 export type CustomTheme = {
   id: string;
   name: string;
@@ -244,6 +268,8 @@ export type CustomTheme = {
   topBarTexture: string | null;
   /** null = no custom Appearance preview texture — the card renders with no background image. */
   previewTexture: string | null;
+  /** null = no override — resolves to `tokens.surface` (see resolveTopBarColor). */
+  topBarColor: string | null;
 };
 
 /** "default" | "mikros" | "custom:<id>" */
@@ -348,6 +374,9 @@ export function clearPaletteOverrides(el: HTMLElement): void {
     // textures, so the official Custom preset (and Default) always render
     // texture-free, exactly like the logo above.
     "--mikros-topbar-texture-url", "--mikros-preview-texture-url",
+    // THEME.TOPBAR.MASK.1 — reset also drops any Top bar color override;
+    // the official preset never needs it since it never has a texture to mask.
+    "--mikros-topbar",
   ];
   for (const prop of props) el.style.removeProperty(prop);
   el.classList.remove(THEME_LOGO_CLASS, THEME_TOPBAR_TEXTURE_CLASS, THEME_PREVIEW_TEXTURE_CLASS);
@@ -403,6 +432,12 @@ export function loadCustomThemes(): CustomTheme[] {
       const topBarTexture = isValidLogoDataUrl(rawTopBarTexture) ? rawTopBarTexture : null;
       const rawPreviewTexture = (entry as { previewTexture?: unknown }).previewTexture;
       const previewTexture = isValidLogoDataUrl(rawPreviewTexture) ? rawPreviewTexture : null;
+      // Top bar color is additive too (THEME.TOPBAR.MASK.1): a missing or
+      // invalid override never rejects the theme — it just falls back to
+      // `tokens.surface` (see resolveTopBarColor), same as every theme
+      // saved before this ticket already looked.
+      const rawTopBarColor = (entry as { topBarColor?: unknown }).topBarColor;
+      const topBarColor = isValidHexColor(rawTopBarColor) ? rawTopBarColor : null;
       result.push({
         id: (entry as { id: string }).id,
         name: (entry as { name: string }).name,
@@ -412,6 +447,7 @@ export function loadCustomThemes(): CustomTheme[] {
         logo,
         topBarTexture,
         previewTexture,
+        topBarColor,
       });
     }
     return result;
