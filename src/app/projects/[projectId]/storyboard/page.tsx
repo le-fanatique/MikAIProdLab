@@ -8,6 +8,7 @@ import {
   shotReferenceImages,
   assetReferenceImages,
   storyboardImages,
+  sequenceStoryboardImages,
   generationJobs,
   comfyWorkflows,
 } from "@/db/schema";
@@ -19,6 +20,9 @@ import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import StoryboardGrid, { type StoryboardGridShot, type StoryboardGridStatus } from "@/components/StoryboardGrid";
 import StoryboardAssetsPanel, { type StoryboardCastAsset } from "@/components/StoryboardAssetsPanel";
+import SequenceStoryboardDraftsPanel, {
+  type SequenceStoryboardDraft,
+} from "@/components/SequenceStoryboardDraftsPanel";
 import SequenceGenerationPackagePanel from "@/components/SequenceGenerationPackagePanel";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { compileShotPrompt } from "@/lib/prompts/compileShotPrompt";
@@ -278,6 +282,21 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     };
   });
 
+  // ── Sequence Storyboard drafts (SEQGEN.STORYBOARD.3) — every version,
+  // newest first, so a saved draft is never invisible after returning here. ──
+  const sequenceDraftRows = await db
+    .select()
+    .from(sequenceStoryboardImages)
+    .where(eq(sequenceStoryboardImages.sequenceId, sid))
+    .orderBy(desc(sequenceStoryboardImages.createdAt));
+  const sequenceStoryboardDrafts: SequenceStoryboardDraft[] = sequenceDraftRows.map((d) => ({
+    id: d.id,
+    imageUrl: refImageUrl(d.imagePath),
+    status: d.status,
+    createdAt: d.createdAt,
+    promptPreview: d.promptSnapshot,
+  }));
+
   const storyboardApproved = sp(resolvedSearchParams["storyboardApproved"]) === "1";
   const storyboardApproveError = sp(resolvedSearchParams["storyboardApproveError"]);
   const storyboardRejected = sp(resolvedSearchParams["storyboardRejected"]) === "1";
@@ -330,6 +349,16 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
       )}
 
       <SectionLabel label="Storyboard" />
+      <div className="mb-3">
+        <Link
+          href={`/projects/${pid}/sequences/${sid}/storyboard/workflows${
+            storyboardRefsParam ? `?storyboardRefs=${encodeURIComponent(storyboardRefsParam)}` : ""
+          }`}
+          className="inline-flex items-center rounded border border-[#5b93d6]/50 bg-[#5b93d6]/10 text-[#5b93d6] px-3 py-1.5 text-sm font-medium hover:border-[#5b93d6] hover:bg-[#5b93d6]/20 hover:text-[#8fbbe8] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#5b93d6] focus-visible:outline-offset-1"
+        >
+          Generate Sequence Storyboard
+        </Link>
+      </div>
       <StoryboardGrid
         projectId={pid}
         sequenceId={sid}
@@ -337,6 +366,9 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
         returnTo={storyboardReturnTo}
         storyboardRefs={storyboardRefsParam}
       />
+
+      <SectionLabel label="Sequence Storyboard Drafts" />
+      <SequenceStoryboardDraftsPanel drafts={sequenceStoryboardDrafts} />
 
       <SectionLabel label="Storyboard Assets" />
       <StoryboardAssetsPanel projectId={pid} assets={storyboardCastAssets} />

@@ -40,6 +40,41 @@ conversation needs these notes, this file is the shared source of truth.
 
 ## Active Feedback
 
+### FB-20260715-015 - Generate a storyboard contact sheet at Sequence level
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-15
+- Area: Storyboard / Sequence Generation
+- Context: Defining the next Storyboard workflow after the Shot-level
+  generation workspace.
+- Original observation:
+
+  > dans Storyboard, je veux cliquer sur Generate Sequence StoryBoard,
+  > choisir un workflow prepare, envoyer les images de casting selectionnees
+  > et obtenir une image avec une vignette par Shot. Pour l'instant cette
+  > image peut etre stockee a la Sequence.
+- Expected outcome: Generate one editable, sequence-aware contact sheet from
+  selected casting references and the full Sequence Generation Package, then
+  save it explicitly with `Save as Sequence Storyboard Draft`.
+- Impact: Establishes the visual storyboard foundation before sequence-level
+  Seedance video generation, split review, and push to Shots.
+- Related ticket: `SEQGEN.STORYBOARD.3`
+- Resolution: `SEQGEN.STORYBOARD.3` implemented — CTA, workflow selector,
+  editable `@ImageN` prompt built from the exact Dynamic Batch send order,
+  Sequence Generation Package inclusion, generation, `Save as Sequence
+  Storyboard Draft` with provenance read from the queued job (never page
+  state), multiple versions retained, and the saved drafts now listed on the
+  Storyboard workspace. Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-15: Codex migration arbitration: a dedicated Sequence-level table
+  and nullable sequence generation target are technically justified; existing
+  `storyboard_images` is Shot-level and `sequence_results` stores editorial
+  videos, so neither should be repurposed.
+- 2026-07-15: User confirmed the explicit save button requirement.
+
 ### FB-20260715-011 - Make Storyboard generation action explicit
 
 - Status: `TO VALIDATE`
@@ -407,6 +442,34 @@ conversation needs these notes, this file is the shared source of truth.
 - 2026-07-15: This observation does not authorize a schema, migration,
   generation-runtime, or dependency change without a dedicated ticket and
   architecture decision.
+
+### FB-20260715-014 - ComfyUI port presets in Render Settings
+
+- Status: `OPEN`
+- Date observed: 2026-07-15
+- Area: Settings / Render Settings / ComfyUI
+- Context: Switching between the ComfyUI instances or ports used for rendering.
+- Original observation:
+
+  > j aimerai bien avoir une list de presset de mes port comfyui dans les
+  > render setting
+
+- Expected outcome: Add a preset list in `Render Settings` for the user's
+  ComfyUI ports, allowing an existing connection target to be selected quickly
+  instead of entering it again for each switch.
+- Impact: Presets would reduce repetitive configuration and mistakes when
+  working with multiple ComfyUI instances.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-15: Ticket preparation must clarify whether a preset stores only a
+  port or a complete named endpoint including protocol and host, where presets
+  persist, how the active preset is selected, and how connectivity is tested.
+  This observation alone does not authorize changes to the ComfyUI protocol,
+  generation runtime, job runner, polling, schema, or dependencies.
 
 ## Entry Template
 

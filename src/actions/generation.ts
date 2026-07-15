@@ -35,6 +35,7 @@ import {
   serializeGenerationSnapshot,
   type GenerationSnapshot,
 } from "@/lib/comfy/generationSnapshot";
+import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -305,6 +306,10 @@ export async function runWorkflowGeneration(args: {
   }
 
   // --- 6. Create generation_jobs row (pending) ---
+  if (!isSingleGenerationTarget({ shotId, assetId: null, sequenceId: null })) {
+    return { ok: false, error: "Invalid generation job target." };
+  }
+
   const clientId = `mikai-${shotId}-${workflowId}-${Date.now()}`;
   const now = new Date().toISOString();
 
@@ -664,6 +669,10 @@ export async function runAssetGeneration(input: {
   }
 
   // --- 10. Create job row (pending) ---
+  if (!isSingleGenerationTarget({ shotId: null, assetId, sequenceId: null })) {
+    return { ok: false, error: "Invalid generation job target." };
+  }
+
   const clientId = `mikai-asset-${assetId}-${workflowId}-${Date.now()}`;
   const now = new Date().toISOString();
 

@@ -10,7 +10,7 @@
 
 export type GenerationSnapshot = {
   workflowId: number;
-  contextType: "shot" | "asset";
+  contextType: "shot" | "asset" | "sequence";
   contextId: number;
   createdAt: string;
   selections: {
@@ -42,6 +42,23 @@ export type GenerationSnapshot = {
   }[];
   /** The exact JSON object passed to queueComfyPrompt — the ground truth for "what was actually queued". */
   queuedWorkflow: Record<string, unknown>;
+  /**
+   * SEQGEN.STORYBOARD.3 — only ever set for `contextType === "sequence"`:
+   * the exact `@ImageN` <-> Asset/role mapping actually used to build
+   * `promptText` and the queued images, in the same order as
+   * `selections.batchSelectedImageIds` (or the full explicit selection when
+   * this workflow has no Dynamic Batch node). Captured here, at queue time,
+   * so a later draft-save reads real provenance from the immutable job
+   * instead of the mutable current page state.
+   */
+  sequenceStoryboardReferenceMappings?: {
+    refId: string;
+    imageLabel: string;
+    assetId: number;
+    assetName: string;
+    assetType: string;
+    roleLabel: string | null;
+  }[];
 };
 
 export function serializeGenerationSnapshot(snapshot: GenerationSnapshot): string {

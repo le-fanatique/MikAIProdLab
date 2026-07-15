@@ -49,7 +49,11 @@ function getNodeLabel(mapping: WorkflowInputMapping): string {
   return mapping.input.label || mapping.input.title || `Node ${mapping.input.nodeId}`;
 }
 
-function findTextInputKey(
+// SEQGEN.STORYBOARD.3 — exported so a reader (extractQueuedTextValues in
+// src/actions/sequenceGeneration.ts, for job provenance snapshots) can
+// reuse this exact write-time rule instead of duplicating a second,
+// potentially divergent priority order.
+export function findTextInputKey(
   inputs: Record<string, unknown>,
   classType: string
 ): string | null {

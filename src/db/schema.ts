@@ -336,6 +336,15 @@ export const generationJobs = sqliteTable(
       .references(() => shots.id, { onDelete: "cascade" }),
     assetId: int("asset_id")
       .references(() => assets.id, { onDelete: "cascade" }),
+    // SEQGEN.STORYBOARD.3 — Sequence-level generation target (a single
+    // contact-sheet storyboard image spanning every Shot of a Sequence,
+    // not one Shot/Asset). Application-level rule (see
+    // assertSingleGenerationTarget in src/actions/generation.ts): exactly
+    // one of shotId/assetId/sequenceId is set per job, never a DB CHECK
+    // constraint — consistent with every other applicative-only rule in
+    // this schema (e.g. "at most one approved draft" on storyboardImages).
+    sequenceId: int("sequence_id")
+      .references(() => sequences.id, { onDelete: "cascade" }),
     workflowId: int("workflow_id")
       .notNull()
       .references(() => comfyWorkflows.id),
@@ -409,6 +418,45 @@ export const storyboardImages = sqliteTable("storyboard_images", {
 
 export type StoryboardImage = typeof storyboardImages.$inferSelect;
 export type NewStoryboardImage = typeof storyboardImages.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Sequence Storyboard image drafts (SEQGEN.STORYBOARD.3) — the Sequence-level
+// twin of `storyboardImages` above: a single contact-sheet storyboard image
+// covering every Shot of a Sequence, stored at the Sequence level and never
+// attached to any one Shot. Deliberately a separate table, not a reuse of
+// `storyboardImages` (Shot-level) or `sequenceResults` (published editorial
+// video output) — same reasoning as that table's own header comment.
+// Multiple drafts per Sequence are allowed by design ("conserver plusieurs
+// versions"); nothing here auto-approves or auto-replaces an existing draft.
+// ---------------------------------------------------------------------------
+export const sequenceStoryboardImages = sqliteTable("sequence_storyboard_images", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  sequenceId: int("sequence_id")
+    .notNull()
+    .references(() => sequences.id, { onDelete: "cascade" }),
+  /** The generation job this draft was captured from, if still known. Nullable: the job row itself is not required to persist forever. */
+  jobId: int("job_id").references(() => generationJobs.id, { onDelete: "set null" }),
+  /** The workflow used to generate this draft, if still known. */
+  workflowId: int("workflow_id").references(() => comfyWorkflows.id, { onDelete: "set null" }),
+  imagePath: text("image_path").notNull(),
+  status: text("status", { enum: ["draft", "approved", "rejected"] })
+    .notNull()
+    .default("draft"),
+  /** The exact composed Sequence Storyboard prompt text at generation time (including the @ImageN mapping and the Sequence Generation Package block) — a provenance snapshot, never re-derived later. */
+  promptSnapshot: text("prompt_snapshot"),
+  /** JSON array of the casting references actually selected for this generation (refId, Asset, role, in @ImageN order) — a provenance snapshot, not a live relation. */
+  referencesSnapshot: text("references_snapshot"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  approvedAt: text("approved_at"),
+});
+
+export type SequenceStoryboardImage = typeof sequenceStoryboardImages.$inferSelect;
+export type NewSequenceStoryboardImage = typeof sequenceStoryboardImages.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // Editorial timeline items — gap-aware montage layer for a sequence.

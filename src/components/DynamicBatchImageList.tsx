@@ -51,8 +51,8 @@ type Props = {
   selectedImageIds: string[];
   passthroughParams: Record<string, string>;
   basePath: string;
-  /** "shot" or "asset" — determines which panel upload server action to use */
-  contextType: "shot" | "asset";
+  /** "shot" or "asset" determine which panel upload server action to use; "sequence" (SEQGEN.STORYBOARD.3) has no upload action — only casting references already in the DB feed the batch, so the Upload Image form is not rendered for it. */
+  contextType: "shot" | "asset" | "sequence";
   projectId: number;
   workflowId: string;
   shotId?: number;
@@ -391,48 +391,52 @@ export default function DynamicBatchImageList({
         )}
       </div>
 
-      {/* Upload form */}
-      <form
-        action={contextType === "shot" ? uploadShotSourceFromPanel : uploadAssetSourceFromPanel}
-        className="flex items-center gap-2"
-      >
-        <input type="hidden" name="projectId" value={String(projectId)} />
-        {contextType === "shot" && (
-          <>
-            <input type="hidden" name="shotId" value={String(shotId ?? "")} />
-            <input type="hidden" name="sequenceId" value={String(sequenceId ?? "")} />
-          </>
-        )}
-        {contextType === "asset" && (
-          <input type="hidden" name="assetId" value={String(assetId ?? "")} />
-        )}
-        <input type="hidden" name="nodeId" value={batchNodeId} />
-        <input
-          type="hidden"
-          name="returnTo"
-          value={(() => {
-            const p = new URLSearchParams();
-            for (const [k, v] of Object.entries(passthroughParams)) {
-              if (!k.startsWith("batchImages_") && k !== "jobId") p.set(k, v);
-            }
-            const key = buildBatchParamKey(batchNodeId);
-            if (selected.length > 0) p.set(key, selected.join(","));
-            return `${basePath}?${p.toString()}`;
-          })()}
-        />
-        <input
-          type="file"
-          name="imageFile"
-          accept={[".jpg", ".jpeg", ".png", ".webp", ".gif", "image/jpeg", "image/png", "image/webp", "image/gif"].join(",")}
-          className="flex-1 min-w-0 text-xs text-[#6e767d] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#1a1d20] file:px-2 file:py-1 file:text-xs file:text-[#a4abb2] file:cursor-pointer hover:file:bg-[#232629] file:transition-colors"
-        />
-        <button
-          type="submit"
-          className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+      {/* Upload form — not offered in "sequence" context (SEQGEN.STORYBOARD.3):
+          only casting references already in the DB feed the Sequence
+          Storyboard batch in this MVP, no ad hoc upload target. */}
+      {contextType !== "sequence" && (
+        <form
+          action={contextType === "shot" ? uploadShotSourceFromPanel : uploadAssetSourceFromPanel}
+          className="flex items-center gap-2"
         >
-          Upload Image
-        </button>
-      </form>
+          <input type="hidden" name="projectId" value={String(projectId)} />
+          {contextType === "shot" && (
+            <>
+              <input type="hidden" name="shotId" value={String(shotId ?? "")} />
+              <input type="hidden" name="sequenceId" value={String(sequenceId ?? "")} />
+            </>
+          )}
+          {contextType === "asset" && (
+            <input type="hidden" name="assetId" value={String(assetId ?? "")} />
+          )}
+          <input type="hidden" name="nodeId" value={batchNodeId} />
+          <input
+            type="hidden"
+            name="returnTo"
+            value={(() => {
+              const p = new URLSearchParams();
+              for (const [k, v] of Object.entries(passthroughParams)) {
+                if (!k.startsWith("batchImages_") && k !== "jobId") p.set(k, v);
+              }
+              const key = buildBatchParamKey(batchNodeId);
+              if (selected.length > 0) p.set(key, selected.join(","));
+              return `${basePath}?${p.toString()}`;
+            })()}
+          />
+          <input
+            type="file"
+            name="imageFile"
+            accept={[".jpg", ".jpeg", ".png", ".webp", ".gif", "image/jpeg", "image/png", "image/webp", "image/gif"].join(",")}
+            className="flex-1 min-w-0 text-xs text-[#6e767d] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#1a1d20] file:px-2 file:py-1 file:text-xs file:text-[#a4abb2] file:cursor-pointer hover:file:bg-[#232629] file:transition-colors"
+          />
+          <button
+            type="submit"
+            className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Upload Image
+          </button>
+        </form>
+      )}
     </div>
   );
 }
