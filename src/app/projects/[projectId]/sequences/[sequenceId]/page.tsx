@@ -25,6 +25,7 @@ import Collapsible from "@/components/Collapsible";
 import SequenceContextInlineEditor from "@/components/SequenceContextInlineEditor";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import SequenceStoryboardGrid, { type StoryboardShot } from "@/components/SequenceStoryboardGrid";
+import SequenceGenerationPackagePanel from "@/components/SequenceGenerationPackagePanel";
 import { getLLMSettings, getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
@@ -611,6 +612,23 @@ npx -y pnpm@9.0.0 dev`}
             <SequenceStoryboardGrid shots={storyboardShots} projectId={pid} sequenceId={sid} />
           </div>
         </>
+      )}
+
+      {/* ── Sequence Generation Package — read-only prompt-compilation
+          preview for a future Sequence-level Seedance generation
+          (SEQGEN.1). Compiles existing Shot prompts/context only; never
+          calls ComfyUI, never produces a video, never writes to a Shot.
+          Placed under Storyboard per the ticket's checklist. */}
+      {shotList.length > 0 && (
+        <div className="mb-6">
+          <SequenceGenerationPackagePanel
+            projectId={pid}
+            sequenceId={sid}
+            project={project}
+            sequence={sequence}
+            shots={shotList}
+          />
+        </div>
       )}
 
       {/* ── Shots ─────────────────────────────────────────────────── */}
