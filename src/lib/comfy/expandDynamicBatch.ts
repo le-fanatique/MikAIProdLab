@@ -9,13 +9,17 @@
 // Types
 // ---------------------------------------------------------------------------
 
-type ComfyNode = {
+// SEQGEN.STORYBOARD.3-FIX2 — exported so expandDirectRepeatableInputs.ts
+// (a dedicated sibling module, never merged into this file's own
+// exportedDynamicBatchWorkflow to avoid making it ambiguous) can reuse the
+// exact same node-graph primitives instead of duplicating them.
+export type ComfyNode = {
   class_type?: string;
   _meta?: { title?: string };
   inputs?: Record<string, unknown>;
 };
 
-type ComfyWorkflow = Record<string, ComfyNode>;
+export type ComfyWorkflow = Record<string, ComfyNode>;
 
 export type DynamicBatchInputInfo = {
   nodeId: string;
@@ -61,11 +65,11 @@ export type DynamicBatchExpansionResult =
 // Guards / helpers
 // ---------------------------------------------------------------------------
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isStringArray2(value: unknown): value is [string, number] {
+export function isStringArray2(value: unknown): value is [string, number] {
   return (
     Array.isArray(value) &&
     value.length === 2 &&
@@ -74,7 +78,7 @@ function isStringArray2(value: unknown): value is [string, number] {
   );
 }
 
-function getTitle(node: ComfyNode, nodeId: string): string {
+export function getTitle(node: ComfyNode, nodeId: string): string {
   return node._meta?.title ?? node.class_type ?? `Node ${nodeId}`;
 }
 
@@ -84,7 +88,7 @@ function numericIds(workflow: ComfyWorkflow): number[] {
     .filter((n) => !isNaN(n));
 }
 
-function maxNumericId(workflow: ComfyWorkflow): number {
+export function maxNumericId(workflow: ComfyWorkflow): number {
   const ids = numericIds(workflow);
   return ids.length > 0 ? Math.max(...ids) : 0;
 }
@@ -93,7 +97,7 @@ function maxNumericId(workflow: ComfyWorkflow): number {
 // normalizeWorkflowJson — accepts string or object, returns parsed object
 // ---------------------------------------------------------------------------
 
-function normalizeWorkflowJson(input: unknown): Record<string, unknown> {
+export function normalizeWorkflowJson(input: unknown): Record<string, unknown> {
   if (typeof input === "string") {
     let parsed: unknown;
     try {
@@ -126,7 +130,7 @@ function normalizeWorkflowJson(input: unknown): Record<string, unknown> {
 // parseWorkflowJson — internal, string-only parser returning ComfyWorkflow
 // ---------------------------------------------------------------------------
 
-function parseWorkflowJson(raw: string): ComfyWorkflow | null {
+export function parseWorkflowJson(raw: string): ComfyWorkflow | null {
   try {
     return normalizeWorkflowJson(raw) as ComfyWorkflow;
   } catch {
@@ -157,7 +161,7 @@ export function findFirstConnectedInput(
 // isImageSourceNode
 // ---------------------------------------------------------------------------
 
-function isImageSourceNode(node: ComfyNode): boolean {
+export function isImageSourceNode(node: ComfyNode): boolean {
   const ct = node.class_type ?? "";
   if (ct === "LoadImage") return true;
   if (/Image.*Load|Load.*Image/i.test(ct)) return true;

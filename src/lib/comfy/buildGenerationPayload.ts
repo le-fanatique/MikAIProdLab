@@ -28,7 +28,100 @@ import {
   type DynamicBatchExpansionImage,
   type DynamicBatchExpansionResult,
 } from "@/lib/comfy/expandDynamicBatch";
+import {
+  detectDirectRepeatableInput,
+  expandDirectRepeatableInputsWorkflow,
+} from "@/lib/comfy/expandDirectRepeatableInputs";
 import { patchWorkflowPayload, type WorkflowPayloadPatchResult } from "@/lib/comfy/patchWorkflowPayload";
+
+// ---------------------------------------------------------------------------
+// resolveImageExpansionMode — SEQGEN.STORYBOARD.3-FIX2
+//
+// Single decision point shared by buildGenerationPayload (which expand
+// function to call) and detectDynamicBatchUiInfo (what the picker UI should
+// show), so the two can never disagree about which mode a workflow uses.
+// Priority: an explicit `(Dynamic Batch Input)` marker always wins (existing
+// workflows keep their exact current behavior, unchanged) — direct
+// repeatable inputs are only considered when no such marker exists, and are
+// themselves purely structural (numbered `model.images.image_N` ports on an
+// OpenAIGPTImageNodeV2 node, never the workflow's name or id).
+// ---------------------------------------------------------------------------
+
+type ImageExpansionMode =
+  | { kind: "none" }
+  | { kind: "error"; error: string }
+  | {
+      kind: "dynamic-batch" | "direct-repeatable-inputs";
+      nodeId: string;
+      title: string;
+      templateChainNodeIds: string[];
+      templateChainTitles: string[];
+    };
+
+function buildChainTitles(
+  workflow: Record<string, { _meta?: { title?: string }; class_type?: string }>,
+  nodeIds: string[]
+): string[] {
+  return nodeIds.map((nid) => {
+    const node = workflow[nid];
+    if (!node) return nid;
+    const t = node._meta?.title ?? node.class_type ?? nid;
+    return t.replace("(Input)", "").replace("(Dynamic Batch Input)", "").replace("(Repeatable)", "").trim();
+  });
+}
+
+function resolveImageExpansionMode(workflowJson: string): ImageExpansionMode {
+  let parsedWorkflow: Record<string, { _meta?: { title?: string }; class_type?: string }>;
+  try {
+    parsedWorkflow = JSON.parse(workflowJson);
+  } catch {
+    return { kind: "error", error: "Invalid workflow JSON." };
+  }
+
+  const batchDetection = detectDynamicBatchInput(workflowJson);
+  if (batchDetection.ok) {
+    const trace = traceUpstreamTemplateChain(parsedWorkflow, batchDetection.info);
+    if (!trace.ok) return { kind: "error", error: trace.error };
+    return {
+      kind: "dynamic-batch",
+      nodeId: batchDetection.info.nodeId,
+      title: batchDetection.info.title.replace("(Dynamic Batch Input)", "").trim(),
+      templateChainNodeIds: trace.templateChainNodeIds,
+      templateChainTitles: buildChainTitles(parsedWorkflow, trace.templateChainNodeIds),
+    };
+  }
+  if (batchDetection.error !== null) {
+    return { kind: "error", error: batchDetection.error };
+  }
+
+  // No Dynamic Batch node — try direct repeatable inputs.
+  const directDetection = detectDirectRepeatableInput(workflowJson);
+  if (directDetection.ok) {
+    const info = directDetection.info;
+    const templatePort = info.populatedPorts[0];
+    const trace = traceUpstreamTemplateChain(parsedWorkflow, {
+      nodeId: info.targetNodeId,
+      title: info.targetTitle,
+      classType: info.targetClassType,
+      templateInputKey: templatePort.key,
+      templateSourceNodeId: templatePort.sourceNodeId,
+      templateSourceOutputIndex: templatePort.sourceOutputIndex,
+    });
+    if (!trace.ok) return { kind: "error", error: trace.error };
+    return {
+      kind: "direct-repeatable-inputs",
+      nodeId: info.targetNodeId,
+      title: info.targetTitle,
+      templateChainNodeIds: trace.templateChainNodeIds,
+      templateChainTitles: buildChainTitles(parsedWorkflow, trace.templateChainNodeIds),
+    };
+  }
+  if (directDetection.error !== null) {
+    return { kind: "error", error: directDetection.error };
+  }
+
+  return { kind: "none" };
+}
 
 // ---------------------------------------------------------------------------
 // buildGenerationPayload — expand -> filter -> patch
@@ -71,10 +164,35 @@ export function buildGenerationPayload(
     params.textOverrideByNodeId
   );
 
-  const expansion = expandDynamicBatchWorkflow({
-    workflowJson: params.workflowJson,
-    selectedImages: params.batchSelectedImages ?? [],
-  });
+  const mode = resolveImageExpansionMode(params.workflowJson);
+  if (mode.kind === "error") {
+    return { ok: false, error: mode.error };
+  }
+
+  let expansion: DynamicBatchExpansionResult;
+  if (mode.kind === "dynamic-batch") {
+    expansion = expandDynamicBatchWorkflow({
+      workflowJson: params.workflowJson,
+      selectedImages: params.batchSelectedImages ?? [],
+    });
+  } else if (mode.kind === "direct-repeatable-inputs") {
+    expansion = expandDirectRepeatableInputsWorkflow({
+      workflowJson: params.workflowJson,
+      selectedImages: params.batchSelectedImages ?? [],
+    });
+  } else {
+    // "none" — no batch node and no direct repeatable inputs detected:
+    // unchanged passthrough, identical to today's no-expansion behavior.
+    expansion = {
+      ok: true,
+      workflowJson: params.workflowJson,
+      expandedNodeIds: [],
+      templateChainNodeIds: [],
+      batchNodeId: "",
+      batchInputKeys: [],
+      preview: { batchTitle: "", templateChainTitles: [], selectedImageCount: 0, clonedNodeCount: 0 },
+    };
+  }
 
   if (!expansion.ok) {
     return { ok: false, error: expansion.error };
@@ -112,35 +230,15 @@ export type DynamicBatchUiInfo =
     };
 
 export function detectDynamicBatchUiInfo(workflowJson: string): DynamicBatchUiInfo {
-  const detection = detectDynamicBatchInput(workflowJson);
-  if (!detection.ok) {
-    // null = no batch node in this workflow at all — not an error.
-    if (detection.error === null) return { kind: "none" };
-    return { kind: "error", message: detection.error };
-  }
-
-  let parsedWorkflow: Record<string, { _meta?: { title?: string }; class_type?: string }>;
-  try {
-    parsedWorkflow = JSON.parse(workflowJson);
-  } catch {
-    return { kind: "error", message: "Invalid workflow JSON." };
-  }
-
-  const trace = traceUpstreamTemplateChain(parsedWorkflow, detection.info);
-  if (!trace.ok) return { kind: "error", message: trace.error };
-
-  const templateChainTitles = trace.templateChainNodeIds.map((nid) => {
-    const node = parsedWorkflow[nid];
-    if (!node) return nid;
-    const t = node._meta?.title ?? node.class_type ?? nid;
-    return t.replace("(Input)", "").replace("(Dynamic Batch Input)", "").trim();
-  });
+  const mode = resolveImageExpansionMode(workflowJson);
+  if (mode.kind === "none") return { kind: "none" };
+  if (mode.kind === "error") return { kind: "error", message: mode.error };
 
   return {
     kind: "ready",
-    batchNodeId: detection.info.nodeId,
-    templateChainNodeIds: trace.templateChainNodeIds,
-    batchTitle: detection.info.title.replace("(Dynamic Batch Input)", "").trim(),
-    templateChainTitles,
+    batchNodeId: mode.nodeId,
+    templateChainNodeIds: mode.templateChainNodeIds,
+    batchTitle: mode.title,
+    templateChainTitles: mode.templateChainTitles,
   };
 }
