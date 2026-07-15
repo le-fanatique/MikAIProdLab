@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { db } from "@/db";
-import { projects, sequences, shots, assets, sequenceAssets } from "@/db/schema";
-import { eq, and, notInArray, inArray, asc } from "drizzle-orm";
+import { projects, sequences, shots, assets, sequenceAssets, shotReferenceImages, generationJobs } from "@/db/schema";
+import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -24,6 +24,7 @@ import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialB
 import Collapsible from "@/components/Collapsible";
 import SequenceContextInlineEditor from "@/components/SequenceContextInlineEditor";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
+import SequenceStoryboardGrid, { type StoryboardShot } from "@/components/SequenceStoryboardGrid";
 import { getLLMSettings, getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
@@ -80,6 +81,77 @@ export default async function SequencePage({ params, searchParams }: Props) {
     .from(shots)
     .where(eq(shots.sequenceId, sid))
     .orderBy(asc(shots.orderIndex));
+
+  // ── Storyboard grid data (SEQGEN.STORYBOARD.1) ──────────────────────
+  // Reuses existing tables only, no new column/migration: first reference
+  // image per shot (lowest orderIndex) as the image fallback, and each
+  // shot's single most recent generation job (any workflow kind — no join
+  // to comfyWorkflows here, see the report's documented limitation) as a
+  // lightweight, already-loaded-shape source for a "Generating"/"Failed"
+  // status when there is no approved video yet.
+  const storyboardShotIds = shotList.map((s) => s.id);
+
+  const storyboardRefImageRows =
+    storyboardShotIds.length > 0
+      ? await db
+          .select({
+            shotId: shotReferenceImages.shotId,
+            imagePath: shotReferenceImages.imagePath,
+            orderIndex: shotReferenceImages.orderIndex,
+          })
+          .from(shotReferenceImages)
+          .where(inArray(shotReferenceImages.shotId, storyboardShotIds))
+          .orderBy(asc(shotReferenceImages.orderIndex))
+      : [];
+  const firstRefImageByShot = new Map<number, string>();
+  for (const row of storyboardRefImageRows) {
+    if (!firstRefImageByShot.has(row.shotId)) {
+      firstRefImageByShot.set(row.shotId, row.imagePath);
+    }
+  }
+
+  const storyboardJobRows =
+    storyboardShotIds.length > 0
+      ? await db
+          .select({
+            shotId: generationJobs.shotId,
+            status: generationJobs.status,
+            createdAt: generationJobs.createdAt,
+          })
+          .from(generationJobs)
+          .where(inArray(generationJobs.shotId, storyboardShotIds))
+          .orderBy(desc(generationJobs.createdAt))
+      : [];
+  const latestJobStatusByShot = new Map<number, string>();
+  for (const row of storyboardJobRows) {
+    if (row.shotId !== null && !latestJobStatusByShot.has(row.shotId)) {
+      latestJobStatusByShot.set(row.shotId, row.status);
+    }
+  }
+
+  const storyboardShots: StoryboardShot[] = shotList.map((s) => {
+    const latestStatus = latestJobStatusByShot.get(s.id);
+    const status: StoryboardShot["status"] = s.approvedVideoPath
+      ? "approved"
+      : latestStatus === "pending" ||
+        latestStatus === "uploading" ||
+        latestStatus === "queued" ||
+        latestStatus === "running"
+      ? "generating"
+      : latestStatus === "failed" || latestStatus === "timeout"
+      ? "failed"
+      : "none";
+    const refImagePath = firstRefImageByShot.get(s.id) ?? null;
+    return {
+      id: s.id,
+      shotCode: s.shotCode,
+      title: s.title,
+      durationSeconds: s.durationSeconds,
+      videoUrl: s.approvedVideoPath ? refImageUrl(s.approvedVideoPath) : null,
+      imageUrl: !s.approvedVideoPath && refImagePath ? refImageUrl(refImagePath) : null,
+      status,
+    };
+  });
 
   const totalDuration = shotList.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0);
 
@@ -522,6 +594,22 @@ npx -y pnpm@9.0.0 dev`}
               locationHint={sequence.locationHint}
             />
           </Card>
+        </>
+      )}
+
+      {/* ── Storyboard — visual complement to the Shots table below
+          (SEQGEN.STORYBOARD.1). Read-only: media priority is approved
+          video, then first reference image, then an explicit empty
+          state — never a fabricated thumbnail or a server-side frame
+          extraction. Only rendered when there is at least one Shot; the
+          Shots table's own "No shots yet." empty state below already
+          covers the zero-shot case, so this avoids a duplicate message. */}
+      {shotList.length > 0 && (
+        <>
+          <SectionLabel label="Storyboard" />
+          <div className="mb-6">
+            <SequenceStoryboardGrid shots={storyboardShots} projectId={pid} sequenceId={sid} />
+          </div>
         </>
       )}
 
