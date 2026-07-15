@@ -7,11 +7,12 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
-import EditorialShotList from "@/components/EditorialShotList";
+import Collapsible from "@/components/Collapsible";
 import EditorialWorkspace from "@/components/EditorialWorkspace";
+import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
-import { buildAdvancedEditorHref } from "@/lib/editorial/advancedEditorLink";
+import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,7 @@ export default async function SequenceEditorialPage({ params }: Props) {
   const mikaiOrigin = await getMikAIPublicBaseUrl();
   const sidecarOrigin = await getOpenReelSidecarUrl();
   const advancedEditorHref = buildAdvancedEditorHref({ mikaiOrigin, sidecarOrigin, projectId: pid, sequenceId: sid });
+  const editorialExportHref = editorialExportHrefFor(pid, sid);
 
   const shotList = await db
     .select()
@@ -107,22 +109,12 @@ export default async function SequenceEditorialPage({ params }: Props) {
       <PageHeader
         title="Sequence Editorial"
         actions={
-          <>
-            <Link
-              href={advancedEditorHref}
-              target="_blank"
-              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
-              title="Opens the OpenReel sidecar editor in a new tab and loads this sequence"
-            >
-              Open in Advanced Editor
-            </Link>
-            <Link
-              href={`/projects/${pid}/sequences/${sid}`}
-              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
-            >
-              ← Sequence
-            </Link>
-          </>
+          <Link
+            href={`/projects/${pid}/sequences/${sid}`}
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors shrink-0"
+          >
+            ← Sequence
+          </Link>
         }
       />
 
@@ -155,16 +147,17 @@ export default async function SequenceEditorialPage({ params }: Props) {
         </nav>
       )}
 
-      {/* EDITORIAL.UX.1: Publish/Advanced Editor/Export live on the
-          Sequence page now — this page stays reachable for the per-shot
-          trim-in/out and gap-aware fallback controls below, which have no
-          equivalent there yet. */}
+      {/* EDITORIAL.POLISH.1: Publish/Export/OpenReel are also available on
+          this page now (Editorial Actions, below the timeline) — the
+          Sequence page keeps its own copy for the Story/Production
+          workflow, this one is scoped to montage. */}
       <p className="text-xs text-[#4b5158] mb-4">
-        Most editorial actions have moved to the{" "}
+        Frame-aware preview, gap-aware trim and fallback controls, plus{" "}
+        Publish/Export/OpenReel Advanced below the timeline. The{" "}
         <Link href={`/projects/${pid}/sequences/${sid}`} className="text-[#5b93d6] hover:text-[#8fbbe8]">
           Sequence page
-        </Link>
-        . This page provides advanced trim-in/out and fallback controls.
+        </Link>{" "}
+        remains the Production entry point.
       </p>
 
       {/* ── Timeline + Sequence Preview (shared selection) ───────── */}
@@ -186,24 +179,41 @@ export default async function SequenceEditorialPage({ params }: Props) {
         editorialItems={editorialItems}
       />
 
-      {/* ── Shot Order & fallback controls ───────────────────────── */}
-      <SectionLabel label="Shot Order & Fallback Controls" />
+      {/* ── Editorial Actions — below the timeline (EDITORIAL.CLEANUP.1) ──
+          Same helpers/contract as Sequence Detail's own Editorial Actions
+          card: PublishBasicSequenceResultButton, editorialExportHrefFor,
+          buildAdvancedEditorHref. OpenReel Advanced is visually emphasized
+          (accent border) as the Advanced mode, Publish/Export stay neutral
+          and distinct. */}
+      <SectionLabel label="Editorial Actions" />
       <Card>
-        <EditorialShotList
-          shots={shotList.map((s) => ({
-            id: s.id,
-            shotCode: s.shotCode,
-            title: s.title,
-            durationSeconds: s.durationSeconds,
-            hasApprovedVideo: s.approvedVideoPath !== null,
-            trimInSeconds: s.trimInSeconds,
-            trimOutSeconds: s.trimOutSeconds,
-          }))}
-          projectId={pid}
-          sequenceId={sid}
-          returnTo={editorialReturnTo}
-          editorialLayerActive={editorialItems.length > 0}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <PublishBasicSequenceResultButton projectId={pid} sequenceId={sid} />
+          <Link
+            href={editorialExportHref}
+            target="_blank"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Export Editorial JSON
+          </Link>
+          <Link
+            href={advancedEditorHref}
+            target="_blank"
+            className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+            title="Opens the OpenReel sidecar editor in a new tab and loads this sequence"
+          >
+            Open in Advanced Editor
+          </Link>
+        </div>
+        <p className="text-xs text-[#4b5158] mt-3">
+          OpenReel must be running at {sidecarOrigin}.
+        </p>
+        <Collapsible label="Show OpenReel start command">
+          <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
+{`cd F:/AI/mikai-openreel-sidecar
+npx -y pnpm@9.0.0 dev`}
+          </pre>
+        </Collapsible>
       </Card>
     </div>
   );

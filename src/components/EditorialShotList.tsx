@@ -30,6 +30,10 @@ type Props = {
   returnTo: string;
   /** When the editorial items layer exists, legacy shot trims are managed on the timeline. */
   editorialLayerActive?: boolean;
+  /** EDITORIAL.POLISH.1: loads this Shot in the player above, without a route change. */
+  onSelectShot?: (shotId: number) => void;
+  /** EDITORIAL.POLISH.1: highlights the row currently loaded in the player. */
+  selectedShotId?: number | null;
 };
 
 function StatusBadge({ shot }: { shot: EditorialShot }) {
@@ -60,6 +64,8 @@ export default function EditorialShotList({
   sequenceId,
   returnTo,
   editorialLayerActive = false,
+  onSelectShot,
+  selectedShotId = null,
 }: Props) {
   const initialOrder = useMemo(() => shots.map((s) => s.id), [shots]);
   const [order, setOrder] = useState<number[]>(initialOrder);
@@ -150,8 +156,13 @@ export default function EditorialShotList({
 
       {/* ── Shot rows ── */}
       <div className="flex flex-col divide-y divide-[#1a1d20]">
-        {orderedShots.map((shot, index) => (
-          <div key={shot.id} className="flex flex-col gap-1 py-2">
+        {orderedShots.map((shot, index) => {
+          const isLoaded = onSelectShot != null && shot.id === selectedShotId;
+          return (
+          <div
+            key={shot.id}
+            className={`flex flex-col gap-1 py-2 ${isLoaded ? "bg-[#141e2b] -mx-2 px-2 rounded" : ""}`}
+          >
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-mono text-[#3a4046] w-6 shrink-0 text-right tabular-nums">
               {index + 1}
@@ -159,6 +170,21 @@ export default function EditorialShotList({
             <span className="text-[10px] font-mono text-[#6e767d] w-16 shrink-0 truncate">
               {shot.shotCode ?? "—"}
             </span>
+            {onSelectShot && (
+              <button
+                type="button"
+                onClick={() => onSelectShot(shot.id)}
+                aria-label={`Select ${shot.shotCode ?? shot.title} in player`}
+                title="Select in player"
+                className={`shrink-0 w-6 h-6 flex items-center justify-center rounded border text-xs transition-colors ${
+                  isLoaded
+                    ? "border-[#5b93d6]/50 text-[#5b93d6]"
+                    : "border-[#232629] text-[#6e767d] hover:border-[#3a4046] hover:text-[#a4abb2]"
+                }`}
+              >
+                ▶
+              </button>
+            )}
             <Link
               href={`/projects/${projectId}/sequences/${sequenceId}/shots/${shot.id}`}
               className="flex-1 min-w-0 text-xs text-[#a4abb2] hover:text-[#e7e9ec] transition-colors truncate"
@@ -267,7 +293,8 @@ export default function EditorialShotList({
             </div>
           )}
           </div>
-        ))}
+          );
+        })}
         {orderedShots.length === 0 && (
           <p className="text-xs text-[#4b5158] py-2">No shots in this sequence yet.</p>
         )}

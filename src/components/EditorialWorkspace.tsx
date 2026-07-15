@@ -7,7 +7,8 @@ import EditorialTimeline, {
   type EditorialTimelineShot,
   type EditorialItemView,
 } from "@/components/EditorialTimeline";
-import SequencePreviewPlayer from "@/components/SequencePreviewPlayer";
+import EditorialShotList from "@/components/EditorialShotList";
+import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import { initializeEditorialTimeline } from "@/actions/shots";
 import {
   moveEditorialItemOrder,
@@ -80,10 +81,19 @@ export default function EditorialWorkspace({
 }: Props) {
   const hasEditorialItems = editorialItems.length > 0;
 
-  // Legacy selection (no-items fallback)
-  const [selectedShotId, setSelectedShotId] = useState<number | null>(null);
-  // Item selection (editorial layer active)
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  // Legacy selection (no-items fallback) — lazily defaults to the first
+  // Shot with a video, computed synchronously at initial render (SSR
+  // included), same as the previous player's own default `currentIndex`.
+  // A `useEffect` here would only run after hydration, causing a false
+  // "no video" flash on first paint whenever a playable Shot exists.
+  const [selectedShotId, setSelectedShotId] = useState<number | null>(() => {
+    if (editorialItems.length > 0) return null;
+    return shots.find((s) => s.videoUrl)?.id ?? null;
+  });
+  // Item selection (editorial layer active) — same synchronous default.
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(
+    () => editorialItems.find((it) => it.type === "shot" && it.videoUrl)?.id ?? null
+  );
 
   const selectedItem = hasEditorialItems
     ? editorialItems.find((it) => it.id === selectedItemId) ?? null
@@ -127,46 +137,102 @@ export default function EditorialWorkspace({
   const canMoveItemDown =
     selectedItemPos !== -1 && selectedItemPos < selectedItemSiblings.length - 1;
 
+  // ── Player selection (EDITORIAL.POLISH.1) ────────────────────────────
+  // VideoFrameReviewPlayer shows exactly one source at a time (the
+  // current selection) — unlike SequencePreviewPlayer it has no built-in
+  // playlist/Previous-Next. Cross-shot navigation now comes from the icon
+  // button on each row of the Shot list below; gap selection is still
+  // driven by clicking a gap segment on the Editorial Timeline, unchanged.
+  type CurrentEntry = {
+    key: number;
+    kind: "shot" | "gap";
+    shotId: number | null;
+    title: string | null;
+    videoUrl: string | null;
+    durationSeconds: number | null;
+  };
+
+  const currentEntry: CurrentEntry | null = hasEditorialItems
+    ? selectedItem
+      ? {
+          key: selectedItem.id,
+          kind: selectedItem.type,
+          shotId: selectedItem.shotId,
+          title: selectedItem.title,
+          videoUrl: selectedItem.type === "shot" ? selectedItem.videoUrl : null,
+          durationSeconds: selectedItem.durationSeconds,
+        }
+      : null
+    : fallbackSelectedShot
+    ? {
+        key: fallbackSelectedShot.id,
+        kind: "shot",
+        shotId: fallbackSelectedShot.id,
+        title: fallbackSelectedShot.title,
+        videoUrl: fallbackSelectedShot.videoUrl,
+        durationSeconds: fallbackSelectedShot.durationSeconds,
+      }
+    : null;
+
+  // Shot navigation from the list below (EDITORIAL.SHOTNAV.1) — resolves
+  // to the matching editorial item when the gap-aware layer is active,
+  // else selects the shot directly (legacy path, same as clicking its
+  // segment on the timeline already did).
+  function handleSelectShotFromList(shotId: number) {
+    if (hasEditorialItems) {
+      const item = editorialItems.find((it) => it.type === "shot" && it.shotId === shotId);
+      if (item) setSelectedItemId(item.id);
+    } else {
+      setSelectedShotId(shotId);
+    }
+  }
+
+  const listSelectedShotId = hasEditorialItems ? selectedItem?.shotId ?? null : selectedShotId;
+
   return (
     <>
       {/* ── Sequence Viewer — dominant, on top ───────────────────── */}
       <SectionLabel label="Sequence Viewer" />
       <Card>
-        <SequencePreviewPlayer
-          shots={shots.map((s) => ({
-            id: s.id,
-            shotCode: s.shotCode,
-            title: s.title,
-            durationSeconds: s.durationSeconds,
-            videoUrl: s.videoUrl,
-            isPlaceholder: s.isPlaceholder,
-            trimInSeconds: s.trimInSeconds,
-            trimOutSeconds: s.trimOutSeconds,
-          }))}
-          projectId={projectId}
-          sequenceId={sequenceId}
-          {...(hasEditorialItems
-            ? {
-                items: editorialItems.map((it) => ({
-                  itemId: it.id,
-                  type: it.type,
-                  shotId: it.shotId,
-                  shotCode: it.shotCode,
-                  title: it.title,
-                  videoUrl: it.videoUrl,
-                  durationSeconds: it.durationSeconds,
-                  trimInSeconds: it.trimInSeconds,
-                  trimOutSeconds: it.trimOutSeconds,
-                  isPlaceholder: it.isPlaceholder,
-                })),
-                selectedItemId,
-                onItemSelect: setSelectedItemId,
-              }
-            : {
-                selectedShotId,
-                onShotSelect: setSelectedShotId,
-              })}
-        />
+        {currentEntry && currentEntry.videoUrl ? (
+          <VideoFrameReviewPlayer
+            key={currentEntry.key}
+            src={currentEntry.videoUrl}
+            projectId={projectId}
+            sequenceId={sequenceId}
+            shotId={currentEntry.shotId ?? undefined}
+            defaultFps={24}
+            // EDITORIAL.POLISH.1: capture destinations intentionally empty
+            // here — a gap has no natural Shot to capture into, and
+            // building the full cross-project destination list (as Shot
+            // Detail/Sequence Result do) is outside "adapter uniquement
+            // les props necessaires" for this ticket. Frame capture into
+            // References stays available from Shot Detail/Sequence
+            // Result; this preview stays focused on playback/seek only.
+            captureDestinations={[]}
+          />
+        ) : currentEntry && currentEntry.kind === "gap" ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-10 border border-dashed border-[#2c3035] rounded">
+            <span className="text-xs text-[#4b5158] uppercase tracking-wider">
+              Gap — no video to preview
+            </span>
+            <span className="text-xs font-mono text-[#6e767d]">
+              {currentEntry.durationSeconds !== null
+                ? `${currentEntry.durationSeconds.toFixed(1)}s`
+                : "—"}
+            </span>
+          </div>
+        ) : currentEntry ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-10 border border-dashed border-[#2c3035] rounded">
+            <span className="text-xs text-[#4b5158]">
+              {currentEntry.title ?? "This shot"} has no approved video yet.
+            </span>
+          </div>
+        ) : (
+          <p className="text-xs text-[#4b5158] py-6 text-center">
+            No approved videos in this sequence yet.
+          </p>
+        )}
       </Card>
 
       {/* ── Selected — lightweight read-only strip ───────────────── */}
@@ -360,6 +426,35 @@ export default function EditorialWorkspace({
           </Link>
         </div>
       )}
+
+      {/* ── Shot Order & Fallback Controls — single list surface ────
+          EDITORIAL.CLEANUP.1: moved here (was a separate block on the
+          page) so it shares this component's selection state and can
+          drive the player above via the icon button added on each row
+          (EDITORIAL.SHOTNAV.1). Removing SequencePreviewPlayer already
+          dropped its own duplicate playlist list, so this remains the
+          single shot list on the page. Placed above Editorial Timeline
+          per the EDITORIAL.POLISH.1 retake. */}
+      <SectionLabel label="Shot Order & Fallback Controls" />
+      <Card>
+        <EditorialShotList
+          shots={shots.map((s) => ({
+            id: s.id,
+            shotCode: s.shotCode,
+            title: s.title,
+            durationSeconds: s.durationSeconds,
+            hasApprovedVideo: s.hasApprovedVideo,
+            trimInSeconds: s.trimInSeconds,
+            trimOutSeconds: s.trimOutSeconds,
+          }))}
+          projectId={projectId}
+          sequenceId={sequenceId}
+          returnTo={returnTo}
+          editorialLayerActive={hasEditorialItems}
+          onSelectShot={handleSelectShotFromList}
+          selectedShotId={listSelectedShotId}
+        />
+      </Card>
 
       {/* ── Editorial Timeline — central editing surface ─────────── */}
       <SectionLabel
