@@ -66,19 +66,17 @@ export default function StoryboardAssetsPanel({ projectId, assets }: Props) {
   }
 
   function toggle(refId: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(refId)) next.delete(refId);
-      else next.add(refId);
+    const next = new Set(selected);
+    if (next.has(refId)) next.delete(refId);
+    else next.add(refId);
 
-      const ids = orderedIds(next);
-      const params = new URLSearchParams(searchParams.toString());
-      if (ids.length > 0) params.set("storyboardRefs", ids.join(","));
-      else params.delete("storyboardRefs");
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    setSelected(next);
 
-      return next;
-    });
+    const ids = orderedIds(next);
+    const params = new URLSearchParams(searchParams.toString());
+    if (ids.length > 0) params.set("storyboardRefs", ids.join(","));
+    else params.delete("storyboardRefs");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   if (assets.length === 0) {
