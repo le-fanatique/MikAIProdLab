@@ -183,6 +183,13 @@
       "when": 1783958339392,
       "tag": "0025_furry_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1784112848840,
+      "tag": "0026_big_trish_tilby",
+      "breakpoints": true
     }
   ]
 }

@@ -627,6 +627,7 @@ npx -y pnpm@9.0.0 dev`}
             project={project}
             sequence={sequence}
             shots={shotList}
+            searchParams={resolvedSearchParams}
           />
         </div>
       )}

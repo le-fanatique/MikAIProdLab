@@ -6,6 +6,11 @@ type Props = {
   basePath: string;
   mappings: WorkflowInputMapping[];
   selectedImageByNodeId: Record<string, string>;
+  // SEQGEN.STORYBOARD.2 (retake 3) — extra params (storyboard=1,
+  // storyboardRefs) that must survive this GET form's submit even though
+  // they aren't imageNode_* fields. Reuses the same hidden-field passthrough
+  // pattern already used elsewhere; no new query-param mechanism.
+  preserveParams?: Record<string, string>;
 };
 
 function resolvePreviewImage(
@@ -62,6 +67,7 @@ export default function WorkflowImageSelectionForm({
   basePath,
   mappings,
   selectedImageByNodeId,
+  preserveParams,
 }: Props) {
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
   if (imageMappings.length === 0) return null;
@@ -73,6 +79,10 @@ export default function WorkflowImageSelectionForm({
       </p>
 
       <form method="GET" action={basePath}>
+        {preserveParams &&
+          Object.entries(preserveParams).map(([key, value]) => (
+            <input key={key} type="hidden" name={key} value={value} />
+          ))}
         <div className="flex flex-col gap-6">
           {imageMappings.map((mapping) => {
             const nodeId = mapping.input.nodeId;

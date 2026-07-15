@@ -24,6 +24,7 @@ import ShotPanelImagePreviewForm from "@/components/ShotPanelImagePreviewForm";
 import type { ShotPanelImageNode } from "@/components/ShotPanelImagePreviewForm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
+import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
 import {
   buildGenerationPayload,
   detectDynamicBatchUiInfo,
@@ -36,6 +37,7 @@ import {
   attachOutputAsShotReference,
   approveVideoOutput,
 } from "@/actions/generation";
+import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { type FillSource } from "@/lib/textInputKind";
@@ -73,6 +75,9 @@ type Props = {
   approveError?: string | null;
   shotPromptSaved?: boolean;
   shotPromptError?: string | null;
+  /** SEQGEN.STORYBOARD.2 feedback after saveStoryboardDraftFromJob — same shape as attachedReference/attachError above. */
+  storyboardDraftSaved?: boolean;
+  storyboardDraftError?: string | null;
 };
 
 export default async function ShotGenerationPanel({
@@ -95,7 +100,21 @@ export default async function ShotGenerationPanel({
   approveError,
   shotPromptSaved,
   shotPromptError,
+  storyboardDraftSaved,
+  storyboardDraftError,
 }: Props) {
+  // SEQGEN.STORYBOARD.2: currentSearchParams already forwards every raw
+  // query param generically (see this file's caller) — no new prop needed
+  // just to read this one flag.
+  const isStoryboardContext = currentSearchParams["storyboard"] === "1";
+  // Retake fix: the actual reference-selection transport from Storyboard
+  // Assets. Ordered, comma-separated RuntimeImageOption ids (the same "id"
+  // shape buildRuntimeImageOptions already produces below) — parsed here,
+  // applied once `availableImages` exists.
+  const storyboardSelectedRefIds = (currentSearchParams["storyboardRefs"] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const [shot] = await db.select().from(shots).where(eq(shots.id, shid));
   if (!shot) return null;
 
@@ -342,7 +361,7 @@ export default async function ShotGenerationPanel({
       : null,
   ].filter((s): s is FillSource => s !== null);
 
-  const availableImages = buildRuntimeImageOptions(
+  const allAvailableImages = buildRuntimeImageOptions(
     shotRefImages,
     castAssetRefImages,
     assignedRows.map((r) => ({
@@ -351,6 +370,18 @@ export default async function ShotGenerationPanel({
       assetType: r.assetType,
     }))
   );
+
+  // Retake fix — SEQGEN.STORYBOARD.2: when a Storyboard Assets selection was
+  // transported in, every downstream consumer of `availableImages` (Dynamic
+  // Batch groups, per-node image pickers, and — critically —
+  // buildGenerationPayload's actual payload below) sees only the selected
+  // references, in the exact order they were selected. No selection (or a
+  // non-storyboard context) keeps today's default: every cast/shot
+  // reference, unfiltered. Filtering itself lives in a pure, independently
+  // tested helper — see filterAvailableImagesBySelection.ts.
+  const availableImages = isStoryboardContext
+    ? filterAvailableImagesBySelection(allAvailableImages, storyboardSelectedRefIds)
+    : allAvailableImages;
 
   // --- Dynamic Batch UI info (detect + trace + titles) — shared helper, same
   // result the /map page and AssetGenerationPanel compute for this workflow. ---
@@ -593,6 +624,17 @@ export default async function ShotGenerationPanel({
       }
     }
   }
+
+  // SEQGEN.STORYBOARD.2 — provenance snapshots for saveStoryboardDraftFromJob.
+  // Reuses this render's own already-computed compiledShotPrompt/
+  // availableImages; never a second source of truth.
+  const canSaveStoryboardDraft = isStoryboardContext && workflow.kind === "image" && canAttach;
+  const storyboardReferencesSnapshot = JSON.stringify(
+    Object.values(selectedImageByNodeId)
+      .map((imageId) => availableImages.find((img) => img.id === imageId))
+      .filter((img): img is NonNullable<typeof img> => img !== undefined)
+      .map((img) => ({ id: img.id, label: img.label, source: img.source, assetName: img.assetName }))
+  );
 
   return (
     <div className="flex flex-col">
@@ -847,6 +889,34 @@ export default async function ShotGenerationPanel({
                 </button>
               </form>
             ) : null}
+            {/* Storyboard draft — SEQGEN.STORYBOARD.2, additive to the
+                Approve Output/Attach-as-reference actions above, never
+                replacing them. Only offered for image workflows reached
+                from the Storyboard workspace (?storyboard=1). */}
+            {canSaveStoryboardDraft && (
+              <>
+                {storyboardDraftError && (
+                  <p className="text-xs text-[#cf7b6b]">{storyboardDraftError}</p>
+                )}
+                {storyboardDraftSaved ? (
+                  <p className="text-xs text-[#6b9e72]">Saved as storyboard draft.</p>
+                ) : (
+                  <form action={saveStoryboardDraftFromJob}>
+                    <input type="hidden" name="shotId" value={String(shid)} />
+                    <input type="hidden" name="jobId" value={String(activeJobId)} />
+                    <input type="hidden" name="promptSnapshot" value={compiledShotPrompt.text} />
+                    <input type="hidden" name="referencesSnapshot" value={storyboardReferencesSnapshot} />
+                    <input type="hidden" name="returnTo" value={approveReturnTo} />
+                    <button
+                      type="submit"
+                      className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+                    >
+                      Save as Storyboard Draft
+                    </button>
+                  </form>
+                )}
+              </>
+            )}
             {/* Video approve — GEN.2.G.2 */}
             {approveError && (
               <p className="text-xs text-[#cf7b6b]">{approveError}</p>

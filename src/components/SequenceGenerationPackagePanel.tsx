@@ -48,16 +48,34 @@ type Props = {
   };
   /** Already ordered by orderIndex (Sequence Structure/Storyboard order) — never re-sorted here. */
   shots: ShotRow[];
+  /**
+   * SEQGEN.STORYBOARD.2 — optional: only read for the two `pkg*` option
+   * flags below. Any other key is ignored, so passing a page's full
+   * `searchParams` object (Sequence Detail, Storyboard) is safe.
+   */
+  searchParams?: Record<string, string | string[] | undefined>;
 };
 
+// A checkbox's own field is present only while checked, so "checked by
+// default" needs the classic hidden("0") + checkbox("1") pair with the same
+// `name` — GET-submits either "0" alone (unchecked) or "0","1" together
+// (checked, both values present). Absent entirely (first load, no form
+// submission yet) falls back to `defaultOn`.
+function isFlagOn(raw: string | string[] | undefined, defaultOn: boolean): boolean {
+  if (raw === undefined) return defaultOn;
+  if (Array.isArray(raw)) return raw.includes("1");
+  return raw === "1";
+}
+
 /**
- * SEQGEN.1 — read-only preview of the Sequence Generation Package: an
- * async Server Component (same pattern as ShotGenerationPanel) that gathers
- * per-Shot casting/references/Asset Bibles/Prompt Segments with lightweight
- * batched queries, then hands everything to the pure
- * buildSequenceGenerationPackage/compileShotPrompt/
- * buildPromptCompilationContext chain. Never calls ComfyUI, never writes to
- * the DB, never produces a video.
+ * SEQGEN.1 (extended by SEQGEN.STORYBOARD.2 with the `Ignore prompt
+ * segments`/`Ignore unapproved reference images` options) — read-only
+ * preview of the Sequence Generation Package: an async Server Component
+ * (same pattern as ShotGenerationPanel) that gathers per-Shot casting/
+ * references/Asset Bibles/Prompt Segments with lightweight batched queries,
+ * then hands everything to the pure buildSequenceGenerationPackage/
+ * compileShotPrompt/buildPromptCompilationContext chain. Never calls
+ * ComfyUI, never writes to the DB, never produces a video.
  */
 export default async function SequenceGenerationPackagePanel({
   projectId,
@@ -65,7 +83,10 @@ export default async function SequenceGenerationPackagePanel({
   sequence,
   project,
   shots,
+  searchParams = {},
 }: Props) {
+  const ignorePromptSegments = isFlagOn(searchParams["pkgIgnoreSegments"], true);
+  const ignoreUnapprovedReferences = isFlagOn(searchParams["pkgIgnoreUnapproved"], true);
   const shotIds = shots.map((s) => s.id);
 
   const segmentRows =
@@ -248,7 +269,8 @@ export default async function SequenceGenerationPackagePanel({
       sequenceTitle: sequence.title,
       sequenceCode: sequence.sequenceCode,
     },
-    shotInputs
+    shotInputs,
+    { ignorePromptSegments, ignoreUnapprovedReferences }
   );
   const formattedText = formatSequenceGenerationPackageText(pkg);
   const formattedJson = JSON.stringify(pkg, null, 2);
@@ -269,6 +291,40 @@ export default async function SequenceGenerationPackagePanel({
             </span>
           </span>
         </div>
+
+        {/* SEQGEN.STORYBOARD.2 — package options, both checked by default.
+            Native GET form: no JS needed, works under pure SSR. Exclusions
+            never erase source data — only this recomputed package. */}
+        <form method="get" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#a4abb2] border-t border-[#232629] pt-3">
+          <label className="flex items-center gap-1.5">
+            <input type="hidden" name="pkgIgnoreSegments" value="0" />
+            <input
+              type="checkbox"
+              name="pkgIgnoreSegments"
+              value="1"
+              defaultChecked={ignorePromptSegments}
+              className="accent-[#5b93d6]"
+            />
+            Ignore prompt segments
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="hidden" name="pkgIgnoreUnapproved" value="0" />
+            <input
+              type="checkbox"
+              name="pkgIgnoreUnapproved"
+              value="1"
+              defaultChecked={ignoreUnapprovedReferences}
+              className="accent-[#5b93d6]"
+            />
+            Ignore unapproved reference images
+          </label>
+          <button
+            type="submit"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Apply
+          </button>
+        </form>
 
         {pkg.warnings.length > 0 && (
           <div className="rounded border border-[#3d3423] bg-[#2e2410]/30 px-3 py-2">
@@ -293,7 +349,7 @@ export default async function SequenceGenerationPackagePanel({
         <Collapsible label={`Shot-by-shot detail (${pkg.shotCount})`}>
           <div className="flex flex-col gap-3">
             {pkg.shots.map((s, i) => (
-              <div key={s.shotId} className="rounded border border-[#232629] bg-[#0d0e10] p-3">
+              <div key={s.shotId} className="rounded border border-[#232629] bg-[#141618] p-3">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span className="text-xs font-mono text-[#6e767d]">
                     #{i + 1} · {s.shotCode ?? "—"} · {s.title}
@@ -302,6 +358,9 @@ export default async function SequenceGenerationPackagePanel({
                     {s.durationSeconds !== null ? `${s.durationSeconds.toFixed(1)}s` : "no duration"}
                   </span>
                 </div>
+                <p className="text-[10px] text-[#4b5158] mb-1.5">
+                  References: {s.referenceSourceCounts.shot} shot · {s.referenceSourceCounts.asset} asset
+                </p>
                 <pre className="text-[11px] text-[#a4abb2] whitespace-pre-wrap">
                   {s.compiledPrompt.text || "(no compiled prompt)"}
                 </pre>
@@ -320,7 +379,7 @@ export default async function SequenceGenerationPackagePanel({
         </Collapsible>
 
         <Collapsible label="Full JSON package">
-          <pre className="text-[10px] text-[#6e767d] bg-[#0d0e10] border border-[#232629] rounded p-3 overflow-x-auto whitespace-pre-wrap">
+          <pre className="text-[10px] text-[#6e767d] bg-[#141618] border border-[#232629] rounded p-3 overflow-x-auto whitespace-pre-wrap">
             {formattedJson}
           </pre>
         </Collapsible>

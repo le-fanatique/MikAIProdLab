@@ -60,6 +60,17 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
     editorialSequenceId != null ? `/projects/${pid}/sequences/${editorialSequenceId}/editorial` : "#";
   const editorialDisabled = editorialSequenceId == null;
 
+  // SEQGEN.STORYBOARD.2: Storyboard is a project-level route (not nested
+  // under /sequences/{id} like Editorial) — the current Sequence is only
+  // ever a query param (?sequenceId=), same "current Sequence, or the
+  // project's first Sequence" resolution as Editorial above.
+  const storyboardSequenceId = editorialSequenceId;
+  const storyboardHref =
+    storyboardSequenceId != null
+      ? `/projects/${pid}/storyboard?sequenceId=${storyboardSequenceId}`
+      : "#";
+  const storyboardDisabled = storyboardSequenceId == null;
+
   return [
     {
       label: "Overview",
@@ -85,6 +96,13 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
       active: !editorialDisabled && pathname === editorialHref,
       disabled: editorialDisabled,
       title: editorialDisabled ? "Create a Sequence to use Editorial." : undefined,
+    },
+    {
+      label: "Storyboard",
+      href: storyboardHref,
+      active: !storyboardDisabled && pathname === `/projects/${pid}/storyboard`,
+      disabled: storyboardDisabled,
+      title: storyboardDisabled ? "Create a Sequence to use Storyboard." : undefined,
     },
     {
       label: "Project Style",

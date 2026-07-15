@@ -371,6 +371,46 @@ export type GenerationJob = typeof generationJobs.$inferSelect;
 export type NewGenerationJob = typeof generationJobs.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// Storyboard image drafts (SEQGEN.STORYBOARD.2) — dedicated, durable storage
+// for storyboard-generation results. Deliberately separate from both
+// `shots.approvedVideoPath` (an approved Shot *video*, never a storyboard
+// image) and `shot_reference_images` (user-curated references, not
+// generation drafts/provenance). A Sequence is derived via `shots.shotId`
+// and is intentionally not duplicated here. Multiple drafts per Shot are
+// allowed; "at most one approved draft active per Shot" is an application
+// rule (see approveStoryboardDraft in src/actions/storyboard.ts), not a DB
+// constraint.
+// ---------------------------------------------------------------------------
+export const storyboardImages = sqliteTable("storyboard_images", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  shotId: int("shot_id")
+    .notNull()
+    .references(() => shots.id, { onDelete: "cascade" }),
+  /** The generation job this draft was captured from, if still known. Nullable: the job row itself is not required to persist forever. */
+  jobId: int("job_id").references(() => generationJobs.id, { onDelete: "set null" }),
+  /** The workflow used to generate this draft, if still known. */
+  workflowId: int("workflow_id").references(() => comfyWorkflows.id, { onDelete: "set null" }),
+  imagePath: text("image_path").notNull(),
+  status: text("status", { enum: ["draft", "approved", "rejected"] })
+    .notNull()
+    .default("draft"),
+  /** The exact compiled prompt text at generation time — a provenance snapshot, never re-derived later. */
+  promptSnapshot: text("prompt_snapshot"),
+  /** JSON array of the reference images actually selected for this generation (asset/shot refId, label, role) — a provenance snapshot, not a live relation. */
+  referencesSnapshot: text("references_snapshot"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  approvedAt: text("approved_at"),
+});
+
+export type StoryboardImage = typeof storyboardImages.$inferSelect;
+export type NewStoryboardImage = typeof storyboardImages.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // Editorial timeline items — gap-aware montage layer for a sequence.
 // Shots stay the narrative/production structure; these items carry the
 // editorial arrangement: order, gaps, per-occurrence trims. Time positions

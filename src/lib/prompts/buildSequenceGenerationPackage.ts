@@ -25,6 +25,35 @@ import {
 } from "./buildPromptCompilationContext";
 import { compileShotPrompt, type CompiledShotPrompt } from "./compileShotPrompt";
 
+/**
+ * SEQGEN.STORYBOARD.2 — optional, retrocompatible package options. Omitting
+ * `options` entirely (as every SEQGEN.1 caller still does) behaves exactly
+ * as before: both flags default to `false`, nothing is excluded. Excluding
+ * data here only ever affects *this* computed package — the caller's own
+ * `promptContext`/`shots` input is never mutated, so the excluded data is
+ * never erased at the source.
+ */
+export type SequenceGenerationPackageOptions = {
+  /** When true, Prompt Segments are excluded from each Shot's compiled prompt (Shot Prompt text still used). */
+  ignorePromptSegments?: boolean;
+  /** When true, asset reference images explicitly marked not approved for generation are excluded. Shot-sourced references (which carry no approval flag) are never affected by this option. */
+  ignoreUnapprovedReferences?: boolean;
+};
+
+type ResolvedSequenceGenerationPackageOptions = {
+  ignorePromptSegments: boolean;
+  ignoreUnapprovedReferences: boolean;
+};
+
+function resolveOptions(
+  options: SequenceGenerationPackageOptions | undefined
+): ResolvedSequenceGenerationPackageOptions {
+  return {
+    ignorePromptSegments: options?.ignorePromptSegments ?? false,
+    ignoreUnapprovedReferences: options?.ignoreUnapprovedReferences ?? false,
+  };
+}
+
 export const SEQUENCE_GENERATION_PACKAGE_KIND = "sequence-generation-package" as const;
 export const SEQUENCE_GENERATION_PACKAGE_VERSION = 1 as const;
 
@@ -69,7 +98,9 @@ export type SequenceGenerationPackageShot = {
   continuity: SequenceGenerationContinuity;
   compiledPrompt: CompiledShotPrompt;
   context: PromptCompilationContext;
-  /** This Shot's own warnings only — compiledPrompt + context warnings, plus duration/media, deduplicated. */
+  /** SEQGEN.STORYBOARD.2 — references in `context.references` distinguished by their existing `source` field ("shot" = Shot's own existing references, "asset" = Storyboard Assets selections or other cast-asset references), counted here for convenience. Never a new data source — purely a tally of `context.references`. */
+  referenceSourceCounts: { shot: number; asset: number };
+  /** This Shot's own warnings only — compiledPrompt + context warnings, plus duration/media, deduplicated. Recomputed against whatever data survived the package's `options` exclusions. */
   warnings: string[];
 };
 
@@ -95,6 +126,8 @@ export type SequenceGenerationPackage = {
   shots: SequenceGenerationPackageShot[];
   /** Package-level diagnostics: one line per Shot warning ("Shot {code}: {warning}"), deduplicated, plus a leading notice when the Sequence has no Shots. Never blocks consultation of the package. */
   warnings: string[];
+  /** SEQGEN.STORYBOARD.2 — the exact options this package was built with, both keys always present so the effect is inspectable even when a caller passed nothing (both false, SEQGEN.1's original default behavior). */
+  options: ResolvedSequenceGenerationPackageOptions;
 };
 
 function trimOrNull(value: string | null | undefined): string | null {
@@ -123,14 +156,37 @@ function buildContinuity(input: SequenceGenerationContinuityInput): SequenceGene
   };
 }
 
-function buildShotPackage(input: SequenceGenerationPackageShotInput): SequenceGenerationPackageShot {
-  const context = buildPromptCompilationContext(input.promptContext);
+function buildShotPackage(
+  input: SequenceGenerationPackageShotInput,
+  options: ResolvedSequenceGenerationPackageOptions
+): SequenceGenerationPackageShot {
+  // Exclusions are applied to a local copy fed into the (unmodified) pure
+  // compilers below — `input`/`input.promptContext` themselves are never
+  // written to, so the source data is only ever excluded from this one
+  // computed package, never erased.
+  const effectiveShot = options.ignorePromptSegments
+    ? { ...input.promptContext.shot, hasPromptSegments: false, compiledPromptSegments: "" }
+    : input.promptContext.shot;
+
+  const effectiveReferences = options.ignoreUnapprovedReferences
+    ? input.promptContext.references.filter(
+        (ref) => !(ref.source === "asset" && ref.approvedForGeneration === false)
+      )
+    : input.promptContext.references;
+
+  const effectivePromptContext: BuildPromptCompilationContextInput = {
+    ...input.promptContext,
+    shot: effectiveShot,
+    references: effectiveReferences,
+  };
+
+  const context = buildPromptCompilationContext(effectivePromptContext);
   const compiledPrompt = compileShotPrompt({
     kind: "video",
-    shotPrompt: input.promptContext.shot.shotPrompt,
-    compiledPromptSegments: input.promptContext.shot.compiledPromptSegments,
-    hasPromptSegments: input.promptContext.shot.hasPromptSegments,
-    hasMissingTiming: input.promptContext.shot.hasMissingTiming,
+    shotPrompt: effectiveShot.shotPrompt,
+    compiledPromptSegments: effectiveShot.compiledPromptSegments,
+    hasPromptSegments: effectiveShot.hasPromptSegments,
+    hasMissingTiming: effectiveShot.hasMissingTiming,
   });
 
   const warnings = [...compiledPrompt.warnings, ...context.warnings];
@@ -140,6 +196,11 @@ function buildShotPackage(input: SequenceGenerationPackageShotInput): SequenceGe
   }
   if (!input.hasApprovedVideo && context.references.length === 0) {
     warnings.push("No approved video or reference image for this Shot.");
+  }
+
+  const referenceSourceCounts = { shot: 0, asset: 0 };
+  for (const ref of context.references) {
+    referenceSourceCounts[ref.source] += 1;
   }
 
   return {
@@ -152,6 +213,7 @@ function buildShotPackage(input: SequenceGenerationPackageShotInput): SequenceGe
     continuity: buildContinuity(input.continuity),
     compiledPrompt,
     context,
+    referenceSourceCounts,
     warnings: dedupePreservingOrder(warnings),
   };
 }
@@ -163,9 +225,11 @@ function buildShotPackage(input: SequenceGenerationPackageShotInput): SequenceGe
  */
 export function buildSequenceGenerationPackage(
   meta: SequenceGenerationPackageMeta,
-  shots: SequenceGenerationPackageShotInput[]
+  shots: SequenceGenerationPackageShotInput[],
+  options?: SequenceGenerationPackageOptions
 ): SequenceGenerationPackage {
-  const shotPackages = shots.map(buildShotPackage);
+  const resolvedOptions = resolveOptions(options);
+  const shotPackages = shots.map((s) => buildShotPackage(s, resolvedOptions));
 
   let totalKnownDurationSeconds = 0;
   let knownDurationShotCount = 0;
@@ -199,6 +263,7 @@ export function buildSequenceGenerationPackage(
     missingDurationShotCount: shotPackages.length - knownDurationShotCount,
     shots: shotPackages,
     warnings: dedupePreservingOrder(warnings),
+    options: resolvedOptions,
   };
 }
 

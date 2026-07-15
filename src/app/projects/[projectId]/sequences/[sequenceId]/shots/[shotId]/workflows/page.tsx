@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 function fmtDate(iso: string): string {
@@ -33,11 +34,33 @@ function fmtDate(iso: string): string {
   });
 }
 
-export default async function WorkflowPickerPage({ params }: Props) {
+export default async function WorkflowPickerPage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId } = await params;
+  const resolvedSearchParams = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
+
+  // SEQGEN.STORYBOARD.2: when arriving from the Storyboard workspace, only
+  // image workflows are relevant (storyboard is an image-only step). Both
+  // the `storyboard` flag and the `storyboardRefs` selection (retake fix —
+  // previously dropped here) must be forwarded into the generate page: the
+  // former lets ShotGenerationPanel offer "Save as Storyboard Draft", the
+  // latter is the actual reference-selection transport it filters
+  // `availableImages` against. Both flow through that page's existing
+  // currentSearchParams passthrough — no other file needs to change for
+  // that part.
+  const isStoryboardContext = resolvedSearchParams["storyboard"] === "1";
+  const rawStoryboardRefs = resolvedSearchParams["storyboardRefs"];
+  const storyboardRefsValue =
+    typeof rawStoryboardRefs === "string"
+      ? rawStoryboardRefs
+      : Array.isArray(rawStoryboardRefs)
+      ? rawStoryboardRefs[0]
+      : undefined;
+  const workflowLinkSuffix = isStoryboardContext
+    ? `?storyboard=1${storyboardRefsValue ? `&storyboardRefs=${encodeURIComponent(storyboardRefsValue)}` : ""}`
+    : "";
 
   const [project] = await db.select().from(projects).where(eq(projects.id, pid));
   if (!project) notFound();
@@ -48,7 +71,7 @@ export default async function WorkflowPickerPage({ params }: Props) {
   const [shot] = await db.select().from(shots).where(eq(shots.id, shid));
   if (!shot || shot.sequenceId !== sid) notFound();
 
-  const workflows = await db
+  const allWorkflows = await db
     .select({
       id: comfyWorkflows.id,
       name: comfyWorkflows.name,
@@ -59,6 +82,10 @@ export default async function WorkflowPickerPage({ params }: Props) {
     })
     .from(comfyWorkflows)
     .orderBy(desc(comfyWorkflows.updatedAt));
+
+  const workflows = isStoryboardContext
+    ? allWorkflows.filter((wf) => wf.kind === "image")
+    : allWorkflows;
 
   const shotLabel = shot.shotCode
     ? `${shot.shotCode} — ${shot.title}`
@@ -92,7 +119,7 @@ export default async function WorkflowPickerPage({ params }: Props) {
 
       {workflows.length === 0 ? (
         <EmptyState
-          title="No workflows saved."
+          title={isStoryboardContext ? "No image workflows saved." : "No workflows saved."}
           description="Upload a ComfyUI API workflow in Settings before mapping shot inputs."
           action={
             <Link
@@ -131,7 +158,7 @@ export default async function WorkflowPickerPage({ params }: Props) {
                   </p>
                 </div>
                 <Link
-                  href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map`}
+                  href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map${workflowLinkSuffix}`}
                   className="shrink-0 rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
                 >
                   {wf.kind === "video" ? "Generate Video →" : "Generate Keyframe →"}

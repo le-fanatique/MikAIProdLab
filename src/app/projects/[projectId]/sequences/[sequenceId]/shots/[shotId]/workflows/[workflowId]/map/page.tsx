@@ -22,6 +22,7 @@ import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPane
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
+import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
 import {
   buildGenerationPayload,
   detectDynamicBatchUiInfo,
@@ -36,6 +37,7 @@ import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
+import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { type FillSource } from "@/lib/textInputKind";
@@ -81,6 +83,14 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   const rawGenerationError = resolvedSearchParams["generationError"];
   const generationError = typeof rawGenerationError === "string" ? rawGenerationError : Array.isArray(rawGenerationError) ? rawGenerationError[0] : undefined;
+
+  // SEQGEN.STORYBOARD.2 (retake 3) — feedback after saveStoryboardDraftFromJob,
+  // same shape as generationError above.
+  const rawStoryboardDraftSaved = resolvedSearchParams["storyboardDraftSaved"];
+  const storyboardDraftSaved =
+    (typeof rawStoryboardDraftSaved === "string" ? rawStoryboardDraftSaved : Array.isArray(rawStoryboardDraftSaved) ? rawStoryboardDraftSaved[0] : undefined) === "1";
+  const rawStoryboardDraftError = resolvedSearchParams["storyboardDraftError"];
+  const storyboardDraftError = typeof rawStoryboardDraftError === "string" ? rawStoryboardDraftError : Array.isArray(rawStoryboardDraftError) ? rawStoryboardDraftError[0] : undefined;
 
   const selectedImageByNodeId: Record<string, string> = {};
   for (const [key, value] of Object.entries(resolvedSearchParams)) {
@@ -361,7 +371,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       : null,
   ].filter((s): s is FillSource => s !== null);
 
-  const availableImages = buildRuntimeImageOptions(
+  const allAvailableImages = buildRuntimeImageOptions(
     shotRefImages,
     castAssetRefImages,
     assignedRows.map((r) => ({
@@ -370,6 +380,35 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       assetType: r.assetType,
     }))
   );
+
+  // SEQGEN.STORYBOARD.2 (retake 2): this is the page StoryboardGrid's
+  // Generate/Regenerate links actually land on (via the workflow selector),
+  // not just ShotGenerationPanel's embedded copy on Shot Detail — the
+  // Storyboard Assets selection must be applied here too, before any
+  // preview/payload construction below, using the exact same shared pure
+  // helper (no second filter implementation).
+  const isStoryboardContext = currentSearchParams["storyboard"] === "1";
+  const storyboardSelectedRefIds = (currentSearchParams["storyboardRefs"] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const availableImages = isStoryboardContext
+    ? filterAvailableImagesBySelection(allAvailableImages, storyboardSelectedRefIds)
+    : allAvailableImages;
+
+  // SEQGEN.STORYBOARD.2 (retake 3) — storyboard=1/storyboardRefs must survive
+  // the Image Inputs "Update Preview" GET form and the Generate redirect's
+  // returnTo, not just this page's initial render. Reused below both as
+  // hidden fields for WorkflowImageSelectionForm and folded into
+  // selectionParams so returnTo carries them too — no second passthrough
+  // mechanism, just the existing selectionParams/currentSearchParams pattern.
+  const storyboardPreserveParams: Record<string, string> | undefined = isStoryboardContext
+    ? {
+        storyboard: "1",
+        ...(currentSearchParams["storyboardRefs"] ? { storyboardRefs: currentSearchParams["storyboardRefs"] } : {}),
+      }
+    : undefined;
+  const storyboardWorkspaceReturnTo = `/projects/${pid}/storyboard?sequenceId=${sid}`;
 
   const basePath = `/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wid}/map`;
 
@@ -526,8 +565,20 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   if (batchDetectionOk && batchSelectedIds.length > 0) {
     selectionParams.set(`batchImages_${batchNodeId}`, batchSelectedIds.join(","));
   }
+  if (storyboardPreserveParams) {
+    for (const [key, value] of Object.entries(storyboardPreserveParams)) {
+      selectionParams.set(key, value);
+    }
+  }
   const selectionQuery = selectionParams.toString();
   const returnTo = selectionQuery ? `${basePath}?${selectionQuery}` : basePath;
+
+  // Output-section returnTo (e.g. for Save as Storyboard Draft) — same
+  // selection state as Generate's returnTo, plus the current jobId so the
+  // panel reopens on the right output if the user comes back to /map.
+  const outputParams = new URLSearchParams(selectionParams);
+  if (jobIdParam) outputParams.set("jobId", jobIdParam);
+  const outputReturnTo = `${basePath}?${outputParams.toString()}`;
 
   const activeJobId =
     jobIdParam && /^\d+$/.test(jobIdParam) ? parseInt(jobIdParam, 10) : null;
@@ -557,6 +608,20 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
         ATTACH_EXTS.has(`.${ext}`);
     }
   }
+
+  // SEQGEN.STORYBOARD.2 (retake 3) — this is the actual route the real
+  // Storyboard flow reaches (Storyboard -> Generate -> workflow selector ->
+  // /map), so the "Save as Storyboard Draft" action belongs here, reusing
+  // saveStoryboardDraftFromJob and this render's own already-computed
+  // compiledShotPrompt/availableImages/selectedImageByNodeId — never a
+  // second source of truth or a second draft-saving action.
+  const canSaveStoryboardDraft = isStoryboardContext && workflow.kind === "image" && canAttach;
+  const storyboardReferencesSnapshot = JSON.stringify(
+    Object.values(selectedImageByNodeId)
+      .map((imageId) => availableImages.find((img) => img.id === imageId))
+      .filter((img): img is NonNullable<typeof img> => img !== undefined)
+      .map((img) => ({ id: img.id, label: img.label, source: img.source, assetName: img.assetName }))
+  );
 
   return (
     <div>
@@ -666,6 +731,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               basePath={basePath}
               mappings={displayMappings}
               selectedImageByNodeId={selectedImageByNodeId}
+              preserveParams={storyboardPreserveParams}
             />
           </Card>
         )}
@@ -813,6 +879,44 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                     </button>
                   </form>
                 )}
+
+                {/* Storyboard draft — SEQGEN.STORYBOARD.2 (retake 3), additive to
+                    Attach as Shot Reference above, never replacing it. Only
+                    offered for image workflows reached from the Storyboard
+                    workspace (?storyboard=1) — this is the real Generate route
+                    the Storyboard grid leads to. */}
+                {canSaveStoryboardDraft && (
+                  <>
+                    {storyboardDraftError && (
+                      <p className="text-xs text-[#cf7b6b]">{storyboardDraftError}</p>
+                    )}
+                    {storyboardDraftSaved ? (
+                      <div className="flex flex-col gap-1">
+                        <p className="text-xs text-[#6b9e72]">Saved as storyboard draft.</p>
+                        <Link
+                          href={storyboardWorkspaceReturnTo}
+                          className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                        >
+                          ← Back to Storyboard Workspace
+                        </Link>
+                      </div>
+                    ) : (
+                      <form action={saveStoryboardDraftFromJob}>
+                        <input type="hidden" name="shotId" value={String(shid)} />
+                        <input type="hidden" name="jobId" value={String(activeJobId)} />
+                        <input type="hidden" name="promptSnapshot" value={compiledShotPrompt.text} />
+                        <input type="hidden" name="referencesSnapshot" value={storyboardReferencesSnapshot} />
+                        <input type="hidden" name="returnTo" value={outputReturnTo} />
+                        <button
+                          type="submit"
+                          className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+                        >
+                          Save as Storyboard Draft
+                        </button>
+                      </form>
+                    )}
+                  </>
+                )}
               </div>
             </Card>
           </>
@@ -833,6 +937,14 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
         >
           ← Back to Shot
         </Link>
+        {isStoryboardContext && (
+          <Link
+            href={storyboardWorkspaceReturnTo}
+            className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+          >
+            ← Back to Storyboard Workspace
+          </Link>
+        )}
       </div>
     </div>
   );

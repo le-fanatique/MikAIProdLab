@@ -80,6 +80,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const deleteSuccess = sp("deleteSuccess");
   const shotPromptSaved = sp("shotPromptSaved");
   const shotPromptError = sp("shotPromptError");
+  const storyboardDraftSaved = sp("storyboardDraftSaved");
+  const storyboardDraftError = sp("storyboardDraftError");
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -927,6 +929,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               approveError={approveError ?? null}
               shotPromptSaved={shotPromptSaved === "1"}
               shotPromptError={shotPromptError ?? null}
+              storyboardDraftSaved={storyboardDraftSaved === "1"}
+              storyboardDraftError={storyboardDraftError ?? null}
             />
           ) : (
             <WorkflowSelectorPanel
