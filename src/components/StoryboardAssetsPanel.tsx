@@ -117,6 +117,7 @@ export default function StoryboardAssetsPanel({ projectId, assets }: Props) {
               <div className="mt-1.5">
                 <Collapsible
                   label={`References (${asset.references.length}) — ${selectedCount} selected / ${asset.references.length} available`}
+                  defaultOpen
                 >
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                     {asset.references.map((ref) => {

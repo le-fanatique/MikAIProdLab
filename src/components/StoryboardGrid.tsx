@@ -124,13 +124,14 @@ export default function StoryboardGrid({ projectId, sequenceId, shots, returnTo,
                 </Collapsible>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                <Link
-                  href={generateHref}
-                  className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                >
-                  {shot.status === "not_generated" ? "Generate" : "Regenerate"}
-                </Link>
+              <Link
+                href={generateHref}
+                className="mt-0.5 block w-full text-center rounded border border-[#5b93d6]/50 bg-[#5b93d6]/10 text-[#5b93d6] px-2 py-1.5 text-[11px] font-medium hover:border-[#5b93d6] hover:bg-[#5b93d6]/20 hover:text-[#8fbbe8] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#5b93d6] focus-visible:outline-offset-1"
+              >
+                {shot.status === "not_generated" ? "Generate Storyboard" : "Regenerate Storyboard"}
+              </Link>
+
+              <div className="flex flex-wrap items-center gap-2">
                 {canApprove && (
                   <form action={approveStoryboardDraft}>
                     <input type="hidden" name="draftId" value={String(shot.displayDraftId)} />
