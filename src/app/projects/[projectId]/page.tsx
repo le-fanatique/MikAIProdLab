@@ -298,18 +298,13 @@ export default async function ProjectPage({ params }: Props) {
               Story Workspace
             </span>
             <span className="text-xs text-[#4b5158]">
-              Pitch, story, outline, sequences and assets
+              Pitch, Story Foundation, Outline, Sequence Structure, Assets
+              and Casting Coverage
             </span>
           </div>
           <span className="text-[#3a4046] text-sm group-hover:text-[#6e767d] transition-colors">
             →
           </span>
-        </Link>
-        <Link
-          href={`/projects/${id}/outline`}
-          className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors pl-1"
-        >
-          Outline Builder — advanced per-sequence editing →
         </Link>
       </div>
 

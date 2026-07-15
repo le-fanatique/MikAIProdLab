@@ -17,6 +17,9 @@ import SequenceShotsLLMAssistPanel from "@/components/SequenceShotsLLMAssistPane
 import StoryFoundationEditor from "@/components/StoryFoundationEditor";
 import AssetsLLMExtractPanel from "@/components/AssetsLLMExtractPanel";
 import BatchAssetDescriptionEnhancePanel from "@/components/BatchAssetDescriptionEnhancePanel";
+import SequenceContextEditor from "@/components/SequenceContextEditor";
+import DeleteButton from "@/components/DeleteButton";
+import { deleteSequenceAndReturn } from "@/actions/sequences";
 import { getLLMSettings } from "@/lib/settings";
 
 type Props = {
@@ -24,9 +27,21 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function SectionLabel({ label, right }: { label: string; right?: ReactNode }) {
+function SectionLabel({
+  label,
+  right,
+  id,
+}: {
+  label: string;
+  right?: ReactNode;
+  /** STORY.WORKSPACE.MERGE.1: anchor target for /outline's compatibility redirect. */
+  id?: string;
+}) {
   return (
-    <div className="border-t border-[#232629] pt-4 mt-8 mb-4 flex items-center justify-between">
+    <div
+      id={id}
+      className="border-t border-[#232629] pt-4 mt-8 mb-4 flex items-center justify-between"
+    >
       <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
         {label}
       </span>
@@ -222,13 +237,13 @@ export default async function StoryPage({ params, searchParams }: Props) {
       </div>
 
       {/* ── 3. Outline ── */}
-      <SectionLabel label="Outline" />
+      <SectionLabel label="Outline" id="outline" />
       <Card className="mb-6">
         <div className="flex flex-col gap-5">
           <p className="text-xs text-[#6e767d] leading-relaxed -mt-1">
-            Edit the outline directly below. Open Outline Builder for
-            per-sequence narrative context (summary, mood, location) and
-            sequence removal.
+            Edit the outline directly below, or generate a draft from the
+            story. Per-sequence narrative context and sequence removal are
+            in Sequence Structure below.
           </p>
           <OutlineEditorForm projectId={pid} initialOutline={project.outline} />
 
@@ -244,19 +259,12 @@ export default async function StoryPage({ params, searchParams }: Props) {
               isConfigured={isLlmConfigured}
             />
           </div>
-
-          <Link
-            href={`/projects/${pid}/outline`}
-            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors self-start"
-          >
-            Open Outline Builder →
-          </Link>
         </div>
       </Card>
 
-      {/* ── 4. Production Structure ── */}
+      {/* ── 4. Sequence Structure ── */}
       <SectionLabel
-        label="Production Structure"
+        label="Sequence Structure"
         right={
           seqs.length > 0 ? (
             <span className="text-xs text-[#4b5158]">
@@ -307,13 +315,13 @@ export default async function StoryPage({ params, searchParams }: Props) {
       {seqs.length === 0 ? (
         <EmptyState
           title="No sequences yet."
-          description="Generate sequences above or open the Outline Builder."
+          description="Generate sequences above, or write an outline first."
           action={
             <Link
-              href={`/projects/${pid}/outline`}
+              href="#outline"
               className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
             >
-              Open Outline Builder →
+              ↑ Jump to Outline
             </Link>
           }
         />
@@ -349,12 +357,20 @@ export default async function StoryPage({ params, searchParams }: Props) {
                       {seq.title}
                     </Link>
                   </div>
-                  <Link
-                    href={`/projects/${pid}/sequences/${seq.id}`}
-                    className="shrink-0 text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
-                  >
-                    Open →
-                  </Link>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Link
+                      href={`/projects/${pid}/sequences/${seq.id}`}
+                      className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                    >
+                      Open →
+                    </Link>
+                    <DeleteButton
+                      action={deleteSequenceAndReturn.bind(null, seq.id, storyReturnTo)}
+                      confirm={`Delete "${seq.title}" and all its shots?`}
+                      label="Delete"
+                      className="text-[10px] text-[#3a4046] hover:text-[#cf7b6b] transition-colors"
+                    />
+                  </div>
                 </div>
 
                 {seq.summary && (
@@ -363,28 +379,18 @@ export default async function StoryPage({ params, searchParams }: Props) {
                   </p>
                 )}
 
-                {(seq.mood || seq.locationHint || seq.narrativePurpose) && (
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 ml-7 text-xs mb-2">
-                    {seq.narrativePurpose && (
-                      <span>
-                        <span className="text-[#4b5158]">Purpose </span>
-                        <span className="text-[#6e767d]">{seq.narrativePurpose}</span>
-                      </span>
-                    )}
-                    {seq.mood && (
-                      <span>
-                        <span className="text-[#4b5158]">Mood </span>
-                        <span className="text-[#6e767d]">{seq.mood}</span>
-                      </span>
-                    )}
-                    {seq.locationHint && (
-                      <span>
-                        <span className="text-[#4b5158]">Location </span>
-                        <span className="text-[#6e767d]">{seq.locationHint}</span>
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* Editable narrative context (STORY.WORKSPACE.MERGE.1) —
+                    reused from Outline Builder as-is: summary/description/
+                    narrativePurpose/mood/locationHint, same server action. */}
+                <SequenceContextEditor
+                  sequenceId={seq.id}
+                  projectId={pid}
+                  summary={seq.summary}
+                  description={seq.description}
+                  narrativePurpose={seq.narrativePurpose}
+                  mood={seq.mood}
+                  locationHint={seq.locationHint}
+                />
 
                 {/* Status row */}
                 <div className="flex items-center gap-2 ml-7 mb-1">
