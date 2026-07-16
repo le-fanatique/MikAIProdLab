@@ -27,6 +27,8 @@ import {
   WorkerContractError,
   type DetectResult,
   type CropResult,
+  type DetectionRequestMode,
+  type Sensitivity,
 } from "./workerContract";
 
 const execFileAsync = promisify(execFile);
@@ -82,32 +84,57 @@ function wrapWorkerFailure(e: unknown): never {
   }
   // execFile rejects with the child's non-zero exit still carrying stdout —
   // try to recover the worker's own {"ok": false, "error": "..."} message.
+  // Parsing happens inside its own try (falling through to the generic
+  // message on any parse failure) but the recovered error is thrown OUTSIDE
+  // that try — throwing inside would just be caught by the same catch below.
   if (typeof err?.stdout === "string" && err.stdout.trim()) {
+    let recoveredMessage: string | null = null;
     try {
       const obj = parseWorkerStdout(err.stdout);
       if (obj.ok === false) {
-        throw new OpenCvWorkerError(extractWorkerError(obj));
+        recoveredMessage = extractWorkerError(obj);
       }
     } catch {
       /* fall through to generic message below */
+    }
+    if (recoveredMessage !== null) {
+      throw new OpenCvWorkerError(recoveredMessage);
     }
   }
   throw new OpenCvWorkerError("OpenCV worker failed to run.");
 }
 
+export type RunDetectOptions = {
+  /** Forwarded to the worker so it can propose a low-confidence `grid-fallback` grid when primary detection is ambiguous — a non-positive-integer value means "unknown", never forcing any fallback. */
+  expectedShotCount?: number;
+  /** "grid" skips primary detection and always returns a grid-fallback proposal (FIX3). Omitted defaults to the worker's own "auto". */
+  mode?: DetectionRequestMode;
+  /** Explicit grid shape override — must be supplied together (both or neither); validated against expectedShotCount and geometric limits by the worker itself, which fails loudly on a mismatch. */
+  columns?: number;
+  rows?: number;
+  /** How readily Auto mode falls back to the proposed grid when its count already matches but confidence is low. Omitted defaults to the worker's own "medium". */
+  sensitivity?: Sensitivity;
+};
+
 /**
  * Runs `detect` against an already-validated absolute image path and returns
- * typed, bounds-checked regions in reading order. `expectedShotCount`, when
- * a positive integer, is forwarded to the worker so it can propose a
- * low-confidence `grid-fallback` grid when primary detection is ambiguous —
- * omitted (or <=0) means "unknown", never forcing any fallback.
+ * typed, bounds-checked regions in reading order.
  */
-export async function runDetect(absoluteInputPath: string, expectedShotCount?: number): Promise<DetectResult> {
+export async function runDetect(absoluteInputPath: string, options: RunDetectOptions = {}): Promise<DetectResult> {
   await validateInputImage(absoluteInputPath);
 
   const args = [getScriptPath(), "detect", "--input", absoluteInputPath, "--max-cells", String(MAX_CELLS)];
-  if (Number.isInteger(expectedShotCount) && (expectedShotCount as number) > 0) {
-    args.push("--expected-shots", String(expectedShotCount));
+  if (Number.isInteger(options.expectedShotCount) && (options.expectedShotCount as number) > 0) {
+    args.push("--expected-shots", String(options.expectedShotCount));
+  }
+  if (options.mode) {
+    args.push("--mode", options.mode);
+  }
+  if (Number.isInteger(options.columns) && Number.isInteger(options.rows)) {
+    args.push("--columns", String(options.columns), "--rows", String(options.rows));
+  }
+  if (options.sensitivity) {
+    args.push("--sensitivity", options.sensitivity);
   }
 
   let stdout: string;

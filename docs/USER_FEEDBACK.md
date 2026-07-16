@@ -821,6 +821,110 @@ conversation needs these notes, this file is the shared source of truth.
   thumbnail, and protect shared files from premature deletion. Interactive
   crop editing and extraction-context-preserving redirects are included.
 
+### FB-20260716-025 - Tune detection and identify crop regions visually
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard extraction / Detection settings
+- Context: Retrying extraction on a real Sequence Storyboard whose detected
+  region count does not match its Shot count.
+- Original observation: The user wants to expose detection parameters so they
+  can rerun with different results, trigger the expected grid when the first
+  detection is wrong, and use a distinct color for each crop shared with the
+  corresponding Regions row.
+- Expected outcome: Tunable Auto/Grid detection with bounded settings,
+  versioned reruns, and unambiguous visual region mapping.
+- Impact: Current failures require code changes and make crop assignment hard
+  to read.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX3`
+- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX3` implemented — a collapsible
+  "Detection Settings" section on the active extraction page exposes Mode
+  (Auto / Grid fallback), optional Columns/Rows (with a "Use Shot count"
+  button pre-filling the aspect-ratio-matched factorization), and Sensitivity
+  (Low/Medium/High, mapped to server-side confidence-threshold profiles, not
+  raw values sent by the client). "Run Detection Again" creates a new,
+  separately-numbered extraction on the same source image — the previous
+  one is always kept, never overwritten. Auto mode's fallback trigger is no
+  longer limited to 0/1 detected regions: a wrong region count (verified
+  live: a real 6-panel sheet forced into an 8-Shot Sequence correctly
+  proposes a 4x2 grid instead of the mismatched 6) or a confidence below the
+  chosen sensitivity's threshold (verified live: the real 8-Shot fixture
+  keeps its correct primary result at Low/Medium but flips to grid-fallback
+  at High) both now trigger the same low-confidence, always-editable grid
+  proposal. All parameters actually used are persisted in the existing
+  `paramsJson` column (no migration). Each region gets a distinct, stable
+  color (by its own `orderIndex`, unaffected by sibling add/delete) shown
+  identically on its preview overlay frame+label and its Regions list row
+  swatch, always paired with the visible region number — never color alone.
+  Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Codex authorized a UI-only parameter model using existing
+  `paramsJson`; no migration is required. Auto fallback must trigger on count
+  mismatch or low confidence, not only zero/one region.
+
+### FB-20260716-026 - Apply extraction settings and region mappings in bulk
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard extraction / Detection settings / Regions
+- Context: Rerunning detection after changing settings and editing several
+  crop regions.
+- Original observation: The user does not see the overridden Detection
+  Settings reflected by `Run Detection Again` and wants `Update All` plus
+  `Assign All` buttons.
+- Expected outcome: Rerun uses and displays the submitted settings; all valid
+  region rectangles can be saved together; all regions can be assigned in
+  reading order to Shots with explicit confirmation.
+- Impact: Repeated per-region actions make tuning and mapping slow and unclear.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX4`
+- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX4` implemented — root cause of
+  the "settings not taken into account" perception: the Mode/Sensitivity/
+  Columns/Rows fields always rendered their hard-coded defaults regardless
+  of the active extraction's actual `paramsJson`, and the panel was
+  collapsed by default, so a just-submitted override was never visibly
+  reflected even though it WAS being applied correctly (verified again in
+  FIX3). Now the Detection Settings panel opens by default and every field
+  is pre-filled from the current extraction's own recorded parameters —
+  verified live: an extraction run with Grid/4×2/High sensitivity shows
+  exactly those values pre-selected when revisited. `Update All` (new
+  `resizeAllExtractionRegions` action) reads every editable region's
+  currently-displayed x/y/width/height and applies them in one transaction;
+  a single invalid entry aborts the whole batch (verified live: a negative
+  width in one of two regions left BOTH untouched, including the otherwise-
+  valid one). `Assign All` (new `assignAllExtractionRegions` action)
+  reapplies the reading-order-to-Shot-order mapping to every editable,
+  non-skipped region — verified live: turns pending grid-fallback regions
+  into `assigned` in one click, correctly skips a region the user had
+  explicitly marked `skipped` (excluded from the reading-order recount, its
+  own assignment left untouched), leaves Shots beyond the mappable region
+  count flagged as still needing a region, and creates zero crops/drafts/
+  references (row counts confirmed unchanged). Both bulk actions are
+  idempotent and cleanly refuse once the extraction is no longer `ready`
+  (e.g. already confirmed). No migration.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Codex authorized atomic server-side bulk actions without schema
+  changes. `Assign All` must never extract files or create drafts/references.
+- 2026-07-16: Bug found and fixed during validation of this ticket (unrelated
+  to FIX3's own new logic, but only surfaced by testing an explicit
+  Columns/Rows mismatch for the first time): `wrapWorkerFailure` in
+  `src/lib/storyboardExtraction/opencvWorker.ts` threw its recovered worker
+  error message from inside the very `try` block whose `catch` swallowed it,
+  so every worker-side validation failure (e.g. "Columns x Rows does not
+  match the expected Shot count") surfaced only as a generic "OpenCV worker
+  failed to run." instead of the specific, actionable message. Fixed by
+  moving the throw outside the parsing `try`.
+- 2026-07-16: `SEQGEN.STORYBOARD.EXTRACT.1-FIX4` also switched the Detection
+  Settings `Collapsible` to `defaultOpen` — verified via SSR HTML that the
+  panel's fields (and their pre-filled values) are otherwise entirely absent
+  from the rendered page until a client-side click, which is the direct
+  cause of the "seems not applied" perception this feedback describes.
+
 ## Entry Template
 
 Copy this block under `Active Feedback` for each new note:

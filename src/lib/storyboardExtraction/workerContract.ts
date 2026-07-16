@@ -168,6 +168,64 @@ export function validateCropResult(obj: Record<string, unknown>): CropResult {
   return { files };
 }
 
+// ---------------------------------------------------------------------------
+// FIX3 — Detection parameters (mode/columns/rows/sensitivity). Pure bounds
+// validation shared between the server action (raw form strings) and any
+// future caller; mirrors the worker's own bounds exactly so a rejected
+// value here is refused before ever spawning the subprocess.
+// ---------------------------------------------------------------------------
+
+export type DetectionRequestMode = "auto" | "grid";
+export const DETECTION_REQUEST_MODES: readonly DetectionRequestMode[] = ["auto", "grid"];
+
+export type Sensitivity = "low" | "medium" | "high";
+export const SENSITIVITY_VALUES: readonly Sensitivity[] = ["low", "medium", "high"];
+
+export const MIN_GRID_DIMENSION = 1;
+export const MAX_GRID_DIMENSION = 12;
+
+export function isDetectionRequestMode(value: string): value is DetectionRequestMode {
+  return (DETECTION_REQUEST_MODES as readonly string[]).includes(value);
+}
+
+export function isSensitivity(value: string): value is Sensitivity {
+  return (SENSITIVITY_VALUES as readonly string[]).includes(value);
+}
+
+/** A grid dimension (Columns or Rows) must be a whole number within [MIN_GRID_DIMENSION, MAX_GRID_DIMENSION] — matches MAX_GRID_DIMENSION in scripts/opencv_storyboard_extract.py exactly, so a value rejected here would also be rejected by the worker. */
+export function isValidGridDimension(n: number): boolean {
+  return Number.isInteger(n) && n >= MIN_GRID_DIMENSION && n <= MAX_GRID_DIMENSION;
+}
+
+/**
+ * Pure TS port of the worker's `best_fit_factorization`: chooses the
+ * (rows, cols) factor pair of `count` whose aspect ratio (cols/rows) best
+ * matches `imageAspect`. Used only to power the "Use Shot count" button's
+ * suggested Columns/Rows — the worker recomputes its own factorization
+ * independently at detection time (this never has to be trusted for
+ * correctness, only for a helpful pre-filled suggestion).
+ */
+export function computeGridFactorization(
+  count: number,
+  imageAspect: number
+): { rows: number; columns: number } | null {
+  if (!Number.isInteger(count) || count < 1 || !Number.isFinite(imageAspect) || imageAspect <= 0) {
+    return null;
+  }
+  let best: { rows: number; columns: number } | null = null;
+  let bestDiff = Infinity;
+  for (let rows = 1; rows <= count; rows++) {
+    if (count % rows !== 0) continue;
+    const columns = count / rows;
+    const diff = Math.abs(columns / rows - imageAspect);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = { rows, columns };
+    }
+  }
+  return best;
+}
+
 export type MappableRegion = { orderIndex: number };
 
 /** Proposes a Shot for each region purely by reading-order position (region i → shots[i]), never fabricating a mapping when counts differ — regions past the last Shot, and Shots past the last region, are simply left unmapped (null / not covered), matching the ticket's explicit "aucun rattachement silencieux". */

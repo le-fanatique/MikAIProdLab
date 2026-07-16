@@ -31,7 +31,16 @@ import {
 } from "@/db/schema";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { runDetect, runCrop, OPENCV_INPUT_IMAGE_EXTS, OpenCvWorkerError } from "@/lib/storyboardExtraction/opencvWorker";
-import { proposeShotMapping, sortRegionsReadingOrder } from "@/lib/storyboardExtraction/workerContract";
+import {
+  proposeShotMapping,
+  sortRegionsReadingOrder,
+  isDetectionRequestMode,
+  isSensitivity,
+  isValidGridDimension,
+  type DetectionRequestMode,
+  type Sensitivity,
+} from "@/lib/storyboardExtraction/workerContract";
+import { parseRegionEdits, type RegionEdit } from "@/lib/storyboardExtraction/regionEdits";
 
 function errRedirectTo(returnTo: string, param: string, msg: string): never {
   const sep = returnTo.includes("?") ? "&" : "?";
@@ -74,6 +83,42 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
     errRedirectTo(returnTo, "extractError", "Please choose a source image.");
   }
 
+  // FIX3 — Detection Settings, all optional with safe defaults so the
+  // original source-selection form (which never sends these fields) keeps
+  // its exact prior behavior (mode "auto", sensitivity "medium", no
+  // explicit grid shape).
+  const rawMode = ((formData.get("mode") as string | null) ?? "auto").trim() || "auto";
+  if (!isDetectionRequestMode(rawMode)) {
+    errRedirectTo(returnTo, "extractError", "Invalid detection mode.");
+  }
+  const mode: DetectionRequestMode = rawMode;
+
+  const rawSensitivity = ((formData.get("sensitivity") as string | null) ?? "medium").trim() || "medium";
+  if (!isSensitivity(rawSensitivity)) {
+    errRedirectTo(returnTo, "extractError", "Invalid sensitivity.");
+  }
+  const sensitivity: Sensitivity = rawSensitivity;
+
+  const rawColumns = (formData.get("columns") as string | null)?.trim() ?? "";
+  const rawRows = (formData.get("rows") as string | null)?.trim() ?? "";
+  let columns: number | null = null;
+  let rows: number | null = null;
+  if (rawColumns !== "" || rawRows !== "") {
+    if (rawColumns === "" || rawRows === "") {
+      errRedirectTo(returnTo, "extractError", "Provide both Columns and Rows, or neither.");
+    }
+    const parsedColumns = parseInt(rawColumns, 10);
+    const parsedRows = parseInt(rawRows, 10);
+    if (!isValidGridDimension(parsedColumns) || !isValidGridDimension(parsedRows)) {
+      errRedirectTo(returnTo, "extractError", "Columns and Rows must each be a whole number between 1 and 12.");
+    }
+    columns = parsedColumns;
+    rows = parsedRows;
+  }
+  // Grid mode without explicit Columns/Rows still needs the expected Shot
+  // count to build a shape from — validated once that count is known below;
+  // the worker itself refuses with a clear error if neither is available.
+
   const [sequence] = await db.select({ id: sequences.id }).from(sequences).where(eq(sequences.id, sequenceId));
   if (!sequence) errRedirectTo(returnTo, "extractError", "Sequence not found.");
 
@@ -91,6 +136,19 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
     errRedirectTo(returnTo, "extractError", e instanceof Error ? e.message : "Invalid source image.");
   }
 
+  const sequenceShots = await db
+    .select({ id: shots.id })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId))
+    .orderBy(asc(shots.orderIndex));
+  const shotIdsInOrder = sequenceShots.map((s) => s.id);
+  const expectedShotCount = shotIdsInOrder.length;
+
+  // Persisted verbatim below as paramsJson — the params actually used for
+  // this extraction, not just what was requested (mirrors what padding
+  // already does at confirm time).
+  const detectionParams = { mode, columns, rows, sensitivity, expectedShotCount };
+
   const [extraction] = await db
     .insert(sequenceStoryboardExtractions)
     .values({
@@ -100,20 +158,20 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
       sourceWidth: 0,
       sourceHeight: 0,
       status: "detecting",
+      paramsJson: JSON.stringify(detectionParams),
     })
     .returning();
 
   const extractionBase = returnTo.split("?")[0];
 
-  const sequenceShots = await db
-    .select({ id: shots.id })
-    .from(shots)
-    .where(eq(shots.sequenceId, sequenceId))
-    .orderBy(asc(shots.orderIndex));
-  const shotIdsInOrder = sequenceShots.map((s) => s.id);
-
   try {
-    const detected = await runDetect(absoluteInputPath, shotIdsInOrder.length);
+    const detected = await runDetect(absoluteInputPath, {
+      expectedShotCount,
+      mode,
+      columns: columns ?? undefined,
+      rows: rows ?? undefined,
+      sensitivity,
+    });
     const orderedRegions = sortRegionsReadingOrder(detected.regions);
 
     const withOrder = orderedRegions.map((r, i) => ({ ...r, orderIndex: i }));
@@ -362,6 +420,150 @@ export async function deleteExtractionRegion(formData: FormData): Promise<void> 
 }
 
 // ---------------------------------------------------------------------------
+// Bulk actions (FIX4) — still pure DB updates, no file I/O, no crop/draft/
+// reference ever created here. Both are idempotent (re-submitting the same
+// values/mapping twice yields the same end state), so no extra double-submit
+// guard is needed beyond what atomicity below already provides.
+// ---------------------------------------------------------------------------
+
+/**
+ * "Update All" — applies every editable region's currently-displayed x/y/
+ * width/height in a single transaction. Any single invalid entry (bad
+ * bounds, region already extracted, region outside source image, region not
+ * belonging to this extraction) aborts the ENTIRE batch — no partial apply,
+ * matching the unit `Update` action's own per-region bounds checks exactly
+ * so the two paths can never silently disagree on what's valid.
+ */
+export async function resizeAllExtractionRegions(formData: FormData): Promise<void> {
+  const extractionId = parseInt(formData.get("extractionId") as string, 10);
+  const returnTo = (formData.get("returnTo") as string | null)?.trim() || "/";
+  const regionsRaw = (formData.get("regionsJson") as string | null) ?? "[]";
+
+  if (!Number.isInteger(extractionId) || extractionId <= 0) {
+    errRedirectTo(returnTo, "extractError", "Invalid request.");
+  }
+
+  let edits: RegionEdit[];
+  try {
+    edits = parseRegionEdits(regionsRaw);
+  } catch (e) {
+    errRedirectTo(returnTo, "extractError", e instanceof Error ? e.message : "Invalid region data.");
+  }
+  if (edits.length === 0) {
+    errRedirectTo(returnTo, "extractError", "No editable regions to update.");
+  }
+
+  const [extraction] = await db
+    .select()
+    .from(sequenceStoryboardExtractions)
+    .where(eq(sequenceStoryboardExtractions.id, extractionId));
+  if (!extraction) errRedirectTo(returnTo, "extractError", "Extraction not found.");
+  if (extraction.status !== "ready") {
+    errRedirectTo(returnTo, "extractError", "This extraction can no longer be edited.");
+  }
+
+  const existingRegions = await db
+    .select()
+    .from(sequenceStoryboardExtractionRegions)
+    .where(eq(sequenceStoryboardExtractionRegions.extractionId, extractionId));
+  const existingById = new Map(existingRegions.map((r) => [r.id, r]));
+
+  // Full validation pass BEFORE any write — a single bad entry must reject
+  // the whole batch, never partially apply.
+  for (const edit of edits) {
+    const region = existingById.get(edit.regionId);
+    if (!region) {
+      errRedirectTo(returnTo, "extractError", `Region ${edit.regionId} not found in this extraction.`);
+    }
+    if (region.status === "extracted") {
+      errRedirectTo(returnTo, "extractError", `Region ${edit.regionId} has already been extracted and can no longer be edited.`);
+    }
+    if (edit.x + edit.width > extraction.sourceWidth || edit.y + edit.height > extraction.sourceHeight) {
+      errRedirectTo(returnTo, "extractError", `Region ${edit.regionId} is outside the source image bounds.`);
+    }
+  }
+
+  const now = new Date().toISOString();
+  db.transaction((tx) => {
+    for (const edit of edits) {
+      tx.update(sequenceStoryboardExtractionRegions)
+        .set({ x: edit.x, y: edit.y, width: edit.width, height: edit.height, updatedAt: now })
+        .where(eq(sequenceStoryboardExtractionRegions.id, edit.regionId))
+        .run();
+    }
+  });
+
+  okRedirectTo(returnTo, "extractAllUpdated");
+}
+
+/**
+ * "Assign All" — explicitly (re-)applies the same reading-order → Shot-order
+ * mapping used at detection time (proposeShotMapping) to every currently
+ * editable, non-skipped region. Never touches `skipped` (an explicit prior
+ * user decision, not silently overridden) or `extracted` (immutable) regions.
+ * Regions past the last Shot are left unassigned ("pending"), never
+ * inventing a mapping — Shots past the last region simply stay unmapped,
+ * surfaced by the existing "Shots without a region" banner. Pure DB update:
+ * never queues extraction, never creates a crop/draft/reference.
+ */
+export async function assignAllExtractionRegions(formData: FormData): Promise<void> {
+  const extractionId = parseInt(formData.get("extractionId") as string, 10);
+  const returnTo = (formData.get("returnTo") as string | null)?.trim() || "/";
+
+  if (!Number.isInteger(extractionId) || extractionId <= 0) {
+    errRedirectTo(returnTo, "extractError", "Invalid request.");
+  }
+
+  const [extraction] = await db
+    .select()
+    .from(sequenceStoryboardExtractions)
+    .where(eq(sequenceStoryboardExtractions.id, extractionId));
+  if (!extraction) errRedirectTo(returnTo, "extractError", "Extraction not found.");
+  if (extraction.status !== "ready") {
+    errRedirectTo(returnTo, "extractError", "This extraction can no longer be edited.");
+  }
+
+  const allRegions = await db
+    .select()
+    .from(sequenceStoryboardExtractionRegions)
+    .where(eq(sequenceStoryboardExtractionRegions.extractionId, extractionId))
+    .orderBy(asc(sequenceStoryboardExtractionRegions.orderIndex));
+  const mappableRegions = allRegions.filter((r) => r.status !== "extracted" && r.status !== "skipped");
+  if (mappableRegions.length === 0) {
+    errRedirectTo(returnTo, "extractError", "No regions available to assign (all are extracted or skipped).");
+  }
+
+  const sequenceShots = await db
+    .select({ id: shots.id })
+    .from(shots)
+    .where(eq(shots.sequenceId, extraction.sequenceId))
+    .orderBy(asc(shots.orderIndex));
+  const shotIdsInOrder = sequenceShots.map((s) => s.id);
+
+  const mapping = proposeShotMapping(
+    mappableRegions.map((r) => ({ orderIndex: r.orderIndex })),
+    shotIdsInOrder
+  );
+
+  const now = new Date().toISOString();
+  db.transaction((tx) => {
+    for (const region of mappableRegions) {
+      const targetShotId = mapping.get(region.orderIndex) ?? null;
+      tx.update(sequenceStoryboardExtractionRegions)
+        .set({
+          targetShotId,
+          status: targetShotId !== null ? "assigned" : "pending",
+          updatedAt: now,
+        })
+        .where(eq(sequenceStoryboardExtractionRegions.id, region.id))
+        .run();
+    }
+  });
+
+  okRedirectTo(returnTo, "extractAllAssigned");
+}
+
+// ---------------------------------------------------------------------------
 // Confirm & Extract — the only action that creates files/drafts
 // ---------------------------------------------------------------------------
 
@@ -572,10 +774,20 @@ export async function confirmStoryboardExtraction(formData: FormData): Promise<v
           .run();
       }
 
+      // Merge padding into whatever detection params were already recorded
+      // at detection time (mode/columns/rows/sensitivity/expectedShotCount)
+      // rather than overwrite them — paramsJson should reflect every
+      // parameter actually used for this extraction, not just the last one set.
+      let existingParams: Record<string, unknown> = {};
+      try {
+        existingParams = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : {};
+      } catch {
+        existingParams = {};
+      }
       tx.update(sequenceStoryboardExtractions)
         .set({
           status: "confirmed",
-          paramsJson: JSON.stringify({ padding }),
+          paramsJson: JSON.stringify({ ...existingParams, padding }),
           updatedAt: now,
         })
         .where(eq(sequenceStoryboardExtractions.id, extractionId))

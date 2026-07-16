@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-opencv_storyboard_extract.py — SEQGEN.STORYBOARD.EXTRACT.1 / -FIX1
+opencv_storyboard_extract.py — SEQGEN.STORYBOARD.EXTRACT.1 / -FIX1 / -FIX3
 
 Detects bordered/gutter-separated panels ("cells") in a Sequence Storyboard
 contact-sheet image, and crops confirmed regions on request. Talks to the
@@ -10,7 +10,8 @@ any output file into permanent storage).
 
 Two subcommands:
 
-  detect --input <path> [--max-cells N] [--expected-shots N]
+  detect --input <path> [--max-cells N] [--expected-shots N] [--mode auto|grid]
+         [--columns N] [--rows N] [--sensitivity low|medium|high]
     Analyzes the image and prints a JSON object describing candidate
     regions, in reading order (top-to-bottom, left-to-right), each with a
     confidence score and a best-effort illustration/caption split.
@@ -19,12 +20,27 @@ Two subcommands:
     found via edge density (a solid-color band has almost no edges,
     regardless of whether it is near-white, near-black, or a mid-tone
     color), reinforced by long straight-line detection (Hough) for thin
-    explicit border lines a pure density scan could miss. If primary
-    detection is ambiguous (0 or 1 region) and `--expected-shots` is a
-    valid integer > 1, a low-confidence `grid-fallback` grid sized to the
-    expected Shot count is proposed instead — never silently, always at low
-    confidence, and never when the resulting cells would be geometrically
-    unreasonable (fewer than 8px per side, or under 1% of the source area).
+    explicit border lines a pure density scan could miss.
+
+    `--mode grid` (FIX3) skips primary detection entirely and always returns
+    a `grid-fallback` grid — sized by `--columns`/`--rows` if both are given
+    (their product must match `--expected-shots` when that is also
+    provided, or the request fails with a visible error), otherwise sized
+    to `--expected-shots` via the aspect-ratio-matching factorization below.
+
+    `--mode auto` (default) runs primary detection first, then falls back
+    to the same `grid-fallback` grid — always at low confidence, never
+    silently — when `--expected-shots` is a valid integer > 1 and any of:
+    the primary result is ambiguous (0 or 1 region), its region count does
+    not match `--expected-shots`, or its confidence is below the
+    `--sensitivity` profile's threshold (FIX3: Low/Medium/High map to
+    increasingly strict confidence gates — see SENSITIVITY_THRESHOLDS).
+    `--columns`/`--rows`, if given, override the auto-chosen factorization
+    for this fallback grid too. A fallback is never forced when the
+    resulting cells would be geometrically unreasonable (fewer than 8px per
+    side, or under 1% of the source area) — an explicit `--columns`/`--rows`
+    request that fails this check is a visible error; an auto-computed one
+    silently keeps the primary (possibly empty/mismatched) result instead.
 
   crop --input <path> --regions <regions.json> --output-dir <dir>
     Crops the exact rectangles given in `regions.json` (already chosen/
@@ -60,6 +76,18 @@ MAX_HOUGH_LINES = 500  # bounded — never process an unbounded number of candid
 GRID_FALLBACK_CONFIDENCE = 0.15
 MIN_FALLBACK_CELL_FRACTION = 0.01  # a grid-fallback cell must still cover at least 1% of the source area
 MIN_FALLBACK_CELL_PX = 8
+MAX_GRID_DIMENSION = 12  # reasonable bound for an explicit Columns/Rows override
+
+# FIX3 — Sensitivity profiles map to how strict Auto mode is about trusting a
+# primary detection result whose region count already matches the expected
+# Shot count: the LOWER the threshold, the more a low-but-matching-count
+# confidence is still trusted (fewer fallback proposals); the HIGHER the
+# threshold, the more readily Auto proposes the grid instead. Chosen so the
+# already-validated real fixtures (confidence ~0.22-0.25, correct counts)
+# keep their primary result at Low/Medium and only flip to grid-fallback at
+# High — giving a genuinely observable difference between levels rather than
+# arbitrary numbers.
+SENSITIVITY_THRESHOLDS = {"low": 0.10, "medium": 0.18, "high": 0.30}
 
 CAPTION_UNIFORMITY_THRESHOLD = 0.85  # fraction of near-white OR near-black pixels in a row to call it a caption background band
 CAPTION_MIN_RUN_PX = 12
@@ -228,36 +256,73 @@ def build_region(x0: int, y0: int, x1: int, y1: int, gray: np.ndarray, confidenc
     }
 
 
-def try_grid_fallback(width: int, height: int, expected_shot_count) -> list[tuple[int, int, int, int]] | None:
-    """Proposes an equal-cell grid sized to `expected_shot_count`, choosing
-    the row/column factorization whose aspect ratio best matches the source
-    image. Returns None (never forces a grid) when the count is missing/
-    invalid, <=1 (a single Shot never gets a multi-cell fallback), or the
-    resulting cells would be geometrically unreasonable."""
-    if not isinstance(expected_shot_count, int) or expected_shot_count <= 1:
-        return None
-
-    image_aspect = width / height
+def best_fit_factorization(count: int, image_aspect: float) -> tuple[int, int] | None:
+    """Chooses the (rows, cols) factor pair of `count` whose aspect ratio
+    (cols/rows) best matches `image_aspect`. Returns None if `count` has no
+    valid factor pairs (never true for count >= 1, kept defensive)."""
     best = None
     best_diff = None
-    for rows in range(1, expected_shot_count + 1):
-        if expected_shot_count % rows != 0:
+    for rows in range(1, count + 1):
+        if count % rows != 0:
             continue
-        cols = expected_shot_count // rows
-        ratio = cols / rows
-        diff = abs(ratio - image_aspect)
+        cols = count // rows
+        diff = abs((cols / rows) - image_aspect)
         if best_diff is None or diff < best_diff:
             best_diff = diff
             best = (rows, cols)
-    if best is None:
-        return None
+    return best
 
-    rows, cols = best
+
+def try_grid_fallback(
+    width: int,
+    height: int,
+    expected_shot_count,
+    columns: int | None = None,
+    rows_override: int | None = None,
+) -> list[tuple[int, int, int, int]] | None:
+    """Proposes an equal-cell grid. With explicit `columns`/`rows_override`
+    (FIX3), uses that exact shape — validated against `expected_shot_count`
+    when known, and against geometric limits — failing loudly (`fail()`,
+    visible error) on any mismatch, since the user asked for this shape
+    specifically. Without them, auto-chooses the row/column factorization of
+    `expected_shot_count` whose aspect ratio best matches the source image,
+    and silently returns None (never forces a grid) when the count is
+    missing/invalid, <=1 (a single Shot never gets a multi-cell fallback),
+    or the resulting cells would be geometrically unreasonable — an
+    unforced, non-fatal "fallback unavailable" signal to the caller."""
+    explicit = columns is not None or rows_override is not None
+
+    if explicit:
+        if columns is None or rows_override is None:
+            fail("Provide both Columns and Rows, or neither.")
+        if not (1 <= columns <= MAX_GRID_DIMENSION and 1 <= rows_override <= MAX_GRID_DIMENSION):
+            fail(f"Columns and Rows must each be between 1 and {MAX_GRID_DIMENSION}.")
+        if isinstance(expected_shot_count, int) and expected_shot_count > 0:
+            if columns * rows_override != expected_shot_count:
+                fail(
+                    f"Columns x Rows ({columns}x{rows_override}={columns * rows_override}) "
+                    f"does not match the expected Shot count ({expected_shot_count})."
+                )
+        rows, cols = rows_override, columns
+    else:
+        if not isinstance(expected_shot_count, int) or expected_shot_count <= 1:
+            return None
+        image_aspect = width / height
+        best = best_fit_factorization(expected_shot_count, image_aspect)
+        if best is None:
+            return None
+        rows, cols = best
+
     cell_w = width / cols
     cell_h = height / rows
-    if cell_w < MIN_FALLBACK_CELL_PX or cell_h < MIN_FALLBACK_CELL_PX:
-        return None
-    if cell_w * cell_h < width * height * MIN_FALLBACK_CELL_FRACTION:
+    geometrically_valid = (
+        cell_w >= MIN_FALLBACK_CELL_PX
+        and cell_h >= MIN_FALLBACK_CELL_PX
+        and cell_w * cell_h >= width * height * MIN_FALLBACK_CELL_FRACTION
+    )
+    if not geometrically_valid:
+        if explicit:
+            fail(f"A {cols}x{rows} grid would produce cells too small for this image.")
         return None
 
     cells = []
@@ -271,13 +336,38 @@ def try_grid_fallback(width: int, height: int, expected_shot_count) -> list[tupl
     return cells
 
 
-def detect_regions(input_path: str, max_cells: int, expected_shot_count) -> dict:
+def build_fallback_regions(fallback: list[tuple[int, int, int, int]], gray: np.ndarray, max_cells: int) -> list[dict]:
+    fallback = sorted(fallback, key=lambda c: (c[1], c[0]))  # reading order: (y0, x0)
+    regions = [
+        build_region(x0, y0, x1, y1, gray, GRID_FALLBACK_CONFIDENCE, "grid-fallback")
+        for (x0, y0, x1, y1) in fallback
+    ]
+    return regions[:max_cells]
+
+
+def detect_regions(
+    input_path: str,
+    max_cells: int,
+    expected_shot_count,
+    mode: str = "auto",
+    columns: int | None = None,
+    rows: int | None = None,
+    sensitivity: str = "medium",
+) -> dict:
     img = cv2.imread(input_path)
     if img is None:
         fail(f"Could not read image: {input_path}")
 
     height, width = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    if mode == "grid":
+        # FIX3 — explicit Grid mode never runs primary detection at all.
+        fallback = try_grid_fallback(width, height, expected_shot_count, columns, rows)
+        if fallback is None:
+            fail("Could not build a grid: provide Columns and Rows, or a valid expected Shot count.")
+        regions = build_fallback_regions(fallback, gray, max_cells)
+        return {"ok": True, "sourceWidth": width, "sourceHeight": height, "regions": regions}
 
     # Polarity-independent separator detection (FIX1): a solid-color band
     # (near-white OR near-black OR any other uniform color) has almost no
@@ -330,32 +420,49 @@ def detect_regions(input_path: str, max_cells: int, expected_shot_count) -> dict
                 candidates.append((y0, x0, y1, x1))
 
     candidates.sort(key=lambda c: (c[0], c[1]))
+    candidates = candidates[:max_cells]
 
-    if len(candidates) <= 1:
-        fallback = try_grid_fallback(width, height, expected_shot_count)
+    confidence = 0.0
+    if candidates:
+        grid_rows = len(row_bands)
+        grid_cols = len(col_bands)
+        expected_cells = grid_rows * grid_cols
+        grid_regularity = min(1.0, len(candidates) / expected_cells) if expected_cells > 0 else 0.5
+        avg_cell_w = width / max(grid_cols, 1)
+        avg_cell_h = height / max(grid_rows, 1)
+        avg_gutter_w = (sum(e - s for s, e in col_gutters) / len(col_gutters)) if col_gutters else 0
+        avg_gutter_h = (sum(e - s for s, e in row_gutters) / len(row_gutters)) if row_gutters else 0
+        gutter_strength = min(1.0, ((avg_gutter_w / max(avg_cell_w, 1)) + (avg_gutter_h / max(avg_cell_h, 1))))
+        confidence = round(max(0.05, min(0.99, 0.5 * grid_regularity + 0.5 * gutter_strength)), 3)
+
+    # FIX3 — Auto mode no longer only distrusts primary detection when it
+    # found 0 or 1 region: a wrong-but-plausible count (e.g. 6 regions found
+    # on an 8-Shot sheet) or a genuinely low confidence relative to the
+    # chosen sensitivity profile are just as much reason to offer the
+    # expected grid instead — always at low confidence, always editable,
+    # never silently substituted.
+    sensitivity_threshold = SENSITIVITY_THRESHOLDS.get(sensitivity, SENSITIVITY_THRESHOLDS["medium"])
+    should_try_fallback = False
+    if isinstance(expected_shot_count, int) and expected_shot_count > 1:
+        if len(candidates) <= 1:
+            should_try_fallback = True
+        elif len(candidates) != expected_shot_count:
+            should_try_fallback = True
+        elif confidence < sensitivity_threshold:
+            should_try_fallback = True
+
+    if should_try_fallback:
+        fallback = try_grid_fallback(width, height, expected_shot_count, columns, rows)
         if fallback is not None:
-            fallback.sort(key=lambda c: (c[1], c[0]))  # reading order: (y0, x0)
-            regions = [
-                build_region(x0, y0, x1, y1, gray, GRID_FALLBACK_CONFIDENCE, "grid-fallback")
-                for (x0, y0, x1, y1) in fallback
-            ]
-            return {"ok": True, "sourceWidth": width, "sourceHeight": height, "regions": regions[:max_cells]}
+            regions = build_fallback_regions(fallback, gray, max_cells)
+            return {"ok": True, "sourceWidth": width, "sourceHeight": height, "regions": regions}
+        # Auto-computed fallback unavailable (geometrically impossible) —
+        # fall through and return whatever primary detection actually found,
+        # even if that's an empty or mismatched-count result: never invent
+        # a grid that wasn't explicitly requested and can't be built safely.
 
     if not candidates:
         return {"ok": True, "sourceWidth": width, "sourceHeight": height, "regions": []}
-
-    candidates = candidates[:max_cells]
-
-    grid_rows = len(row_bands)
-    grid_cols = len(col_bands)
-    expected_cells = grid_rows * grid_cols
-    grid_regularity = min(1.0, len(candidates) / expected_cells) if expected_cells > 0 else 0.5
-    avg_cell_w = width / max(grid_cols, 1)
-    avg_cell_h = height / max(grid_rows, 1)
-    avg_gutter_w = (sum(e - s for s, e in col_gutters) / len(col_gutters)) if col_gutters else 0
-    avg_gutter_h = (sum(e - s for s, e in row_gutters) / len(row_gutters)) if row_gutters else 0
-    gutter_strength = min(1.0, ((avg_gutter_w / max(avg_cell_w, 1)) + (avg_gutter_h / max(avg_cell_h, 1))))
-    confidence = round(max(0.05, min(0.99, 0.5 * grid_regularity + 0.5 * gutter_strength)), 3)
 
     regions = [build_region(x0, y0, x1, y1, gray, confidence, "border") for (y0, x0, y1, x1) in candidates]
     return {"ok": True, "sourceWidth": width, "sourceHeight": height, "regions": regions}
@@ -365,7 +472,17 @@ def cmd_detect(args):
     if not os.path.isfile(args.input):
         fail(f"Input file not found: {args.input}")
     expected_shot_count = args.expected_shots if (args.expected_shots is not None and args.expected_shots > 0) else None
-    result = detect_regions(args.input, args.max_cells, expected_shot_count)
+    columns = args.columns if (args.columns is not None and args.columns > 0) else None
+    rows = args.rows if (args.rows is not None and args.rows > 0) else None
+    result = detect_regions(
+        args.input,
+        args.max_cells,
+        expected_shot_count,
+        mode=args.mode,
+        columns=columns,
+        rows=rows,
+        sensitivity=args.sensitivity,
+    )
     print(json.dumps(result))
 
 
@@ -426,6 +543,10 @@ def main():
     p_detect.add_argument("--input", required=True)
     p_detect.add_argument("--max-cells", type=int, default=24)
     p_detect.add_argument("--expected-shots", type=int, default=None)
+    p_detect.add_argument("--mode", choices=["auto", "grid"], default="auto")
+    p_detect.add_argument("--columns", type=int, default=None)
+    p_detect.add_argument("--rows", type=int, default=None)
+    p_detect.add_argument("--sensitivity", choices=["low", "medium", "high"], default="medium")
     p_detect.set_defaults(func=cmd_detect)
 
     p_crop = sub.add_parser("crop")

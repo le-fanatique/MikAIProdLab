@@ -14,8 +14,13 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
+import Collapsible from "@/components/Collapsible";
 import RegionCropBox from "@/components/RegionCropBox";
+import UseShotCountButton from "@/components/UseShotCountButton";
+import UpdateAllButton from "@/components/UpdateAllButton";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { computeGridFactorization } from "@/lib/storyboardExtraction/workerContract";
+import { getRegionColor } from "@/lib/storyboardExtraction/regionColors";
 import {
   startStoryboardExtraction,
   addExtractionRegion,
@@ -24,6 +29,8 @@ import {
   skipExtractionRegion,
   deleteExtractionRegion,
   confirmStoryboardExtraction,
+  resizeAllExtractionRegions,
+  assignAllExtractionRegions,
 } from "@/actions/storyboardExtraction";
 
 export const dynamic = "force-dynamic";
@@ -70,20 +77,26 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
     skipped: sp(resolvedSearchParams["extractRegionSkipped"]) === "1",
     deleted: sp(resolvedSearchParams["extractRegionDeleted"]) === "1",
     confirmed: sp(resolvedSearchParams["extractConfirmed"]) === "1",
+    allUpdated: sp(resolvedSearchParams["extractAllUpdated"]) === "1",
+    allAssigned: sp(resolvedSearchParams["extractAllAssigned"]) === "1",
   };
   const okMessage = okFlags.confirmed
     ? "Extraction confirmed. Crops were saved as Shot storyboard drafts."
-    : okFlags.added
-      ? "Region added."
-      : okFlags.resized
-        ? "Region updated."
-        : okFlags.reassigned
-          ? "Region reassigned."
-          : okFlags.skipped
-            ? "Region skipped."
-            : okFlags.deleted
-              ? "Region deleted."
-              : null;
+    : okFlags.allUpdated
+      ? "All editable regions updated."
+      : okFlags.allAssigned
+        ? "All editable regions assigned to Shots in reading order."
+        : okFlags.added
+          ? "Region added."
+          : okFlags.resized
+            ? "Region updated."
+            : okFlags.reassigned
+              ? "Region reassigned."
+              : okFlags.skipped
+                ? "Region skipped."
+                : okFlags.deleted
+                  ? "Region deleted."
+                  : null;
 
   const extractionIdRaw = sp(resolvedSearchParams["extractionId"]);
   const extractionId = extractionIdRaw ? parseInt(extractionIdRaw, 10) : null;
@@ -201,6 +214,30 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
   const assignedCount = regions.filter((r) => r.status === "assigned").length;
   const hasGridFallback = regions.some((r) => r.detectionMode === "grid-fallback");
   const isAmbiguousSingleRegion = isEditable && regions.length <= 1 && sequenceShots.length > 1 && !hasGridFallback;
+  const editableRegionIds = regions.filter((r) => r.status !== "extracted").map((r) => r.id);
+
+  // FIX3 — Detection Settings / Run Detection Again. Re-runs detection on
+  // the SAME source image (never overwrites the current extraction — always
+  // inserts a fresh, separately-numbered one via startStoryboardExtraction).
+  const canRerun = extraction.sourceStoryboardImageId !== null;
+  const suggestedGrid =
+    sequenceShots.length > 0 && extraction.sourceWidth > 0 && extraction.sourceHeight > 0
+      ? computeGridFactorization(sequenceShots.length, extraction.sourceWidth / extraction.sourceHeight)
+      : null;
+
+  let detectionParamsSummary: {
+    mode?: string;
+    columns?: number | null;
+    rows?: number | null;
+    sensitivity?: string;
+    expectedShotCount?: number;
+    padding?: number;
+  } | null = null;
+  try {
+    detectionParamsSummary = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : null;
+  } catch {
+    detectionParamsSummary = null;
+  }
 
   return (
     <div>
@@ -242,6 +279,125 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
         </p>
       )}
 
+      {detectionParamsSummary && (
+        <p className="text-[10px] text-[#4b5158] mb-4">
+          Detected with: {detectionParamsSummary.mode === "grid" ? "Grid fallback" : "Auto"}
+          {detectionParamsSummary.columns && detectionParamsSummary.rows
+            ? ` (${detectionParamsSummary.columns}×${detectionParamsSummary.rows})`
+            : ""}
+          {detectionParamsSummary.sensitivity ? `, Sensitivity: ${detectionParamsSummary.sensitivity}` : ""}
+          {detectionParamsSummary.expectedShotCount != null ? `, expected ${detectionParamsSummary.expectedShotCount} Shots` : ""}
+        </p>
+      )}
+
+      <Collapsible label="Detection Settings" defaultOpen>
+        <Card>
+          {canRerun ? (
+            <form action={startStoryboardExtraction} className="flex flex-col gap-3">
+              <input type="hidden" name="sequenceId" value={String(sid)} />
+              <input type="hidden" name="sourceStoryboardImageId" value={String(extraction.sourceStoryboardImageId)} />
+              <input type="hidden" name="returnTo" value={basePath} />
+
+              <div className="flex flex-wrap gap-4">
+                <fieldset className="flex flex-col gap-1">
+                  <legend className="text-[9px] uppercase tracking-wider text-[#4b5158] mb-0.5">Mode</legend>
+                  <label className="flex items-center gap-1.5 text-xs text-[#a4abb2]">
+                    <input
+                      type="radio"
+                      name="mode"
+                      value="auto"
+                      defaultChecked={detectionParamsSummary?.mode !== "grid"}
+                    />
+                    Auto (OpenCV, then fallback if ambiguous)
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-[#a4abb2]">
+                    <input
+                      type="radio"
+                      name="mode"
+                      value="grid"
+                      defaultChecked={detectionParamsSummary?.mode === "grid"}
+                    />
+                    Grid fallback (skip detection, use a grid)
+                  </label>
+                </fieldset>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Sensitivity</span>
+                  <select
+                    name="sensitivity"
+                    defaultValue={detectionParamsSummary?.sensitivity ?? "medium"}
+                    className="rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                  >
+                    <option value="low">Low — trust Auto&apos;s result more</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High — fall back to grid more readily</option>
+                  </select>
+                  <span className="text-[9px] text-[#4b5158] max-w-xs">
+                    Only affects Auto mode: how low a confidence (with a matching region count) is still trusted
+                    before proposing the grid instead.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Columns / Rows (optional)</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      id="detect-columns"
+                      name="columns"
+                      min={1}
+                      max={12}
+                      placeholder="Columns"
+                      defaultValue={detectionParamsSummary?.columns ?? ""}
+                      className="w-24 rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                    />
+                    <span className="text-[#4b5158]">×</span>
+                    <input
+                      type="number"
+                      id="detect-rows"
+                      name="rows"
+                      min={1}
+                      max={12}
+                      placeholder="Rows"
+                      defaultValue={detectionParamsSummary?.rows ?? ""}
+                      className="w-24 rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                    />
+                  </div>
+                  {suggestedGrid && (
+                    <UseShotCountButton
+                      columnsFieldId="detect-columns"
+                      rowsFieldId="detect-rows"
+                      suggestedColumns={suggestedGrid.columns}
+                      suggestedRows={suggestedGrid.rows}
+                    />
+                  )}
+                  <span className="text-[9px] text-[#4b5158] max-w-xs">
+                    Used for Grid mode, or as the fallback shape if Auto mode falls back. Must multiply to the
+                    expected Shot count ({sequenceShots.length}) if both are set.
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="submit"
+                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                >
+                  Run Detection Again
+                </button>
+                <span className="ml-3 text-[9px] text-[#4b5158]">
+                  Creates a new extraction — this one ({extraction.status}) is kept, never overwritten.
+                </span>
+              </div>
+            </form>
+          ) : (
+            <p className="text-xs text-[#4b5158]">
+              This extraction&apos;s source image is no longer available, so it cannot be re-run.
+            </p>
+          )}
+        </Card>
+      </Collapsible>
+
       {(extraction.status === "ready" || extraction.status === "confirmed") && (
         <>
           <SectionLabel label="Preview" />
@@ -276,6 +432,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                   detectionMode={r.detectionMode}
                   confidence={r.confidence}
                   editable={isEditable && r.status !== "extracted"}
+                  color={getRegionColor(r.orderIndex)}
                 />
               ))}
             </div>
@@ -297,6 +454,34 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
       {(extraction.status === "ready" || extraction.status === "confirmed") && (
         <>
           <SectionLabel label={`Regions (${regions.length})`} />
+          {isEditable && editableRegionIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <form id="update-all-form" action={resizeAllExtractionRegions}>
+                <input type="hidden" name="extractionId" value={String(extractionId)} />
+                <input type="hidden" name="returnTo" value={returnToActive} />
+                <input type="hidden" id="update-all-regions-json" name="regionsJson" defaultValue="[]" />
+              </form>
+              <UpdateAllButton
+                regionIds={editableRegionIds}
+                formId="update-all-form"
+                hiddenFieldId="update-all-regions-json"
+              />
+              <form action={assignAllExtractionRegions}>
+                <input type="hidden" name="extractionId" value={String(extractionId)} />
+                <input type="hidden" name="returnTo" value={returnToActive} />
+                <button
+                  type="submit"
+                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                >
+                  Assign All
+                </button>
+              </form>
+              <span className="text-[9px] text-[#4b5158] max-w-sm">
+                Update All saves every editable region&apos;s current rectangle at once. Assign All maps editable,
+                non-skipped regions to Shots in reading order. Neither extracts files or creates drafts/references.
+              </span>
+            </div>
+          )}
           {regions.length === 0 ? (
             <p className="text-xs text-[#4b5158]">No regions detected. Use “Add Region” below to create one manually.</p>
           ) : (
@@ -307,7 +492,14 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                   <Card key={r.id}>
                     <div className="flex flex-wrap items-start gap-4">
                       <div className="text-xs font-mono text-[#6e767d] w-16 shrink-0">
-                        #{i + 1}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: getRegionColor(r.orderIndex) }}
+                            aria-hidden="true"
+                          />
+                          #{i + 1}
+                        </span>
                         <div className={`mt-1 text-[9px] uppercase tracking-wider ${
                           r.status === "extracted" ? "text-[#6b9e72]" : r.status === "skipped" ? "text-[#4b5158]" : r.status === "assigned" ? "text-[#5b93d6]" : "text-[#cda24f]"
                         }`}>

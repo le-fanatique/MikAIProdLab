@@ -37,22 +37,11 @@ type Props = {
   detectionMode: string;
   confidence: number;
   editable: boolean;
+  /** SEQGEN.STORYBOARD.EXTRACT.1-FIX3 — this region's identity color (getRegionColor), reused verbatim on the matching Regions list row's swatch. Never the sole way to identify a region: the numbered label below always carries the same "#N" as visible text. */
+  color: string;
 };
 
 const MIN_SIZE_PX = 8;
-
-function borderColorClass(status: Props["status"]): string {
-  switch (status) {
-    case "extracted":
-      return "border-[#6b9e72]";
-    case "skipped":
-      return "border-[#4b5158]";
-    case "assigned":
-      return "border-[#5b93d6]";
-    default:
-      return "border-[#cda24f]";
-  }
-}
 
 const HANDLE_POSITION: Record<Corner, string> = {
   nw: "-top-1.5 -left-1.5 cursor-nwse-resize",
@@ -74,6 +63,7 @@ export default function RegionCropBox({
   detectionMode,
   confidence,
   editable,
+  color,
 }: Props) {
   const [box, setBox] = useState({ x, y, width, height });
 
@@ -177,14 +167,18 @@ export default function RegionCropBox({
   const w = (box.width / sourceWidth) * 100;
   const h = (box.height / sourceHeight) * 100;
   const borderStyle = detectionMode === "grid-fallback" ? "border-dashed" : "border-solid";
+  const opacity = status === "skipped" ? 0.55 : 1;
 
   return (
     <div
-      className={`absolute border-2 ${borderStyle} ${borderColorClass(status)} ${editable ? "cursor-move" : "pointer-events-none"}`}
-      style={{ left: `${left}%`, top: `${top}%`, width: `${w}%`, height: `${h}%` }}
+      role="img"
+      aria-label={`Region ${index + 1}, status ${status}, ${Math.round(confidence * 100)}% confidence${detectionMode === "grid-fallback" ? ", grid fallback" : ""}`}
+      className={`absolute border-2 ${borderStyle} ${editable ? "cursor-move" : "pointer-events-none"}`}
+      style={{ left: `${left}%`, top: `${top}%`, width: `${w}%`, height: `${h}%`, borderColor: color, opacity }}
       onPointerDown={editable ? startDrag("move") : undefined}
     >
-      <span className="absolute top-0.5 left-0.5 text-[9px] font-mono bg-[#0d0e10]/85 text-[#e7e9ec] rounded px-1 py-px pointer-events-none select-none">
+      <span className="absolute top-0.5 left-0.5 flex items-center gap-1 text-[9px] font-mono bg-[#0d0e10]/85 text-[#e7e9ec] rounded px-1 py-px pointer-events-none select-none">
+        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} aria-hidden="true" />
         {index + 1} · {Math.round(confidence * 100)}%{detectionMode === "grid-fallback" ? " · grid" : ""}
       </span>
       {editable &&
@@ -192,7 +186,8 @@ export default function RegionCropBox({
           <div
             key={corner}
             onPointerDown={startDrag("resize", corner)}
-            className={`absolute w-3 h-3 bg-[#e7e9ec] border border-[#0d0e10] rounded-sm ${HANDLE_POSITION[corner]}`}
+            className={`absolute w-3 h-3 border border-[#0d0e10] rounded-sm ${HANDLE_POSITION[corner]}`}
+            style={{ backgroundColor: color }}
           />
         ))}
     </div>
