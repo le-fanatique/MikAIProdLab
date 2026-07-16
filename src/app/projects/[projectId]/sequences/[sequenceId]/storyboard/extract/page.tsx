@@ -14,6 +14,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
+import RegionCropBox from "@/components/RegionCropBox";
 import { refImageUrl } from "@/lib/refImageUrl";
 import {
   startStoryboardExtraction,
@@ -188,11 +189,18 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
     .where(eq(shots.sequenceId, sid))
     .orderBy(asc(shots.orderIndex));
 
+  // Every action below (Update/Reassign/Skip/Add/Delete) must return to this
+  // same active extraction, not the bare source-selection page — the outer
+  // `returnTo` (state A only) deliberately omits extractionId.
+  const returnToActive = `${basePath}?extractionId=${extractionId}`;
+
   const assignedShotIds = new Set(regions.filter((r) => r.status !== "skipped" && r.targetShotId !== null).map((r) => r.targetShotId!));
   const shotsWithoutRegion = sequenceShots.filter((s) => !assignedShotIds.has(s.id));
   const unassignedRegions = regions.filter((r) => r.status === "pending");
   const isEditable = extraction.status === "ready";
   const assignedCount = regions.filter((r) => r.status === "assigned").length;
+  const hasGridFallback = regions.some((r) => r.detectionMode === "grid-fallback");
+  const isAmbiguousSingleRegion = isEditable && regions.length <= 1 && sequenceShots.length > 1 && !hasGridFallback;
 
   return (
     <div>
@@ -219,42 +227,57 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
         </p>
       )}
 
+      {hasGridFallback && (
+        <p className="text-xs text-[#cda24f] mb-4">
+          Automatic panel detection was ambiguous for this image, so a grid was proposed instead, sized to match
+          this Sequence&apos;s {sequenceShots.length} Shots. Every proposed region is low-confidence and stays
+          unassigned until you review and explicitly assign it — nothing here is extracted automatically.
+        </p>
+      )}
+
+      {isAmbiguousSingleRegion && (
+        <p className="text-xs text-[#cf7b6b] mb-4">
+          Detection found only one region, but this Sequence has {sequenceShots.length} Shots. Use{" "}
+          <span className="text-[#a4abb2]">Add Region</span> below to create the missing panels manually.
+        </p>
+      )}
+
       {(extraction.status === "ready" || extraction.status === "confirmed") && (
         <>
           <SectionLabel label="Preview" />
           <Card>
-            <div className="relative w-full max-w-3xl" style={{ aspectRatio: `${extraction.sourceWidth} / ${extraction.sourceHeight}` }}>
+            <p className="text-[10px] text-[#4b5158] mb-2">
+              Drag a region to move it, or drag a corner handle to resize — the numeric fields below update live.
+              Click <span className="text-[#a4abb2]">Update</span> to save.
+            </p>
+            <div
+              data-crop-container
+              className="relative w-full max-w-3xl"
+              style={{ aspectRatio: `${extraction.sourceWidth} / ${extraction.sourceHeight}` }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={refImageUrl(extraction.sourceImagePath)}
                 alt="Storyboard source"
-                className="absolute inset-0 w-full h-full object-contain"
+                className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
               />
-              {regions.map((r, i) => {
-                const left = (r.x / extraction.sourceWidth) * 100;
-                const top = (r.y / extraction.sourceHeight) * 100;
-                const width = (r.width / extraction.sourceWidth) * 100;
-                const height = (r.height / extraction.sourceHeight) * 100;
-                const borderColor =
-                  r.status === "extracted"
-                    ? "border-[#6b9e72]"
-                    : r.status === "skipped"
-                      ? "border-[#4b5158]"
-                      : r.status === "assigned"
-                        ? "border-[#5b93d6]"
-                        : "border-[#cda24f]";
-                return (
-                  <div
-                    key={r.id}
-                    className={`absolute border-2 ${borderColor} pointer-events-none`}
-                    style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
-                  >
-                    <span className="absolute top-0.5 left-0.5 text-[9px] font-mono bg-[#0d0e10]/85 text-[#e7e9ec] rounded px-1 py-px">
-                      {i + 1} · {Math.round(r.confidence * 100)}%
-                    </span>
-                  </div>
-                );
-              })}
+              {regions.map((r, i) => (
+                <RegionCropBox
+                  key={r.id}
+                  regionId={r.id}
+                  index={i}
+                  x={r.x}
+                  y={r.y}
+                  width={r.width}
+                  height={r.height}
+                  sourceWidth={extraction.sourceWidth}
+                  sourceHeight={extraction.sourceHeight}
+                  status={r.status}
+                  detectionMode={r.detectionMode}
+                  confidence={r.confidence}
+                  editable={isEditable && r.status !== "extracted"}
+                />
+              ))}
             </div>
           </Card>
         </>
@@ -291,6 +314,9 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                           {r.status}
                         </div>
                         <div className="mt-1 text-[9px] text-[#4b5158]">{Math.round(r.confidence * 100)}% conf.</div>
+                        {r.detectionMode === "grid-fallback" && (
+                          <div className="mt-1 text-[9px] text-[#cda24f]">Grid fallback — review required</div>
+                        )}
                         {!r.textSeparationDetected && (
                           <div className="mt-1 text-[9px] text-[#4b5158]">Full cell (no caption split)</div>
                         )}
@@ -300,12 +326,13 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                         <form action={resizeExtractionRegion} className="flex flex-wrap items-end gap-2">
                           <input type="hidden" name="extractionId" value={String(extractionId)} />
                           <input type="hidden" name="regionId" value={String(r.id)} />
-                          <input type="hidden" name="returnTo" value={returnTo} />
+                          <input type="hidden" name="returnTo" value={returnToActive} />
                           {(["x", "y", "width", "height"] as const).map((field) => (
                             <label key={field} className="flex flex-col gap-0.5">
                               <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">{field}</span>
                               <input
                                 type="number"
+                                id={`region-${r.id}-${field}`}
                                 name={field}
                                 defaultValue={r[field]}
                                 min={field === "x" || field === "y" ? 0 : 1}
@@ -331,7 +358,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                           <form action={reassignExtractionRegion} className="flex items-end gap-2">
                             <input type="hidden" name="extractionId" value={String(extractionId)} />
                             <input type="hidden" name="regionId" value={String(r.id)} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
+                            <input type="hidden" name="returnTo" value={returnToActive} />
                             <label className="flex flex-col gap-0.5">
                               <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Shot</span>
                               <select
@@ -367,7 +394,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                             <form action={skipExtractionRegion}>
                               <input type="hidden" name="extractionId" value={String(extractionId)} />
                               <input type="hidden" name="regionId" value={String(r.id)} />
-                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <input type="hidden" name="returnTo" value={returnToActive} />
                               <button type="submit" className="text-[10px] text-[#cda24f] hover:text-[#e0b968] transition-colors">
                                 Skip
                               </button>
@@ -376,7 +403,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                           <form action={deleteExtractionRegion}>
                             <input type="hidden" name="extractionId" value={String(extractionId)} />
                             <input type="hidden" name="regionId" value={String(r.id)} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
+                            <input type="hidden" name="returnTo" value={returnToActive} />
                             <button type="submit" className="text-[10px] text-[#cf7b6b] hover:text-[#e0958a] transition-colors">
                               Delete
                             </button>
@@ -394,7 +421,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
             <div className="mt-3">
               <form action={addExtractionRegion}>
                 <input type="hidden" name="extractionId" value={String(extractionId)} />
-                <input type="hidden" name="returnTo" value={returnTo} />
+                <input type="hidden" name="returnTo" value={returnToActive} />
                 <button
                   type="submit"
                   className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
@@ -416,7 +443,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                 </p>
                 <form action={confirmStoryboardExtraction} className="flex items-end gap-3">
                   <input type="hidden" name="extractionId" value={String(extractionId)} />
-                  <input type="hidden" name="returnTo" value={returnTo} />
+                  <input type="hidden" name="returnTo" value={returnToActive} />
                   <label className="flex flex-col gap-0.5">
                     <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Padding (px, inward)</span>
                     <input

@@ -250,7 +250,12 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     const drafts = draftsByShot.get(shot.id) ?? [];
     const visibleDrafts = drafts.filter((d) => d.status !== "rejected");
     const approved = visibleDrafts.find((d) => d.status === "approved") ?? null;
-    const display = approved ?? visibleDrafts[0] ?? null;
+    // SEQGEN.STORYBOARD.EXTRACT.1-FIX2 — an extracted panel (extractionRegionId
+    // set) takes thumbnail priority over any other non-approved draft, even an
+    // older or newer one, since it's a deliberately-confirmed crop rather than
+    // a generation attempt. An approved draft (of any origin) still always wins.
+    const extractedDraft = visibleDrafts.find((d) => d.extractionRegionId !== null) ?? null;
+    const display = approved ?? extractedDraft ?? visibleDrafts[0] ?? null;
 
     let status: StoryboardGridStatus;
     if (display) {

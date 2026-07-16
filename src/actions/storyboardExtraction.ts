@@ -26,9 +26,10 @@ import {
   sequenceStoryboardExtractions,
   sequenceStoryboardExtractionRegions,
   storyboardImages,
+  shotReferenceImages,
   shots,
 } from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { runDetect, runCrop, OPENCV_INPUT_IMAGE_EXTS, OpenCvWorkerError } from "@/lib/storyboardExtraction/opencvWorker";
 import { proposeShotMapping, sortRegionsReadingOrder } from "@/lib/storyboardExtraction/workerContract";
 
@@ -104,16 +105,16 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
 
   const extractionBase = returnTo.split("?")[0];
 
-  try {
-    const detected = await runDetect(absoluteInputPath);
-    const orderedRegions = sortRegionsReadingOrder(detected.regions);
+  const sequenceShots = await db
+    .select({ id: shots.id })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId))
+    .orderBy(asc(shots.orderIndex));
+  const shotIdsInOrder = sequenceShots.map((s) => s.id);
 
-    const sequenceShots = await db
-      .select({ id: shots.id })
-      .from(shots)
-      .where(eq(shots.sequenceId, sequenceId))
-      .orderBy(asc(shots.orderIndex));
-    const shotIdsInOrder = sequenceShots.map((s) => s.id);
+  try {
+    const detected = await runDetect(absoluteInputPath, shotIdsInOrder.length);
+    const orderedRegions = sortRegionsReadingOrder(detected.regions);
 
     const withOrder = orderedRegions.map((r, i) => ({ ...r, orderIndex: i }));
     const mapping = proposeShotMapping(withOrder, shotIdsInOrder);
@@ -130,6 +131,14 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
         .run();
 
       for (const r of withOrder) {
+        // A grid-fallback proposal is always low-confidence and never
+        // auto-assigned: the region is still pre-filled with the
+        // position-proposed Shot so a single click confirms it, but its
+        // status stays "pending" until the user explicitly reassigns it —
+        // the mandatory manual-validation gate the ticket requires for
+        // fallback regions, reusing the same "pending = not extracted"
+        // state machine already used for unassigned regions.
+        const isGridFallback = r.detectionMode === "grid-fallback";
         const targetShotId = mapping.get(r.orderIndex) ?? null;
         tx.insert(sequenceStoryboardExtractionRegions)
           .values({
@@ -143,7 +152,7 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
             textSeparationDetected: r.textSeparationDetected,
             confidence: r.confidence,
             detectionMode: r.detectionMode,
-            status: targetShotId !== null ? "assigned" : "pending",
+            status: !isGridFallback && targetShotId !== null ? "assigned" : "pending",
             targetShotId,
           })
           .run();
@@ -440,7 +449,13 @@ export async function confirmStoryboardExtraction(formData: FormData): Promise<v
   const regionById = new Map(assignedRegions.map((r) => [r.id, r]));
   const publicRoot = path.join(process.cwd(), "public");
 
-  type CopiedFile = { regionId: number; shotId: number; destAbsolute: string; destRelative: string };
+  type CopiedFile = {
+    regionId: number;
+    shotId: number;
+    orderIndex: number;
+    destAbsolute: string;
+    destRelative: string;
+  };
   const copied: CopiedFile[] = [];
 
   try {
@@ -469,7 +484,13 @@ export async function confirmStoryboardExtraction(formData: FormData): Promise<v
 
       await fs.mkdir(destDir, { recursive: true });
       await fs.copyFile(scratchAbsolute, destAbsolute);
-      copied.push({ regionId: region.id, shotId: region.targetShotId, destAbsolute, destRelative });
+      copied.push({
+        regionId: region.id,
+        shotId: region.targetShotId,
+        orderIndex: region.orderIndex,
+        destAbsolute,
+        destRelative,
+      });
     }
   } catch (e) {
     for (const c of copied) {
@@ -481,16 +502,67 @@ export async function confirmStoryboardExtraction(formData: FormData): Promise<v
 
   await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => {});
 
+  // Per-Shot starting orderIndex for the new references, read once before
+  // the transaction (mirrors the exact coalesce(max(...), -1)+1 pattern
+  // already used by attachOutputAsShotReference in src/actions/generation.ts).
+  // Incremented in-memory below so two regions confirmed in the same batch
+  // for the same Shot never collide on orderIndex.
+  const shotIdsInvolved = Array.from(new Set(copied.map((c) => c.shotId)));
+  const nextOrderByShot = new Map<number, number>();
+  for (const shotId of shotIdsInvolved) {
+    const [{ maxOrder }] = await db
+      .select({ maxOrder: sql<number>`coalesce(max(${shotReferenceImages.orderIndex}), -1)` })
+      .from(shotReferenceImages)
+      .where(eq(shotReferenceImages.shotId, shotId));
+    nextOrderByShot.set(shotId, maxOrder + 1);
+  }
+
   try {
     db.transaction((tx) => {
+      // Double-submit / race guard: re-check status as the very first
+      // statement of the write transaction (SQLite serializes writers), so
+      // if two Confirm & Extract requests both passed the earlier "ready"
+      // check, only the first to reach this point actually commits —
+      // the second throws here and its copied files are cleaned up below,
+      // never creating a duplicate draft/reference pair.
+      const [fresh] = tx
+        .select({ status: sequenceStoryboardExtractions.status })
+        .from(sequenceStoryboardExtractions)
+        .where(eq(sequenceStoryboardExtractions.id, extractionId))
+        .all() as unknown as { status: string }[];
+      if (!fresh || fresh.status !== "ready") {
+        throw new Error("This extraction was already confirmed.");
+      }
+
       const now = new Date().toISOString();
       for (const c of copied) {
-        tx.insert(storyboardImages)
+        const [insertedDraft] = tx
+          .insert(storyboardImages)
           .values({
             shotId: c.shotId,
             imagePath: c.destRelative,
             status: "draft",
             extractionRegionId: c.regionId,
+          })
+          .returning({ id: storyboardImages.id })
+          .all() as unknown as { id: number }[];
+
+        // Shares the exact same file as the draft above — no binary copy.
+        // Never auto-approved (imageRole alone carries no approval
+        // semantics); provenance recorded via sourceStoryboardImageId so
+        // deletion can later confirm the file is still needed by the draft.
+        const orderIndex = nextOrderByShot.get(c.shotId) ?? 0;
+        nextOrderByShot.set(c.shotId, orderIndex + 1);
+        tx.insert(shotReferenceImages)
+          .values({
+            shotId: c.shotId,
+            orderIndex,
+            imagePath: c.destRelative,
+            sourceFilename: null,
+            label: "Storyboard Frame",
+            imageRole: "storyboard_frame",
+            notes: `Extracted from Sequence Storyboard panel #${c.orderIndex + 1}.`,
+            sourceStoryboardImageId: insertedDraft.id,
           })
           .run();
 

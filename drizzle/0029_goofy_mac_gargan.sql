@@ -1,0 +1,1 @@
+ALTER TABLE `shot_reference_images` ADD `source_storyboard_image_id` integer REFERENCES storyboard_images(id);

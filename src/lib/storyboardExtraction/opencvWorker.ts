@@ -95,17 +95,28 @@ function wrapWorkerFailure(e: unknown): never {
   throw new OpenCvWorkerError("OpenCV worker failed to run.");
 }
 
-/** Runs `detect` against an already-validated absolute image path and returns typed, bounds-checked regions in reading order. */
-export async function runDetect(absoluteInputPath: string): Promise<DetectResult> {
+/**
+ * Runs `detect` against an already-validated absolute image path and returns
+ * typed, bounds-checked regions in reading order. `expectedShotCount`, when
+ * a positive integer, is forwarded to the worker so it can propose a
+ * low-confidence `grid-fallback` grid when primary detection is ambiguous —
+ * omitted (or <=0) means "unknown", never forcing any fallback.
+ */
+export async function runDetect(absoluteInputPath: string, expectedShotCount?: number): Promise<DetectResult> {
   await validateInputImage(absoluteInputPath);
+
+  const args = [getScriptPath(), "detect", "--input", absoluteInputPath, "--max-cells", String(MAX_CELLS)];
+  if (Number.isInteger(expectedShotCount) && (expectedShotCount as number) > 0) {
+    args.push("--expected-shots", String(expectedShotCount));
+  }
 
   let stdout: string;
   try {
-    const result = await execFileAsync(
-      getPythonBin(),
-      [getScriptPath(), "detect", "--input", absoluteInputPath, "--max-cells", String(MAX_CELLS)],
-      { timeout: DETECT_TIMEOUT_MS, windowsHide: true, maxBuffer: MAX_STDOUT_BUFFER_BYTES }
-    );
+    const result = await execFileAsync(getPythonBin(), args, {
+      timeout: DETECT_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: MAX_STDOUT_BUFFER_BYTES,
+    });
     stdout = result.stdout;
   } catch (e) {
     wrapWorkerFailure(e);

@@ -1,8 +1,10 @@
 "use server";
 import { db } from "@/db";
-import { shots, sequences, shotReferenceImages, assets, assetReferenceImages } from "@/db/schema";
+import { shots, sequences, shotReferenceImages, assets, assetReferenceImages, storyboardImages } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   saveReferenceImage,
   deleteStoredReferenceImage,
@@ -279,6 +281,31 @@ export async function captureVideoFrame(input: {
   }
 }
 
+/**
+ * SEQGEN.STORYBOARD.EXTRACT.1-FIX2 — mirrors deleteStoredReferenceImage's
+ * exact safety pattern (path-traversal rejection, root containment check,
+ * best-effort/silent failure), scoped to `uploads/storyboard-images/`
+ * instead of `uploads/reference-images/`: a reference sharing a Storyboard
+ * extraction's file lives under the former root, which the generic helper
+ * deliberately never touches. Callers MUST already have confirmed no other
+ * `storyboard_images` draft or `shot_reference_images` row still needs this
+ * exact path before calling this — see deleteShotReferenceImage below.
+ */
+async function deleteSharedStoryboardImageFile(imagePath: string): Promise<void> {
+  try {
+    if (!imagePath.startsWith("uploads/storyboard-images/")) return;
+    if (imagePath.includes("..") || imagePath.includes("\\") || path.isAbsolute(imagePath)) return;
+
+    const absolutePath = path.join(process.cwd(), "public", imagePath);
+    const safeBase = path.join(process.cwd(), "public", "uploads", "storyboard-images");
+    if (!absolutePath.startsWith(safeBase + path.sep) && absolutePath !== safeBase) return;
+
+    await fs.unlink(absolutePath);
+  } catch {
+    // best-effort — silent failure, matches deleteStoredReferenceImage's convention
+  }
+}
+
 export async function deleteShotReferenceImage(
   imageId: number,
   shotId: number,
@@ -299,7 +326,28 @@ export async function deleteShotReferenceImage(
 
   await db.delete(shotReferenceImages).where(eq(shotReferenceImages.id, imageId));
 
-  await deleteStoredReferenceImage(existing.imagePath);
+  // SEQGEN.STORYBOARD.EXTRACT.1-FIX2 — a reference created by sharing an
+  // extracted panel's file (imageRole "storyboard_frame",
+  // sourceStoryboardImageId set) never owns that file exclusively: the
+  // storyboard_images draft it was copied from — or any other reference row
+  // — may still point at the exact same path. Never unlink while a live row
+  // still needs it, regardless of how this deletion was reached.
+  const [stillNeededByDraft] = await db
+    .select({ id: storyboardImages.id })
+    .from(storyboardImages)
+    .where(eq(storyboardImages.imagePath, existing.imagePath));
+  const [stillNeededByOtherReference] = await db
+    .select({ id: shotReferenceImages.id })
+    .from(shotReferenceImages)
+    .where(eq(shotReferenceImages.imagePath, existing.imagePath));
+
+  if (!stillNeededByDraft && !stillNeededByOtherReference) {
+    if (existing.imagePath.startsWith("uploads/storyboard-images/")) {
+      await deleteSharedStoryboardImageFile(existing.imagePath);
+    } else {
+      await deleteStoredReferenceImage(existing.imagePath);
+    }
+  }
 
   redirect(shotDetailPath(projectId, sequenceId, shotId));
 }

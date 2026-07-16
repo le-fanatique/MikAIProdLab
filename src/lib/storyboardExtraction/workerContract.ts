@@ -12,13 +12,16 @@
 
 export class WorkerContractError extends Error {}
 
+/** "grid-fallback" — a region proposed from an equal-cell grid sized to the expected Shot count, used only when primary border/gutter detection was ambiguous (0 or 1 region found). Always low confidence; never silently extracted without explicit reassignment (see startStoryboardExtraction). */
+export type DetectionMode = "border" | "grid-fallback";
+
 export type DetectedRegion = {
   x: number;
   y: number;
   width: number;
   height: number;
   confidence: number;
-  detectionMode: "border";
+  detectionMode: DetectionMode;
   illustrationHeight: number | null;
   textSeparationDetected: boolean;
 };
@@ -87,7 +90,7 @@ function validateRegion(raw: unknown, index: number): DetectedRegion {
   if (!isFiniteNumber(r.confidence) || r.confidence < 0 || r.confidence > 1) {
     throw new WorkerContractError(`Region ${index} has an invalid confidence.`);
   }
-  if (r.detectionMode !== "border") {
+  if (r.detectionMode !== "border" && r.detectionMode !== "grid-fallback") {
     throw new WorkerContractError(`Region ${index} has an unsupported detectionMode.`);
   }
   if (r.illustrationHeight !== null && !isNonNegativeInt(r.illustrationHeight)) {
@@ -102,7 +105,7 @@ function validateRegion(raw: unknown, index: number): DetectedRegion {
     width: r.width,
     height: r.height,
     confidence: r.confidence,
-    detectionMode: "border",
+    detectionMode: r.detectionMode,
     illustrationHeight: r.illustrationHeight as number | null,
     textSeparationDetected: r.textSeparationDetected,
   };

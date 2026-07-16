@@ -715,6 +715,112 @@ conversation needs these notes, this file is the shared source of truth.
   border-less panels, automatic approval, and any change to existing Shots,
   durations, approved videos, or references.
 
+### FB-20260716-023 - Storyboard detector misses dark separators
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Storyboard extraction
+- Context: Extracting panels from a real 3840x2160 Sequence Storyboard with
+  eight Shots.
+- Original observation: OpenCV returns one region covering the entire image;
+  the separators and captions are black, while the detector mainly expects
+  near-white gutters.
+- Expected outcome: Detect dark, light, or mixed separators and propose the
+  expected 4x2 layout for eight Shots when primary detection is ambiguous.
+- Impact: The extraction tool cannot split the real storyboard contact sheet.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX1`
+- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX1` implemented — separator
+  detection is now polarity-independent (edge density plus a
+  border-sampled adaptive background-color estimate, reinforced by bounded
+  Hough long-line detection), which correctly splits the real 8-Shot dark
+  contact sheet into a clean 4x2 grid via primary detection (confidence
+  0.25, all 8 illustration/caption splits detected). When primary detection
+  is still ambiguous (0 or 1 region) and the Sequence's real Shot count is
+  passed to the worker, a low-confidence `grid-fallback` grid is proposed
+  instead — its regions are pre-filled with a proposed Shot but never
+  auto-assigned, so `Confirm & Extract` cannot include them until reviewed
+  and explicitly assigned one by one. A single Shot never gets a
+  multi-cell fallback. Illustration/caption splitting now also recognizes
+  dark caption backgrounds (white-on-black), not just light ones. No
+  migration was needed (verified: `drizzle-kit generate` produces no SQL
+  for the new `grid-fallback` enum value). Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Codex authorized a no-migration retake using polarity-
+  independent line detection plus a low-confidence expected-Shot-count grid
+  fallback. Manual confirmation remains mandatory before extraction.
+- 2026-07-16: Verified against the real reported fixture (Sequence 32,
+  Project 4, 3840x2160, 8 Shots) via the live dev server: all 8 regions
+  detected and mapped 1:1 to Shots 81-88 in reading order; `Confirm &
+  Extract` produced 8 real crops, each correctly excluding its dark
+  caption band. Regression-tested against every previously-passing fixture
+  (1/3/6-cell synthetic, the original 6-Shot white-gutter Sequence) plus
+  two new fixtures built for this retake (an all-black-gutter sheet, and
+  an adversarial two-tone sheet where the vertical gutter is white and the
+  horizontal gutter is black within the same image) — the two-tone case
+  correctly falls back to the low-confidence grid path rather than
+  guessing, and reassigning one fallback region and confirming produced
+  exactly one crop, leaving the other seven untouched.
+
+### FB-20260716-024 - Use extracted panels as Shot thumbnails and references
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard extraction / Shots / Reference Images
+- Context: Confirming extracted Storyboard panels that have been assigned to
+  their corresponding Shots.
+- Original observation:
+
+  > pour le storyboard, j aimerai bien que les image extracted soit forcé dans
+  > les thumbnail des shots, les images extract doivent aussi se retrouver
+  > dans la parti reference image de chat shot associé
+
+- Expected outcome: After a panel extraction is confirmed for a Shot, the
+  extracted image is automatically used as that Shot's visible thumbnail and
+  is also available in the associated Shot's `Reference Images` section.
+- Impact: Extracted compositions would immediately become useful throughout
+  the Shot workflow instead of remaining isolated as Storyboard drafts.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX2`.
+- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX2` implemented — confirming an
+  extraction now creates a `shot_reference_images` row (role
+  `storyboard_frame`) in the same transaction as the `storyboard_images`
+  draft, sharing the exact same file path (no binary copy). The Storyboard
+  grid's thumbnail selection now prioritizes an extraction-sourced draft
+  over any other non-approved draft, so the extracted panel is the visible
+  thumbnail without needing approval. An approved draft (any origin) still
+  always wins. Deletion of the shared reference never removes the file
+  while the originating draft (or any other reference) still points at it
+  — verified for both the "still needed" and "genuinely orphaned" cases.
+  Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: This changes the previous extraction boundary recorded in
+  `FB-20260716-022`, where extracted drafts deliberately did not modify Shot
+  references. A dedicated product and architecture decision is required.
+- 2026-07-16: Ticket preparation must define whether an extracted image
+  replaces an existing thumbnail, how the active thumbnail is chosen, which
+  reference role and approval state it receives, and whether `Reference
+  Images` points to the same stored file or creates a separate durable copy.
+  Provenance and deletion behavior must remain consistent.
+- 2026-07-16: Codex decision (`SEQGEN.STORYBOARD.EXTRACT.1-FIX2`): the
+  reference shares the draft's file (no copy), role `storyboard_frame`,
+  never auto-approved; a new nullable `source_storyboard_image_id` column on
+  `shot_reference_images` (additive migration) records the shared-file
+  provenance so deletion can verify the file is still needed before
+  unlinking.
+- 2026-07-16: This observation does not yet authorize automatic approval,
+  schema/migration changes, storage changes, or writes to
+  `shot_reference_images` outside a dedicated ticket.
+- 2026-07-16: Codex authorized FIX2 to add a provenance link through an
+  additive migration if needed, reuse the same crop file as storyboard draft
+  and Shot reference, prioritize the extracted crop in the Storyboard
+  thumbnail, and protect shared files from premature deletion. Interactive
+  crop editing and extraction-context-preserving redirects are included.
+
 ## Entry Template
 
 Copy this block under `Active Feedback` for each new note:

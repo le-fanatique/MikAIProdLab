@@ -204,6 +204,13 @@
       "when": 1784192941950,
       "tag": "0028_tiny_logan",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1784200797672,
+      "tag": "0029_goofy_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

@@ -317,6 +317,10 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
     ],
   }),
   notes: text("notes"),
+  /** SEQGEN.STORYBOARD.EXTRACT.1-FIX2 — set only when this reference shares its file with a `storyboard_images` draft (e.g. an extracted panel auto-added as a Shot reference); null for every manually-uploaded/captured reference. Set-null on delete: losing the draft row never deletes this reference or its file — deletion safety is re-checked against `storyboard_images.image_path` directly at delete time, not solely via this column. */
+  sourceStoryboardImageId: int("source_storyboard_image_id").references(() => storyboardImages.id, {
+    onDelete: "set null",
+  }),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
@@ -529,7 +533,8 @@ export const sequenceStoryboardExtractionRegions = sqliteTable(
       .notNull()
       .default(false),
     confidence: real("confidence").notNull(),
-    detectionMode: text("detection_mode", { enum: ["border", "manual"] })
+    /** "grid-fallback" (SEQGEN.STORYBOARD.EXTRACT.1-FIX1) — an equal-cell grid proposed when primary detection was ambiguous; always low confidence, text-only enum change so no migration is needed (SQLite text columns carry no CHECK constraint from Drizzle). */
+    detectionMode: text("detection_mode", { enum: ["border", "manual", "grid-fallback"] })
       .notNull()
       .default("border"),
     status: text("status", {
