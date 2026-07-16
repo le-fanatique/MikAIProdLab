@@ -498,9 +498,9 @@ conversation needs these notes, this file is the shared source of truth.
   > la couleur du bouton "new project" est illisible, elle n'est pas réglé
   > comme la couleur des autres bouton du meme genre
 
-- Expected outcome: The `New Project` button uses the same readable theme
-  colors and visual variant as other buttons representing the same kind of
-  primary action.
+- Expected outcome: In the left column, the `New Project` label uses the
+  `Text Secondary` theme token while the button remains consistent with
+  equivalent actions and preserves readable contrast.
 - Impact: The current foreground/background color combination makes the action
   difficult to read and creates an inconsistent button hierarchy.
 - Related ticket: None
@@ -512,6 +512,14 @@ conversation needs these notes, this file is the shared source of truth.
 - 2026-07-15: Ticket preparation should identify the intended shared button
   variant and verify contrast in every supported appearance mode, rather than
   applying an isolated hard-coded color.
+- 2026-07-16: User refinement:
+
+  > le mot "new project" de la colonne de gauche devrait avoir la couleur de
+  > la text secondary
+
+- 2026-07-16: `Text Secondary` is now the explicit desired token for the
+  left-column label; implementation should still use the shared theme token,
+  not a hard-coded color.
 
 ### FB-20260715-008 - Custom thumbnail backgrounds for Project and Sequence rows
 
@@ -924,6 +932,514 @@ conversation needs these notes, this file is the shared source of truth.
   panel's fields (and their pre-filled values) are otherwise entirely absent
   from the rendered page until a client-side click, which is the direct
   cause of the "seems not applied" perception this feedback describes.
+
+### FB-20260716-027 - Crop/Fit image tool with aspect-ratio presets
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Image editing / Storyboard / Reference media
+- Context: Adjusting an image to the framing required by a Shot, workflow, or
+  final display format.
+- Original observation:
+
+  > ajouter un outil de modeification d'image "CROP/FIT" pour ajuster au
+  > format voulu (16:9, 2:35)
+
+- Expected outcome: Provide a `Crop / Fit` image-adjustment tool with aspect-
+  ratio presets such as `16:9` and cinematic `2.35:1`. `Crop` fills the target
+  frame by trimming overflow, while `Fit` preserves the complete image and
+  handles the remaining space explicitly.
+- Impact: Images could be prepared consistently for their intended Shot or
+  generation format without relying on an external editor.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation must confirm that the user's `2:35` means
+  `2.35:1`, identify which image surfaces expose the tool, and define crop
+  positioning, zoom, additional/custom ratios, and the `Fit` background or
+  padding behavior.
+- 2026-07-16: Editing should be non-destructive by default: preserve the
+  original, preview the result, and save or apply explicitly with clear
+  provenance. This observation alone does not authorize storage, schema,
+  migration, image-processing dependency, or generation-runtime changes.
+
+### FB-20260716-028 - Crop illustration without storyboard text
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Extraction
+- Context: Reviewing generated contact sheets with image panels and optional
+  title or caption bands.
+- Original observation: The user reports that extraction also crops the
+  description below each illustration and wants to tune the result from the
+  interface using several generated examples.
+- Expected outcome: Bounded presets for full cell, bottom-caption removal,
+  top-header removal, and both, plus a manual mode and bulk application to
+  editable regions.
+- Impact: Text bands contaminate Shot storyboard thumbnails and require
+  repeated manual correction.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX5`
+- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX5` implemented — a "Content
+  Crop" control (Mode: Full cell / Remove bottom caption / Remove top
+  header / Remove top and bottom text / Manual, plus bounded 0-45% Header/
+  Caption inputs, presets pre-filling adjustable starting values) previews
+  new rectangles for every editable, non-skipped, non-extracted region via
+  `Apply to all regions` — a client-only preview, no DB write — and `Update
+  All` (existing, unchanged) remains the sole, atomic persistence step.
+  Verified live against the real 8-Shot fixture: `Remove bottom caption`
+  produces a crop with the full illustration and the caption band fully
+  excluded; `Remove top header` and `Remove top and bottom text` verified
+  numerically and visually. Skipped and already-extracted regions are
+  provably untouched by both the bulk preview and `Update All`. Settings
+  persist in the existing `paramsJson` (no migration) and correctly
+  pre-fill the controls (including the exact selected mode and percentages)
+  on reload. Invalid mode/percentage values reject the whole batch with a
+  clear error, same atomicity guarantee as an invalid rectangle.
+  Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Codex authorized a no-migration implementation using existing
+  region rectangles plus extraction `paramsJson`; the worker and generation
+  runtime remain out of scope.
+- 2026-07-16: Bug found and fixed during validation of this ticket:
+  `confirmStoryboardExtraction` (from `SEQGEN.STORYBOARD.EXTRACT.1`) silently
+  overrode a region's current height with the auto-detected
+  `illustrationHeight` whenever a valid split existed — which is true for
+  most real regions — meaning Content Crop's explicit choice was ignored at
+  the final extraction step for any region FIX1's heuristic had already
+  analyzed. Fixed by skipping that auto-override entirely once an
+  extraction's `paramsJson` shows Content Crop has ever been used (a
+  `contentCrop` key present, any mode) — the current rectangle then always
+  wins. Extractions that have never touched Content Crop keep the original
+  auto-detection behavior unchanged. Verified live: a `Remove top header`
+  crop produced the exact configured height (832px) instead of the
+  pre-existing auto-detected illustration height (715px) it would have used
+  before this fix.
+
+### FB-20260716-029 - Expose advanced storyboard detection diagnostics
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Extraction / Detection
+- Context: Comparing Auto and Grid reruns on several generated contact sheets.
+- Original observation: Auto and Grid appear to return the same result; the
+  user wants to choose Otsu, Canny or Grid and directly tune raw thresholds,
+  including values such as 0.8, with an explanation for every parameter.
+- Expected outcome: Advanced Diagnostics exposes bounded raw parameters,
+  accessible tooltips, the primary result, fallback reason and final engine.
+- Impact: Detection quality cannot currently be understood or tuned reliably.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
+- Resolution: `Detection engine` now offers Otsu (Legacy, reintroduced from
+  commit `4bc3db5`), Canny + Hough, and Exact Grid, plus a collapsed
+  `Advanced Diagnostics` panel exposing every bounded raw worker parameter
+  with English hover/focus tooltips and a `Custom threshold` overriding the
+  Low/Medium/High presets. The worker's JSON contract now carries a
+  structured `diagnostics` object (primary engine, detected count,
+  confidence, threshold, fallback reason, final engine).
+- Resolved or validated on: Implemented 2026-07-16, pending Codex review.
+
+#### Follow-up notes
+
+- 2026-07-16: Otsu and Canny/Hough are OpenCV algorithms, not AI models. They
+  add no model weights or meaningful binary storage. Grid is geometric.
+
+### FB-20260716-030 - Upload and delete Sequence Storyboard Drafts
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Storyboard Drafts
+- Context: Testing extraction settings against several different contact
+  sheets for the same Sequence.
+- Original observation: The user wants to upload or delete Storyboards from
+  Sequence Storyboard Drafts in order to keep several visuals for testing.
+- Expected outcome: Validated local upload, visible independent drafts, and
+  safe deletion that never breaks an existing extraction.
+- Impact: Testing currently depends only on generated drafts already stored.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
+- Resolution: `Upload storyboard` and `Delete` added to Sequence Storyboard
+  Drafts. Upload accepts PNG/JPEG/WebP only (extension AND magic-byte
+  checked), 10MB max; each upload is a new file plus a new `draft` row with
+  null job/workflow/prompt/references provenance. Delete requires
+  confirmation, Sequence ownership, strict path containment, and is blocked
+  with a clear error when the draft is already an extraction's source.
+- Resolved or validated on: Implemented 2026-07-16, pending Codex review.
+
+#### Follow-up notes
+
+- 2026-07-16: Codex authorized storage writes only under the existing Sequence
+  Storyboard upload root. No migration is needed; uploaded files consume their
+  real file size, while detection reruns reuse the source image.
+
+### FB-20260716-031 - Ratio-aware storyboard cropboxes
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Extraction / Content Crop
+- Context: Normalizing extracted storyboard panels to production framing.
+- Original observation: Add ratio presets 19:9, 2:35 and 2:38, Apply Ratio
+  All, Lock ratio for homothetic resize, and a size multiplier.
+- Expected outcome: Deterministic, idempotent ratio/scale previews calculated
+  from stable cell bounds and persisted only through Update All.
+- Impact: Manual crops cannot currently preserve a common framing ratio.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
+- Resolution: `Free`/`19:9`/`2.35:1`/`2.38:1` ratio presets and a `Size
+  multiplier` (0.10-1.00) added to Content Crop, computed via a new pure
+  pipeline (Content Crop -> ratio -> multiplier -> clamp) always from the
+  same stable base rect. `Apply Ratio All` previews on eligible regions;
+  `Update All` remains the only persistence. `Lock ratio` on the crop box
+  keeps all 4 resize handles active but constrains resizing to the selected
+  ratio, anchored on the opposite corner, without leaving source bounds.
+- Resolved or validated on: Implemented 2026-07-16, pending Codex review.
+
+#### Follow-up notes
+
+- 2026-07-16: Product wording `19:9` is retained literally. Ratios `2:35` and
+  `2:38` are interpreted as `2.35:1` and `2.38:1`.
+
+### FB-20260716-032 - Unify Edit-page text-field colors with API Key
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Forms / Edit pages / Theme
+- Context: Editing Projects, Assets, Shots, and other application entities.
+- Original observation:
+
+  > tout les text field des pages d'edit (exemple asset, shot, projet...)
+  > devrait avoir la meme couleur que la couleur du text field "API KEY" par
+  > exemple
+
+- Expected outcome: Text fields across Edit pages use the same canonical color
+  treatment as the `API Key` field, producing a consistent form appearance for
+  Project, Asset, Shot, and equivalent editors.
+- Impact: Inconsistent field colors make forms feel unrelated and can obscure
+  which controls are editable or part of the same design system.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation must audit the shared and one-off input
+  components, identify the exact `API Key` reference styles or theme tokens,
+  and clarify whether the requested consistency includes background, border,
+  entered text, placeholder, disabled, error, hover, and focus states.
+- 2026-07-16: Prefer a shared field variant or design token over per-page
+  hard-coded colors. Confirm separately whether textareas, selects, numeric
+  fields, and other form controls should follow the same treatment.
+
+### FB-20260716-033 - Make Edit Project text fields translatable
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Project editing / Translation
+- Context: Editing the textual content of a Project from the `Edit Project`
+  page.
+- Original observation:
+
+  > ajouter les text field de Edit project comme translatable
+
+- Expected outcome: The relevant text fields on `Edit Project` use the
+  application's translatable-field workflow, allowing their content to be
+  translated with the same interaction and safeguards as other supported
+  editors.
+- Impact: Project-level creative context can be maintained across languages
+  without copying content into an external translation tool.
+- Related ticket: The existing `TRANS.*` translation work should be audited
+  when preparing this request.
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation must inventory the page fields and decide
+  which are creative translatable content, such as Pitch, Story, or Notes,
+  versus names, identifiers, paths, or technical values that should remain
+  unchanged.
+- 2026-07-16: Reuse the existing translation preview/apply behavior, preserve
+  the source text, and never overwrite a field silently. This observation
+  alone does not authorize schema, migration, provider, or dependency changes.
+- 2026-07-16: Evaluate a non-generative, low-latency French↔English option for
+  the translation workflow. Apertium is a rule-based/deterministic candidate
+  with an official French–English pair; it may suit UI labels, short technical
+  text, and quick previews, while an LLM can remain available for creative
+  wording and nuance. Keep the provider configurable and compare quality before
+  changing the default.
+
+### FB-20260716-034 - Match Apply to Story with Save Changes button colors
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Story / Buttons / Theme
+- Context: Applying edited or generated content to the Story.
+- Original observation:
+
+  > le bouton "apply to story" n'a pas la bonne couleur et devrait avoir la
+  > meme couleur que les bouton "save changes"
+
+- Expected outcome: The `Apply to Story` button uses the same color treatment
+  and shared visual variant as `Save Changes` buttons.
+- Impact: Matching equivalent confirmation actions would improve readability
+  and make the application's action hierarchy more consistent.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation should identify the canonical `Save Changes`
+  button variant and reuse it for default, hover, focus, disabled, and loading
+  states rather than copying hard-coded colors.
+
+### FB-20260716-035 - Add an extra system prompt to Story LLM Assist
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Story / LLM Assist / Prompting
+- Context: Generating a Story from a Project pitch through the Story LLM Assist.
+- Original observation:
+
+  > faudrait faire une passe sur le llm assist de story, actuellement c est
+  > blackbox, ca serait pas mal d'y ajouter un bouton "extra System prompt" ou
+  > on pourrait affiner la requette.
+  >
+  > Par exemple, là j ai généré une histoire par rapport au pitch. Il m'a fait
+  > une histoire qui pourrait se traiter comme un film, bcp de decors, bcp de
+  > perso, bcp de sequence potentiel. Alors que pour ce projet j avais envi
+  > d'une histoire qui tiens dans 30s , 1 perso, 1 props, un decor,
+  > establishing , mistere, decouverte, action consequence, twist de fin.
+  > Basta.
+
+- Expected outcome: Story LLM Assist exposes an optional `Extra System Prompt`
+  control where the user can state production constraints (duration, number of
+  characters, props, locations, beats, and ending structure) before generation.
+  The generated result should make those constraints visible and reviewable.
+- Impact: Users currently receive an opaque, over-scoped Story that can expand
+  beyond the intended short-form production budget and visual complexity.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: The control should be optional and additive to the existing
+  system prompt, with a clear preview of the effective prompt and no silent
+  overwrite of the user's source text. It should support reusable presets or
+  structured constraints later, but the first ticket can remain text-based.
+- 2026-07-16: Generation UX should distinguish the base Story prompt from the
+  user-provided extra constraints and retain both in the generation record or
+  visible result context, subject to the existing persistence rules.
+
+### FB-20260716-036 - Introduce a specialist-agent MikAI Assist Director
+
+- Status: `INBOX`
+- Date observed: 2026-07-16
+- Area: Cross-workspace assistance / Creative direction
+- Context: Considering how LLM assistance should guide Story, Asset,
+  Storyboard, and Editorial tasks.
+- Original observation:
+
+  > Peut etre que cela revient plus avec le concept de MikAI Assist Director.
+  > Je ne sait plus si je l'avais déjà mentionné. Mais en gros l'idée c est
+  > d'avoir une serie d'agents sepecialist dans chaque categorie (asset, story,
+  > storyboard, editorial) pour nous aider a orienté plus chaque tache
+
+- Expected outcome: MikAI Assist Director coordinates domain-focused assistants
+  for Story, Asset, Storyboard, and Editorial work, each applying task-specific
+  constraints and checks while keeping the user in control.
+- Impact: Specialized guidance could prevent scope drift between narrative
+  intent and downstream production tasks, while making the current LLM actions
+  less black-box.
+- Related ticket: `DIRECTOR.ASSIST.1` (roadmap candidate)
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: The roadmap already contains `DIRECTOR.ASSIST.1`; this feedback
+  confirms the intended direction and adds specialist domains plus the need to
+  expose constraints. Product design should define agent boundaries,
+  orchestration, approvals, and failure/override behavior before implementation.
+- 2026-07-16: Do not interpret this concept as authorization to add a new model,
+  provider, schema, or autonomous action system. Start with a product contract
+  and a transparent assist flow built on the existing LLM infrastructure.
+
+### FB-20260716-037 - Unify colors for LLM Apply buttons
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Story / LLM Assist / Buttons / Theme
+- Context: Applying LLM-generated content, including the `Apply Outline`
+  action.
+- Original observation:
+
+  > "Apply Outline" a aussi un probleme de couleur, je pense que cela va etre
+  > redondant à tout les boutons "Apply" relatif au llm
+
+- Expected outcome: All LLM-related `Apply` buttons, including `Apply Outline`
+  and `Apply to Story`, use one consistent action color and shared button
+  variant across their default, hover, focus, disabled, and loading states.
+- Impact: A shared treatment would make equivalent LLM confirmation actions
+  recognizable and prevent repeated per-button color fixes.
+- Related ticket: None; related feedback: `FB-20260716-034`
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation should inventory every LLM-driven `Apply`
+  action and identify the canonical existing variant (for example, the
+  `Save Changes` treatment) before changing individual buttons. Prefer a shared
+  component or theme token over hard-coded per-page colors.
+
+### FB-20260716-038 - Split Asset Description and Notes enhancement
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Asset / LLM Assist / Editing
+- Context: Using the enhancement action on the Asset Detail page.
+- Original observation:
+
+  > j ai un probleme avec le enhance description, il faudrait splité enhance
+  > description et enhance notres , pour les lancé un par un dans la page de
+  > l'asset
+
+- Expected outcome: The Asset page exposes separate `Enhance Description` and
+  `Enhance Notes` actions that can be run independently, with each result shown
+  in its own preview before the user explicitly applies it.
+- Impact: Independent generation avoids unwanted coupling between fields and
+  lets the user improve only the content that needs work.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Preserve the existing preview/apply safeguards for each field;
+  one action must not overwrite or regenerate the other field silently. Keep
+  the two prompts and loading/error states distinguishable in the UI.
+- 2026-07-16: Ticket preparation should verify whether the current combined
+  enhancement also feeds Asset Bible fields, and document that behavior before
+  splitting the actions. This observation alone does not authorize schema,
+  migration, provider, or dependency changes.
+
+### FB-20260716-039 - Include Visual Identity in Generate Content Fill
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Asset / Generate Content / Prompt composition
+- Context: Using the `Fill` action in the `Generate Content` workflow for an
+  Asset.
+- Original observation:
+
+  > ajouter visual idnetity dans le bouton Fill de generate content
+
+- Expected outcome: The `Fill` action can include the Asset's `Visual Identity`
+  content in the generated prompt/context, alongside the currently supported
+  Asset information, so visual consistency is preserved during generation.
+- Impact: Generated content may currently omit a key part of the Asset Bible,
+  causing avoidable drift in the asset's appearance and identity.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation should confirm whether `Visual Identity` is
+  appended, merged, or mapped to a dedicated prompt segment, and show the
+  resulting text in the existing prompt preview before generation. Empty or
+  missing values should leave the current behavior unchanged.
+
+### FB-20260716-040 - Show an image zoom popup on hover
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Images / Preview / UX
+- Context: Viewing image thumbnails throughout the application.
+- Original observation:
+
+  > lorsque je met le curseur au dessus d une image, toujours me faire un
+  > popup zoon
+
+- Expected outcome: Hovering an image thumbnail opens a consistent zoom popup
+  or enlarged preview, allowing the user to inspect the image without leaving
+  the current page.
+- Impact: Small thumbnails are difficult to evaluate and currently require
+  extra navigation or manual opening to inspect visual details.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Ticket preparation should inventory image surfaces and define
+  one shared preview behavior, including delay, placement, viewport clamping,
+  keyboard/focus access, and mobile/touch fallback. Avoid blocking the use of
+  image action buttons underneath the thumbnail.
+
+### FB-20260716-041 - Prefill workflow Duration from Shot duration
+
+- Status: `OPEN`
+- Date observed: 2026-07-16
+- Area: Shot / Generate Content / Workflow inputs
+- Context: Generating content from a Shot workflow that exposes a `Duration`
+  input.
+- Original observation:
+
+  > injecter par defaut la duration du shot dans l'imput "Duration" des
+  > workflow dans generate content
+
+- Expected outcome: When `Generate Content` opens for a Shot, the workflow
+  `Duration` input is prefilled from that Shot's configured duration whenever
+  the workflow exposes a compatible duration field.
+- Impact: The generated clip should follow the Shot's intended timing without
+  requiring the user to copy the value manually or risk a mismatch.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: The injected value should be a default only: preserve an
+  explicit user edit during the current generation flow and validate units and
+  bounds against the selected workflow. If the Shot has no duration or the
+  workflow has no compatible input, retain the current behavior.
+
+### FB-20260717-042 - Add Shot video references management
+
+- Status: `OPEN`
+- Date observed: 2026-07-17
+- Area: Shot / References / Video
+- Context: Managing reference media attached to an individual Shot.
+- Original observation:
+
+  > il faudrait une section video pour les shots comme la sections image
+  > reference, pour pouvoir les supprimer ou en uploader au besoin
+
+- Expected outcome: Shot Detail exposes a dedicated video reference section,
+  parallel to `Image References`, where the user can upload supported reference
+  videos and delete existing ones explicitly.
+- Impact: Video-to-video and other reference-video workflows need durable,
+  manageable Shot-level video inputs instead of relying on external files or
+  temporary generation state.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-17: Ticket preparation should define supported formats, size and
+  duration limits, storage ownership, preview behavior, and safe deletion. A
+  deletion must not remove a video that is referenced by another entity or
+  workflow record; provenance should remain visible where the video is used.
+- 2026-07-17: Reuse the existing reference-media conventions where possible,
+  but keep video references distinct from approved Shot outputs and from
+  editorial media. This observation alone does not authorize schema,
+  migration, provider, or generation-runtime changes.
 
 ## Entry Template
 

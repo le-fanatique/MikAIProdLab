@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// RegionCropBox.tsx — SEQGEN.STORYBOARD.EXTRACT.1-FIX2
+// RegionCropBox.tsx — SEQGEN.STORYBOARD.EXTRACT.1-FIX2 / -FIX5
 //
 // Interactive overlay rectangle for one extraction region: draggable body
 // (move) plus four corner resize handles, rendered as an absolutely-
@@ -21,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RATIO_VALUES, isRatioPreset } from "@/lib/storyboardExtraction/ratioCrop";
 
 type Corner = "nw" | "ne" | "sw" | "se";
 
@@ -39,9 +40,55 @@ type Props = {
   editable: boolean;
   /** SEQGEN.STORYBOARD.EXTRACT.1-FIX3 — this region's identity color (getRegionColor), reused verbatim on the matching Regions list row's swatch. Never the sole way to identify a region: the numbered label below always carries the same "#N" as visible text. */
   color: string;
+  /** FIX6 (Lot C) — id of this region's own "Lock ratio" checkbox and the shared ratio <select>, both read fresh from the DOM at the START of each drag (never cached across drags) so toggling either mid-session takes effect on the very next interaction. Omitted entirely keeps today's unconstrained free-resize behavior. */
+  lockRatioFieldId?: string;
+  ratioSelectId?: string;
 };
 
 const MIN_SIZE_PX = 8;
+
+/** SEQGEN.STORYBOARD.EXTRACT.1-FIX5 — dispatched on `window` by ApplyToAllRegionsButton after it writes a region's new x/y/width/height into the region-{id}-{field} inputs, so this box's own visual preview refreshes in step with the batch content-crop preview, not just per-drag edits. Detail: { regionId: number; rect: { x, y, width, height } }. */
+export const REGION_RECT_APPLIED_EVENT = "storyboard-region-rect-applied";
+
+/**
+ * REVISE (Codex finding #2) — computes a resize that stays STRICTLY within
+ * [0, sourceWidth] x [0, sourceHeight] while preserving `ratio` exactly
+ * (width/height), for the given corner's fixed anchor (the opposite
+ * corner). The previous implementation derived height from width
+ * (preserving ratio) but then let the generic `clamp()` shrink width and
+ * height INDEPENDENTLY against the source bounds — near an edge this broke
+ * the ratio and un-anchored the opposite corner. Here, width is capped
+ * jointly against both the horizontal AND vertical available space
+ * (`maxH * ratio`) BEFORE height is derived from it, so the final rect can
+ * never need an independent post-hoc clamp: it is in-bounds and ratio-exact
+ * by construction (up to integer rounding).
+ */
+export function computeLockedResizeRect(
+  startBox: { x: number; y: number; width: number; height: number },
+  corner: Corner,
+  desiredWidthUnclamped: number,
+  ratio: number,
+  sourceWidth: number,
+  sourceHeight: number
+): { x: number; y: number; width: number; height: number } {
+  const anchorX = corner.includes("w") ? startBox.x + startBox.width : startBox.x;
+  const anchorY = corner.includes("n") ? startBox.y + startBox.height : startBox.y;
+  const maxW = Math.max(1, corner.includes("w") ? anchorX : sourceWidth - anchorX);
+  const maxH = Math.max(1, corner.includes("n") ? anchorY : sourceHeight - anchorY);
+
+  const widthCap = Math.min(maxW, maxH * ratio);
+  let width = Math.min(Math.max(MIN_SIZE_PX, desiredWidthUnclamped), widthCap);
+  let height = width / ratio;
+
+  width = Math.min(Math.round(width), Math.floor(maxW));
+  height = Math.min(Math.round(height), Math.floor(maxH));
+  width = Math.max(1, width);
+  height = Math.max(1, height);
+
+  const x = corner.includes("w") ? anchorX - width : anchorX;
+  const y = corner.includes("n") ? anchorY - height : anchorY;
+  return { x, y, width, height };
+}
 
 const HANDLE_POSITION: Record<Corner, string> = {
   nw: "-top-1.5 -left-1.5 cursor-nwse-resize",
@@ -64,6 +111,8 @@ export default function RegionCropBox({
   confidence,
   editable,
   color,
+  lockRatioFieldId,
+  ratioSelectId,
 }: Props) {
   const [box, setBox] = useState({ x, y, width, height });
 
@@ -75,13 +124,28 @@ export default function RegionCropBox({
     startBox: { x: number; y: number; width: number; height: number };
     scaleX: number;
     scaleY: number;
+    /** FIX6 (Lot C) — null unless "Lock ratio" was checked and a non-"free" ratio was selected at drag-start; resolved once here so a resize drag never re-reads the DOM mid-drag. */
+    lockedRatioValue: number | null;
   } | null>(null);
 
   const writeFieldsToDom = useCallback(
-    (next: { x: number; y: number; width: number; height: number }) => {
+    (next: { x: number; y: number; width: number; height: number }, isManualEdit: boolean) => {
       (["x", "y", "width", "height"] as const).forEach((field) => {
         const el = document.getElementById(`region-${regionId}-${field}`) as HTMLInputElement | null;
         if (el) el.value = String(next[field]);
+        // REVISE (round 2, finding #1) — a real drag IS the user manually
+        // repositioning the region, so it becomes the new stable base
+        // `Apply Ratio All` uses for Manual mode (see
+        // region-{id}-manual-base-{field}, rendered by the page). An
+        // externally-applied rect (Apply to all regions / Apply Ratio All
+        // itself, via REGION_RECT_APPLIED_EVENT) must NEVER count as a
+        // manual edit — that would make the ratio pipeline's own output
+        // become its next base, breaking idempotence exactly like the bug
+        // this same field was introduced to fix.
+        if (isManualEdit) {
+          const baseEl = document.getElementById(`region-${regionId}-manual-base-${field}`) as HTMLInputElement | null;
+          if (baseEl) baseEl.value = String(next[field]);
+        }
       });
     },
     [regionId]
@@ -107,7 +171,7 @@ export default function RegionCropBox({
       const dx = (e.clientX - state.startClientX) * state.scaleX;
       const dy = (e.clientY - state.startClientY) * state.scaleY;
 
-      const next = { ...state.startBox };
+      let next = { ...state.startBox };
       if (state.mode === "move") {
         next.x = state.startBox.x + dx;
         next.y = state.startBox.y + dy;
@@ -122,13 +186,23 @@ export default function RegionCropBox({
           next.y = state.startBox.y + dy;
           next.height = state.startBox.height - dy;
         }
+
+        // REVISE (Codex finding #2) — a locked resize is computed by its
+        // own bounds-aware, ratio-exact-by-construction function, never by
+        // the generic `clamp()` below (which shrinks width/height
+        // independently and would break the ratio and un-anchor the
+        // opposite corner near a source edge). `next.width` here is only
+        // used as the "desired" unclamped width the drag distance implies.
+        if (state.lockedRatioValue) {
+          next = computeLockedResizeRect(state.startBox, state.corner, next.width, state.lockedRatioValue, sourceWidth, sourceHeight);
+        }
       }
 
-      const clamped = clamp(next);
+      const clamped = state.mode === "resize" && state.corner && state.lockedRatioValue ? next : clamp(next);
       setBox(clamped);
-      writeFieldsToDom(clamped);
+      writeFieldsToDom(clamped, true);
     },
-    [clamp, writeFieldsToDom]
+    [clamp, writeFieldsToDom, sourceWidth, sourceHeight]
   );
 
   const endDrag = useCallback(() => {
@@ -139,6 +213,18 @@ export default function RegionCropBox({
 
   useEffect(() => endDrag, [endDrag]);
 
+  useEffect(() => {
+    function onExternalRectApplied(e: Event) {
+      const detail = (e as CustomEvent<{ regionId: number; rect: { x: number; y: number; width: number; height: number } }>).detail;
+      if (!detail || detail.regionId !== regionId) return;
+      const clamped = clamp(detail.rect);
+      setBox(clamped);
+      writeFieldsToDom(clamped, false);
+    }
+    window.addEventListener(REGION_RECT_APPLIED_EVENT, onExternalRectApplied);
+    return () => window.removeEventListener(REGION_RECT_APPLIED_EVENT, onExternalRectApplied);
+  }, [regionId, clamp, writeFieldsToDom]);
+
   const startDrag = useCallback(
     (mode: "move" | "resize", corner?: Corner) => (e: React.PointerEvent<HTMLElement>) => {
       if (!editable) return;
@@ -147,6 +233,18 @@ export default function RegionCropBox({
       const container = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-crop-container]");
       if (!container) return;
       const rect = container.getBoundingClientRect();
+
+      // FIX6 (Lot C) — resolved once per drag, only relevant for a resize
+      // (a plain move never changes width/height, so ratio locking is moot).
+      let lockedRatioValue: number | null = null;
+      if (mode === "resize" && lockRatioFieldId && ratioSelectId) {
+        const lockEl = document.getElementById(lockRatioFieldId) as HTMLInputElement | null;
+        const ratioEl = document.getElementById(ratioSelectId) as HTMLSelectElement | null;
+        if (lockEl?.checked && ratioEl?.value && isRatioPreset(ratioEl.value) && ratioEl.value !== "free") {
+          lockedRatioValue = RATIO_VALUES[ratioEl.value];
+        }
+      }
+
       dragState.current = {
         mode,
         corner,
@@ -155,11 +253,12 @@ export default function RegionCropBox({
         startBox: { ...box },
         scaleX: sourceWidth / rect.width,
         scaleY: sourceHeight / rect.height,
+        lockedRatioValue,
       };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", endDrag);
     },
-    [editable, box, sourceWidth, sourceHeight, onPointerMove, endDrag]
+    [editable, box, sourceWidth, sourceHeight, onPointerMove, endDrag, lockRatioFieldId, ratioSelectId]
   );
 
   const left = (box.x / sourceWidth) * 100;

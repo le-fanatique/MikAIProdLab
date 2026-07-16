@@ -25,10 +25,12 @@ import {
   validateDetectResult,
   validateCropResult,
   WorkerContractError,
+  ADVANCED_PARAM_SPECS,
   type DetectResult,
   type CropResult,
-  type DetectionRequestMode,
+  type DetectionEngine,
   type Sensitivity,
+  type AdvancedDetectionParams,
 } from "./workerContract";
 
 const execFileAsync = promisify(execFile);
@@ -107,13 +109,17 @@ function wrapWorkerFailure(e: unknown): never {
 export type RunDetectOptions = {
   /** Forwarded to the worker so it can propose a low-confidence `grid-fallback` grid when primary detection is ambiguous — a non-positive-integer value means "unknown", never forcing any fallback. */
   expectedShotCount?: number;
-  /** "grid" skips primary detection and always returns a grid-fallback proposal (FIX3). Omitted defaults to the worker's own "auto". */
-  mode?: DetectionRequestMode;
+  /** FIX6 — explicit primary-detection engine: "otsu" | "canny" | "grid". Omitted defaults to the worker's own "canny" (byte-identical to the pre-FIX6 "auto" mode). */
+  engine?: DetectionEngine;
   /** Explicit grid shape override — must be supplied together (both or neither); validated against expectedShotCount and geometric limits by the worker itself, which fails loudly on a mismatch. */
   columns?: number;
   rows?: number;
-  /** How readily Auto mode falls back to the proposed grid when its count already matches but confidence is low. Omitted defaults to the worker's own "medium". */
+  /** How readily otsu/canny fall back to the proposed grid when their count already matches but confidence is low. Omitted defaults to the worker's own "medium". Ignored when customThreshold is given. */
   sensitivity?: Sensitivity;
+  /** FIX6 — 0.00-1.00, takes priority over `sensitivity` for the fallback decision when present. */
+  customThreshold?: number;
+  /** FIX6 — advanced tunables, each forwarded verbatim as its own CLI flag; omitted fields keep the worker's own pre-FIX6 default constants. */
+  advancedParams?: AdvancedDetectionParams;
 };
 
 /**
@@ -127,14 +133,25 @@ export async function runDetect(absoluteInputPath: string, options: RunDetectOpt
   if (Number.isInteger(options.expectedShotCount) && (options.expectedShotCount as number) > 0) {
     args.push("--expected-shots", String(options.expectedShotCount));
   }
-  if (options.mode) {
-    args.push("--mode", options.mode);
+  if (options.engine) {
+    args.push("--engine", options.engine);
   }
   if (Number.isInteger(options.columns) && Number.isInteger(options.rows)) {
     args.push("--columns", String(options.columns), "--rows", String(options.rows));
   }
   if (options.sensitivity) {
     args.push("--sensitivity", options.sensitivity);
+  }
+  if (typeof options.customThreshold === "number") {
+    args.push("--custom-threshold", String(options.customThreshold));
+  }
+  if (options.advancedParams) {
+    for (const spec of ADVANCED_PARAM_SPECS) {
+      const value = options.advancedParams[spec.key];
+      if (typeof value === "number") {
+        args.push(spec.flag, String(value));
+      }
+    }
   }
 
   let stdout: string;

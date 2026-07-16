@@ -9,6 +9,7 @@ import {
   assetReferenceImages,
   storyboardImages,
   sequenceStoryboardImages,
+  sequenceStoryboardExtractions,
   generationJobs,
   comfyWorkflows,
 } from "@/db/schema";
@@ -24,6 +25,7 @@ import SequenceStoryboardDraftsPanel, {
   type SequenceStoryboardDraft,
 } from "@/components/SequenceStoryboardDraftsPanel";
 import SequenceGenerationPackagePanel from "@/components/SequenceGenerationPackagePanel";
+import { uploadSequenceStoryboardImage, deleteSequenceStoryboardImage } from "@/actions/sequenceStoryboard";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { compileShotPrompt } from "@/lib/prompts/compileShotPrompt";
 import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
@@ -294,13 +296,27 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     .from(sequenceStoryboardImages)
     .where(eq(sequenceStoryboardImages.sequenceId, sid))
     .orderBy(desc(sequenceStoryboardImages.createdAt));
+  // FIX6 (Lot B) — which drafts are already an extraction's source, so
+  // Delete can be disabled/blocked for them without a round trip.
+  const usedSourceImageIds = new Set(
+    (
+      await db
+        .select({ sourceStoryboardImageId: sequenceStoryboardExtractions.sourceStoryboardImageId })
+        .from(sequenceStoryboardExtractions)
+        .where(eq(sequenceStoryboardExtractions.sequenceId, sid))
+    )
+      .map((r) => r.sourceStoryboardImageId)
+      .filter((id): id is number => id !== null)
+  );
   const sequenceStoryboardDrafts: SequenceStoryboardDraft[] = sequenceDraftRows.map((d) => ({
     id: d.id,
     imageUrl: refImageUrl(d.imagePath),
     status: d.status,
     createdAt: d.createdAt,
     promptPreview: d.promptSnapshot,
+    usedByExtraction: usedSourceImageIds.has(d.id),
   }));
+  const sequenceStoryboardUploadError = sp(resolvedSearchParams["sequenceStoryboardUploadError"]);
 
   const storyboardApproved = sp(resolvedSearchParams["storyboardApproved"]) === "1";
   const storyboardApproveError = sp(resolvedSearchParams["storyboardApproveError"]);
@@ -383,7 +399,14 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
           </Link>
         </div>
       )}
-      <SequenceStoryboardDraftsPanel drafts={sequenceStoryboardDrafts} />
+      <SequenceStoryboardDraftsPanel
+        drafts={sequenceStoryboardDrafts}
+        sequenceId={sid}
+        returnTo={storyboardReturnTo}
+        uploadAction={uploadSequenceStoryboardImage}
+        deleteAction={deleteSequenceStoryboardImage}
+        uploadError={sequenceStoryboardUploadError}
+      />
 
       <SectionLabel label="Storyboard Assets" />
       <StoryboardAssetsPanel projectId={pid} assets={storyboardCastAssets} />

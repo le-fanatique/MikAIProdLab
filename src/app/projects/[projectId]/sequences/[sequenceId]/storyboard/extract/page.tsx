@@ -18,9 +18,22 @@ import Collapsible from "@/components/Collapsible";
 import RegionCropBox from "@/components/RegionCropBox";
 import UseShotCountButton from "@/components/UseShotCountButton";
 import UpdateAllButton from "@/components/UpdateAllButton";
+import ContentCropModeSelect from "@/components/ContentCropModeSelect";
+import ApplyToAllRegionsButton from "@/components/ApplyToAllRegionsButton";
+import ApplyRatioAllButton from "@/components/ApplyRatioAllButton";
+import ManualBaseSync from "@/components/ManualBaseSync";
+import FieldTooltip from "@/components/FieldTooltip";
+import EngineFieldsToggle from "@/components/EngineFieldsToggle";
 import { refImageUrl } from "@/lib/refImageUrl";
-import { computeGridFactorization } from "@/lib/storyboardExtraction/workerContract";
+import { computeGridFactorization, ADVANCED_PARAM_SPECS, type DetectionDiagnostics } from "@/lib/storyboardExtraction/workerContract";
 import { getRegionColor } from "@/lib/storyboardExtraction/regionColors";
+import {
+  isContentCropMode,
+  getContentCropBaseRect,
+  type ContentCropMode,
+  type ContentCropBaseRects,
+} from "@/lib/storyboardExtraction/contentCrop";
+import { isRatioPreset, RATIO_PRESETS, type RatioPreset } from "@/lib/storyboardExtraction/ratioCrop";
 import {
   startStoryboardExtraction,
   addExtractionRegion,
@@ -45,6 +58,26 @@ function sp(raw: string | string[] | undefined): string | null {
   if (Array.isArray(raw)) return raw[0] ?? null;
   return null;
 }
+
+// FIX6 — presentation-only metadata (label + English hover/focus tooltip)
+// for each ADVANCED_PARAM_SPECS entry. Bounds/engine-relevance live in
+// workerContract.ts (the actual validated contract); this is purely UI text.
+const ADVANCED_PARAM_FIELD_META: { key: string; label: string; tooltip: string }[] = [
+  { key: "minCellAreaFraction", label: "Min cell area fraction", tooltip: "Smallest fraction of the source image area a candidate cell may cover. Lower catches smaller panels but risks stray slivers; higher discards small real panels." },
+  { key: "gutterDensityThreshold", label: "Gutter density threshold", tooltip: "Content density below which a row/column reads as gutter. Lower requires an emptier gutter (stricter); higher tolerates noisier gutters (looser)." },
+  { key: "colorDistanceThreshold", label: "Color distance threshold", tooltip: "Canny only. Grayscale distance from the sampled background color to count a pixel as content. Lower is more sensitive to subtle content; higher ignores faint content." },
+  { key: "minGutterWidthPx", label: "Min gutter width (px)", tooltip: "Minimum pixel width for a low-density run to count as a real gutter. Lower catches thinner gutters but risks splitting on in-cell padding; higher requires a wider gap." },
+  { key: "minGutterFraction", label: "Min gutter fraction", tooltip: "Same as Min gutter width, expressed as a fraction of the image dimension — whichever of the two is larger applies. Useful for very large images." },
+  { key: "gutterMergeGapPx", label: "Gutter merge gap (px)", tooltip: "Bridges a raw low-density run across a thin explicit border line before the minimum-width filter applies. Lower keeps runs separate; higher merges more aggressively." },
+  { key: "cannySigma", label: "Canny sigma", tooltip: "Canny only. Spread of the auto-Canny threshold around the image's median intensity. Lower is stricter (fewer edges detected); higher is looser (more edges, more noise)." },
+  { key: "houghMinLineFraction", label: "Hough min line fraction", tooltip: "Canny only. Minimum fraction of the image dimension a straight line must span to count as a separator. Lower catches shorter border lines; higher requires longer, more confident lines." },
+  { key: "houghVoteThreshold", label: "Hough vote threshold", tooltip: "Canny only. Minimum accumulator votes for a line to be detected. Lower detects more (possibly spurious) lines; higher requires stronger evidence." },
+  { key: "houghMaxLineGap", label: "Hough max line gap (px)", tooltip: "Canny only. Maximum pixel gap allowed when joining line segments into one line. Lower keeps segments separate; higher joins more readily." },
+  { key: "maxHoughLines", label: "Max Hough lines", tooltip: "Canny only. Hard cap on candidate lines processed, bounding worst-case time/memory. Lower is faster but may miss lines on busy images; higher is slower but more thorough." },
+  { key: "captionUniformityThreshold", label: "Caption uniformity threshold", tooltip: "Fraction of near-white or near-black pixels in a row to call it a caption background band. Lower is more permissive (detects more captions, more false positives); higher requires a cleaner band." },
+  { key: "captionMinRunPx", label: "Caption min run (px)", tooltip: "Minimum sustained pixel run for a uniform band to be treated as a caption boundary. Lower catches shorter captions; higher requires a longer, more confident run." },
+  { key: "minIllustrationFraction", label: "Min illustration fraction", tooltip: "Discards a caption split that would leave less than this fraction of the cell as illustration. Lower allows smaller illustrations; higher rejects splits that look too aggressive." },
+];
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -212,9 +245,15 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
   const unassignedRegions = regions.filter((r) => r.status === "pending");
   const isEditable = extraction.status === "ready";
   const assignedCount = regions.filter((r) => r.status === "assigned").length;
-  const hasGridFallback = regions.some((r) => r.detectionMode === "grid-fallback");
-  const isAmbiguousSingleRegion = isEditable && regions.length <= 1 && sequenceShots.length > 1 && !hasGridFallback;
   const editableRegionIds = regions.filter((r) => r.status !== "extracted").map((r) => r.id);
+  // FIX5 — Content Crop's bulk preview never touches skipped regions (an
+  // explicit prior decision, not silently reopened by a batch action) or
+  // extracted ones (immutable) — narrower than editableRegionIds above,
+  // which Update All still uses as-is since a skipped region's fields
+  // remain manually editable one at a time.
+  const contentCropTargetRegionIds = regions
+    .filter((r) => isEditable && r.status !== "extracted" && r.status !== "skipped")
+    .map((r) => r.id);
 
   // FIX3 — Detection Settings / Run Detection Again. Re-runs detection on
   // the SAME source image (never overwrites the current extraction — always
@@ -226,18 +265,60 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
       : null;
 
   let detectionParamsSummary: {
+    engine?: string;
+    /** Legacy pre-FIX6 field, kept read-only for backward-compat banner logic below (old extractions have no `diagnostics`). */
     mode?: string;
     columns?: number | null;
     rows?: number | null;
     sensitivity?: string;
+    customThreshold?: number | null;
+    advancedParams?: Record<string, number>;
     expectedShotCount?: number;
     padding?: number;
+    contentCrop?: { mode?: string; headerPercent?: number | null; captionPercent?: number | null };
+    contentCropBaseRects?: ContentCropBaseRects;
+    diagnostics?: DetectionDiagnostics;
   } | null = null;
   try {
     detectionParamsSummary = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : null;
   } catch {
     detectionParamsSummary = null;
   }
+
+  // REVISE (Codex finding #4) — `detectionMode === "grid-fallback"` is a
+  // per-REGION field the worker also uses for the explicit Grid engine's
+  // own regions (see build_fallback_regions in the Python worker): it is
+  // NOT proof that automatic detection was ambiguous. The structured
+  // `diagnostics` object (extraction-level) is the only reliable source for
+  // that distinction — `finalEngine === "grid-fallback"` only happens when
+  // otsu/canny's primary result was rejected and replaced; `finalEngine ===
+  // "grid"` means the user explicitly chose Exact Grid and no visual
+  // detection ever ran. Extractions that predate FIX6 (no `diagnostics`)
+  // fall back to the pre-FIX6 heuristic — the only case where the two truly
+  // cannot be told apart.
+  const diagnostics = detectionParamsSummary?.diagnostics;
+  const isRealAutoFallback = diagnostics
+    ? diagnostics.fallbackTriggered && diagnostics.finalEngine === "grid-fallback"
+    : regions.some((r) => r.detectionMode === "grid-fallback");
+  const isExplicitGrid = diagnostics
+    ? diagnostics.finalEngine === "grid"
+    : detectionParamsSummary?.engine === "grid" || detectionParamsSummary?.mode === "grid";
+  const isAmbiguousSingleRegion =
+    isEditable && regions.length <= 1 && sequenceShots.length > 1 && !isRealAutoFallback && !isExplicitGrid;
+
+  // FIX5 — pre-fill Content Crop from whatever was last persisted for this
+  // extraction; a non-destructive "Full cell" default when nothing was
+  // saved yet, so the very first visit never silently crops anything.
+  const persistedContentCropMode = detectionParamsSummary?.contentCrop?.mode;
+  const contentCropMode: ContentCropMode =
+    persistedContentCropMode && isContentCropMode(persistedContentCropMode) ? persistedContentCropMode : "full";
+  const contentCropHeaderPercent = detectionParamsSummary?.contentCrop?.headerPercent ?? 15;
+  const contentCropCaptionPercent = detectionParamsSummary?.contentCrop?.captionPercent ?? 20;
+  // FIX6 (Lot C) — ratio/multiplier pre-fill, same non-destructive-default contract as Content Crop above.
+  const persistedRatio = (detectionParamsSummary?.contentCrop as { ratio?: string } | undefined)?.ratio;
+  const contentCropRatio: RatioPreset = persistedRatio && isRatioPreset(persistedRatio) ? persistedRatio : "free";
+  const contentCropSizeMultiplier =
+    (detectionParamsSummary?.contentCrop as { sizeMultiplier?: number } | undefined)?.sizeMultiplier ?? 1;
 
   return (
     <div>
@@ -264,11 +345,19 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
         </p>
       )}
 
-      {hasGridFallback && (
+      {isRealAutoFallback && (
         <p className="text-xs text-[#cda24f] mb-4">
-          Automatic panel detection was ambiguous for this image, so a grid was proposed instead, sized to match
-          this Sequence&apos;s {sequenceShots.length} Shots. Every proposed region is low-confidence and stays
-          unassigned until you review and explicitly assign it — nothing here is extracted automatically.
+          Automatic panel detection ({diagnostics?.primaryEngine ?? "Otsu/Canny"}) was ambiguous for this image
+          {diagnostics?.fallbackReason ? ` (${diagnostics.fallbackReason})` : ""}, so a grid was proposed instead,
+          sized to match this Sequence&apos;s {sequenceShots.length} Shots. Every proposed region is low-confidence
+          and stays unassigned until you review and explicitly assign it — nothing here is extracted automatically.
+        </p>
+      )}
+
+      {isExplicitGrid && (
+        <p className="text-xs text-[#6e767d] mb-4">
+          This extraction used the <span className="text-[#a4abb2]">Exact Grid</span> engine — a deterministic
+          geometric grid, not automatic visual detection. Nothing was ambiguous; review and assign regions as usual.
         </p>
       )}
 
@@ -280,44 +369,79 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
       )}
 
       {detectionParamsSummary && (
-        <p className="text-[10px] text-[#4b5158] mb-4">
-          Detected with: {detectionParamsSummary.mode === "grid" ? "Grid fallback" : "Auto"}
-          {detectionParamsSummary.columns && detectionParamsSummary.rows
-            ? ` (${detectionParamsSummary.columns}×${detectionParamsSummary.rows})`
-            : ""}
-          {detectionParamsSummary.sensitivity ? `, Sensitivity: ${detectionParamsSummary.sensitivity}` : ""}
-          {detectionParamsSummary.expectedShotCount != null ? `, expected ${detectionParamsSummary.expectedShotCount} Shots` : ""}
-        </p>
+        <div className="text-[10px] text-[#4b5158] mb-4 flex flex-col gap-0.5">
+          <p>
+            Detection engine: {detectionParamsSummary.engine ?? "canny"}
+            {detectionParamsSummary.columns && detectionParamsSummary.rows
+              ? ` (${detectionParamsSummary.columns}×${detectionParamsSummary.rows})`
+              : ""}
+            {detectionParamsSummary.customThreshold != null
+              ? `, Custom threshold: ${detectionParamsSummary.customThreshold}`
+              : detectionParamsSummary.sensitivity
+                ? `, Sensitivity: ${detectionParamsSummary.sensitivity}`
+                : ""}
+            {detectionParamsSummary.expectedShotCount != null ? `, expected ${detectionParamsSummary.expectedShotCount} Shots` : ""}
+            {detectionParamsSummary.contentCrop?.mode
+              ? `. Content Crop: ${detectionParamsSummary.contentCrop.mode}` +
+                (detectionParamsSummary.contentCrop.headerPercent != null
+                  ? ` (header ${detectionParamsSummary.contentCrop.headerPercent}%, caption ${detectionParamsSummary.contentCrop.captionPercent}%)`
+                  : "")
+              : ""}
+          </p>
+          {detectionParamsSummary.diagnostics && (
+            <p>
+              Diagnostics — primary: {detectionParamsSummary.diagnostics.primaryEngine}, detected:{" "}
+              {detectionParamsSummary.diagnostics.detectedCount}, confidence: {detectionParamsSummary.diagnostics.confidence}
+              {detectionParamsSummary.diagnostics.threshold != null
+                ? `, threshold: ${detectionParamsSummary.diagnostics.threshold}`
+                : ""}
+              , final engine: {detectionParamsSummary.diagnostics.finalEngine}
+              {detectionParamsSummary.diagnostics.fallbackTriggered
+                ? ` — fallback triggered (${detectionParamsSummary.diagnostics.fallbackReason ?? "unspecified reason"})`
+                : ""}
+            </p>
+          )}
+        </div>
       )}
 
       <Collapsible label="Detection Settings" defaultOpen>
         <Card>
           {canRerun ? (
-            <form action={startStoryboardExtraction} className="flex flex-col gap-3">
+            <form id="detect-again-form" action={startStoryboardExtraction} className="flex flex-col gap-3">
+              <EngineFieldsToggle formId="detect-again-form" />
               <input type="hidden" name="sequenceId" value={String(sid)} />
               <input type="hidden" name="sourceStoryboardImageId" value={String(extraction.sourceStoryboardImageId)} />
               <input type="hidden" name="returnTo" value={basePath} />
 
               <div className="flex flex-wrap gap-4">
                 <fieldset className="flex flex-col gap-1">
-                  <legend className="text-[9px] uppercase tracking-wider text-[#4b5158] mb-0.5">Mode</legend>
+                  <legend className="text-[9px] uppercase tracking-wider text-[#4b5158] mb-0.5">Detection engine</legend>
                   <label className="flex items-center gap-1.5 text-xs text-[#a4abb2]">
                     <input
                       type="radio"
-                      name="mode"
-                      value="auto"
-                      defaultChecked={detectionParamsSummary?.mode !== "grid"}
+                      name="engine"
+                      value="otsu"
+                      defaultChecked={detectionParamsSummary?.engine === "otsu"}
                     />
-                    Auto (OpenCV, then fallback if ambiguous)
+                    Otsu (Legacy) — single global threshold, no edge/line detection
                   </label>
                   <label className="flex items-center gap-1.5 text-xs text-[#a4abb2]">
                     <input
                       type="radio"
-                      name="mode"
-                      value="grid"
-                      defaultChecked={detectionParamsSummary?.mode === "grid"}
+                      name="engine"
+                      value="canny"
+                      defaultChecked={!detectionParamsSummary?.engine || detectionParamsSummary.engine === "canny"}
                     />
-                    Grid fallback (skip detection, use a grid)
+                    Canny + Hough — polarity-independent edge/line detection (default)
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-[#a4abb2]">
+                    <input
+                      type="radio"
+                      name="engine"
+                      value="grid"
+                      defaultChecked={detectionParamsSummary?.engine === "grid"}
+                    />
+                    Exact Grid — geometric slicing only, no visual detection
                   </label>
                 </fieldset>
 
@@ -325,17 +449,34 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                   <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Sensitivity</span>
                   <select
                     name="sensitivity"
+                    data-engine-only=""
                     defaultValue={detectionParamsSummary?.sensitivity ?? "medium"}
                     className="rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
                   >
-                    <option value="low">Low — trust Auto&apos;s result more</option>
+                    <option value="low">Low — trust the primary result more</option>
                     <option value="medium">Medium</option>
                     <option value="high">High — fall back to grid more readily</option>
                   </select>
                   <span className="text-[9px] text-[#4b5158] max-w-xs">
-                    Only affects Auto mode: how low a confidence (with a matching region count) is still trusted
-                    before proposing the grid instead.
+                    Ignored when Custom threshold (below) is set, and when Exact Grid is selected.
                   </span>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] uppercase tracking-wider text-[#4b5158] inline-flex items-center gap-1">
+                    Custom threshold (0.00-1.00)
+                    <FieldTooltip text="Overrides the Sensitivity preset above. Lower values trust the primary engine's result even at low confidence (fewer grid fallbacks); higher values fall back to the grid more readily." />
+                  </span>
+                  <input
+                    type="number"
+                    name="customThreshold"
+                    step="0.01"
+                    min={0}
+                    max={1}
+                    placeholder="e.g. 0.80"
+                    defaultValue={detectionParamsSummary?.customThreshold ?? ""}
+                    className="w-28 rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                  />
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -372,11 +513,44 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                     />
                   )}
                   <span className="text-[9px] text-[#4b5158] max-w-xs">
-                    Used for Grid mode, or as the fallback shape if Auto mode falls back. Must multiply to the
+                    Used for Exact Grid, or as the fallback shape if Otsu/Canny fall back. Must multiply to the
                     expected Shot count ({sequenceShots.length}) if both are set.
                   </span>
                 </div>
               </div>
+
+              <Collapsible label="Advanced Diagnostics">
+                <p className="text-[9px] text-[#4b5158] mb-3 max-w-xl">
+                  Raw worker parameters — the values shown are exactly what is sent to the detection worker and
+                  persisted for this extraction. Leave a field blank to keep its default. Fields grayed out below
+                  are unused by the currently selected engine (their value is simply ignored server-side).
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {ADVANCED_PARAM_FIELD_META.map((meta) => {
+                    const spec = ADVANCED_PARAM_SPECS.find((s) => s.key === meta.key)!;
+                    const engineOnly = spec.engines.join(" ");
+                    return (
+                      <label key={meta.key} className="flex flex-col gap-0.5">
+                        <span className="text-[9px] uppercase tracking-wider text-[#4b5158] inline-flex items-center gap-1">
+                          {meta.label}
+                          <FieldTooltip text={meta.tooltip} />
+                        </span>
+                        <input
+                          type="number"
+                          name={meta.key}
+                          step={spec.integer ? 1 : "any"}
+                          min={spec.min}
+                          max={spec.max}
+                          data-engine-only={engineOnly}
+                          placeholder={String(spec.integer ? Math.round((spec.min + spec.max) / 2) : "default")}
+                          defaultValue={detectionParamsSummary?.advancedParams?.[meta.key] ?? ""}
+                          className="w-full rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </Collapsible>
 
               <div>
                 <button
@@ -433,6 +607,8 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                   confidence={r.confidence}
                   editable={isEditable && r.status !== "extracted"}
                   color={getRegionColor(r.orderIndex)}
+                  lockRatioFieldId={`region-${r.id}-lock-ratio`}
+                  ratioSelectId="content-crop-ratio"
                 />
               ))}
             </div>
@@ -455,31 +631,125 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
         <>
           <SectionLabel label={`Regions (${regions.length})`} />
           {isEditable && editableRegionIds.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 mb-3">
-              <form id="update-all-form" action={resizeAllExtractionRegions}>
+            <div className="flex flex-col gap-3 mb-3">
+              <form id="update-all-form" action={resizeAllExtractionRegions} className="flex flex-wrap items-end gap-3">
                 <input type="hidden" name="extractionId" value={String(extractionId)} />
                 <input type="hidden" name="returnTo" value={returnToActive} />
                 <input type="hidden" id="update-all-regions-json" name="regionsJson" defaultValue="[]" />
+
+                <fieldset className="flex flex-wrap items-end gap-2">
+                  <legend className="text-[9px] uppercase tracking-wider text-[#4b5158] mb-0.5 w-full">
+                    Content Crop
+                  </legend>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Mode</span>
+                    <ContentCropModeSelect
+                      defaultValue={contentCropMode}
+                      headerFieldId="content-crop-header-percent"
+                      captionFieldId="content-crop-caption-percent"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Header %</span>
+                    <input
+                      type="number"
+                      id="content-crop-header-percent"
+                      name="contentCropHeaderPercent"
+                      min={0}
+                      max={45}
+                      defaultValue={contentCropHeaderPercent}
+                      className="w-20 rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Caption %</span>
+                    <input
+                      type="number"
+                      id="content-crop-caption-percent"
+                      name="contentCropCaptionPercent"
+                      min={0}
+                      max={45}
+                      defaultValue={contentCropCaptionPercent}
+                      className="w-20 rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                    />
+                  </label>
+                  <ApplyToAllRegionsButton
+                    regionIds={contentCropTargetRegionIds}
+                    modeFieldId="content-crop-mode"
+                    headerFieldId="content-crop-header-percent"
+                    captionFieldId="content-crop-caption-percent"
+                  />
+                </fieldset>
+
+                <fieldset className="flex flex-wrap items-end gap-2">
+                  <legend className="text-[9px] uppercase tracking-wider text-[#4b5158] mb-0.5 w-full">Ratio</legend>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">Ratio</span>
+                    <select
+                      id="content-crop-ratio"
+                      name="contentCropRatio"
+                      defaultValue={contentCropRatio}
+                      className="rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                    >
+                      {RATIO_PRESETS.map((p) => (
+                        <option key={p} value={p}>
+                          {p === "free" ? "Free (no ratio)" : p}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-[#4b5158] inline-flex items-center gap-1">
+                      Size multiplier
+                      <FieldTooltip text="Shrinks width and height around the region's center, applied after Content Crop and the ratio. 1.00 keeps full size, 0.10 is the smallest allowed." />
+                    </span>
+                    <input
+                      type="number"
+                      id="content-crop-size-multiplier"
+                      name="contentCropSizeMultiplier"
+                      step="0.01"
+                      min={0.1}
+                      max={1}
+                      defaultValue={contentCropSizeMultiplier}
+                      className="w-24 rounded border border-[#2c3035] bg-[#0d0e10] text-[#e7e9ec] text-xs px-2 py-1"
+                    />
+                  </label>
+                  <ApplyRatioAllButton
+                    regionIds={contentCropTargetRegionIds}
+                    modeFieldId="content-crop-mode"
+                    headerFieldId="content-crop-header-percent"
+                    captionFieldId="content-crop-caption-percent"
+                    ratioFieldId="content-crop-ratio"
+                    multiplierFieldId="content-crop-size-multiplier"
+                    sourceWidth={extraction.sourceWidth}
+                    sourceHeight={extraction.sourceHeight}
+                  />
+                  <ManualBaseSync regionIds={contentCropTargetRegionIds} />
+                </fieldset>
               </form>
-              <UpdateAllButton
-                regionIds={editableRegionIds}
-                formId="update-all-form"
-                hiddenFieldId="update-all-regions-json"
-              />
-              <form action={assignAllExtractionRegions}>
-                <input type="hidden" name="extractionId" value={String(extractionId)} />
-                <input type="hidden" name="returnTo" value={returnToActive} />
-                <button
-                  type="submit"
-                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                >
-                  Assign All
-                </button>
-              </form>
-              <span className="text-[9px] text-[#4b5158] max-w-sm">
-                Update All saves every editable region&apos;s current rectangle at once. Assign All maps editable,
-                non-skipped regions to Shots in reading order. Neither extracts files or creates drafts/references.
-              </span>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <UpdateAllButton
+                  regionIds={editableRegionIds}
+                  formId="update-all-form"
+                  hiddenFieldId="update-all-regions-json"
+                />
+                <form action={assignAllExtractionRegions}>
+                  <input type="hidden" name="extractionId" value={String(extractionId)} />
+                  <input type="hidden" name="returnTo" value={returnToActive} />
+                  <button
+                    type="submit"
+                    className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                  >
+                    Assign All
+                  </button>
+                </form>
+                <span className="text-[9px] text-[#4b5158] max-w-sm">
+                  Apply to all regions previews the Content Crop on every editable, non-skipped region — Update All
+                  is the only action that saves it. Assign All maps editable, non-skipped regions to Shots in
+                  reading order. None of these extract files or create drafts/references.
+                </span>
+              </div>
             </div>
           )}
           {regions.length === 0 ? (
@@ -506,8 +776,11 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                           {r.status}
                         </div>
                         <div className="mt-1 text-[9px] text-[#4b5158]">{Math.round(r.confidence * 100)}% conf.</div>
-                        {r.detectionMode === "grid-fallback" && (
+                        {r.detectionMode === "grid-fallback" && isRealAutoFallback && (
                           <div className="mt-1 text-[9px] text-[#cda24f]">Grid fallback — review required</div>
+                        )}
+                        {r.detectionMode === "grid-fallback" && isExplicitGrid && (
+                          <div className="mt-1 text-[9px] text-[#6e767d]">Exact Grid</div>
                         )}
                         {!r.textSeparationDetected && (
                           <div className="mt-1 text-[9px] text-[#4b5158]">Full cell (no caption split)</div>
@@ -519,6 +792,32 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                           <input type="hidden" name="extractionId" value={String(extractionId)} />
                           <input type="hidden" name="regionId" value={String(r.id)} />
                           <input type="hidden" name="returnTo" value={returnToActive} />
+                          {(() => {
+                            const base = getContentCropBaseRect(detectionParamsSummary?.contentCropBaseRects, r.orderIndex, {
+                              x: r.x,
+                              y: r.y,
+                              width: r.width,
+                              height: r.height,
+                            });
+                            return (["x", "y", "width", "height"] as const).map((field) => (
+                              <input
+                                key={`base-${field}`}
+                                type="hidden"
+                                id={`region-${r.id}-base-${field}`}
+                                value={base[field]}
+                                readOnly
+                              />
+                            ));
+                          })()}
+                          {/* REVISE round 2 (finding #1) — separate stable base for Apply Ratio All in "Manual" mode: starts from this region's CURRENT rectangle (never the FIX5-detected cell), kept in sync with real manual edits only (RegionCropBox drag, direct field typing via ManualBaseSync) — never by an automated transformation's own output, which is what keeps repeated Apply Ratio All clicks idempotent. */}
+                          {(["x", "y", "width", "height"] as const).map((field) => (
+                            <input
+                              key={`manual-base-${field}`}
+                              type="hidden"
+                              id={`region-${r.id}-manual-base-${field}`}
+                              defaultValue={r[field]}
+                            />
+                          ))}
                           {(["x", "y", "width", "height"] as const).map((field) => (
                             <label key={field} className="flex flex-col gap-0.5">
                               <span className="text-[9px] uppercase tracking-wider text-[#4b5158]">{field}</span>
@@ -538,6 +837,10 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
                           >
                             Update
                           </button>
+                          <label className="flex items-center gap-1 text-[10px] text-[#a4abb2]">
+                            <input type="checkbox" id={`region-${r.id}-lock-ratio`} />
+                            Lock ratio
+                          </label>
                         </form>
                       ) : (
                         <div className="text-xs font-mono text-[#4b5158]">

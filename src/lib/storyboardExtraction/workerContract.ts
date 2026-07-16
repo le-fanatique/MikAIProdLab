@@ -26,10 +26,22 @@ export type DetectedRegion = {
   textSeparationDetected: boolean;
 };
 
+/** FIX6 — structured diagnostics the worker always emits alongside `regions`. Never derived by parsing free-text logs: every field here comes straight from the worker's own typed JSON contract. */
+export type DetectionDiagnostics = {
+  primaryEngine: DetectionEngine;
+  detectedCount: number;
+  confidence: number;
+  threshold: number | null;
+  fallbackTriggered: boolean;
+  fallbackReason: string | null;
+  finalEngine: DetectionEngine | "grid-fallback";
+};
+
 export type DetectResult = {
   sourceWidth: number;
   sourceHeight: number;
   regions: DetectedRegion[];
+  diagnostics: DetectionDiagnostics;
 };
 
 export type CropResultFile = {
@@ -136,7 +148,46 @@ export function validateDetectResult(obj: Record<string, unknown>): DetectResult
       throw new WorkerContractError("Worker returned a region outside the source image bounds.");
     }
   }
-  return { sourceWidth: obj.sourceWidth, sourceHeight: obj.sourceHeight, regions };
+  const diagnostics = validateDiagnostics(obj.diagnostics);
+  return { sourceWidth: obj.sourceWidth, sourceHeight: obj.sourceHeight, regions, diagnostics };
+}
+
+/** Validates the FIX6 structured diagnostics object — required on every successful `detect` response. */
+function validateDiagnostics(raw: unknown): DetectionDiagnostics {
+  if (typeof raw !== "object" || raw === null) {
+    throw new WorkerContractError("Worker output is missing a diagnostics object.");
+  }
+  const d = raw as Record<string, unknown>;
+  if (typeof d.primaryEngine !== "string" || !isDetectionEngine(d.primaryEngine)) {
+    throw new WorkerContractError("Diagnostics has an invalid primaryEngine.");
+  }
+  if (!isNonNegativeInt(d.detectedCount)) {
+    throw new WorkerContractError("Diagnostics has an invalid detectedCount.");
+  }
+  if (!isFiniteNumber(d.confidence) || d.confidence < 0 || d.confidence > 1) {
+    throw new WorkerContractError("Diagnostics has an invalid confidence.");
+  }
+  if (d.threshold !== null && (!isFiniteNumber(d.threshold) || d.threshold < 0 || d.threshold > 1)) {
+    throw new WorkerContractError("Diagnostics has an invalid threshold.");
+  }
+  if (typeof d.fallbackTriggered !== "boolean") {
+    throw new WorkerContractError("Diagnostics has an invalid fallbackTriggered.");
+  }
+  if (d.fallbackReason !== null && typeof d.fallbackReason !== "string") {
+    throw new WorkerContractError("Diagnostics has an invalid fallbackReason.");
+  }
+  if (typeof d.finalEngine !== "string" || !(isDetectionEngine(d.finalEngine) || d.finalEngine === "grid-fallback")) {
+    throw new WorkerContractError("Diagnostics has an invalid finalEngine.");
+  }
+  return {
+    primaryEngine: d.primaryEngine,
+    detectedCount: d.detectedCount,
+    confidence: d.confidence,
+    threshold: d.threshold as number | null,
+    fallbackTriggered: d.fallbackTriggered,
+    fallbackReason: d.fallbackReason as string | null,
+    finalEngine: d.finalEngine as DetectionEngine | "grid-fallback",
+  };
 }
 
 /** Sorts regions in reading order: top-to-bottom, then left-to-right within a row. Pure, deterministic, safe to reapply at any point (detect output, after manual edits, before persisting orderIndex). */
@@ -175,8 +226,14 @@ export function validateCropResult(obj: Record<string, unknown>): CropResult {
 // value here is refused before ever spawning the subprocess.
 // ---------------------------------------------------------------------------
 
-export type DetectionRequestMode = "auto" | "grid";
-export const DETECTION_REQUEST_MODES: readonly DetectionRequestMode[] = ["auto", "grid"];
+// FIX6 — `DetectionEngine` replaces the old two-valued "auto"/"grid" mode:
+// `otsu` and `canny` are two genuinely distinct PRIMARY detection algorithms
+// (never both called "auto"); `grid` is explicit geometric slicing and is
+// never labeled "Auto" in the UI. Both `otsu` and `canny` can still fall
+// back to the same grid proposal the old "auto" mode used (see
+// DetectionDiagnostics.fallbackTriggered/finalEngine).
+export type DetectionEngine = "otsu" | "canny" | "grid";
+export const DETECTION_ENGINES: readonly DetectionEngine[] = ["otsu", "canny", "grid"];
 
 export type Sensitivity = "low" | "medium" | "high";
 export const SENSITIVITY_VALUES: readonly Sensitivity[] = ["low", "medium", "high"];
@@ -184,12 +241,90 @@ export const SENSITIVITY_VALUES: readonly Sensitivity[] = ["low", "medium", "hig
 export const MIN_GRID_DIMENSION = 1;
 export const MAX_GRID_DIMENSION = 12;
 
-export function isDetectionRequestMode(value: string): value is DetectionRequestMode {
-  return (DETECTION_REQUEST_MODES as readonly string[]).includes(value);
+export function isDetectionEngine(value: string): value is DetectionEngine {
+  return (DETECTION_ENGINES as readonly string[]).includes(value);
 }
 
 export function isSensitivity(value: string): value is Sensitivity {
   return (SENSITIVITY_VALUES as readonly string[]).includes(value);
+}
+
+// ---------------------------------------------------------------------------
+// FIX6 — Advanced detection parameters. Pure bounds validation, mirroring
+// scripts/opencv_storyboard_extract.py's PARAM_BOUNDS exactly (see
+// resolve_params() there) so a value rejected here would also be rejected by
+// the worker — the server is still the trust boundary, the worker's own
+// check is defense in depth for anyone invoking it directly.
+// ---------------------------------------------------------------------------
+
+export type AdvancedDetectionParams = {
+  minCellAreaFraction?: number;
+  gutterDensityThreshold?: number;
+  colorDistanceThreshold?: number;
+  minGutterWidthPx?: number;
+  minGutterFraction?: number;
+  gutterMergeGapPx?: number;
+  cannySigma?: number;
+  houghMinLineFraction?: number;
+  houghVoteThreshold?: number;
+  houghMaxLineGap?: number;
+  maxHoughLines?: number;
+  captionUniformityThreshold?: number;
+  captionMinRunPx?: number;
+  minIllustrationFraction?: number;
+};
+
+/** [min, max] per field, and the exact `--flag-name` the worker expects. */
+export const ADVANCED_PARAM_SPECS: {
+  key: keyof AdvancedDetectionParams;
+  flag: string;
+  min: number;
+  max: number;
+  integer: boolean;
+  /** Which primary engine(s) this parameter actually affects — used only to gray out/hide irrelevant controls in the UI; the server accepts any of them regardless of the selected engine (a value simply goes unused). */
+  engines: readonly DetectionEngine[];
+}[] = [
+  { key: "minCellAreaFraction", flag: "--min-cell-area-fraction", min: 0, max: 1, integer: false, engines: ["otsu", "canny"] },
+  { key: "gutterDensityThreshold", flag: "--gutter-density-threshold", min: 0, max: 1, integer: false, engines: ["otsu", "canny"] },
+  { key: "colorDistanceThreshold", flag: "--color-distance-threshold", min: 0, max: 255, integer: false, engines: ["canny"] },
+  { key: "minGutterWidthPx", flag: "--min-gutter-width-px", min: 0, max: 2000, integer: true, engines: ["otsu", "canny"] },
+  { key: "minGutterFraction", flag: "--min-gutter-fraction", min: 0, max: 1, integer: false, engines: ["otsu", "canny"] },
+  { key: "gutterMergeGapPx", flag: "--gutter-merge-gap-px", min: 0, max: 500, integer: true, engines: ["otsu", "canny"] },
+  { key: "cannySigma", flag: "--canny-sigma", min: 0, max: 2, integer: false, engines: ["canny"] },
+  { key: "houghMinLineFraction", flag: "--hough-min-line-fraction", min: 0, max: 1, integer: false, engines: ["canny"] },
+  { key: "houghVoteThreshold", flag: "--hough-vote-threshold", min: 1, max: 5000, integer: true, engines: ["canny"] },
+  { key: "houghMaxLineGap", flag: "--hough-max-line-gap", min: 0, max: 2000, integer: true, engines: ["canny"] },
+  { key: "maxHoughLines", flag: "--max-hough-lines", min: 1, max: 2000, integer: true, engines: ["canny"] },
+  { key: "captionUniformityThreshold", flag: "--caption-uniformity-threshold", min: 0, max: 1, integer: false, engines: ["otsu", "canny"] },
+  { key: "captionMinRunPx", flag: "--caption-min-run-px", min: 0, max: 2000, integer: true, engines: ["otsu", "canny"] },
+  { key: "minIllustrationFraction", flag: "--min-illustration-fraction", min: 0, max: 1, integer: false, engines: ["otsu", "canny"] },
+];
+
+export const CUSTOM_THRESHOLD_MIN = 0;
+export const CUSTOM_THRESHOLD_MAX = 1;
+
+/**
+ * Strict decimal parsing for an advanced-parameter form field: rejects
+ * anything that isn't a plain, whole-or-decimal, non-negative-sign number
+ * end to end (no "20abc", no "1e5", no leading "+"), then checks bounds.
+ * Returns null for empty/whitespace-only input (meaning "use the default")
+ * or any invalid/out-of-range value — the caller must reject the whole
+ * submission on null when the field was actually present with non-empty
+ * text, exactly as parseStrictContentCropPercent does.
+ */
+export function parseStrictBoundedFloat(raw: string, min: number, max: number): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
+}
+
+/** Same as `parseStrictBoundedFloat` but additionally requires a whole number (no decimal point at all). */
+export function parseStrictBoundedInt(raw: string, min: number, max: number): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
 }
 
 /** A grid dimension (Columns or Rows) must be a whole number within [MIN_GRID_DIMENSION, MAX_GRID_DIMENSION] — matches MAX_GRID_DIMENSION in scripts/opencv_storyboard_extract.py exactly, so a value rejected here would also be rejected by the worker. */

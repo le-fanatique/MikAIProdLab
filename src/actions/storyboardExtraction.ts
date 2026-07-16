@@ -34,13 +34,28 @@ import { runDetect, runCrop, OPENCV_INPUT_IMAGE_EXTS, OpenCvWorkerError } from "
 import {
   proposeShotMapping,
   sortRegionsReadingOrder,
-  isDetectionRequestMode,
+  isDetectionEngine,
   isSensitivity,
-  isValidGridDimension,
-  type DetectionRequestMode,
+  parseStrictBoundedFloat,
+  parseStrictBoundedInt,
+  ADVANCED_PARAM_SPECS,
+  CUSTOM_THRESHOLD_MIN,
+  CUSTOM_THRESHOLD_MAX,
+  MIN_GRID_DIMENSION,
+  MAX_GRID_DIMENSION,
+  type DetectionEngine,
   type Sensitivity,
+  type AdvancedDetectionParams,
 } from "@/lib/storyboardExtraction/workerContract";
 import { parseRegionEdits, type RegionEdit } from "@/lib/storyboardExtraction/regionEdits";
+import {
+  isContentCropMode,
+  parseStrictContentCropPercent,
+  type ContentCropMode,
+  type ContentCropBaseRects,
+  type Rect,
+} from "@/lib/storyboardExtraction/contentCrop";
+import { isRatioPreset, isValidSizeMultiplier, type RatioPreset } from "@/lib/storyboardExtraction/ratioCrop";
 
 function errRedirectTo(returnTo: string, param: string, msg: string): never {
   const sep = returnTo.includes("?") ? "&" : "?";
@@ -83,21 +98,53 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
     errRedirectTo(returnTo, "extractError", "Please choose a source image.");
   }
 
-  // FIX3 — Detection Settings, all optional with safe defaults so the
+  // FIX3/FIX6 — Detection Settings, all optional with safe defaults so the
   // original source-selection form (which never sends these fields) keeps
-  // its exact prior behavior (mode "auto", sensitivity "medium", no
-  // explicit grid shape).
-  const rawMode = ((formData.get("mode") as string | null) ?? "auto").trim() || "auto";
-  if (!isDetectionRequestMode(rawMode)) {
-    errRedirectTo(returnTo, "extractError", "Invalid detection mode.");
+  // its exact prior behavior (engine "canny" — the old "auto" mode's actual
+  // algorithm, sensitivity "medium", no explicit grid shape, no custom
+  // threshold, no advanced params).
+  const rawEngine = ((formData.get("engine") as string | null) ?? "canny").trim() || "canny";
+  if (!isDetectionEngine(rawEngine)) {
+    errRedirectTo(returnTo, "extractError", "Invalid detection engine.");
   }
-  const mode: DetectionRequestMode = rawMode;
+  const engine: DetectionEngine = rawEngine;
 
   const rawSensitivity = ((formData.get("sensitivity") as string | null) ?? "medium").trim() || "medium";
   if (!isSensitivity(rawSensitivity)) {
     errRedirectTo(returnTo, "extractError", "Invalid sensitivity.");
   }
   const sensitivity: Sensitivity = rawSensitivity;
+
+  // FIX6 — Custom threshold (0.00-1.00) takes priority over the sensitivity
+  // preset when present. Absent/blank means "use sensitivity", never a
+  // silent 0 — strict parsing rejects anything malformed rather than
+  // guessing.
+  const rawCustomThreshold = (formData.get("customThreshold") as string | null)?.trim() ?? "";
+  let customThreshold: number | null = null;
+  if (rawCustomThreshold !== "") {
+    customThreshold = parseStrictBoundedFloat(rawCustomThreshold, CUSTOM_THRESHOLD_MIN, CUSTOM_THRESHOLD_MAX);
+    if (customThreshold === null) {
+      errRedirectTo(returnTo, "extractError", "Custom threshold must be a number between 0.00 and 1.00.");
+    }
+  }
+
+  // FIX6 — Advanced detection parameters: every field optional, strictly
+  // bounded server-side before ever reaching the worker (mirrors the
+  // worker's own PARAM_BOUNDS exactly). Absent/blank fields keep the
+  // worker's own pre-FIX6 default constants.
+  const advancedParams: AdvancedDetectionParams = {};
+  for (const spec of ADVANCED_PARAM_SPECS) {
+    const raw = (formData.get(spec.key) as string | null)?.trim() ?? "";
+    if (raw === "") continue;
+    const value = parseStrictBoundedFloat(raw, spec.min, spec.max);
+    if (value === null) {
+      errRedirectTo(returnTo, "extractError", `${spec.flag} must be a number between ${spec.min} and ${spec.max}.`);
+    }
+    if (spec.integer && !Number.isInteger(value)) {
+      errRedirectTo(returnTo, "extractError", `${spec.flag} must be a whole number.`);
+    }
+    advancedParams[spec.key] = value;
+  }
 
   const rawColumns = (formData.get("columns") as string | null)?.trim() ?? "";
   const rawRows = (formData.get("rows") as string | null)?.trim() ?? "";
@@ -107,9 +154,14 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
     if (rawColumns === "" || rawRows === "") {
       errRedirectTo(returnTo, "extractError", "Provide both Columns and Rows, or neither.");
     }
-    const parsedColumns = parseInt(rawColumns, 10);
-    const parsedRows = parseInt(rawRows, 10);
-    if (!isValidGridDimension(parsedColumns) || !isValidGridDimension(parsedRows)) {
+    // REVISE (round 2, finding #2) — `parseInt` accepts a partial match
+    // ("3abc" -> 3, stopping at the first non-digit) so a malformed value
+    // could still pass `isValidGridDimension`. `parseStrictBoundedInt`
+    // requires the WHOLE string to be a plain decimal integer before
+    // checking bounds, rejecting "3abc", "2.5", "1e1", "0", and "13" alike.
+    const parsedColumns = parseStrictBoundedInt(rawColumns, MIN_GRID_DIMENSION, MAX_GRID_DIMENSION);
+    const parsedRows = parseStrictBoundedInt(rawRows, MIN_GRID_DIMENSION, MAX_GRID_DIMENSION);
+    if (parsedColumns === null || parsedRows === null) {
       errRedirectTo(returnTo, "extractError", "Columns and Rows must each be a whole number between 1 and 12.");
     }
     columns = parsedColumns;
@@ -147,7 +199,7 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
   // Persisted verbatim below as paramsJson — the params actually used for
   // this extraction, not just what was requested (mirrors what padding
   // already does at confirm time).
-  const detectionParams = { mode, columns, rows, sensitivity, expectedShotCount };
+  const detectionParams = { engine, columns, rows, sensitivity, customThreshold, advancedParams, expectedShotCount };
 
   const [extraction] = await db
     .insert(sequenceStoryboardExtractions)
@@ -167,15 +219,27 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
   try {
     const detected = await runDetect(absoluteInputPath, {
       expectedShotCount,
-      mode,
+      engine,
       columns: columns ?? undefined,
       rows: rows ?? undefined,
       sensitivity,
+      customThreshold: customThreshold ?? undefined,
+      advancedParams,
     });
     const orderedRegions = sortRegionsReadingOrder(detected.regions);
 
     const withOrder = orderedRegions.map((r, i) => ({ ...r, orderIndex: i }));
     const mapping = proposeShotMapping(withOrder, shotIdsInOrder);
+
+    // REVISE fix — each region's detected rectangle is its permanent
+    // Content Crop base: recorded once, here, before any edit/preset can
+    // ever touch it, so "Full cell" can always restore exactly this and
+    // repeated preset clicks stay idempotent (see contentCrop.ts header).
+    const contentCropBaseRects: ContentCropBaseRects = {};
+    for (const r of withOrder) {
+      contentCropBaseRects[String(r.orderIndex)] = { x: r.x, y: r.y, width: r.width, height: r.height };
+    }
+    const finalParamsJson = JSON.stringify({ ...detectionParams, contentCropBaseRects, diagnostics: detected.diagnostics });
 
     db.transaction((tx) => {
       tx.update(sequenceStoryboardExtractions)
@@ -183,6 +247,7 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
           sourceWidth: detected.sourceWidth,
           sourceHeight: detected.sourceHeight,
           status: "ready",
+          paramsJson: finalParamsJson,
           updatedAt: new Date().toISOString(),
         })
         .where(eq(sequenceStoryboardExtractions.id, extraction.id))
@@ -268,19 +333,45 @@ export async function addExtractionRegion(formData: FormData): Promise<void> {
   const x = Math.max(0, Math.round((extraction.sourceWidth - w) / 2));
   const y = Math.max(0, Math.round((extraction.sourceHeight - h) / 2));
 
-  await db.insert(sequenceStoryboardExtractionRegions).values({
-    extractionId,
-    orderIndex: nextOrder,
-    x,
-    y,
-    width: w,
-    height: h,
-    illustrationHeight: null,
-    textSeparationDetected: false,
-    confidence: 1,
-    detectionMode: "manual",
-    status: "pending",
-    targetShotId: null,
+  // REVISE fix — a manually-added region gets its own Content Crop base
+  // rect too, recorded at the moment of creation, same as a detected one.
+  let existingParams: Record<string, unknown> = {};
+  try {
+    existingParams = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : {};
+  } catch {
+    existingParams = {};
+  }
+  const existingBaseRects: ContentCropBaseRects =
+    existingParams.contentCropBaseRects && typeof existingParams.contentCropBaseRects === "object"
+      ? (existingParams.contentCropBaseRects as ContentCropBaseRects)
+      : {};
+  const newRect: Rect = { x, y, width: w, height: h };
+  const updatedParamsJson = JSON.stringify({
+    ...existingParams,
+    contentCropBaseRects: { ...existingBaseRects, [String(nextOrder)]: newRect },
+  });
+
+  db.transaction((tx) => {
+    tx.insert(sequenceStoryboardExtractionRegions)
+      .values({
+        extractionId,
+        orderIndex: nextOrder,
+        x,
+        y,
+        width: w,
+        height: h,
+        illustrationHeight: null,
+        textSeparationDetected: false,
+        confidence: 1,
+        detectionMode: "manual",
+        status: "pending",
+        targetShotId: null,
+      })
+      .run();
+    tx.update(sequenceStoryboardExtractions)
+      .set({ paramsJson: updatedParamsJson, updatedAt: new Date().toISOString() })
+      .where(eq(sequenceStoryboardExtractions.id, extractionId))
+      .run();
   });
 
   okRedirectTo(returnTo, "extractRegionAdded");
@@ -453,6 +544,65 @@ export async function resizeAllExtractionRegions(formData: FormData): Promise<vo
     errRedirectTo(returnTo, "extractError", "No editable regions to update.");
   }
 
+  // FIX5 — Content Crop settings (mode + header/caption %) accompany every
+  // Update All submission (the form always includes them), persisted into
+  // paramsJson alongside the existing detection params/padding, so a reload
+  // pre-fills the same choice. Optional/absent (e.g. a hand-crafted request
+  // without the field) means "don't touch this part of paramsJson" — never
+  // silently reset to a default. Invalid values reject the WHOLE batch, same
+  // as an invalid region rectangle: the rectangles were computed from these
+  // exact settings client-side, so persisting one without the other would
+  // desynchronize what the page shows on reload from what's on disk.
+  const rawContentCropMode = (formData.get("contentCropMode") as string | null)?.trim() ?? "";
+  let contentCropMode: ContentCropMode | null = null;
+  let contentCropHeaderPercent: number | null = null;
+  let contentCropCaptionPercent: number | null = null;
+  if (rawContentCropMode !== "") {
+    if (!isContentCropMode(rawContentCropMode)) {
+      errRedirectTo(returnTo, "extractError", "Invalid Content Crop mode.");
+    }
+    contentCropMode = rawContentCropMode;
+
+    const rawHeader = (formData.get("contentCropHeaderPercent") as string | null) ?? "";
+    const rawCaption = (formData.get("contentCropCaptionPercent") as string | null) ?? "";
+    // REVISE fix — strict parsing: "20abc" must be refused outright, never
+    // silently truncated to 20 the way parseInt would. The client is never
+    // a trust boundary for this value.
+    const headerPercent = parseStrictContentCropPercent(rawHeader);
+    const captionPercent = parseStrictContentCropPercent(rawCaption);
+    if (headerPercent === null || captionPercent === null) {
+      errRedirectTo(
+        returnTo,
+        "extractError",
+        "Content Crop header/caption percentages must be whole numbers between 0 and 45."
+      );
+    }
+    contentCropHeaderPercent = headerPercent;
+    contentCropCaptionPercent = captionPercent;
+  }
+
+  // FIX6 (Lot C) — ratio + size multiplier, same "present together, absent
+  // means don't touch this part of paramsJson" contract as Content Crop
+  // above. Only meaningful alongside a Content Crop submission (the same
+  // form always sends all of them together), but validated independently
+  // so a malformed ratio never silently falls back to "free".
+  const rawRatio = (formData.get("contentCropRatio") as string | null)?.trim() ?? "";
+  let contentCropRatio: RatioPreset | null = null;
+  let contentCropSizeMultiplier: number | null = null;
+  if (rawRatio !== "") {
+    if (!isRatioPreset(rawRatio)) {
+      errRedirectTo(returnTo, "extractError", "Invalid ratio preset.");
+    }
+    contentCropRatio = rawRatio;
+
+    const rawMultiplier = (formData.get("contentCropSizeMultiplier") as string | null) ?? "";
+    const multiplier = parseStrictBoundedFloat(rawMultiplier, 0.1, 1.0);
+    if (multiplier === null || !isValidSizeMultiplier(multiplier)) {
+      errRedirectTo(returnTo, "extractError", "Size multiplier must be a number between 0.10 and 1.00.");
+    }
+    contentCropSizeMultiplier = multiplier;
+  }
+
   const [extraction] = await db
     .select()
     .from(sequenceStoryboardExtractions)
@@ -483,6 +633,36 @@ export async function resizeAllExtractionRegions(formData: FormData): Promise<vo
     }
   }
 
+  let existingParams: Record<string, unknown> = {};
+  try {
+    existingParams = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : {};
+  } catch {
+    existingParams = {};
+  }
+
+  // REVISE fix — backfill a Content Crop base rect for any region about to
+  // be edited that doesn't have one yet (extractions created before this
+  // field existed). Uses the region's PRE-edit rectangle (its state right
+  // now, before this very update applies edit.x/y/width/height below) —
+  // never the just-submitted values — so an old region's first Update All
+  // after upgrading establishes a real, stable base instead of silently
+  // freezing an already-cropped rectangle as if it were the original.
+  // Runs on every Update All (not only when Content Crop fields are
+  // present) so a plain manual edit still protects a future Content Crop
+  // use on the same region.
+  const existingBaseRects: ContentCropBaseRects =
+    existingParams.contentCropBaseRects && typeof existingParams.contentCropBaseRects === "object"
+      ? (existingParams.contentCropBaseRects as ContentCropBaseRects)
+      : {};
+  const baseRectsWithBackfill: ContentCropBaseRects = { ...existingBaseRects };
+  for (const edit of edits) {
+    const region = existingById.get(edit.regionId)!;
+    const key = String(region.orderIndex);
+    if (!(key in baseRectsWithBackfill)) {
+      baseRectsWithBackfill[key] = { x: region.x, y: region.y, width: region.width, height: region.height };
+    }
+  }
+
   const now = new Date().toISOString();
   db.transaction((tx) => {
     for (const edit of edits) {
@@ -491,6 +671,21 @@ export async function resizeAllExtractionRegions(formData: FormData): Promise<vo
         .where(eq(sequenceStoryboardExtractionRegions.id, edit.regionId))
         .run();
     }
+
+    const nextParams: Record<string, unknown> = { ...existingParams, contentCropBaseRects: baseRectsWithBackfill };
+    if (contentCropMode !== null) {
+      nextParams.contentCrop = {
+        mode: contentCropMode,
+        headerPercent: contentCropHeaderPercent,
+        captionPercent: contentCropCaptionPercent,
+        ratio: contentCropRatio,
+        sizeMultiplier: contentCropSizeMultiplier,
+      };
+    }
+    tx.update(sequenceStoryboardExtractions)
+      .set({ paramsJson: JSON.stringify(nextParams), updatedAt: now })
+      .where(eq(sequenceStoryboardExtractions.id, extractionId))
+      .run();
   });
 
   okRedirectTo(returnTo, "extractAllUpdated");
@@ -611,6 +806,22 @@ export async function confirmStoryboardExtraction(formData: FormData): Promise<v
     errRedirectTo(returnTo, "extractError", e instanceof Error ? e.message : "Invalid source image.");
   }
 
+  // FIX5 — once this extraction has ever used Content Crop (paramsJson has
+  // a `contentCrop` key, regardless of which mode), the region's current
+  // width/height IS the user's final, explicit word on what to extract —
+  // never silently overridden by the auto-detected illustrationHeight
+  // below. An extraction that has never touched Content Crop keeps the
+  // exact original FIX1 behavior (auto-exclude the detected caption band
+  // when the split looks valid), so nothing changes for anyone not using
+  // this feature.
+  let hasUsedContentCrop = false;
+  try {
+    const parsed = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : null;
+    hasUsedContentCrop = Boolean(parsed && typeof parsed === "object" && "contentCrop" in parsed);
+  } catch {
+    hasUsedContentCrop = false;
+  }
+
   // Exclude the detected caption band first (illustration-only crop), then
   // apply padding as an inward shrink on what remains — clamped so the crop
   // never collapses to zero and never leaves the source image bounds.
@@ -618,6 +829,7 @@ export async function confirmStoryboardExtraction(formData: FormData): Promise<v
   // exactly as required: never trust a stale/out-of-range illustrationHeight.
   const cropRegions = assignedRegions.map((r) => {
     const hasValidSplit =
+      !hasUsedContentCrop &&
       r.textSeparationDetected &&
       r.illustrationHeight !== null &&
       Number.isInteger(r.illustrationHeight) &&
