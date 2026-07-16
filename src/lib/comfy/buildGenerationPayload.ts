@@ -227,6 +227,16 @@ export type DynamicBatchUiInfo =
       templateChainNodeIds: string[];
       batchTitle: string;
       templateChainTitles: string[];
+      /**
+       * SEQGEN.STORYBOARD.3-FIX3 — which expansion mode this is, so a
+       * caller (the Sequence generate page) can decide how to initialize
+       * its selection without re-deriving the mode itself from workflow
+       * structure (a second, divergent detection heuristic). Classic
+       * Dynamic Batch workflows keep their exact current behavior
+       * (absence of `batchImages_<nodeId>` = nothing selected); only
+       * `direct-repeatable-inputs` initializes from `storyboardRefs`.
+       */
+      mode: "dynamic-batch" | "direct-repeatable-inputs";
     };
 
 export function detectDynamicBatchUiInfo(workflowJson: string): DynamicBatchUiInfo {
@@ -240,5 +250,6 @@ export function detectDynamicBatchUiInfo(workflowJson: string): DynamicBatchUiIn
     templateChainNodeIds: mode.templateChainNodeIds,
     batchTitle: mode.title,
     templateChainTitles: mode.templateChainTitles,
+    mode: mode.kind,
   };
 }

@@ -135,8 +135,20 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     if (strValue !== undefined) textOverrideByNodeId[nodeId] = strValue;
   }
 
+  // SEQGEN.STORYBOARD.3-FIX4 — `generationError` is a flash message tied to
+  // this one failed attempt, read separately above (`generationError` const)
+  // for display on THIS render only. It must never be re-propagated as a
+  // navigation parameter: every in-page form/link that spreads
+  // `currentSearchParams` as its own passthrough base
+  // (WorkflowRuntimeMappingPanel -> WorkflowTextOverrideForm/
+  // WorkflowScalarInputsForm, DynamicBatchImageList's pushState and upload
+  // form) would otherwise carry a stale error forward into every subsequent
+  // interaction and Sequence/workflow the user moves to next. Filtering it
+  // out at this single shared construction site fixes every one of those
+  // downstream consumers at once — no divergent per-component filtering.
   const currentSearchParams: Record<string, string> = {};
   for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (key === "generationError") continue;
     const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
     if (strValue !== undefined) currentSearchParams[key] = strValue;
   }
@@ -285,8 +297,24 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
 
   let batchSelectedIds: string[] = [];
   if (batchDetectionOk) {
-    const raw = currentSearchParams[`batchImages_${batchNodeId}`] ?? "";
-    batchSelectedIds = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const rawParam = currentSearchParams[`batchImages_${batchNodeId}`];
+    if (rawParam !== undefined) {
+      // Explicit selection already in the URL (either the user reordered/
+      // removed images in the panel, or a previous render already
+      // initialized it below) — this is always the source of truth once
+      // present, for both modes.
+      batchSelectedIds = rawParam.split(",").map((s) => s.trim()).filter(Boolean);
+    } else if (batchUiInfo.kind === "ready" && batchUiInfo.mode === "direct-repeatable-inputs") {
+      // SEQGEN.STORYBOARD.3-FIX3 — direct mode has no separate selection
+      // step of its own: `storyboardRefs` (already resolved into
+      // `availableImages`, in the user's selected order) IS the intended
+      // selection. Initializing from it here means the first render
+      // already has a usable preview/Update Preview, instead of requiring
+      // an extra manual pick in the Dynamic Image Batch panel. Classic
+      // Dynamic Batch workflows are untouched: batchSelectedIds stays []
+      // when their query param is absent, exactly as before.
+      batchSelectedIds = availableImages.map((img) => img.id);
+    }
     if (batchPreview) {
       batchPreview.selectedImageCount = batchSelectedIds.length;
       batchPreview.clonedNodeCount = batchSelectedIds.length * batchPreview.templateChainTitles.length;
@@ -757,7 +785,11 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                     <input key={`text-${nodeId}`} type="hidden" name={`textNode_${nodeId}`} value={value} />
                   ))}
                   {batchDetectionOk && (
-                    <DynamicBatchFormSync batchNodeId={batchNodeId} workflowId={String(wid)} />
+                    <DynamicBatchFormSync
+                      batchNodeId={batchNodeId}
+                      workflowId={String(wid)}
+                      initialValue={batchSelectedIds.join(",")}
+                    />
                   )}
 
                   <WorkflowGenerateActions
