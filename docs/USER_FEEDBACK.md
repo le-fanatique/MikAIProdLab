@@ -1,6 +1,6 @@
 # MikAI User Feedback Log
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 ## Purpose
 
@@ -39,6 +39,199 @@ conversation needs these notes, this file is the shared source of truth.
 - `DUPLICATE`: covered by another feedback ID, which must be referenced.
 
 ## Active Feedback
+
+### FB-20260716-021 - Reference videos for Assets and Shots
+
+- Status: `INBOX`
+- Date observed: 2026-07-16
+- Area: Assets / Shots / Reference media / ComfyUI workflows
+- Context: Preparing future reference video-to-video generation workflows.
+- Original observation:
+
+  > il faudra qu on voit ensemble pour pouvoir storer des videos de reference
+  > pour les assets et les shots, car cela sera necessaire pour les workflow
+  > reference video to video
+
+- Expected outcome: Define a durable way to upload, store, review, and select
+  reference videos associated with Assets and Shots so compatible
+  reference video-to-video workflows can use them as explicit inputs.
+- Impact: Without first-class video references, future video-to-video
+  workflows cannot reliably reuse motion, appearance, camera, rhythm, or
+  continuity material linked to the relevant Asset or Shot.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Product discussion must define reference-video roles, whether a
+  video belongs to an Asset, a Shot, or a shared catalog, and the expected
+  upload, preview, approval, ordering, replacement, and deletion workflow.
+- 2026-07-16: Architecture preparation must audit the existing media schema
+  and storage lifecycle, then decide what durable metadata is required, such
+  as source filename, path, duration, dimensions, frame rate, codec,
+  thumbnail, role, approval, provenance, and usage notes.
+- 2026-07-16: This observation does not yet authorize a schema, migration,
+  storage, ComfyUI protocol, generation-runtime, job-runner, polling, or
+  dependency change. Those decisions require a dedicated ticket after the
+  product discussion.
+
+### FB-20260716-020 - First Generate click submits zero direct images
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Generation / Direct GPT Image inputs
+- Context: Clicking `Generate Sequence Storyboard` from a direct GPT Image 2
+  workflow after selecting three casting references.
+- Original observation:
+
+  > Le premier clic donne `Add at least one image...`; le second clic
+  > fonctionne. L'URL avant le clic contient deja
+  > `batchImages_6=asset-21-18,asset-26-16,asset-20-19`.
+- Expected outcome: The first click must submit the selected direct image IDs;
+  no manual retry should be required.
+- Impact: The main generation action appears broken on first use.
+- Related ticket: `SEQGEN.STORYBOARD.3-FIX5`
+- Resolution: `SEQGEN.STORYBOARD.3-FIX5` implemented — `DynamicBatchFormSync`
+  gained an optional `initialValue` prop, used only by the Sequence
+  Storyboard generate page, so the hidden `batchImages_<nodeId>` input is
+  server-rendered with the real selection instead of a literal empty
+  string. The first click now works without depending on any client effect
+  having run first; sessionStorage/URL sync for later reorder/remove is
+  unchanged; classic Dynamic Batch workflows and every existing Shot/Asset
+  caller are unaffected (prop defaults to empty). Awaiting hands-on
+  confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: URL comparison confirms selection exists before the click; the
+  second click succeeds after client sessionStorage initialization.
+
+### FB-20260716-019 - Clear stale generation errors when changing Sequence
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Generation / Navigation
+- Context: Repeating the Sequence Storyboard generation workflow after
+  switching Sequence.
+- Original observation:
+
+  > Si je change de Sequence et refais les memes etapes, le message d'erreur
+  > reapparait et je dois supprimer `&generationError=...` manuellement.
+- Expected outcome: A previous generation error may be shown after its own
+  failed submission, but must not survive navigation into a new Sequence,
+  workflow, or fresh generation attempt.
+- Impact: Stale error blocks/confuses the next generation workflow.
+- Related ticket: `SEQGEN.STORYBOARD.3-FIX4`
+- Resolution: `SEQGEN.STORYBOARD.3-FIX4` implemented — `generationError` is
+  now excluded at the single shared point where the generate page builds its
+  passthrough search params, so every internal form/panel that reuses them
+  (text/scalar overrides, the Dynamic Image Batch picker) stops carrying the
+  stale error forward. The error still displays on the page that produced
+  it, and `storyboardRefs`/`batchImages_*`/other functional params are
+  unaffected. Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Manual confirmation: removing `generationError` from the URL
+  makes the current direct workflow operate correctly.
+
+### FB-20260716-018 - Direct GPT Image inputs start with zero selected images
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Generation
+- Context: Testing `GPT_STORYBOARD_demo.json` after
+  `SEQGEN.STORYBOARD.3-FIX2`.
+- Original observation:
+
+  > Apres l'etape 7, je n'ai pas de bouton Update Preview. Dans Dynamic Image
+  > Batch j'ai le message: Add at least one image to the direct GPT Image 2
+  > inputs before generating.
+- Expected outcome: Selected `storyboardRefs` should initialize the direct
+  GPT Image 2 inputs and show the preview/update action immediately.
+- Impact: The new direct mode is detected but cannot be used on first load.
+- Related ticket: `SEQGEN.STORYBOARD.3-FIX3`
+- Resolution: `SEQGEN.STORYBOARD.3-FIX3` implemented — `batchSelectedIds`
+  now initializes from `storyboardRefs`/`availableImages` when
+  `batchImages_<nodeId>` is absent, but only for the direct-repeatable-inputs
+  mode (exposed via a new `mode` field on `detectDynamicBatchUiInfo`).
+  Classic Dynamic Batch workflows keep their exact current behavior
+  (absent parameter = nothing selected, no preselection). Once the user
+  reorders/removes images in the panel, `batchImages_<nodeId>` becomes the
+  source of truth. Zero `storyboardRefs` still blocks generation cleanly.
+  Awaiting hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Root cause confirmed in the Sequence generation page: direct
+  mode was treated as ready but read only `batchImages_<nodeId>`.
+
+### FB-20260716-017 - GPT Image 2 needs direct repeatable image inputs
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Generation / ComfyUI workflow mapping
+- Context: Comparing the prepared GPT Image 2 storyboard workflows.
+- Original observation:
+
+  > Dans `GPT_STORYBOARD_03`, les images passent par un image batch. Dans
+  > `GPT_STORYBOARD_demo`, elles sont connectees directement au node OpenAI
+  > GPT Image 2. Le batch ne fonctionne pas correctement pour les references.
+- Expected outcome: Inject each selected reference into direct
+  `model.images.image_N` inputs when the workflow requires it, while retaining
+  the existing batch mode for compatible workflows.
+- Impact: GPT Image 2 must receive references as distinct semantic inputs for
+  correct storyboard generation.
+- Related ticket: `SEQGEN.STORYBOARD.3-FIX2`
+- Resolution: `SEQGEN.STORYBOARD.3-FIX2` implemented — a dedicated
+  `direct-repeatable-inputs` mode, detected purely from workflow structure
+  (numbered `model.images.image_N` ports on an `OpenAIGPTImageNodeV2` node
+  fed directly by `LoadImage` nodes, never by workflow name/id), clones the
+  Load Image chain per selected reference and wires it straight to
+  `image_1..image_N`, pruning unused ports when the selection shrinks. The
+  existing Dynamic Batch mode (used by `GPT_STORYBOARD_03` and other
+  workflows) is checked first and stays completely unchanged. Awaiting
+  hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: `GPT_STORYBOARD_demo.json` uses direct numbered inputs;
+  `GPT_STORYBOARD_03.json` uses `ImageBatchMulti` into `image_1`.
+- 2026-07-16: `GPT_STORYBOARD_demo.json` was not yet present in this
+  environment when the ticket started (only `GPT_STORYBOARD_03.json` was in
+  the workflow library); the user uploaded it via Settings > Workflows
+  (id=13) before implementation, so tests run against the real file.
+
+### FB-20260715-016 - React Router update during Storyboard Assets render
+
+- Status: `IN PROGRESS`
+- Date observed: 2026-07-15
+- Area: Storyboard / Assets selection
+- Context: Selecting or rendering the expanded reference lists in Storyboard.
+- Original observation:
+
+  > Cannot update a component (`Router`) while rendering a different component
+  > (`StoryboardAssetsPanel`). `router.replace()` at
+  > `StoryboardAssetsPanel.tsx:78`.
+- Expected outcome: Storyboard Assets renders without React console errors;
+  reference selection still updates `storyboardRefs` and preserves other query
+  parameters.
+- Impact: React render warning may indicate unstable selection state and makes
+  the Storyboard workflow unreliable.
+- Related ticket: `SEQGEN.STORYBOARD.3-FIX`
+- Resolution: In progress; remove Router updates from state updaters/render
+  paths and revalidate after a clean server restart.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-15: User-provided Next.js/React stack trace identified
+  `StoryboardAssetsPanel.tsx` as the failing surface.
 
 ### FB-20260715-015 - Generate a storyboard contact sheet at Sequence level
 
@@ -470,6 +663,57 @@ conversation needs these notes, this file is the shared source of truth.
   persist, how the active preset is selected, and how connectivity is tested.
   This observation alone does not authorize changes to the ComfyUI protocol,
   generation runtime, job runner, polling, schema, or dependencies.
+
+### FB-20260716-022 - Detect and crop storyboard panels automatically
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-16
+- Area: Storyboard / Sequence Storyboard
+- Context: Reviewing a generated Sequence Storyboard contact sheet and wanting
+  each vignette split out into its own Shot-level image instead of manually
+  cropping each cell.
+- Original observation:
+
+  > MikAI reçoit des images composites contenant plusieurs vignettes, vues ou
+  > sujets. L'objectif est de détecter automatiquement chaque vignette puis de
+  > produire une image cropée indépendante par vignette. [...] L'utilisateur
+  > souhaite extraire uniquement l'illustration de chaque cellule, sans le
+  > texte descriptif éventuel.
+  > (`.agents/opencv_storyboard_extraction_handoff.md`, exploratory handoff,
+  > 2026-07-16)
+
+- Expected outcome: An `Extract Storyboard Panels` action detects bordered/
+  gutter-separated cells in a chosen Sequence Storyboard image with OpenCV,
+  previews numbered rectangles with confidence, lets the user add/delete/
+  resize/reassign/skip regions, then creates draft Shot-level storyboard
+  images from the confirmed crops.
+- Impact: Removes manual per-cell cropping after every Sequence Storyboard
+  generation.
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1`
+- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1` implemented — Python/OpenCV
+  worker (`scripts/opencv_storyboard_extract.py`, border/gutter-band
+  detection with a strict JSON contract), additive migration
+  (`sequence_storyboard_extractions`, `sequence_storyboard_extraction_regions`,
+  nullable `storyboard_images.extraction_region_id`), a dedicated
+  `/storyboard/extract` review page with numbered overlay + confidence,
+  per-region add/resize/reassign/skip/delete, a global inward padding option,
+  and `Confirm & Extract` as the only action that crops and creates `draft`
+  Shot-level `storyboard_images` rows (never approved, never touching
+  `shots.approvedVideoPath` or existing references). Unassigned regions and
+  Shots without a region are flagged, never silently paired. Awaiting
+  hands-on confirmation.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-16: Codex arbitration captured in
+  `.agents/opencv_storyboard_extraction_handoff.md` and
+  `.agents/current_task.md`: OpenCV worker and the additive migration are
+  explicitly authorized for this ticket; illustration/text splitting and
+  Shot mapping require explicit user confirmation, never automatic
+  attachment; out-of-scope for this ticket: OCR, AI segmentation fallback for
+  border-less panels, automatic approval, and any change to existing Shots,
+  durations, approved videos, or references.
 
 ## Entry Template
 

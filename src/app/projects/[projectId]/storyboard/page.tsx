@@ -368,6 +368,16 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
       />
 
       <SectionLabel label="Sequence Storyboard Drafts" />
+      {sequenceStoryboardDrafts.length > 0 && (
+        <div className="mb-3">
+          <Link
+            href={`/projects/${pid}/sequences/${sid}/storyboard/extract`}
+            className="inline-flex items-center rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Extract Storyboard Panels
+          </Link>
+        </div>
+      )}
       <SequenceStoryboardDraftsPanel drafts={sequenceStoryboardDrafts} />
 
       <SectionLabel label="Storyboard Assets" />
