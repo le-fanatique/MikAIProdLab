@@ -20,15 +20,19 @@
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { sequences, sequenceVideoDrafts, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shots } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, inArray } from "drizzle-orm";
 import {
   resolveSequenceVideoDraftAbsolutePath,
   detectVideoSplits,
   cleanupRunThumbnails,
   deleteSegmentThumbnail,
   generateSegmentThumbnail,
+  runFfmpegSceneDetectionInRange,
+  parseFrameRateModeFromParamsJson,
   DetectVideoSplitsError,
 } from "@/lib/sequenceVideoSplit/detectVideoSplits";
+import { parseFfmpegSceneOutput } from "@/lib/sequenceVideoSplit/parseFfmpegSceneOutput";
+import { filterLocalCandidates } from "@/lib/sequenceVideoSplit/localDetectionFilter";
 import type { BoundaryProvenance } from "@/lib/sequenceVideoSplit/selectSegmentBoundaries";
 import {
   DEFAULT_SCENE_THRESHOLD,
@@ -39,6 +43,7 @@ import {
   MAX_MIN_SEGMENT_DURATION,
   parseStrictBoundedFloat,
 } from "@/lib/sequenceVideoSplit/detectionParams";
+import { validateFrameSplit, roundBoundarySeconds } from "@/lib/sequenceVideoSplit/frameTime";
 
 function errRedirectTo(returnTo: string, param: string, msg: string): never {
   const sep = returnTo.includes("?") ? "&" : "?";
@@ -133,6 +138,10 @@ export async function startSequenceVideoSplitDetection(formData: FormData): Prom
     })
     .returning();
 
+  // REVISE (SEQGEN.SPLIT.WORKSPACE.1) — the unified workspace lives at ONE
+  // route (`splitsBase`, same as `returnTo`'s own path now — no more
+  // `/splits/[splitRunId]` sub-route); "Run Detection Again" stays on that
+  // exact route and selects the freshly created run via `splitRunId`.
   const splitsBase = returnTo.split("?")[0];
 
   try {
@@ -154,6 +163,13 @@ export async function startSequenceVideoSplitDetection(formData: FormData): Prom
       // outside this ticket's authorization) is safe because it is a plain
       // nullable text field never constrained to only mean "status=failed".
       const thumbnailWarning = result.thumbnailWarnings.length > 0 ? result.thumbnailWarnings.join(" ") : null;
+      // REVISE (round 2, finding 2) — the CFR/VFR/unknown classification is
+      // only known once probing completes, so it's folded into `paramsJson`
+      // here (reusing the same free-text JSON extension point as
+      // `sceneThreshold`/`minSegmentDurationSeconds` — no schema change) —
+      // `sourceFps` alone already gates frame-exact behavior everywhere it
+      // matters, but the mode is kept visible/auditable for diagnostics.
+      const finalParamsJson = JSON.stringify({ sceneThreshold, minSegmentDurationSeconds, frameRateMode: result.probed.frameRateMode });
       tx.update(sequenceVideoSplitRuns)
         .set({
           status: "ready",
@@ -162,6 +178,7 @@ export async function startSequenceVideoSplitDetection(formData: FormData): Prom
           sourceWidth: result.probed.width,
           sourceHeight: result.probed.height,
           rawCandidatesJson: JSON.stringify(result.rawCandidates),
+          paramsJson: finalParamsJson,
           errorMessage: thumbnailWarning,
           updatedAt: new Date().toISOString(),
         })
@@ -196,7 +213,7 @@ export async function startSequenceVideoSplitDetection(formData: FormData): Prom
       .where(eq(sequenceVideoSplitRuns.id, run.id));
   }
 
-  redirect(`${splitsBase}/${run.id}`);
+  redirect(`${splitsBase}?sequenceVideoDraftId=${sequenceVideoDraftId}&splitRunId=${run.id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +403,79 @@ export async function adjustSegmentBoundary(formData: FormData): Promise<void> {
 
 // ---- Split: insert a cut at an explicit timestamp inside one segment ----
 
+/** Sub-frame tolerance floor shared by every split entry point (numeric and frame-exact) — never a true zero/negative segment on either side. */
+const SPLIT_MIN_GAP_SECONDS = 0.05;
+
+/**
+ * Shared core for both `splitSegmentAt` (raw seconds, manual/VFR-safe) and
+ * `splitSegmentAtFrame` (frame-exact, SEQGEN.SPLIT.WORKSPACE.1 Lot B) — both
+ * ultimately insert a cut at a server-validated `splitAtSeconds` inside one
+ * segment. Kept as one implementation so the two entry points can never
+ * silently diverge in DB/thumbnail behavior.
+ */
+async function performSplitAtSeconds(runId: number, sequenceId: number, segmentId: number, splitAtSeconds: number): Promise<{ warning: string | null }> {
+  const run = await loadEditableRun(runId, sequenceId);
+  const segments = await loadRunSegments(runId);
+  const target = segments.find((s) => s.id === segmentId);
+  if (!target) throw new Error("Segment not found in this run.");
+
+  if (!(splitAtSeconds > target.startSeconds + SPLIT_MIN_GAP_SECONDS && splitAtSeconds < target.endSeconds - SPLIT_MIN_GAP_SECONDS)) {
+    throw new Error("Split point must be strictly inside the segment (not touching either edge).");
+  }
+
+  const after = segments.filter((s) => s.orderIndex > target.orderIndex);
+
+  db.transaction((tx) => {
+    const [freshRun] = tx.select({ status: sequenceVideoSplitRuns.status }).from(sequenceVideoSplitRuns).where(eq(sequenceVideoSplitRuns.id, runId)).all() as unknown as { status: string }[];
+    if (!freshRun || freshRun.status !== "ready") throw new Error("This Split Plan can no longer be edited.");
+
+    // Shrink the original into the first half, unassign it (mapping is
+    // now ambiguous — the user must explicitly re-map both halves).
+    tx.update(sequenceVideoSplitSegments)
+      .set({ endSeconds: splitAtSeconds, status: "pending", targetShotId: null, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() })
+      .where(eq(sequenceVideoSplitSegments.id, target.id))
+      .run();
+
+    // Second half — new row, inserted right after, orderIndex/others
+    // renumbered below (outside the transaction, via a fresh SELECT+bulk
+    // update pass) to keep this insert simple and avoid a self-referential
+    // ordering conflict inside the same transaction.
+    tx.insert(sequenceVideoSplitSegments)
+      .values({
+        splitRunId: runId,
+        orderIndex: target.orderIndex + 1,
+        startSeconds: splitAtSeconds,
+        endSeconds: target.endSeconds,
+        confidence: null,
+        boundaryProvenance: "manual",
+        status: "pending",
+        thumbnailPath: null,
+      })
+      .run();
+
+    // Shift every following segment's orderIndex up by one to make room.
+    for (const seg of after) {
+      tx.update(sequenceVideoSplitSegments).set({ orderIndex: seg.orderIndex + 1 }).where(eq(sequenceVideoSplitSegments.id, seg.id)).run();
+    }
+  });
+
+  // firstHalf's `thumbnailPath` (from this fresh SELECT) is still the OLD
+  // file — the transaction above never touched that column — so passing
+  // it straight into the shared helper lets it detect and clean up the
+  // stale file exactly like Adjust does. secondHalf is a brand-new row
+  // with `thumbnailPath: null`, so there is nothing old to clean up for it.
+  const sourceAbsolutePath = await resolveSequenceVideoDraftAbsolutePath(run.sourceVideoPathSnapshot);
+  const refreshed = await loadRunSegments(runId);
+  const firstHalf = refreshed.find((s) => s.id === target.id)!;
+  const secondHalf = refreshed.find((s) => s.startSeconds === splitAtSeconds && s.id !== target.id);
+  const segmentWarnings: string[] = [];
+  for (const seg of [firstHalf, secondHalf].filter((s): s is NonNullable<typeof s> => !!s)) {
+    const { warning: segWarning } = await regenerateThumbnailAndCleanup(sourceAbsolutePath, seg, runId);
+    if (segWarning) segmentWarnings.push(segWarning);
+  }
+  return { warning: segmentWarnings.length > 0 ? segmentWarnings.join(" ") : null };
+}
+
 export async function splitSegmentAt(formData: FormData): Promise<void> {
   const runId = parseInt(formData.get("runId") as string, 10);
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
@@ -395,71 +485,218 @@ export async function splitSegmentAt(formData: FormData): Promise<void> {
   let warning: string | null = null;
 
   try {
-    const run = await loadEditableRun(runId, sequenceId);
     const segments = await loadRunSegments(runId);
     const target = segments.find((s) => s.id === segmentId);
     if (!target) throw new Error("Segment not found in this run.");
-
-    const MIN_GAP = 0.05;
-    const splitAt = parseStrictBoundedFloat(rawAt, target.startSeconds + MIN_GAP, target.endSeconds - MIN_GAP);
+    const splitAt = parseStrictBoundedFloat(rawAt, target.startSeconds + SPLIT_MIN_GAP_SECONDS, target.endSeconds - SPLIT_MIN_GAP_SECONDS);
     if (splitAt === null) throw new Error("Split point must be strictly inside the segment (not touching either edge).");
 
-    const after = segments.filter((s) => s.orderIndex > target.orderIndex);
-
-    db.transaction((tx) => {
-      const [freshRun] = tx.select({ status: sequenceVideoSplitRuns.status }).from(sequenceVideoSplitRuns).where(eq(sequenceVideoSplitRuns.id, runId)).all() as unknown as { status: string }[];
-      if (!freshRun || freshRun.status !== "ready") throw new Error("This Split Plan can no longer be edited.");
-
-      // Shrink the original into the first half, unassign it (mapping is
-      // now ambiguous — the user must explicitly re-map both halves).
-      tx.update(sequenceVideoSplitSegments)
-        .set({ endSeconds: splitAt, status: "pending", targetShotId: null, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() })
-        .where(eq(sequenceVideoSplitSegments.id, target.id))
-        .run();
-
-      // Second half — new row, inserted right after, orderIndex/others
-      // renumbered below (outside the transaction, via a fresh SELECT+bulk
-      // update pass) to keep this insert simple and avoid a self-referential
-      // ordering conflict inside the same transaction.
-      tx.insert(sequenceVideoSplitSegments)
-        .values({
-          splitRunId: runId,
-          orderIndex: target.orderIndex + 1,
-          startSeconds: splitAt,
-          endSeconds: target.endSeconds,
-          confidence: null,
-          boundaryProvenance: "manual",
-          status: "pending",
-          thumbnailPath: null,
-        })
-        .run();
-
-      // Shift every following segment's orderIndex up by one to make room.
-      for (const seg of after) {
-        tx.update(sequenceVideoSplitSegments).set({ orderIndex: seg.orderIndex + 1 }).where(eq(sequenceVideoSplitSegments.id, seg.id)).run();
-      }
-    });
-
-    // firstHalf's `thumbnailPath` (from this fresh SELECT) is still the OLD
-    // file — the transaction above never touched that column — so passing
-    // it straight into the shared helper lets it detect and clean up the
-    // stale file exactly like Adjust does. secondHalf is a brand-new row
-    // with `thumbnailPath: null`, so there is nothing old to clean up for it.
-    const sourceAbsolutePath = await resolveSequenceVideoDraftAbsolutePath(run.sourceVideoPathSnapshot);
-    const refreshed = await loadRunSegments(runId);
-    const firstHalf = refreshed.find((s) => s.id === target.id)!;
-    const secondHalf = refreshed.find((s) => s.startSeconds === splitAt && s.id !== target.id);
-    const segmentWarnings: string[] = [];
-    for (const seg of [firstHalf, secondHalf].filter((s): s is NonNullable<typeof s> => !!s)) {
-      const { warning: segWarning } = await regenerateThumbnailAndCleanup(sourceAbsolutePath, seg, runId);
-      if (segWarning) segmentWarnings.push(segWarning);
-    }
-    if (segmentWarnings.length > 0) warning = segmentWarnings.join(" ");
+    const result = await performSplitAtSeconds(runId, sequenceId, segmentId, splitAt);
+    warning = result.warning;
   } catch (e) {
     errRedirectTo(returnTo, "splitError", e instanceof Error ? e.message : "Failed to split segment.");
   }
 
   okRedirectTo(returnTo, "splitEdited", warning ?? undefined);
+}
+
+// ---- Split at Current Frame (SEQGEN.SPLIT.WORKSPACE.1, Lot B) — frame-exact, server-derived from the run's own FPS snapshot ----
+
+export async function splitSegmentAtFrame(formData: FormData): Promise<void> {
+  const runId = parseInt(formData.get("runId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const segmentId = parseInt(formData.get("segmentId") as string, 10);
+  const rawFrame = (formData.get("frame") as string | null)?.trim() ?? "";
+  const returnTo = (formData.get("returnTo") as string | null)?.trim() || "/";
+  let warning: string | null = null;
+
+  try {
+    if (!/^\d+$/.test(rawFrame)) throw new Error("Frame must be a non-negative whole number.");
+    const frame = parseInt(rawFrame, 10);
+
+    const run = await loadEditableRun(runId, sequenceId);
+    const segments = await loadRunSegments(runId);
+    const target = segments.find((s) => s.id === segmentId);
+    if (!target) throw new Error("Segment not found in this run.");
+
+    // REVISE (round 2, finding 2) — a numerically plausible `sourceFps` is
+    // NOT sufficient proof of a constant frame rate: a run persisted before
+    // `frameRateMode` existed, or whose source was later found to be VFR,
+    // must still be refused here even if the UI's own gating were ever
+    // bypassed (e.g. a stale form resubmission). This mirrors the UI's own
+    // `frameSplitAvailable` check exactly, but is the authoritative one —
+    // the UI hiding the button is only a courtesy.
+    if (parseFrameRateModeFromParamsJson(run.paramsJson) !== "cfr") {
+      throw new Error(
+        "This run has no verified constant frame rate (missing, VFR, or predates frame-rate verification) — frame-exact splitting is not available. Run detection again, or use the numeric Split control instead."
+      );
+    }
+
+    // The server NEVER trusts a client-supplied timestamp directly — only a
+    // frame index, re-derived into seconds through the run's own
+    // snapshotted FPS (never the player's/client's own notion of FPS).
+    const validation = validateFrameSplit({
+      frame,
+      fps: run.sourceFps ?? NaN,
+      segmentStartSeconds: target.startSeconds,
+      segmentEndSeconds: target.endSeconds,
+      minGapSeconds: SPLIT_MIN_GAP_SECONDS,
+    });
+    if (!validation.ok) throw new Error(validation.error);
+
+    const result = await performSplitAtSeconds(runId, sequenceId, segmentId, validation.splitAtSeconds);
+    warning = result.warning;
+  } catch (e) {
+    errRedirectTo(returnTo, "splitError", e instanceof Error ? e.message : "Failed to split at the current frame.");
+  }
+
+  okRedirectTo(returnTo, "splitEdited", warning ?? undefined);
+}
+
+// ---- Refine Detection in This Segment (SEQGEN.SPLIT.WORKSPACE.1, Lot C) — local FFmpeg re-detection scoped to one segment's own [start, end] range ----
+
+export async function detectSplitsInSegment(formData: FormData): Promise<void> {
+  const runId = parseInt(formData.get("runId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const segmentId = parseInt(formData.get("segmentId") as string, 10);
+  const returnTo = (formData.get("returnTo") as string | null)?.trim() || "/";
+
+  const rawThreshold = (formData.get("localSceneThreshold") as string | null)?.trim() ?? "";
+  const localSceneThreshold =
+    rawThreshold === "" ? DEFAULT_SCENE_THRESHOLD : parseStrictBoundedFloat(rawThreshold, MIN_SCENE_THRESHOLD, MAX_SCENE_THRESHOLD);
+  const rawMinDuration = (formData.get("localMinSegmentDurationSeconds") as string | null)?.trim() ?? "";
+  const localMinSegmentDuration =
+    rawMinDuration === "" ? MIN_MIN_SEGMENT_DURATION : parseStrictBoundedFloat(rawMinDuration, MIN_MIN_SEGMENT_DURATION, MAX_MIN_SEGMENT_DURATION);
+  let warning: string | undefined;
+
+  try {
+    if (localSceneThreshold === null) {
+      throw new Error(`Local scene threshold must be a number between ${MIN_SCENE_THRESHOLD} and ${MAX_SCENE_THRESHOLD}.`);
+    }
+    if (localMinSegmentDuration === null) {
+      throw new Error(`Local minimum segment duration must be a number between ${MIN_MIN_SEGMENT_DURATION} and ${MAX_MIN_SEGMENT_DURATION} seconds.`);
+    }
+
+    const run = await loadEditableRun(runId, sequenceId);
+    const segments = await loadRunSegments(runId);
+    const target = segments.find((s) => s.id === segmentId);
+    if (!target) throw new Error("Segment not found in this run.");
+
+    const sourceAbsolutePath = await resolveSequenceVideoDraftAbsolutePath(run.sourceVideoPathSnapshot);
+    const rangeDuration = target.endSeconds - target.startSeconds;
+
+    // Local FFmpeg detection scoped ONLY to this segment's own range — no
+    // other segment's frames are ever read or reanalyzed. `pts_time` values
+    // are range-relative; converted to absolute video timestamps
+    // immediately, in this one place, before anything else touches them.
+    const stderrText = await runFfmpegSceneDetectionInRange(sourceAbsolutePath, localSceneThreshold, target.startSeconds, rangeDuration);
+    const localCandidates = parseFfmpegSceneOutput(stderrText);
+
+    // REVISE (round 2, finding 4) — quantize to the run's own frame
+    // precision BEFORE filtering, never after: filtering on raw timestamps
+    // and THEN snapping the survivors to the nearest frame can silently
+    // move two distinct, validly-spaced candidates onto the SAME frame
+    // (a collision the raw-timestamp check never saw), or push a candidate
+    // that legitimately cleared `minGapSeconds` back under it once rounded.
+    // Quantizing first and filtering the quantized values means the
+    // dedupe/min-gap/edge checks below are evaluated against the EXACT
+    // values that will actually be persisted.
+    const absoluteCandidates = localCandidates.map((c) => ({
+      ...c,
+      timestampSeconds: roundBoundarySeconds(c.timestampSeconds + target.startSeconds, run.sourceFps),
+    }));
+
+    const filtered = filterLocalCandidates({
+      candidates: absoluteCandidates,
+      segmentStartSeconds: target.startSeconds,
+      segmentEndSeconds: target.endSeconds,
+      minGapSeconds: localMinSegmentDuration,
+    });
+
+    if (!filtered.ok) {
+      if (filtered.reason === "no-candidates") {
+        throw new Error(
+          "No reliable cut was found inside this segment at the current local settings. Try lowering the local scene threshold, reducing the local minimum duration, or use Split at Current Frame instead."
+        );
+      }
+      throw new Error(
+        `This local threshold produced ${filtered.rejectedCount} candidate cuts inside one segment — refusing as noisy/unsafe. Raise the local scene threshold and try again.`
+      );
+    }
+
+    const boundaries = [target.startSeconds, ...filtered.candidates.map((c) => c.timestampSeconds), target.endSeconds];
+    const subSegmentCount = boundaries.length - 1;
+
+    const after = segments.filter((s) => s.orderIndex > target.orderIndex);
+    const orderShift = subSegmentCount - 1;
+
+    let insertedIds: number[] = [];
+    db.transaction((tx) => {
+      const [freshRun] = tx.select({ status: sequenceVideoSplitRuns.status }).from(sequenceVideoSplitRuns).where(eq(sequenceVideoSplitRuns.id, runId)).all() as unknown as { status: string }[];
+      if (!freshRun || freshRun.status !== "ready") throw new Error("This Split Plan can no longer be edited.");
+
+      // Shift every following segment's orderIndex to make room for the
+      // new sub-segments FIRST (descending order avoids any transient
+      // collision with the still-present target row or with each other).
+      for (const seg of [...after].sort((a, b) => b.orderIndex - a.orderIndex)) {
+        tx.update(sequenceVideoSplitSegments).set({ orderIndex: seg.orderIndex + orderShift }).where(eq(sequenceVideoSplitSegments.id, seg.id)).run();
+      }
+
+      tx.delete(sequenceVideoSplitSegments).where(eq(sequenceVideoSplitSegments.id, target.id)).run();
+
+      const ids: number[] = [];
+      for (let i = 0; i < subSegmentCount; i++) {
+        const [inserted] = tx
+          .insert(sequenceVideoSplitSegments)
+          .values({
+            splitRunId: runId,
+            orderIndex: target.orderIndex + i,
+            startSeconds: boundaries[i],
+            endSeconds: boundaries[i + 1],
+            confidence: i === 0 ? (filtered.candidates[0]?.score ?? null) : (filtered.candidates[i - 1]?.score ?? null),
+            boundaryProvenance: "scene",
+            status: "pending",
+            thumbnailPath: null,
+          })
+          .returning({ id: sequenceVideoSplitSegments.id })
+          .all() as unknown as { id: number }[];
+        ids.push(inserted.id);
+      }
+      insertedIds = ids;
+    });
+
+    // Every OTHER segment (before/after the refined one) is guaranteed
+    // untouched above: only `target` was deleted, only `after` had its
+    // `orderIndex` shifted, nothing else was read from or written to.
+
+    const warnings: string[] = [];
+
+    // The original segment's own thumbnail is now referenced by nothing —
+    // clean it up (never silently swallowed).
+    const oldCleanup = await deleteSegmentThumbnail(target.thumbnailPath);
+    if (!oldCleanup.ok) warnings.push(oldCleanup.error);
+
+    // Generate a thumbnail for each brand-new sub-segment, keyed by its own
+    // stable DB id (never orderIndex — same rule as every other edit path).
+    // REVISE (round 2, finding 3) — reuses the already-hardened
+    // `regenerateThumbnailAndCleanup` (generate -> DB write -> only-then
+    // cleanup, in that order) instead of a bare generate-then-update: for a
+    // brand-new row `seg.thumbnailPath` is `null`, so the helper's
+    // "old path" branch is simply a no-op, but its DB-write-failure branch
+    // still applies — a thrown DB update here removes the just-generated
+    // (now-unreferenced) file instead of leaving it orphaned.
+    const freshSubSegments = await db.select().from(sequenceVideoSplitSegments).where(inArray(sequenceVideoSplitSegments.id, insertedIds));
+    for (const seg of freshSubSegments) {
+      const { warning: segWarning } = await regenerateThumbnailAndCleanup(sourceAbsolutePath, seg, runId);
+      if (segWarning) warnings.push(`Segment starting at ${seg.startSeconds.toFixed(2)}s: ${segWarning}`);
+    }
+
+    warning = warnings.length > 0 ? warnings.join(" ") : undefined;
+  } catch (e) {
+    errRedirectTo(returnTo, "splitError", e instanceof Error ? e.message : "Failed to detect splits in this segment.");
+  }
+
+  okRedirectTo(returnTo, "splitEdited", warning);
 }
 
 // ---- Merge with previous/next segment ----

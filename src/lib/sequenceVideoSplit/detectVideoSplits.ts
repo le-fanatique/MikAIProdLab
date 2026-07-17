@@ -56,14 +56,95 @@ export async function resolveSequenceVideoDraftAbsolutePath(relativePath: string
 const FFMPEG_DETECT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes — bounded, generous for a short Sequence Video draft
 const THUMBNAIL_TIMEOUT_MS = 30_000;
 
+export type FrameRateMode = "cfr" | "vfr" | "unknown";
+
 export type ProbedVideoInfo = {
   durationSeconds: number;
+  /** Only ever non-null when `frameRateMode === "cfr"` — see below. */
   fps: number | null;
+  frameRateMode: FrameRateMode;
   width: number | null;
   height: number | null;
 };
 
-/** Confirms the source has a valid video stream and returns duration/fps/dimensions — never reconstructed from the fragile scene-detection stderr scraping. */
+export function parseFrameRateFraction(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const [num, den] = raw.split("/").map(Number);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) return null;
+  return num / den;
+}
+
+/**
+ * Pure CFR/VFR/unknown classification, extracted so it's independently
+ * testable without FFprobe I/O — see `probeVideoInfo`'s own doc comment for
+ * the full reasoning. `fps` is only ever non-null when `frameRateMode ===
+ * "cfr"`.
+ */
+export function classifyFrameRate(rFrameRateRaw: string | undefined, avgFrameRateRaw: string | undefined): { fps: number | null; frameRateMode: FrameRateMode } {
+  const rFps = parseFrameRateFraction(rFrameRateRaw);
+  const avgFps = parseFrameRateFraction(avgFrameRateRaw);
+
+  if (rFps === null || avgFps === null || rFps <= 0 || avgFps <= 0) {
+    return { fps: null, frameRateMode: "unknown" };
+  }
+  // Tight relative tolerance (0.1%) — enough to absorb ffprobe's own
+  // fraction-rounding for a genuinely constant rate (e.g. "24000/1001" vs
+  // an averaged "23.976...") without accepting a real VFR mismatch.
+  const relativeDiff = Math.abs(rFps - avgFps) / rFps;
+  if (relativeDiff <= 0.001) {
+    return { fps: rFps, frameRateMode: "cfr" };
+  }
+  return { fps: null, frameRateMode: "vfr" };
+}
+
+/**
+ * REVISE (round 2, finding 2) — defensive read of the `frameRateMode`
+ * persisted into a run's `paramsJson` by `startSequenceVideoSplitDetection`.
+ * The persisted marker is worthless if nothing ever consults it: this is
+ * the ONE place that should be called before ever enabling frame-exact
+ * behavior for a run, so a missing field, unparseable JSON, or any value
+ * other than the three known ones ALWAYS falls back to `"unknown"` —
+ * never silently treated as `"cfr"`. This also correctly (and
+ * conservatively) covers every run persisted BEFORE this field existed at
+ * all: `paramsJson` for those runs has no `frameRateMode` key, so
+ * `JSON.parse(...).frameRateMode` is `undefined`, which the strict
+ * three-value check below rejects — exactly like a corrupted/unknown value,
+ * never assumed proven-CFR from `sourceFps` being numeric alone.
+ */
+export function parseFrameRateModeFromParamsJson(paramsJson: string | null): FrameRateMode {
+  if (!paramsJson) return "unknown";
+  try {
+    const parsed: unknown = JSON.parse(paramsJson);
+    if (parsed && typeof parsed === "object" && "frameRateMode" in parsed) {
+      const value = (parsed as { frameRateMode: unknown }).frameRateMode;
+      if (value === "cfr" || value === "vfr" || value === "unknown") return value;
+    }
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Confirms the source has a valid video stream and returns duration/fps/
+ * dimensions — never reconstructed from the fragile scene-detection stderr
+ * scraping.
+ *
+ * REVISE (SEQGEN.SPLIT.WORKSPACE.1, round 2, finding 2) — `fps` is ONLY
+ * ever populated (and `frameRateMode` only ever `"cfr"`) when ffprobe's two
+ * independent frame-rate readings agree: `r_frame_rate` (the stream's
+ * declared/nominal rate) AND `avg_frame_rate` (packet-count / duration —
+ * the actual average measured over the whole stream). A genuinely variable
+ * frame rate source can report a perfectly plausible `r_frame_rate` (e.g.
+ * "30/1") while its `avg_frame_rate` reveals the true average differs
+ * (e.g. "27500/1000") — trusting `r_frame_rate` alone (the previous
+ * behavior) would silently promise frame-exact splitting a VFR source
+ * cannot actually honor. Either value missing/unparseable, or the two
+ * disagreeing beyond a tight relative tolerance, downgrades the result to
+ * `frameRateMode: "vfr" | "unknown"` and `fps: null` — which
+ * `isReliableFps`/`roundBoundarySeconds` already treat as "no frame-exact
+ * guarantee, fall back to high-precision seconds."
+ */
 export async function probeVideoInfo(absolutePath: string): Promise<ProbedVideoInfo> {
   let probe: unknown;
   try {
@@ -74,7 +155,7 @@ export async function probeVideoInfo(absolutePath: string): Promise<ProbedVideoI
 
   const typed = probe as {
     format?: { duration?: string };
-    streams?: Array<{ codec_type?: string; r_frame_rate?: string; width?: number; height?: number }>;
+    streams?: Array<{ codec_type?: string; r_frame_rate?: string; avg_frame_rate?: string; width?: number; height?: number }>;
   };
 
   const videoStream = typed.streams?.find((s) => s.codec_type === "video");
@@ -87,15 +168,12 @@ export async function probeVideoInfo(absolutePath: string): Promise<ProbedVideoI
     throw new DetectVideoSplitsError("Could not determine the source video's duration.");
   }
 
-  let fps: number | null = null;
-  if (videoStream.r_frame_rate) {
-    const [num, den] = videoStream.r_frame_rate.split("/").map(Number);
-    if (Number.isFinite(num) && Number.isFinite(den) && den > 0) fps = num / den;
-  }
+  const { fps, frameRateMode } = classifyFrameRate(videoStream.r_frame_rate, videoStream.avg_frame_rate);
 
   return {
     durationSeconds,
     fps,
+    frameRateMode,
     width: typeof videoStream.width === "number" ? videoStream.width : null,
     height: typeof videoStream.height === "number" ? videoStream.height : null,
   };
@@ -145,6 +223,59 @@ export async function runFfmpegSceneDetection(absolutePath: string, sceneThresho
     // stderr to the error object on non-zero exit.
     const stderr = (e as { stderr?: string })?.stderr;
     throw new DetectVideoSplitsError(`FFmpeg scene detection failed: ${stderr || (e instanceof Error ? e.message : String(e))}`);
+  }
+}
+
+/**
+ * SEQGEN.SPLIT.WORKSPACE.1 (Lot C) — same detection filter as
+ * `runFfmpegSceneDetection`, scoped to ONE segment's own `[rangeStartSeconds,
+ * rangeStartSeconds + rangeDurationSeconds]` range via input-side `-ss`/`-t`
+ * (the same seek style already proven accurate for thumbnail generation on
+ * the real dev drafts). No other segment's frames are ever read or
+ * reanalyzed. Because `-ss` sits BEFORE `-i` (input seeking, not
+ * `-copyts`), every `pts_time` this prints is RANGE-RELATIVE (starts near
+ * 0) — callers MUST add `rangeStartSeconds` back before treating a
+ * candidate as an absolute video timestamp; this function deliberately
+ * returns the raw range-relative stderr text only, so that conversion
+ * happens in exactly one place (never duplicated/forgotten).
+ */
+export async function runFfmpegSceneDetectionInRange(
+  absolutePath: string,
+  sceneThreshold: number,
+  rangeStartSeconds: number,
+  rangeDurationSeconds: number
+): Promise<string> {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) {
+    throw new DetectVideoSplitsError("FFmpeg binary is not available for this platform/architecture.");
+  }
+
+  const args = [
+    "-hide_banner",
+    "-ss",
+    rangeStartSeconds.toFixed(3),
+    "-i",
+    absolutePath,
+    "-t",
+    rangeDurationSeconds.toFixed(3),
+    "-filter:v",
+    `select='gt(scene,${sceneThreshold})',metadata=mode=print:key=lavfi.scene_score`,
+    "-an",
+    "-f",
+    "null",
+    "-",
+  ];
+
+  try {
+    const { stderr } = await execFileAsync(ffmpegPath, args, {
+      timeout: FFMPEG_DETECT_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    return stderr;
+  } catch (e) {
+    const stderr = (e as { stderr?: string })?.stderr;
+    throw new DetectVideoSplitsError(`FFmpeg local scene detection failed: ${stderr || (e instanceof Error ? e.message : String(e))}`);
   }
 }
 
@@ -304,6 +435,7 @@ export async function detectVideoSplits(params: {
     expectedShotDurations,
     candidates: rawCandidates,
     minSegmentDurationSeconds,
+    sourceFps: probed.fps,
   });
 
   const segments: (ProposedSegment & { thumbnailPath: string | null })[] = [];

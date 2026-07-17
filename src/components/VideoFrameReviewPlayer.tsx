@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { captureVideoFrame } from "@/actions/shotReferenceImages";
 
 export type CaptureDestination =
@@ -36,6 +36,32 @@ type Props = {
   projectId: number;
   defaultFps?: number;
   captureDestinations: CaptureDestination[];
+  /**
+   * SEQGEN.SPLIT.WORKSPACE.1 — optional, additive: fires whenever the
+   * player's internal frame/fps state changes (metadata load, playback
+   * tick, seek, FPS change). Every existing caller omits this prop and is
+   * completely unaffected — it is read-only, external state mirroring, and
+   * never influences the player's own behavior.
+   *
+   * REVISE (round 2) — `frame`/`totalFrames`/`fps` are the player's own
+   * DISPLAY-fps-quantized values (the FPS selector exists for playback/
+   * scrubbing granularity, not as a precision guarantee); a caller that
+   * needs an un-quantized playhead position (to re-derive against a
+   * DIFFERENT fps, e.g. a run's `sourceFps`) MUST use `currentTimeSeconds`
+   * — the raw `HTMLVideoElement.currentTime` at the moment this fired,
+   * never itself rounded to any frame boundary.
+   */
+  onFrameChange?: (info: { frame: number; totalFrames: number; fps: number; currentTimeSeconds: number }) => void;
+};
+
+/**
+ * SEQGEN.SPLIT.WORKSPACE.1 — optional imperative handle, additive: lets a
+ * parent coordinate the player (seek to a segment's start) without a full
+ * page navigation. Existing callers never attach a ref, so this has no
+ * effect on their behavior.
+ */
+export type VideoFrameReviewPlayerHandle = {
+  seekToFrame: (frame: number) => void;
 };
 
 const FPS_OPTIONS = [12, 24, 25, 30, 60];
@@ -117,14 +143,18 @@ function getDestGroups(dests: CaptureDestination[]) {
     .map((g) => ({ label: g, items: map.get(g)! }));
 }
 
-export default function VideoFrameReviewPlayer({
-  src,
-  shotId,
-  sequenceId,
-  projectId,
-  defaultFps = 24,
-  captureDestinations,
-}: Props) {
+function VideoFrameReviewPlayer(
+  {
+    src,
+    shotId,
+    sequenceId,
+    projectId,
+    defaultFps = 24,
+    captureDestinations,
+    onFrameChange,
+  }: Props,
+  forwardedRef: React.ForwardedRef<VideoFrameReviewPlayerHandle>
+) {
   const [fps, setFps] = useState(defaultFps);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [totalFrames, setTotalFrames] = useState(0);
@@ -297,6 +327,34 @@ export default function VideoFrameReviewPlayer({
     video.currentTime = next / safeFps;
     setCurrentFrame(next);
   }
+
+  // SEQGEN.SPLIT.WORKSPACE.1 — additive imperative handle. `seekToFrame` is
+  // a plain function (not memoized) but only ever reads through refs
+  // (videoRef/hasMetadataRef/totalFramesRef/fpsRef/rafRef), never a stale
+  // closure over state, so exposing it once with an empty dependency array
+  // is safe: every call always sees current values via those refs.
+  useImperativeHandle(forwardedRef, () => ({ seekToFrame }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SEQGEN.SPLIT.WORKSPACE.1 — additive, read-only mirror of the player's
+  // own frame/fps state for an external coordinator (e.g. the Split
+  // workspace's segment list/current-frame display). No-op when
+  // `onFrameChange` is omitted (every pre-existing caller).
+  //
+  // REVISE (round 2, finding 1) — `currentTimeSeconds` is read LIVE from
+  // `videoRef.current.currentTime` at the moment this effect runs, never
+  // from `currentFrame` (which is already quantized to the player's
+  // DISPLAY fps and therefore lossy for any other fps). This effect still
+  // re-fires on every `currentFrame` change (i.e. every playback tick/seek)
+  // so `currentTimeSeconds` stays fresh, but the value itself is the raw,
+  // un-rounded playhead position a caller needs to re-derive frame numbers
+  // against a DIFFERENT fps (e.g. a run's `sourceFps`) without inheriting
+  // the display fps's own rounding error.
+  useEffect(() => {
+    if (!onFrameChange || !hasMetadata || totalFrames <= 0) return;
+    const video = videoRef.current;
+    const currentTimeSeconds = video ? video.currentTime : currentFrame / fps;
+    onFrameChange({ frame: currentFrame, totalFrames, fps, currentTimeSeconds });
+  }, [onFrameChange, currentFrame, totalFrames, fps, hasMetadata]);
 
   function handleFpsChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const newFps = parseInt(e.target.value, 10);
@@ -706,3 +764,5 @@ export default function VideoFrameReviewPlayer({
     </div>
   );
 }
+
+export default forwardRef(VideoFrameReviewPlayer);

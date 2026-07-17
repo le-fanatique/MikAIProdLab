@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type { SceneCandidate } from "./parseFfmpegSceneOutput";
+import { roundBoundarySeconds } from "./frameTime";
 
 export type BoundaryProvenance = "scene" | "timing-fallback" | "manual";
 
@@ -32,10 +33,6 @@ export type ProposedSegment = {
 /** A fallback (non-detected) boundary is always reported at this fixed, clearly-low confidence — never a fabricated high score. */
 export const TIMING_FALLBACK_CONFIDENCE = 0.1;
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 export function selectSegmentBoundaries(params: {
   videoDurationSeconds: number;
   /** One entry per expected Shot, in Shot order. Missing/non-positive durations are treated defensively (see below) — never cause a crash or a NaN boundary. */
@@ -43,11 +40,23 @@ export function selectSegmentBoundaries(params: {
   /** Raw, unfiltered candidates — already deduplicated/sorted is NOT assumed; this function sorts and dedupes defensively. */
   candidates: SceneCandidate[];
   minSegmentDurationSeconds: number;
+  /**
+   * REVISE (SEQGEN.SPLIT.WORKSPACE.1, Lot D) — the run's probed source FPS,
+   * when reliable (see `isReliableFps` in frameTime.ts). Every final
+   * boundary is quantized to the EXACT seconds-value of its nearest frame
+   * at this FPS instead of the old destructive fixed 2-decimal `round2`
+   * (which could shift a boundary by up to ±0.005s — more than a full
+   * frame at high FPS or for a very short Shot). When FPS is missing/
+   * unreliable (VFR source), a high-precision (6-decimal) fallback is used
+   * instead — never a frame-snap the source cannot actually honor.
+   */
+  sourceFps?: number | null;
   /** Fraction of the average expected Shot duration used as the search tolerance around each target boundary position when looking for a matching candidate — bounded to a sane range internally. */
   candidateSearchToleranceFraction?: number;
 }): ProposedSegment[] {
-  const { videoDurationSeconds, expectedShotDurations, minSegmentDurationSeconds } = params;
+  const { videoDurationSeconds, expectedShotDurations, minSegmentDurationSeconds, sourceFps } = params;
   const n = expectedShotDurations.length;
+  const round = (seconds: number) => roundBoundarySeconds(seconds, sourceFps);
 
   if (!Number.isFinite(videoDurationSeconds) || videoDurationSeconds <= 0 || n === 0) {
     return [];
@@ -59,7 +68,7 @@ export function selectSegmentBoundaries(params: {
       {
         orderIndex: 0,
         startSeconds: 0,
-        endSeconds: round2(videoDurationSeconds),
+        endSeconds: round(videoDurationSeconds),
         confidence: null,
         boundaryProvenance: "timing-fallback",
       },
@@ -150,7 +159,7 @@ export function selectSegmentBoundaries(params: {
     if (positions[i] < positions[i - 1]) positions[i] = positions[i - 1];
   }
 
-  const boundaries = [0, ...positions.map(round2), round2(videoDurationSeconds)];
+  const boundaries = [0, ...positions.map(round), round(videoDurationSeconds)];
   const segments: ProposedSegment[] = [];
   for (let i = 0; i < n; i++) {
     const boundaryInfo = i === 0 ? null : chosenBoundaries[i - 1];

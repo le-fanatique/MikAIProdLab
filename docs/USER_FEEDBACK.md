@@ -40,6 +40,57 @@ conversation needs these notes, this file is the shared source of truth.
 
 ## Active Feedback
 
+### FB-20260717-046 - Unify Split review and refine cuts locally
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-17
+- Area: Storyboard / Sequence video splits / UX / Frame accuracy
+- Context: Reviewing a detected Sequence Video Split Plan and correcting a
+  very short Shot that global detection misses unless settings are lowered so
+  far that other valid cuts disappear.
+- Original observation:
+
+  > Je voudrais que Detect & Review Splits affiche directement le Split Plan,
+  > avec les reglages de detection et Run Detection Again sur la meme page.
+  > Apres une premiere decoupe, je veux merger les fausses coupes, selectionner
+  > un segment qui contient plusieurs Shots, puis soit le splitter moi-meme a
+  > la frame courante du player, soit relancer une detection uniquement dans
+  > ce segment avec des reglages locaux. Le cas concret est un plan de 14
+  > frames : des reglages globaux assez permissifs pour le retrouver font
+  > disparaitre d'autres bonnes detections.
+
+- Expected outcome: `Detect & Review Splits` becomes one workspace containing
+  detection settings and the current editable plan. The user can merge false
+  cuts, select a segment, split exactly at the current source frame, or rerun
+  FFmpeg only inside that segment with local settings, without changing the
+  rest of the plan.
+- Impact: A single global threshold cannot reliably cover both micro-Shots and
+  longer transitions. Page navigation and whole-video reruns currently make
+  iterative correction slow and frustrating.
+- Related ticket: `SEQGEN.SPLIT.WORKSPACE.1`
+- Resolution: Implemented — `/splits` is now the single workspace (Detection
+  Settings + review together, current run resolved via `splitRunId` or the
+  most recent run, `Run Detection Again` stays on the same route), segment
+  selection seeks the player without a page reload, `Split at Current Frame`
+  is a frame-exact server action, and `Refine Detection in This Segment` runs
+  FFmpeg scoped to only the selected segment. Pending Codex review/user
+  validation.
+- Resolved or validated on: None yet — awaiting Codex verdict.
+
+#### Follow-up notes
+
+- 2026-07-17: Keep seconds at high precision as the canonical persisted
+  boundary and derive frame/timecode from the run's source FPS. Do not add
+  duplicated frame columns. Existing runs remain versioned and durable even
+  though only the current run is emphasized in the UI.
+- 2026-07-17: Local detection may replace only the selected segment; all other
+  segment boundaries, mappings, statuses and thumbnails must remain intact.
+- 2026-07-17: The exact 14-frame Shot case from the original observation was
+  not reproducible against real dev data (no Sequence Video draft exists for
+  the Sequence with sub-1s Shots) — Lot D's 14-frame proof is via pure
+  synthetic unit tests at 24/25/30 FPS, per the ticket's own instruction not
+  to fabricate a positive proof for an unavailable real case.
+
 ### FB-20260717-043 - Generate a Sequence video from the Storyboard workspace
 
 - Status: `TO VALIDATE`
@@ -1506,6 +1557,69 @@ conversation needs these notes, this file is the shared source of truth.
   label, iconography, disabled/loading states, and responsive behavior. Keep
   the action visually distinct from `Generate Shot` and explain any missing
   storyboard or workflow prerequisites near the button.
+
+### FB-20260717-045 - Configure project format ratio and FPS
+
+- Status: `OPEN`
+- Date observed: 2026-07-17
+- Area: Project settings / Media format / Generation
+- Context: Defining the technical output format that should apply to a Project
+  and guide its downstream production workflows.
+- Original observation:
+
+  > regler au projet les information de format  ratio du projet ainsi que le
+  > fps
+
+- Expected outcome: Project settings expose editable format information,
+  including the target aspect ratio and frame rate (FPS), with clear values
+  that can be reused by Storyboard, Shot, generation, and editorial workflows.
+- Impact: Centralizing these constraints reduces inconsistent framing and
+  timing between generated assets, shots, sequences, and final outputs.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-17: Ticket preparation should define supported ratio presets and
+  custom values, supported FPS values, validation/rounding rules, inheritance
+  versus per-Sequence or per-Shot overrides, and the behavior for existing
+  Projects with no configured format. This observation alone does not
+  authorize schema, migration, provider, or generation-runtime changes.
+
+### FB-20260717-046 - Expose a visual camera control interface in workflows
+
+- Status: `INBOX`
+- Date observed: 2026-07-17
+- Area: Workflows / Camera direction / Qwen Multiangle Camera
+- Context: Configuring camera behavior for image or video generation workflows
+  that currently expose Qwen Multiangle Camera settings as text/API fields.
+- Original observation:
+
+  > ca serait pas mal de faire une interface de camera controle dans les
+  > workflow, mais pour ca il faudrait que l'interface Qwen Multiangle Camera
+  > soit visible dans l'app, et pas en text api
+
+- Expected outcome: The workflow UI exposes a dedicated camera-control
+  interface for compatible Qwen Multiangle Camera workflows, translating the
+  underlying API fields into understandable controls and showing the resulting
+  payload before generation.
+- Impact: Visual camera direction would be easier to configure, inspect, and
+  repeat than editing opaque text fields, reducing parameter errors and making
+  camera choices accessible to non-technical users.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-17: Ticket preparation should first inventory the real Qwen
+  Multiangle Camera workflow inputs and supported ranges, then define controls
+  for angle, lens/framing, distance, elevation, movement, and any workflow-
+  specific options without inventing unsupported parameters. Keep an advanced
+  raw/API view available for completeness and debugging.
+- 2026-07-17: The visual controls should be workflow-aware and additive; they
+  must not alter unrelated ComfyUI workflows or generation-runtime behavior.
 
 ## Entry Template
 
