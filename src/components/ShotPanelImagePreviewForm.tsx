@@ -11,7 +11,10 @@ export type ShotPanelImageOption = {
   imagePath: string;
   label: string;
   role: string | null | undefined;
-  source: "shot" | "asset";
+  // SEQGEN.VIDEO.1 — "board" added additively (RuntimeImageSource now
+  // includes it too); no existing caller ever passes it, this only widens
+  // the type to stay assignable from RuntimeImageOption[].
+  source: "shot" | "asset" | "board";
   assetName?: string;
 };
 

@@ -468,6 +468,53 @@ export type SequenceStoryboardImage = typeof sequenceStoryboardImages.$inferSele
 export type NewSequenceStoryboardImage = typeof sequenceStoryboardImages.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// Sequence video drafts (SEQGEN.VIDEO.1) — a single generated video covering
+// the ordered Shot progression of a Sequence, generated from an explicitly
+// chosen `sequenceStoryboardImages` draft via a `kind="video"` ComfyUI
+// workflow. Deliberately its own table, not a reuse of `sequenceResults`
+// (the published/active editorial output — see that table's own header
+// comment) or `generationJobs.outputPath` (tied to the job's own lifecycle:
+// deleting/retrying a job removes that file, see deleteGenerationJob). This
+// is a durable, pre-split raw draft: `SEQGEN.SPLIT.1` will later analyze one
+// of these to detect cut candidates, and `SEQGEN.PUSH.1` will attach the
+// resulting clips to Shots — neither happens here. Multiple drafts per
+// Sequence are allowed by design, same as `sequenceStoryboardImages`.
+// ---------------------------------------------------------------------------
+export const sequenceVideoDrafts = sqliteTable("sequence_video_drafts", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  sequenceId: int("sequence_id")
+    .notNull()
+    .references(() => sequences.id, { onDelete: "cascade" }),
+  /** The Sequence Storyboard contact sheet this video was generated from — the mandatory visual anchor. Set-null on delete: `deleteSequenceStoryboardImage` explicitly blocks deleting a draft still referenced here (mirrors the existing `sequenceStoryboardExtractions` in-use guard), so in practice this only ever goes null if the source row is removed through some other path. */
+  sourceStoryboardImageId: int("source_storyboard_image_id").references(
+    () => sequenceStoryboardImages.id,
+    { onDelete: "set null" }
+  ),
+  /** The generation job this draft was captured from, if still known. Nullable: the job row itself is not required to persist forever. */
+  jobId: int("job_id").references(() => generationJobs.id, { onDelete: "set null" }),
+  /** The workflow used to generate this draft, if still known. */
+  workflowId: int("workflow_id").references(() => comfyWorkflows.id, { onDelete: "set null" }),
+  videoPath: text("video_path").notNull(),
+  status: text("status", { enum: ["draft", "approved", "rejected"] })
+    .notNull()
+    .default("draft"),
+  /** The exact composed Sequence Video prompt text at generation time (see buildSequenceVideoPrompt) — a provenance snapshot, never re-derived later. */
+  promptSnapshot: text("prompt_snapshot"),
+  /** JSON provenance of the images actually sent (the source storyboard board plus any optional casting references, in payload order) — a provenance snapshot, not a live relation. */
+  referencesSnapshot: text("references_snapshot"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  approvedAt: text("approved_at"),
+});
+
+export type SequenceVideoDraft = typeof sequenceVideoDrafts.$inferSelect;
+export type NewSequenceVideoDraft = typeof sequenceVideoDrafts.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // Storyboard panel extraction (SEQGEN.STORYBOARD.EXTRACT.1) — detects
 // bordered/gutter-separated panels in an existing `sequenceStoryboardImages`
 // contact sheet, lets the user review/correct the proposed regions, then

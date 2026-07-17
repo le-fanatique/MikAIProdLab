@@ -1,6 +1,11 @@
 import type { WorkflowInput } from "@/lib/comfy/parseWorkflow";
 
-export type RuntimeImageSource = "shot" | "asset";
+// SEQGEN.VIDEO.1 — "board" is the mandatory Sequence Storyboard visual
+// anchor for a Sequence Video generation; distinct from "asset"/"shot" so
+// callers that group/filter by source (Dynamic Batch image lists, casting
+// grids) never mistake it for a casting reference. Additive: every existing
+// `source === "shot" | "asset"` check still narrows correctly.
+export type RuntimeImageSource = "shot" | "asset" | "board";
 
 export type RuntimeImageOption = {
   id: string;

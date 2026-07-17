@@ -22,7 +22,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { sequences, generationJobs, sequenceStoryboardImages, sequenceStoryboardExtractions } from "@/db/schema";
+import { sequences, generationJobs, sequenceStoryboardImages, sequenceStoryboardExtractions, sequenceVideoDrafts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { parseGenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 
@@ -235,7 +235,18 @@ export async function deleteSequenceStoryboardImage(formData: FormData): Promise
         .from(sequenceStoryboardExtractions)
         .where(eq(sequenceStoryboardExtractions.sourceStoryboardImageId, imageId))
         .all();
-      if (usedByExtraction.length > 0) {
+      // SEQGEN.VIDEO.1 — a Sequence Video draft generated from this board
+      // reads its own `sourceStoryboardImageId` for future re-runs and
+      // provenance display; deleting the board out from under it would
+      // silently break that trail. Same synchronous in-transaction check
+      // as the extraction guard above, so both share the exact same
+      // race-free/atomic guarantee.
+      const usedByVideoDraft = tx
+        .select({ id: sequenceVideoDrafts.id })
+        .from(sequenceVideoDrafts)
+        .where(eq(sequenceVideoDrafts.sourceStoryboardImageId, imageId))
+        .all();
+      if (usedByExtraction.length > 0 || usedByVideoDraft.length > 0) {
         raceDetected = true;
         throw new Error("SEQUENCE_STORYBOARD_DRAFT_IN_USE");
       }
@@ -253,7 +264,7 @@ export async function deleteSequenceStoryboardImage(formData: FormData): Promise
       }
     }
     if (raceDetected) {
-      errRedirect("This draft is already the source of an extraction and cannot be deleted.");
+      errRedirect("This draft is already the source of an extraction or a Sequence Video draft and cannot be deleted.");
     }
     errRedirect("Failed to delete this draft — nothing was changed. Please try again.");
   }

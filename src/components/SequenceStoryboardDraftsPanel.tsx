@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Collapsible from "@/components/Collapsible";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 
@@ -7,17 +8,20 @@ export type SequenceStoryboardDraft = {
   status: "draft" | "approved" | "rejected";
   createdAt: string;
   promptPreview: string | null;
-  /** FIX6 (Lot B) — true when a sequence_storyboard_extractions row already uses this draft as its source; Delete is refused server-side either way, but disabling the button here avoids a round trip just to learn that. */
+  /** True when a sequence_storyboard_extractions row OR a sequence_video_drafts row already uses this draft as its source; Delete is refused server-side either way, but disabling the button here avoids a round trip just to learn that. */
   usedByExtraction: boolean;
 };
 
 type Props = {
   drafts: SequenceStoryboardDraft[];
+  projectId: number;
   sequenceId: number;
   returnTo: string;
   uploadAction: (formData: FormData) => void | Promise<void>;
   deleteAction: (formData: FormData) => void | Promise<void>;
   uploadError?: string | null;
+  /** SEQGEN.VIDEO.1 — current Storyboard Assets selection, forwarded unchanged into "Generate Sequence Video" so casting references (optional there) survive the trip, same convention as the image workflow CTA. */
+  storyboardRefs?: string;
 };
 
 function fmtDate(iso: string): string {
@@ -49,7 +53,16 @@ function statusClass(status: SequenceStoryboardDraft["status"]): string {
  * unreachable from any product surface. Every version is shown (never
  * only the latest) since multiple versions are explicitly retained.
  */
-export default function SequenceStoryboardDraftsPanel({ drafts, sequenceId, returnTo, uploadAction, deleteAction, uploadError }: Props) {
+export default function SequenceStoryboardDraftsPanel({
+  drafts,
+  projectId,
+  sequenceId,
+  returnTo,
+  uploadAction,
+  deleteAction,
+  uploadError,
+  storyboardRefs,
+}: Props) {
   return (
     <div className="flex flex-col gap-3">
       {/* REVISE (round 3, finding #1) — no explicit `encType`: React sets the
@@ -113,6 +126,14 @@ export default function SequenceStoryboardDraftsPanel({ drafts, sequenceId, retu
                     <p className="text-[10px] text-[#6e767d] whitespace-pre-wrap">{d.promptPreview}</p>
                   </Collapsible>
                 )}
+                <Link
+                  href={`/projects/${projectId}/sequences/${sequenceId}/storyboard/video/workflows?sourceStoryboardImageId=${d.id}${
+                    storyboardRefs ? `&storyboardRefs=${encodeURIComponent(storyboardRefs)}` : ""
+                  }`}
+                  className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                >
+                  Generate Sequence Video →
+                </Link>
                 <form action={deleteAction} className="mt-0.5">
                   <input type="hidden" name="sequenceId" value={String(sequenceId)} />
                   <input type="hidden" name="imageId" value={String(d.id)} />
@@ -120,7 +141,7 @@ export default function SequenceStoryboardDraftsPanel({ drafts, sequenceId, retu
                   <ConfirmSubmitButton
                     confirmMessage="Delete this Sequence Storyboard draft? This cannot be undone."
                     disabled={d.usedByExtraction}
-                    title={d.usedByExtraction ? "This draft is already the source of an extraction and cannot be deleted." : undefined}
+                    title={d.usedByExtraction ? "This draft is already the source of an extraction or a Sequence Video draft and cannot be deleted." : undefined}
                     className="text-[10px] text-[#cf7b6b] hover:text-[#e0958a] transition-colors disabled:text-[#4b5158] disabled:cursor-not-allowed"
                   >
                     {d.usedByExtraction ? "Delete (in use)" : "Delete"}

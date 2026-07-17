@@ -59,6 +59,32 @@ export type GenerationSnapshot = {
     assetType: string;
     roleLabel: string | null;
   }[];
+  /**
+   * SEQGEN.VIDEO.1 — only ever set for a Sequence Video generation job: the
+   * `sequence_storyboard_images.id` explicitly chosen as the mandatory
+   * visual anchor (always @Image1). Captured here, at queue time, so
+   * `saveSequenceVideoDraftFromJob` reads real provenance from the immutable
+   * job instead of a client-supplied field.
+   */
+  sequenceVideoSourceStoryboardImageId?: number;
+  /**
+   * SEQGEN.VIDEO.1 — the full @ImageN <-> board/reference mapping actually
+   * used, in payload order (index 0 is always the board, kind: "board").
+   * Distinct from `sequenceStoryboardReferenceMappings` (image-workflow
+   * casting-only) since entry 0 here is never a casting reference.
+   */
+  sequenceVideoImageMappings?: (
+    | { refId: "board"; imageLabel: string; kind: "board" }
+    | {
+        refId: string;
+        imageLabel: string;
+        kind: "reference";
+        assetId: number;
+        assetName: string;
+        assetType: string;
+        roleLabel: string | null;
+      }
+  )[];
 };
 
 export function serializeGenerationSnapshot(snapshot: GenerationSnapshot): string {

@@ -40,6 +40,44 @@ conversation needs these notes, this file is the shared source of truth.
 
 ## Active Feedback
 
+### FB-20260717-043 - Generate a Sequence video from the Storyboard workspace
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-17
+- Area: Storyboard / Sequence-level video generation / Seedance
+- Context: The Sequence contact sheet can now be generated, stored, extracted
+  and assigned to Shots. The next production stage is a single generated video
+  containing the ordered Shot progression before split review.
+- Original observation:
+
+  > Je veux que la generation de cette video basee sur le storyboard se fasse
+  > depuis la page Storyboard. Nous splitterons ensuite la video et pousserons
+  > chaque video splittee dans les Shots correspondants, dans le meme esprit
+  > que image Storyboard -> extract -> push Shot, mais video -> split -> push.
+
+- Expected outcome: From Storyboard, explicitly choose a stored Sequence
+  Storyboard draft, run a compatible video workflow, inspect the real payload
+  and save the result as a durable versioned Sequence Video Draft. No split or
+  Shot mutation occurs yet.
+- Impact: `SEQGEN.SPLIT.1` currently has no durable generated Sequence video to
+  analyze.
+- Related ticket: `SEQGEN.VIDEO.1`
+- Resolution: `Generate Sequence Video` added to Storyboard, per Sequence
+  Storyboard draft. New `.../storyboard/video/workflows[...]` surface lists
+  `kind="video"` workflows only, always anchors the chosen board as the
+  mandatory `@Image1` (never displaced by optional casting references),
+  reuses the exact same generation pipeline (`buildGenerationPayload`,
+  Dynamic Batch, payload preview, job polling) as the image flow, and a
+  dedicated `buildSequenceVideoPrompt` asks for one continuous video with
+  cut-friendly transitions. `Save as Sequence Video Draft` copies a `done`
+  job's output into a new `sequence_video_drafts` row (additive migration),
+  playable via the existing `VideoFrameReviewPlayer`. Deleting a Sequence
+  Storyboard draft is now blocked if a Sequence Video draft still
+  references it. Validated end-to-end with a real ComfyUI job (SeedanceLow)
+  from queue to saved, playable draft. No split, Shot, or Sequence Result
+  mutation.
+- Resolved or validated on: Implemented 2026-07-17, pending Codex review.
+
 ### FB-20260716-021 - Reference videos for Assets and Shots
 
 - Status: `INBOX`
@@ -1440,6 +1478,34 @@ conversation needs these notes, this file is the shared source of truth.
   but keep video references distinct from approved Shot outputs and from
   editorial media. This observation alone does not authorize schema,
   migration, provider, or generation-runtime changes.
+
+### FB-20260717-044 - Make Generate Sequence Video more prominent
+
+- Status: `OPEN`
+- Date observed: 2026-07-17
+- Area: Storyboard / Sequence video generation / CTA visibility
+- Context: Looking for the action that generates the Sequence video from the
+  Storyboard workspace.
+- Original observation:
+
+  > le bouton de generate sequence video de la partie storyboard n est pas
+  > assez en evidence
+
+- Expected outcome: The `Generate Sequence Video` action is visually prominent
+  and clearly identifiable as the primary next step after preparing or
+  selecting the Storyboard, without being confused with Shot-level generation.
+- Impact: Users may overlook the Sequence-level video workflow or mistake the
+  available generation actions, slowing the storyboard-to-video process.
+- Related ticket: `SEQGEN.VIDEO.1`; related feedback: `FB-20260717-043`
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-17: Ticket preparation should review CTA hierarchy, placement,
+  label, iconography, disabled/loading states, and responsive behavior. Keep
+  the action visually distinct from `Generate Shot` and explain any missing
+  storyboard or workflow prerequisites near the button.
 
 ## Entry Template
 

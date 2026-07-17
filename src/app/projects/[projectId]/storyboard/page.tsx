@@ -10,6 +10,7 @@ import {
   storyboardImages,
   sequenceStoryboardImages,
   sequenceStoryboardExtractions,
+  sequenceVideoDrafts,
   generationJobs,
   comfyWorkflows,
 } from "@/db/schema";
@@ -24,6 +25,7 @@ import StoryboardAssetsPanel, { type StoryboardCastAsset } from "@/components/St
 import SequenceStoryboardDraftsPanel, {
   type SequenceStoryboardDraft,
 } from "@/components/SequenceStoryboardDraftsPanel";
+import SequenceVideoDraftsPanel, { type SequenceVideoDraftItem } from "@/components/SequenceVideoDraftsPanel";
 import SequenceGenerationPackagePanel from "@/components/SequenceGenerationPackagePanel";
 import { uploadSequenceStoryboardImage, deleteSequenceStoryboardImage } from "@/actions/sequenceStoryboard";
 import { refImageUrl } from "@/lib/refImageUrl";
@@ -296,18 +298,27 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     .from(sequenceStoryboardImages)
     .where(eq(sequenceStoryboardImages.sequenceId, sid))
     .orderBy(desc(sequenceStoryboardImages.createdAt));
-  // FIX6 (Lot B) — which drafts are already an extraction's source, so
-  // Delete can be disabled/blocked for them without a round trip.
-  const usedSourceImageIds = new Set(
-    (
-      await db
-        .select({ sourceStoryboardImageId: sequenceStoryboardExtractions.sourceStoryboardImageId })
-        .from(sequenceStoryboardExtractions)
-        .where(eq(sequenceStoryboardExtractions.sequenceId, sid))
-    )
-      .map((r) => r.sourceStoryboardImageId)
-      .filter((id): id is number => id !== null)
-  );
+  // FIX6 (Lot B) / SEQGEN.VIDEO.1 — which drafts are already an
+  // extraction's source OR a Sequence Video draft's source, so Delete can
+  // be disabled/blocked for them without a round trip (server action
+  // enforces both regardless of this UI hint).
+  const usedByExtractionIds = (
+    await db
+      .select({ sourceStoryboardImageId: sequenceStoryboardExtractions.sourceStoryboardImageId })
+      .from(sequenceStoryboardExtractions)
+      .where(eq(sequenceStoryboardExtractions.sequenceId, sid))
+  )
+    .map((r) => r.sourceStoryboardImageId)
+    .filter((id): id is number => id !== null);
+  const usedByVideoDraftIds = (
+    await db
+      .select({ sourceStoryboardImageId: sequenceVideoDrafts.sourceStoryboardImageId })
+      .from(sequenceVideoDrafts)
+      .where(eq(sequenceVideoDrafts.sequenceId, sid))
+  )
+    .map((r) => r.sourceStoryboardImageId)
+    .filter((id): id is number => id !== null);
+  const usedSourceImageIds = new Set([...usedByExtractionIds, ...usedByVideoDraftIds]);
   const sequenceStoryboardDrafts: SequenceStoryboardDraft[] = sequenceDraftRows.map((d) => ({
     id: d.id,
     imageUrl: refImageUrl(d.imagePath),
@@ -317,6 +328,28 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     usedByExtraction: usedSourceImageIds.has(d.id),
   }));
   const sequenceStoryboardUploadError = sp(resolvedSearchParams["sequenceStoryboardUploadError"]);
+
+  // ── Sequence Video drafts (SEQGEN.VIDEO.1) — every version, newest first,
+  // same "always visible, never only the latest" convention as the image
+  // drafts above. Read-only here: playback via VideoFrameReviewPlayer only,
+  // no approve/split/push action exists yet (future SEQGEN.SPLIT.1). ──
+  const sequenceVideoDraftRows = await db
+    .select()
+    .from(sequenceVideoDrafts)
+    .where(eq(sequenceVideoDrafts.sequenceId, sid))
+    .orderBy(desc(sequenceVideoDrafts.createdAt));
+  const sourceBoardImagePathById = new Map(sequenceDraftRows.map((d) => [d.id, d.imagePath]));
+  const sequenceVideoDraftItems: SequenceVideoDraftItem[] = sequenceVideoDraftRows.map((d) => ({
+    id: d.id,
+    videoUrl: refImageUrl(d.videoPath),
+    status: d.status,
+    createdAt: d.createdAt,
+    promptPreview: d.promptSnapshot,
+    sourceStoryboardImageUrl:
+      d.sourceStoryboardImageId !== null && sourceBoardImagePathById.has(d.sourceStoryboardImageId)
+        ? refImageUrl(sourceBoardImagePathById.get(d.sourceStoryboardImageId)!)
+        : null,
+  }));
 
   const storyboardApproved = sp(resolvedSearchParams["storyboardApproved"]) === "1";
   const storyboardApproveError = sp(resolvedSearchParams["storyboardApproveError"]);
@@ -401,12 +434,17 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
       )}
       <SequenceStoryboardDraftsPanel
         drafts={sequenceStoryboardDrafts}
+        projectId={pid}
         sequenceId={sid}
         returnTo={storyboardReturnTo}
         uploadAction={uploadSequenceStoryboardImage}
         deleteAction={deleteSequenceStoryboardImage}
         uploadError={sequenceStoryboardUploadError}
+        storyboardRefs={storyboardRefsParam}
       />
+
+      <SectionLabel label="Sequence Video Drafts" />
+      <SequenceVideoDraftsPanel projectId={pid} drafts={sequenceVideoDraftItems} />
 
       <SectionLabel label="Storyboard Assets" />
       <StoryboardAssetsPanel projectId={pid} assets={storyboardCastAssets} />
