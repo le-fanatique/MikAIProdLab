@@ -63,12 +63,20 @@ export function selectSegmentBoundaries(params: {
   }
 
   // Single Shot — the whole video is one segment, never an invented cut.
+  // REVISE (SEQGEN.SPLIT.WORKSPACE.1-FIX1) — the END here is the video's
+  // own EOF, not a cut: it must stay exactly `videoDurationSeconds` (the
+  // high-precision FFprobe duration), never passed through `round()`.
+  // Quantizing it to the nearest frame (e.g. 15.104s @ 24fps -> 15.083333s)
+  // was the exact bug this fix closes — the container's real duration is
+  // frequently not an integer multiple of the frame duration, and rounding
+  // the EOF down created a plan that could never validate against its own
+  // source duration.
   if (n === 1) {
     return [
       {
         orderIndex: 0,
         startSeconds: 0,
-        endSeconds: round(videoDurationSeconds),
+        endSeconds: videoDurationSeconds,
         confidence: null,
         boundaryProvenance: "timing-fallback",
       },
@@ -159,7 +167,12 @@ export function selectSegmentBoundaries(params: {
     if (positions[i] < positions[i - 1]) positions[i] = positions[i - 1];
   }
 
-  const boundaries = [0, ...positions.map(round), round(videoDurationSeconds)];
+  // REVISE (SEQGEN.SPLIT.WORKSPACE.1-FIX1) — only the INTERNAL cut
+  // boundaries (`positions`) are frame-quantized; the absolute start (0,
+  // never a cut) and the absolute end (the video's own EOF, never a cut
+  // either) stay exactly `videoDurationSeconds` — see the `n === 1` branch
+  // above for the full reasoning.
+  const boundaries = [0, ...positions.map(round), videoDurationSeconds];
   const segments: ProposedSegment[] = [];
   for (let i = 0; i < n; i++) {
     const boundaryInfo = i === 0 ? null : chosenBoundaries[i - 1];
