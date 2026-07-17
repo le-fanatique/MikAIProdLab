@@ -1,0 +1,41 @@
+CREATE TABLE `sequence_video_split_runs` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`sequence_id` integer NOT NULL,
+	`sequence_video_draft_id` integer NOT NULL,
+	`source_video_path_snapshot` text NOT NULL,
+	`source_duration_seconds` real NOT NULL,
+	`source_fps` real,
+	`source_width` integer,
+	`source_height` integer,
+	`engine_version` text NOT NULL,
+	`scene_threshold` real NOT NULL,
+	`min_segment_duration_seconds` real NOT NULL,
+	`params_json` text,
+	`raw_candidates_json` text,
+	`expected_shot_count` integer NOT NULL,
+	`expected_shot_order_snapshot` text NOT NULL,
+	`status` text DEFAULT 'detecting' NOT NULL,
+	`error_message` text,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`validated_at` text,
+	FOREIGN KEY (`sequence_id`) REFERENCES `sequences`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`sequence_video_draft_id`) REFERENCES `sequence_video_drafts`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `sequence_video_split_segments` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`split_run_id` integer NOT NULL,
+	`order_index` integer NOT NULL,
+	`start_seconds` real NOT NULL,
+	`end_seconds` real NOT NULL,
+	`confidence` real,
+	`boundary_provenance` text DEFAULT 'scene' NOT NULL,
+	`target_shot_id` integer,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`thumbnail_path` text,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	FOREIGN KEY (`split_run_id`) REFERENCES `sequence_video_split_runs`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`target_shot_id`) REFERENCES `shots`(`id`) ON UPDATE no action ON DELETE set null
+);

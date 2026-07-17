@@ -218,6 +218,13 @@
       "when": 1784244371757,
       "tag": "0030_majestic_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1784254300633,
+      "tag": "0031_overconfident_princess_powerful",
+      "breakpoints": true
     }
   ]
 }

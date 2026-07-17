@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Collapsible from "@/components/Collapsible";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 
@@ -12,6 +13,7 @@ export type SequenceVideoDraftItem = {
 
 type Props = {
   projectId: number;
+  sequenceId: number;
   drafts: SequenceVideoDraftItem[];
 };
 
@@ -47,7 +49,7 @@ function statusClass(status: SequenceVideoDraftItem["status"]): string {
  * here; `SEQGEN.SPLIT.1` will own turning this video into Shot clips).
  * Nothing here approves, splits, or pushes to Shots.
  */
-export default function SequenceVideoDraftsPanel({ projectId, drafts }: Props) {
+export default function SequenceVideoDraftsPanel({ projectId, sequenceId, drafts }: Props) {
   if (drafts.length === 0) {
     return (
       <p className="text-xs text-[#4b5158]">
@@ -84,6 +86,12 @@ export default function SequenceVideoDraftsPanel({ projectId, drafts }: Props) {
                 <p className="text-[10px] text-[#6e767d] whitespace-pre-wrap">{d.promptPreview}</p>
               </Collapsible>
             )}
+            <Link
+              href={`/projects/${projectId}/sequences/${sequenceId}/storyboard/video/splits?sequenceVideoDraftId=${d.id}`}
+              className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Detect &amp; Review Splits →
+            </Link>
           </div>
         </div>
       ))}
