@@ -68,6 +68,18 @@ export function clipDurationToleranceSeconds(sourceFps: number | null | undefine
   return isReliable ? 1 / sourceFps : 0.05;
 }
 
+/**
+ * Builds the `ffmpeg` argument array for extracting the very first decodable
+ * frame of an already-produced, already-cut clip into a standalone still
+ * image (SEQGEN.PUSH.2, Lot B). Deliberately never seeks (`-ss`) — the clip
+ * itself already starts exactly at the segment's own boundary, so frame 1 of
+ * the clip IS the segment's first frame; seeking again would only add a
+ * second, unnecessary source of potential drift/black-frame artifacts.
+ */
+export function buildFirstFrameArgs(params: { clipAbsolutePath: string; outputAbsolutePath: string }): string[] {
+  return ["-y", "-i", params.clipAbsolutePath, "-frames:v", "1", "-f", "image2", params.outputAbsolutePath];
+}
+
 export type ClipDurationCheck = { ok: true } | { ok: false; error: string };
 
 /** Validates a probed clip duration against the segment's own expected duration, within `clipDurationToleranceSeconds`. */

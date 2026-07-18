@@ -504,11 +504,23 @@ async function PushClipsSection({
           approve a new candidate from Shot Detail afterwards.
         </p>
       )}
+      <p className="text-[10px] text-[#6e767d] mb-3">
+        Every pushed clip also gets a durable <span className="text-[#a4abb2]">first frame</span> saved as a Reference Image, and
+        becomes the Shot&apos;s Storyboard thumbnail unless a manual choice was already made.
+      </p>
       <form action={pushSplitPlanToShots}>
         <input type="hidden" name="runId" value={run.id} />
         <input type="hidden" name="sequenceId" value={sid} />
         <input type="hidden" name="projectId" value={pid} />
         <input type="hidden" name="returnTo" value={workspaceReturnTo} />
+        <label className="flex items-start gap-2 mb-3 text-xs text-[#a4abb2] cursor-pointer">
+          <input type="checkbox" name="pushDurations" className="mt-0.5" />
+          <span>
+            <span className="text-[#e7e9ec]">Push durations</span> — when checked, each Shot&apos;s duration is set to its
+            produced clip&apos;s exact duration, and dependent Sequence/Film Results are marked outdated only if a duration
+            actually changes. When unchecked (default), Shot durations are never touched by this push.
+          </span>
+        </label>
         <ConfirmSubmitButton
           confirmMessage={`Push ${active.length} clip(s) to their mapped Shots? This cuts permanent files and creates new video candidates.`}
           className="rounded border border-[#6b9e72]/50 text-[#6b9e72] px-4 py-1.5 text-sm hover:border-[#6b9e72] hover:bg-[#6b9e72]/10 transition-colors"

@@ -13,6 +13,7 @@ import {
   sequenceVideoDrafts,
   generationJobs,
   comfyWorkflows,
+  shotStoryboardThumbnails,
 } from "@/db/schema";
 import { eq, asc, desc, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -202,6 +203,25 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     shotRefCountByShot.set(row.shotId, (shotRefCountByShot.get(row.shotId) ?? 0) + 1);
   }
 
+  // ── SEQGEN.PUSH.2 — explicit Storyboard thumbnail selection, first
+  // priority below. A LEFT JOIN so a selector row whose target image was
+  // somehow removed (should be structurally impossible — see
+  // `deleteShotReferenceImage`'s atomic clear — but never trusted blindly)
+  // resolves to a null `imagePath` and is simply ignored, falling back to
+  // the legacy heuristic instead of crashing or showing a broken image. ──
+  const explicitThumbnailRows =
+    shotIds.length > 0
+      ? await db
+          .select({ shotId: shotStoryboardThumbnails.shotId, imagePath: shotReferenceImages.imagePath })
+          .from(shotStoryboardThumbnails)
+          .leftJoin(shotReferenceImages, eq(shotStoryboardThumbnails.referenceImageId, shotReferenceImages.id))
+          .where(inArray(shotStoryboardThumbnails.shotId, shotIds))
+      : [];
+  const explicitThumbnailByShot = new Map<number, string>();
+  for (const row of explicitThumbnailRows) {
+    if (row.imagePath) explicitThumbnailByShot.set(row.shotId, row.imagePath);
+  }
+
   const assetRefRows =
     uniqueAssetIds.length > 0
       ? await db
@@ -259,11 +279,21 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
     // older or newer one, since it's a deliberately-confirmed crop rather than
     // a generation attempt. An approved draft (of any origin) still always wins.
     const extractedDraft = visibleDrafts.find((d) => d.extractionRegionId !== null) ?? null;
-    const display = approved ?? extractedDraft ?? visibleDrafts[0] ?? null;
+    const legacyDisplay = approved ?? extractedDraft ?? visibleDrafts[0] ?? null;
+
+    // SEQGEN.PUSH.2 — an explicit, valid Storyboard thumbnail selection
+    // (manual or the most recent automatic push) is FIRST priority, above
+    // even an approved `storyboard_images` draft: it is a deliberate
+    // presentation choice, not merely a fallback. The legacy heuristic
+    // above is strictly preserved as the fallback — used unchanged whenever
+    // no valid selection exists.
+    const explicitThumbnailPath = explicitThumbnailByShot.get(shot.id) ?? null;
 
     let status: StoryboardGridStatus;
-    if (display) {
-      status = display.status === "approved" ? "approved" : "generated";
+    if (explicitThumbnailPath) {
+      status = "generated";
+    } else if (legacyDisplay) {
+      status = legacyDisplay.status === "approved" ? "approved" : "generated";
     } else {
       const latestJobStatus = latestImageJobStatusByShot.get(shot.id);
       if (latestJobStatus && IN_FLIGHT_JOB_STATUSES.has(latestJobStatus)) status = "generating";
@@ -282,9 +312,12 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
       shotCode: shot.shotCode,
       title: shot.title,
       durationSeconds: shot.durationSeconds,
-      displayImageUrl: display ? refImageUrl(display.imagePath) : null,
-      displayDraftId: display?.id ?? null,
-      displayDraftStatus: display?.status ?? null,
+      displayImageUrl: explicitThumbnailPath ? refImageUrl(explicitThumbnailPath) : legacyDisplay ? refImageUrl(legacyDisplay.imagePath) : null,
+      // An explicit thumbnail is never a `storyboard_images` draft — there is
+      // no `draftId` to quick-approve from the grid tile for it (the grid's
+      // own inline Approve action only ever applies to a real draft).
+      displayDraftId: explicitThumbnailPath ? null : (legacyDisplay?.id ?? null),
+      displayDraftStatus: explicitThumbnailPath ? null : (legacyDisplay?.status ?? null),
       status,
       compiledPromptPreview: compiled.text.trim() ? compiled.text : null,
       referenceCount,

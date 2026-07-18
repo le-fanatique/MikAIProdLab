@@ -24,10 +24,23 @@ import path from "node:path";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { sequences, sequenceVideoDrafts, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shots, shotVideoCandidates, sequenceResults, filmResults } from "@/db/schema";
-import { eq, and, asc, inArray } from "drizzle-orm";
+import {
+  sequences,
+  sequenceVideoDrafts,
+  sequenceVideoSplitRuns,
+  sequenceVideoSplitSegments,
+  shots,
+  shotVideoCandidates,
+  shotReferenceImages,
+  shotStoryboardThumbnails,
+  sequenceResults,
+  filmResults,
+} from "@/db/schema";
+import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import { resolveSequenceVideoDraftAbsolutePath, DetectVideoSplitsError } from "@/lib/sequenceVideoSplit/detectVideoSplits";
 import { cutSegmentClip, sourceHasAudioStream, deleteShotVideoCandidateFile, SHOT_VIDEO_CANDIDATES_ROOT_RELATIVE } from "@/lib/sequenceVideoPush/cutSegmentClip";
+import { extractFirstFrame, deleteFirstFrameImageFile } from "@/lib/sequenceVideoPush/extractFirstFrame";
+import { shouldReplaceThumbnailSelection, hasDurationChanged } from "@/lib/sequenceVideoPush/thumbnailPolicy";
 
 function errRedirectTo(returnTo: string, param: string, msg: string): never {
   const sep = returnTo.includes("?") ? "&" : "?";
@@ -50,6 +63,11 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const returnTo = (formData.get("returnTo") as string | null)?.trim() || "/";
+  // SEQGEN.PUSH.2, Lot A — off unless the checkbox is explicitly checked
+  // (an unchecked checkbox sends no field at all). Only ever consulted on a
+  // genuinely fresh push (never on the no-op path below) — an already-fully
+  // pushed plan never rewrites durations, exactly as the ticket requires.
+  const pushDurations = formData.get("pushDurations") === "on";
 
   if (!Number.isInteger(runId) || !Number.isInteger(sequenceId) || !Number.isInteger(projectId)) {
     errRedirectTo(returnTo, "pushError", "Invalid request.");
@@ -135,10 +153,24 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
   // can never publish a stale mapping.
   const manifestSignature = JSON.stringify(active.map((s) => ({ id: s.id, orderIndex: s.orderIndex, targetShotId: s.targetShotId, startSeconds: s.startSeconds, endSeconds: s.endSeconds, status: s.status })));
 
-  // Lot B — batch all-or-nothing: cut+probe every clip WITHOUT any DB write
-  // first. A mid-batch failure cleans up every file this attempt produced
-  // and creates zero rows.
-  const produced: { segmentId: number; shotId: number; relativePath: string; startSeconds: number; endSeconds: number }[] = [];
+  // Lot B — batch all-or-nothing: cut+probe every clip AND extract its first
+  // frame WITHOUT any DB write first. A mid-batch failure (clip OR frame)
+  // cleans up every file this attempt produced (clips AND frames) and
+  // creates zero rows/frames/thumbnails/duration changes.
+  type Produced = { segmentId: number; shotId: number; relativePath: string; startSeconds: number; endSeconds: number; probedDurationSeconds: number; frameRelativePath: string };
+  const produced: Produced[] = [];
+
+  async function cleanupProduced(list: Produced[]): Promise<string[]> {
+    const warnings: string[] = [];
+    for (const p of list) {
+      const clipCleanup = await deleteShotVideoCandidateFile(p.relativePath);
+      if (!clipCleanup.ok) warnings.push(clipCleanup.error);
+      const frameCleanup = await deleteFirstFrameImageFile(p.frameRelativePath);
+      if (!frameCleanup.ok) warnings.push(frameCleanup.error);
+    }
+    return warnings;
+  }
+
   for (const segment of active) {
     const result = await cutSegmentClip({
       sourceAbsolutePath,
@@ -150,14 +182,29 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
       hasAudio,
     });
     if (!result.ok) {
-      const cleanupWarnings: string[] = [];
-      for (const p of produced) {
-        const cleanup = await deleteShotVideoCandidateFile(p.relativePath);
-        if (!cleanup.ok) cleanupWarnings.push(cleanup.error);
-      }
+      const cleanupWarnings = await cleanupProduced(produced);
       errRedirectTo(returnTo, "pushError", cleanupWarnings.length > 0 ? `${result.error} Additionally, cleanup failed for: ${cleanupWarnings.join("; ")}` : result.error);
     }
-    produced.push({ segmentId: segment.id, shotId: segment.targetShotId!, relativePath: result.relativePath, startSeconds: segment.startSeconds, endSeconds: segment.endSeconds });
+
+    const frameResult = await extractFirstFrame({ clipAbsolutePath: result.absolutePath, shotId: segment.targetShotId!, splitSegmentId: segment.id });
+    if (!frameResult.ok) {
+      // The clip for THIS segment was already produced — clean it up too,
+      // alongside every earlier segment's clip+frame from this attempt.
+      const clipCleanup = await deleteShotVideoCandidateFile(result.relativePath);
+      const cleanupWarnings = await cleanupProduced(produced);
+      if (!clipCleanup.ok) cleanupWarnings.unshift(clipCleanup.error);
+      errRedirectTo(returnTo, "pushError", cleanupWarnings.length > 0 ? `${frameResult.error} Additionally, cleanup failed for: ${cleanupWarnings.join("; ")}` : frameResult.error);
+    }
+
+    produced.push({
+      segmentId: segment.id,
+      shotId: segment.targetShotId!,
+      relativePath: result.relativePath,
+      startSeconds: segment.startSeconds,
+      endSeconds: segment.endSeconds,
+      probedDurationSeconds: result.probedDurationSeconds,
+      frameRelativePath: frameResult.relativePath,
+    });
   }
 
   // Atomic write: re-verify inside the transaction (closes both the
@@ -175,7 +222,7 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
         throw new Error("This Split Plan is no longer in a pushable state.");
       }
 
-      const freshShots = tx.select({ id: shots.id }).from(shots).where(eq(shots.sequenceId, sequenceId)).orderBy(asc(shots.orderIndex)).all();
+      const freshShots = tx.select({ id: shots.id, durationSeconds: shots.durationSeconds }).from(shots).where(eq(shots.sequenceId, sequenceId)).orderBy(asc(shots.orderIndex)).all();
       const freshOrderSnapshot = JSON.stringify(freshShots.map((s) => s.id));
       if (freshOrderSnapshot !== freshRun.expectedShotOrderSnapshot) {
         manifestDrifted = true;
@@ -195,10 +242,18 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
         raceLost = true;
         throw new Error("SEQGEN_PUSH_RACE_LOST");
       }
+
       const now = new Date().toISOString();
-      tx.insert(shotVideoCandidates)
-        .values(
-          produced.map((p) => ({
+      const shotDurationById = new Map(freshShots.map((s) => [s.id, s.durationSeconds]));
+      let anyDurationChanged = false;
+
+      // Per-row inserts (not one bulk insert) — each candidate's own
+      // autoincrement id is needed immediately to link its first-frame
+      // reference image's provenance (`sourceShotVideoCandidateId`).
+      for (const p of produced) {
+        const candidateInsert = tx
+          .insert(shotVideoCandidates)
+          .values({
             shotId: p.shotId,
             splitRunId: runId,
             splitSegmentId: p.segmentId,
@@ -207,20 +262,83 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
             sourceEndSeconds: p.endSeconds,
             createdAt: now,
             updatedAt: now,
-          }))
-        )
-        .run();
+          })
+          .run();
+        const candidateId = Number(candidateInsert.lastInsertRowid);
+
+        // Lot B — durable `first_frame` reference, never approved for
+        // generation automatically, always provenanced back to the candidate.
+        const [{ maxOrder }] = tx
+          .select({ maxOrder: sql<number>`coalesce(max(${shotReferenceImages.orderIndex}), -1)` })
+          .from(shotReferenceImages)
+          .where(eq(shotReferenceImages.shotId, p.shotId))
+          .all();
+        const frameInsert = tx
+          .insert(shotReferenceImages)
+          .values({
+            shotId: p.shotId,
+            orderIndex: maxOrder + 1,
+            imagePath: p.frameRelativePath,
+            sourceFilename: null,
+            label: "First Frame — Sequence Push",
+            imageRole: "first_frame",
+            notes: `Auto-extracted from Shot Video Candidate #${candidateId} (Split Run #${runId}, Segment #${p.segmentId}).`,
+            sourceShotVideoCandidateId: candidateId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+        const referenceImageId = Number(frameInsert.lastInsertRowid);
+
+        // The first frame becomes the explicit Storyboard thumbnail ONLY if
+        // the Shot has no `manual` selection — an existing manual choice
+        // always wins and is never overwritten by a push. An existing
+        // `automatic_push` selection MAY be replaced by this newer push.
+        const [existingThumbnail] = tx.select().from(shotStoryboardThumbnails).where(eq(shotStoryboardThumbnails.shotId, p.shotId)).all();
+        if (shouldReplaceThumbnailSelection(existingThumbnail ?? null)) {
+          if (!existingThumbnail) {
+            tx.insert(shotStoryboardThumbnails).values({ shotId: p.shotId, referenceImageId, source: "automatic_push", createdAt: now, updatedAt: now }).run();
+          } else {
+            tx.update(shotStoryboardThumbnails).set({ referenceImageId, source: "automatic_push", updatedAt: now }).where(eq(shotStoryboardThumbnails.id, existingThumbnail.id)).run();
+          }
+        }
+
+        // Lot A — only when explicitly requested, only when the value
+        // actually differs (never rewrites an identical duration).
+        if (pushDurations) {
+          const current = shotDurationById.get(p.shotId) ?? null;
+          if (hasDurationChanged(current, p.probedDurationSeconds)) {
+            tx.update(shots).set({ durationSeconds: p.probedDurationSeconds, updatedAt: now }).where(eq(shots.id, p.shotId)).run();
+            anyDurationChanged = true;
+          }
+        }
+      }
+
+      // Duration changes affect production timing, which dependent
+      // Sequence/Film Results may already reflect — outdate them exactly
+      // like `approveShotVideoCandidate` does, inline in the same
+      // transaction (the async outdate helpers can't be called from a
+      // synchronous `db.transaction` callback). `sequence_editorial_items`
+      // is never touched — production duration and Editorial timing are
+      // deliberately distinct.
+      if (anyDurationChanged) {
+        tx.update(sequenceResults)
+          .set({ status: "outdated", updatedAt: now })
+          .where(and(eq(sequenceResults.sequenceId, sequenceId), eq(sequenceResults.projectId, projectId), inArray(sequenceResults.status, ["active", "published"])))
+          .run();
+        tx.update(filmResults)
+          .set({ status: "outdated", updatedAt: now })
+          .where(and(eq(filmResults.projectId, projectId), inArray(filmResults.status, ["active", "published"])))
+          .run();
+      }
     });
   } catch (e) {
     // Transaction failed (lost the race to a concurrent push, or the
     // manifest drifted) — clean up ONLY this attempt's own uniquely-named
-    // files, never a concurrent winner's. A cleanup failure is NEVER
-    // dropped — it is always appended to whichever message is redirected.
-    const cleanupWarnings: string[] = [];
-    for (const p of produced) {
-      const cleanup = await deleteShotVideoCandidateFile(p.relativePath);
-      if (!cleanup.ok) cleanupWarnings.push(cleanup.error);
-    }
+    // files (clips AND frames), never a concurrent winner's. A cleanup
+    // failure is NEVER dropped — it is always appended to whichever message
+    // is redirected.
+    const cleanupWarnings = await cleanupProduced(produced);
     const cleanupSuffix = cleanupWarnings.length > 0 ? ` Additionally, cleanup failed for: ${cleanupWarnings.join("; ")}` : "";
     if (raceLost) {
       errRedirectTo(returnTo, "pushError", `This Split Plan was already pushed by a concurrent request.${cleanupSuffix}`);
@@ -373,6 +491,17 @@ export async function deleteShotVideoCandidate(formData: FormData): Promise<void
         raceDetected = true;
         throw new Error("SHOT_VIDEO_CANDIDATE_APPROVED_RACE");
       }
+      // REVISE (round 2) — the FK on `shot_reference_images.sourceShotVideoCandidateId`
+      // is `NO ACTION` in reality (confirmed via `PRAGMA foreign_key_list`;
+      // SQLite does not apply an `ON DELETE SET NULL` clause added through
+      // `ALTER TABLE ADD COLUMN`, the exact same characteristic already
+      // accepted for the pre-existing `sourceStoryboardImageId` column — see
+      // schema.ts). A candidate with a linked first-frame reference would
+      // otherwise raise a raw FK error on delete. Explicitly null out every
+      // reference's provenance pointer, in this SAME transaction, before
+      // deleting the candidate row — the reference image and its file are
+      // NEVER touched, they simply become a plain, unprovenanced reference.
+      tx.update(shotReferenceImages).set({ sourceShotVideoCandidateId: null, updatedAt: new Date().toISOString() }).where(eq(shotReferenceImages.sourceShotVideoCandidateId, candidateId)).run();
       tx.delete(shotVideoCandidates).where(eq(shotVideoCandidates.id, candidateId)).run();
     });
   } catch (e) {

@@ -321,13 +321,17 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
   sourceStoryboardImageId: int("source_storyboard_image_id").references(() => storyboardImages.id, {
     onDelete: "set null",
   }),
+  /** SEQGEN.PUSH.2 — set only for a `first_frame` row auto-extracted from a pushed `shot_video_candidates` clip; null for every manually-uploaded/captured reference (mirrors `sourceStoryboardImageId`'s own convention). REVISE (round 2) — deliberately NO `onDelete` clause: SQLite does not enforce a `SET NULL`/`CASCADE` action declared here for a column added via `ALTER TABLE ADD COLUMN` (confirmed via `PRAGMA foreign_key_list` — the exact same real-world characteristic `sourceStoryboardImageId` above already has, out of scope to fix here). The FK is therefore genuinely `NO ACTION`/RESTRICT: `deleteShotVideoCandidate` (`src/actions/sequenceVideoPush.ts`) MUST explicitly null out every referencing row's provenance pointer in the SAME transaction as the candidate delete — never left to a DB-level guarantee this column cannot actually provide. Unique (nullable-safe: SQLite treats NULLs as distinct) so a retried/no-op push can never create a second first-frame row for the same candidate. */
+  sourceShotVideoCandidateId: int("source_shot_video_candidate_id").references(() => shotVideoCandidates.id),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
-});
+},
+(table) => [unique("shot_reference_images_source_candidate_unique").on(table.sourceShotVideoCandidateId)]
+);
 
 export type ShotReferenceImage = typeof shotReferenceImages.$inferSelect;
 export type NewShotReferenceImage = typeof shotReferenceImages.$inferInsert;
@@ -658,6 +662,52 @@ export const shotVideoCandidates = sqliteTable(
 
 export type ShotVideoCandidate = typeof shotVideoCandidates.$inferSelect;
 export type NewShotVideoCandidate = typeof shotVideoCandidates.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Shot Storyboard thumbnail selection (SEQGEN.PUSH.2) — at most one explicit,
+// durable thumbnail choice per Shot, always a `shot_reference_images` row
+// (never a `storyboard_images` draft — an approved draft is a content
+// approval, this is a presentation preference and the two are deliberately
+// NOT conflated). `source` records whether the current selection came from
+// an explicit user action (`manual`) or an automatic push
+// (`automatic_push`): a `manual` selection is never overwritten by a future
+// push; an existing `automatic_push` selection MAY be replaced by a newer
+// push's first frame. The Storyboard grid must treat a valid row here as its
+// first-priority thumbnail source, falling back to its existing legacy
+// heuristic (`storyboard_images`) only when no row exists or its referenced
+// image no longer does.
+//
+// `shotId` is UNIQUE — enforces "at most one" at the DB level, not just by
+// convention. No `onDelete` action on `referenceImageId` (defaults to
+// RESTRICT) — the selector row must always be explicitly cleared, in the
+// SAME transaction as any Reference Image deletion that would otherwise
+// orphan it (see `deleteShotReferenceImage` in
+// `src/actions/shotReferenceImages.ts`), never left to a raw FK error.
+// ---------------------------------------------------------------------------
+
+export const shotStoryboardThumbnails = sqliteTable(
+  "shot_storyboard_thumbnails",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    shotId: int("shot_id")
+      .notNull()
+      .references(() => shots.id, { onDelete: "cascade" }),
+    referenceImageId: int("reference_image_id")
+      .notNull()
+      .references(() => shotReferenceImages.id),
+    source: text("source", { enum: ["manual", "automatic_push"] }).notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("shot_storyboard_thumbnails_shot_id_unique").on(table.shotId)]
+);
+
+export type ShotStoryboardThumbnail = typeof shotStoryboardThumbnails.$inferSelect;
+export type NewShotStoryboardThumbnail = typeof shotStoryboardThumbnails.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // Storyboard panel extraction (SEQGEN.STORYBOARD.EXTRACT.1) — detects

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { refImageUrl } from "@/lib/refImageUrl";
-import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, sequenceVideoSplitRuns, sequenceVideoSplitSegments } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -22,7 +22,7 @@ import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
-import { deleteShotReferenceImage } from "@/actions/shotReferenceImages";
+import { deleteShotReferenceImage, setShotStoryboardThumbnail } from "@/actions/shotReferenceImages";
 import {
   deletePromptSegment,
   movePromptSegmentUp,
@@ -91,6 +91,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const candidateError = sp("candidateError");
   const candidateApproved = sp("candidateApproved");
   const candidateDeleted = sp("candidateDeleted");
+  const thumbnailError = sp("thumbnailError");
+  const thumbnailSet = sp("thumbnailSet");
+  const referenceImageError = sp("error");
+  const referenceImageDeleteWarning = sp("deleteWarning");
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -228,6 +232,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     .from(shotReferenceImages)
     .where(eq(shotReferenceImages.shotId, shid))
     .orderBy(asc(shotReferenceImages.orderIndex));
+
+  const [storyboardThumbnail] = await db.select().from(shotStoryboardThumbnails).where(eq(shotStoryboardThumbnails.shotId, shid));
 
   // Resolve effective workflow — apply default if no explicit selection and no forced selector
   let effectiveWorkflowId: number | null = selectedWorkflowId;
@@ -891,14 +897,23 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
         <Collapsible label={`Reference Images${refImages.length > 0 ? ` (${refImages.length})` : ""}`}>
           <Card title="Reference Images">
+            {thumbnailError && <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{thumbnailError}</p>}
+            {thumbnailSet && <p className="mb-3 text-xs text-[#6b9e72]">Storyboard thumbnail updated.</p>}
+            {referenceImageError && <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{referenceImageError}</p>}
+            {referenceImageDeleteWarning && (
+              <p className="mb-3 text-xs text-[#c9a24b] border border-[#3d3320] rounded px-3 py-2 bg-[#1a1712]">Warning: {referenceImageDeleteWarning}</p>
+            )}
             <ReferenceImagesPanel
-              images={refImages}
+              images={refImages.map((img) => ({ ...img, isStoryboardThumbnail: storyboardThumbnail?.referenceImageId === img.id }))}
               addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
               getEditHref={(imageId) =>
                 `/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${imageId}/edit`
               }
               getDeleteAction={(imageId) =>
                 deleteShotReferenceImage.bind(null, imageId, shid, sid, pid)
+              }
+              getMakeThumbnailAction={(imageId) =>
+                setShotStoryboardThumbnail.bind(null, imageId, shid, sid, pid)
               }
             />
           </Card>

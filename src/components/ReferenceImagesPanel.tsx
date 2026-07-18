@@ -19,6 +19,10 @@ type ReferenceImageItem = {
   variantState?: string | null;
   usageNotes?: string | null;
   approvedForGeneration?: boolean;
+  // SEQGEN.PUSH.2 — optional: only ever populated by Shot Detail (Asset
+  // Detail has no concept of a Storyboard thumbnail). True for at most one
+  // image across the whole list.
+  isStoryboardThumbnail?: boolean;
 };
 
 type Props = {
@@ -29,6 +33,9 @@ type Props = {
   // ASSET.BIBLE.2 — explicit approve/unapprove action. Omitted entirely by
   // Shot Detail; when omitted, no approval UI renders at all.
   getApprovalAction?: (imageId: number, nextApproved: boolean) => () => Promise<void>;
+  // SEQGEN.PUSH.2 — explicit "Make Storyboard Thumbnail" action. Omitted
+  // entirely by Asset Detail; when omitted, no thumbnail UI renders at all.
+  getMakeThumbnailAction?: (imageId: number) => () => Promise<void>;
 };
 
 export default function ReferenceImagesPanel({
@@ -37,6 +44,7 @@ export default function ReferenceImagesPanel({
   getEditHref,
   getDeleteAction,
   getApprovalAction,
+  getMakeThumbnailAction,
 }: Props) {
   if (images.length === 0) {
     return (
@@ -101,6 +109,11 @@ export default function ReferenceImagesPanel({
                       {image.approvedForGeneration ? "Approved" : "Not approved"}
                     </span>
                   )}
+                  {image.isStoryboardThumbnail && (
+                    <span className="inline-flex items-center rounded border border-[#5b93d6]/40 bg-[#5b93d6]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#5b93d6]">
+                      Storyboard Thumbnail
+                    </span>
+                  )}
                 </div>
                 {image.notes && (
                   <p className="text-[11px] text-[#6e767d] leading-relaxed line-clamp-2">
@@ -121,6 +134,16 @@ export default function ReferenceImagesPanel({
                         className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
                       >
                         {image.approvedForGeneration ? "Unapprove" : "Approve"}
+                      </button>
+                    </form>
+                  )}
+                  {getMakeThumbnailAction && !image.isStoryboardThumbnail && (
+                    <form action={getMakeThumbnailAction(image.id)}>
+                      <button
+                        type="submit"
+                        className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
+                      >
+                        Make Storyboard Thumbnail
                       </button>
                     </form>
                   )}

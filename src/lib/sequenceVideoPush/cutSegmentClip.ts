@@ -42,7 +42,9 @@ export async function sourceHasAudioStream(sourceAbsolutePath: string): Promise<
   return Array.isArray(probe.streams) && probe.streams.some((s) => s.codec_type === "audio");
 }
 
-export type CutSegmentClipResult = { ok: true; relativePath: string; absolutePath: string } | { ok: false; error: string };
+export type CutSegmentClipResult =
+  | { ok: true; relativePath: string; absolutePath: string; probedDurationSeconds: number }
+  | { ok: false; error: string };
 
 /**
  * Best-effort removal of a single path, treating a missing file as success.
@@ -142,7 +144,7 @@ export async function cutSegmentClip(params: {
     }
 
     await fs.rename(tmpAbsolute, absolute);
-    return { ok: true, relativePath: relative, absolutePath: absolute };
+    return { ok: true, relativePath: relative, absolutePath: absolute, probedDurationSeconds: probedDuration };
   } catch (e) {
     const primaryError = e instanceof Error ? e.message : String(e);
     const cleanupErrors = (await Promise.all([removeIfExists(tmpAbsolute), removeIfExists(absolute)])).filter((m): m is string => m !== null);
