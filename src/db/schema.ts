@@ -605,6 +605,61 @@ export type SequenceVideoSplitSegment = typeof sequenceVideoSplitSegments.$infer
 export type NewSequenceVideoSplitSegment = typeof sequenceVideoSplitSegments.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// Shot video candidates (SEQGEN.PUSH.1) — a physically-cut clip produced by
+// pushing a `validated` Split Plan, attached to the Shot its segment was
+// mapped to. Deliberately a durable candidate, never an auto-approved Shot
+// output: `shots.approvedVideoPath` is the single source of truth for which
+// output is "the" approved one, and a row here becomes the approved one
+// ONLY by equality (`shots.approvedVideoPath === clipPath`), never by a
+// duplicated boolean column that could drift out of sync.
+//
+// `splitSegmentId` is unique — at most one candidate per Split Segment, so a
+// re-push can never silently duplicate clips for the same cut. Provenance
+// beyond the immediate segment (source draft, detection run params, etc.)
+// is NOT duplicated here: `splitRunId` is the source of truth, walked back
+// through `sequence_video_split_runs -> sequence_video_drafts` whenever
+// full provenance is needed, exactly as the ticket requires.
+//
+// No `onDelete` action on `shotId`/`splitRunId`/`splitSegmentId` (defaults
+// to RESTRICT under `PRAGMA foreign_keys=ON`) — mirrors the same
+// in-use-guard convention already used by `sequenceVideoSplitRuns.sequenceVideoDraftId`
+// and `sequenceStoryboardImages`/`sequenceVideoDrafts`. Deleting a Shot,
+// Split Run, or Segment that still has a candidate must go through an
+// explicit application-level guard (see `deleteShot` in
+// `src/actions/shots.ts`), never a raw FK error or an orphaned file.
+// ---------------------------------------------------------------------------
+
+export const shotVideoCandidates = sqliteTable(
+  "shot_video_candidates",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    shotId: int("shot_id")
+      .notNull()
+      .references(() => shots.id),
+    splitRunId: int("split_run_id")
+      .notNull()
+      .references(() => sequenceVideoSplitRuns.id),
+    splitSegmentId: int("split_segment_id")
+      .notNull()
+      .references(() => sequenceVideoSplitSegments.id),
+    clipPath: text("clip_path").notNull(),
+    /** Exact snapshot of the segment boundaries used for this cut at push time — independent of whatever the (immutable, but defensively re-read) segment row says later. */
+    sourceStartSeconds: real("source_start_seconds").notNull(),
+    sourceEndSeconds: real("source_end_seconds").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("shot_video_candidates_split_segment_id_unique").on(table.splitSegmentId), index("shot_video_candidates_shot_id_idx").on(table.shotId)]
+);
+
+export type ShotVideoCandidate = typeof shotVideoCandidates.$inferSelect;
+export type NewShotVideoCandidate = typeof shotVideoCandidates.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // Storyboard panel extraction (SEQGEN.STORYBOARD.EXTRACT.1) — detects
 // bordered/gutter-separated panels in an existing `sequenceStoryboardImages`
 // contact sheet, lets the user review/correct the proposed regions, then

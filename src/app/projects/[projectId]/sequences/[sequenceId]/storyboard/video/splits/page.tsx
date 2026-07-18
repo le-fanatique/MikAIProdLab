@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { db } from "@/db";
-import { projects, sequences, sequenceVideoDrafts, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shots } from "@/db/schema";
+import { projects, sequences, sequenceVideoDrafts, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shots, shotVideoCandidates } from "@/db/schema";
 import { eq, desc, asc, inArray, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { startSequenceVideoSplitDetection } from "@/actions/sequenceVideoSplit";
+import { pushSplitPlanToShots } from "@/actions/sequenceVideoPush";
 import SplitWorkspaceClient from "@/components/sequenceVideoSplit/SplitWorkspaceClient";
 import { parseFrameRateModeFromParamsJson } from "@/lib/sequenceVideoSplit/detectVideoSplits";
 import {
@@ -98,6 +100,10 @@ export default async function SequenceVideoSplitWorkspacePage({ params, searchPa
   const splitWarning = sp(resolvedSearchParams["splitWarning"]);
   const edited = sp(resolvedSearchParams["splitEdited"]) === "1";
   const validated = sp(resolvedSearchParams["splitValidated"]) === "1";
+  const pushError = sp(resolvedSearchParams["pushError"]);
+  const pushed = sp(resolvedSearchParams["pushed"]) === "1";
+  const pushNoop = sp(resolvedSearchParams["pushNoop"]) === "1";
+  const pushCount = sp(resolvedSearchParams["pushCount"]);
 
   // `splitRunId`, when present, is authoritative for which run is "current"
   // — it always wins over a (possibly stale/absent) `sequenceVideoDraftId`
@@ -180,7 +186,10 @@ export default async function SequenceVideoSplitWorkspacePage({ params, searchPa
         <p className="mb-4 text-xs text-[#c9a24b] border border-[#3d3320] rounded px-3 py-2 bg-[#1a1712]">Warning: {splitWarning}</p>
       )}
       {edited && !splitError && <p className="mb-4 text-xs text-[#6b9e72]">Change saved.</p>}
-      {validated && <p className="mb-4 text-xs text-[#6b9e72]">Split Plan validated — ready for a future push.</p>}
+      {validated && <p className="mb-4 text-xs text-[#6b9e72]">Split Plan validated — ready to push.</p>}
+      {pushError && <p className="mb-4 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{pushError}</p>}
+      {pushed && <p className="mb-4 text-xs text-[#6b9e72]">Pushed {pushCount ?? ""} clip(s) to their mapped Shots.</p>}
+      {pushNoop && <p className="mb-4 text-xs text-[#a4abb2]">This plan was already pushed — no new clips were created ({pushCount ?? "0"} existing candidate(s)).</p>}
 
       <Card title="Source draft" className="mb-4">
         <p className="text-xs text-[#a4abb2] mb-4">
@@ -367,11 +376,7 @@ async function SplitWorkspaceBody({
         </p>
       )}
 
-      {isValidated && (
-        <p className="mb-4 text-xs text-[#a4abb2]">
-          This run is validated and immutable. A future push feature will consume this plan — nothing has been pushed by this ticket.
-        </p>
-      )}
+      {isValidated && <PushClipsSection pid={pid} sid={sid} run={run} segments={segments} sequenceShots={sequenceShots} workspaceReturnTo={workspaceReturnTo} />}
 
       {draft && (
         <SplitWorkspaceClient
@@ -399,5 +404,118 @@ async function SplitWorkspaceBody({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * SEQGEN.PUSH.1 (Lot C) — replaces the old "future push feature" placeholder
+ * for a `validated` run. Shows a pre-confirmation resume (clip count, target
+ * Shots, bounds, a warning for any Shot that already has an Approved
+ * Output), or, once every active segment already has its candidate, the
+ * already-pushed list instead of a redundant push CTA — the current run
+ * remains the surface of work, no separate "past plans" browsing flow.
+ */
+async function PushClipsSection({
+  pid,
+  sid,
+  run,
+  segments,
+  sequenceShots,
+  workspaceReturnTo,
+}: {
+  pid: number;
+  sid: number;
+  run: typeof sequenceVideoSplitRuns.$inferSelect;
+  segments: (typeof sequenceVideoSplitSegments.$inferSelect)[];
+  sequenceShots: (typeof shots.$inferSelect)[];
+  workspaceReturnTo: string;
+}) {
+  const active = segments.filter((s) => s.status !== "skipped");
+  const activeSegmentIds = active.map((s) => s.id);
+  const shotById = new Map(sequenceShots.map((s) => [s.id, s]));
+
+  const candidates =
+    activeSegmentIds.length > 0
+      ? await db.select().from(shotVideoCandidates).where(inArray(shotVideoCandidates.splitSegmentId, activeSegmentIds))
+      : [];
+  const candidateBySegmentId = new Map(candidates.map((c) => [c.splitSegmentId, c]));
+
+  const alreadyPushed = active.length > 0 && candidates.length === active.length;
+
+  if (alreadyPushed) {
+    return (
+      <Card title={`Pushed to Shots (${candidates.length})`} className="mb-4">
+        <div className="flex flex-col gap-2">
+          {active.map((s) => {
+            const candidate = candidateBySegmentId.get(s.id);
+            const shot = s.targetShotId ? shotById.get(s.targetShotId) : null;
+            if (!candidate || !shot) return null;
+            const isApproved = shot.approvedVideoPath === candidate.clipPath;
+            return (
+              <div key={s.id} className="flex items-center justify-between gap-3 rounded border border-[#232629] bg-[#141618] px-3 py-2 text-xs">
+                <div className="text-[#a4abb2]">
+                  <span className="text-[#e7e9ec]">{shot.shotCode ? `${shot.shotCode} — ` : ""}{shot.title}</span>{" "}
+                  <span className="text-[#6e767d]">
+                    ({candidate.sourceStartSeconds.toFixed(3)}s–{candidate.sourceEndSeconds.toFixed(3)}s, {(candidate.sourceEndSeconds - candidate.sourceStartSeconds).toFixed(3)}s)
+                  </span>
+                  {isApproved && <span className="ml-2 text-[9px] uppercase tracking-wider border rounded px-1.5 py-px text-[#6b9e72] border-[#2a3d2e]">Approved</span>}
+                </div>
+                <Link href={`/projects/${pid}/sequences/${sid}/shots/${shot.id}`} className="shrink-0 text-[#5b93d6] hover:text-[#8fbbe8] transition-colors">
+                  Open Shot →
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    );
+  }
+
+  const warnedShots = active
+    .map((s) => (s.targetShotId ? shotById.get(s.targetShotId) : null))
+    .filter((shot): shot is typeof sequenceShots[number] => !!shot && !!shot.approvedVideoPath);
+
+  return (
+    <Card title="Push Clips to Shots" className="mb-4">
+      <p className="text-xs text-[#a4abb2] mb-3">
+        Cuts {active.length} physical clip{active.length === 1 ? "" : "s"} from the source video and attaches each to its mapped
+        Shot as a new video candidate. This never replaces an existing Approved Output — candidates are reviewed and approved
+        individually from Shot Detail.
+      </p>
+      <div className="flex flex-col gap-1 mb-3">
+        {active.map((s) => {
+          const shot = s.targetShotId ? shotById.get(s.targetShotId) : null;
+          if (!shot) return null;
+          const hasApproved = !!shot.approvedVideoPath;
+          return (
+            <div key={s.id} className="flex items-center justify-between gap-3 text-[10px] text-[#6e767d]">
+              <span>
+                {shot.shotCode ? `${shot.shotCode} — ` : ""}
+                {shot.title} — {s.startSeconds.toFixed(3)}s–{s.endSeconds.toFixed(3)}s ({(s.endSeconds - s.startSeconds).toFixed(3)}s)
+              </span>
+              {hasApproved && <span className="text-[#c9a24b]">already has an Approved Output</span>}
+            </div>
+          );
+        })}
+      </div>
+      {warnedShots.length > 0 && (
+        <p className="text-[10px] text-[#c9a24b] mb-3">
+          {warnedShots.length} target Shot(s) already have an Approved Output — pushing never replaces it automatically; you can
+          approve a new candidate from Shot Detail afterwards.
+        </p>
+      )}
+      <form action={pushSplitPlanToShots}>
+        <input type="hidden" name="runId" value={run.id} />
+        <input type="hidden" name="sequenceId" value={sid} />
+        <input type="hidden" name="projectId" value={pid} />
+        <input type="hidden" name="returnTo" value={workspaceReturnTo} />
+        <ConfirmSubmitButton
+          confirmMessage={`Push ${active.length} clip(s) to their mapped Shots? This cuts permanent files and creates new video candidates.`}
+          className="rounded border border-[#6b9e72]/50 text-[#6b9e72] px-4 py-1.5 text-sm hover:border-[#6b9e72] hover:bg-[#6b9e72]/10 transition-colors"
+        >
+          Push Clips to Shots →
+        </ConfirmSubmitButton>
+      </form>
+    </Card>
   );
 }

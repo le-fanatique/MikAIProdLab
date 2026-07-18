@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { shots, sequences, sequenceEditorialItems } from "@/db/schema";
+import { shots, sequences, sequenceEditorialItems, shotVideoCandidates } from "@/db/schema";
 import { eq, max, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -166,7 +166,46 @@ export async function deleteShot(
   sequenceId: number,
   projectId: number
 ) {
-  await db.delete(shots).where(eq(shots.id, id));
+  // SEQGEN.PUSH.1 — a Shot with any `shot_video_candidates` row (the new FK
+  // this ticket adds) must never be deleted out from under them: there is
+  // no onDelete action on that FK (defaults to RESTRICT), and a raw FK
+  // error or an orphaned candidate file is explicitly forbidden. Policy
+  // chosen: block deletion with a clear user-facing message asking the
+  // candidates to be removed first, rather than an automatic
+  // cleanup-with-restore cascade (a Shot can have several candidate clips
+  // on disk; a safe automatic cascade would need the same quarantine/
+  // restore machinery as `deleteShotVideoCandidate` repeated N times inside
+  // one transaction — deferred as unnecessary complexity for this MVP since
+  // the explicit per-candidate Delete action already exists on Shot Detail).
+  //
+  // The check and the delete run inside ONE synchronous `db.transaction`
+  // callback — no `await` inside it — so a concurrent `pushSplitPlanToShots`
+  // insert (also a single synchronous transaction) can never land in the
+  // gap between "no candidates found" and "Shot deleted": on Node's
+  // single-threaded event loop, one synchronous transaction always runs to
+  // completion before another request's handler gets a turn, which is what
+  // actually closes this race (better-sqlite3 itself is not otherwise
+  // concurrent). Either the push's insert commits first (this check then
+  // sees the candidate and blocks with the stable message below), or this
+  // delete commits first (the push's own insert then correctly fails its
+  // FK constraint inside ITS OWN transaction and reports a clean error via
+  // its existing catch path) — never a raw, unhandled FK exception.
+  let blockedByCandidates = false;
+  try {
+    db.transaction((tx) => {
+      const existingCandidates = tx.select({ id: shotVideoCandidates.id }).from(shotVideoCandidates).where(eq(shotVideoCandidates.shotId, id)).all();
+      if (existingCandidates.length > 0) {
+        blockedByCandidates = true;
+        throw new Error("SHOT_HAS_VIDEO_CANDIDATES");
+      }
+      tx.delete(shots).where(eq(shots.id, id)).run();
+    });
+  } catch (e) {
+    if (blockedByCandidates) {
+      redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("This Shot has one or more Sequence Video Candidates. Delete them from Shot Detail before deleting the Shot.")}`);
+    }
+    redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("Failed to delete this Shot — nothing was changed. Please try again.")}`);
+  }
   redirect(`/projects/${projectId}/sequences/${sequenceId}`);
 }
 

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { refImageUrl } from "@/lib/refImageUrl";
-import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, sequenceVideoSplitRuns, sequenceVideoSplitSegments } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -35,6 +35,7 @@ import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import ShotNarrativeContextEditor from "@/components/ShotNarrativeContextEditor";
+import ShotVideoCandidatesPanel, { type ShotVideoCandidateRow } from "@/components/sequenceVideoPush/ShotVideoCandidatesPanel";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -49,6 +50,11 @@ function SectionLabel({ label }: { label: string }) {
       </span>
     </div>
   );
+}
+
+/** Fixed `timeZone: "UTC"` — this Server Component's output is hydrated by a Client Component (`ShotVideoCandidatesPanel`); without an explicit zone, `toLocaleString` would render differently on the server vs. a browser in a different local time zone, causing a hydration mismatch. */
+function formatCandidateDate(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" });
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -82,6 +88,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const shotPromptError = sp("shotPromptError");
   const storyboardDraftSaved = sp("storyboardDraftSaved");
   const storyboardDraftError = sp("storyboardDraftError");
+  const candidateError = sp("candidateError");
+  const candidateApproved = sp("candidateApproved");
+  const candidateDeleted = sp("candidateDeleted");
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -538,6 +547,52 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     }
   }
 
+  // ── Sequence Video Candidates (SEQGEN.PUSH.1) ───────────────────────────────
+  const rawCandidates = await db
+    .select()
+    .from(shotVideoCandidates)
+    .where(eq(shotVideoCandidates.shotId, shid))
+    .orderBy(desc(shotVideoCandidates.createdAt));
+
+  const candidateRuns =
+    rawCandidates.length > 0
+      ? await db
+          .select({ id: sequenceVideoSplitRuns.id, sequenceVideoDraftId: sequenceVideoSplitRuns.sequenceVideoDraftId })
+          .from(sequenceVideoSplitRuns)
+          .where(
+            inArray(
+              sequenceVideoSplitRuns.id,
+              [...new Set(rawCandidates.map((c) => c.splitRunId))]
+            )
+          )
+      : [];
+  const draftIdByRunId = new Map(candidateRuns.map((r) => [r.id, r.sequenceVideoDraftId]));
+
+  const candidateSegments =
+    rawCandidates.length > 0
+      ? await db
+          .select({ id: sequenceVideoSplitSegments.id, orderIndex: sequenceVideoSplitSegments.orderIndex })
+          .from(sequenceVideoSplitSegments)
+          .where(inArray(sequenceVideoSplitSegments.id, rawCandidates.map((c) => c.splitSegmentId)))
+      : [];
+  const orderIndexBySegmentId = new Map(candidateSegments.map((s) => [s.id, s.orderIndex]));
+
+  const shotDetailReturnTo = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
+  const candidateRows: ShotVideoCandidateRow[] = rawCandidates.map((c) => {
+    const draftId = draftIdByRunId.get(c.splitRunId);
+    return {
+      id: c.id,
+      clipUrl: refImageUrl(c.clipPath),
+      sourceStartSeconds: c.sourceStartSeconds,
+      sourceEndSeconds: c.sourceEndSeconds,
+      createdAtLabel: formatCandidateDate(c.createdAt),
+      splitRunId: c.splitRunId,
+      splitSegmentOrderIndex: orderIndexBySegmentId.get(c.splitSegmentId) ?? null,
+      splitWorkspaceHref: draftId != null ? `/projects/${pid}/sequences/${sid}/storyboard/video/splits?sequenceVideoDraftId=${draftId}&splitRunId=${c.splitRunId}` : null,
+      isApproved: shot.approvedVideoPath === c.clipPath,
+    };
+  });
+
   const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const closeUrl = detailBaseUrl;
   const openPanelUrl = `${detailBaseUrl}?generation=open`;
@@ -620,6 +675,16 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                 </a>
               </div>
             </div>
+          </Card>
+        )}
+
+        {/* ── Sequence Video Candidates ─────────────────────────────── */}
+        {candidateRows.length > 0 && (
+          <Card title={`Sequence Video Candidates (${candidateRows.length})`}>
+            {candidateError && <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{candidateError}</p>}
+            {candidateApproved && <p className="mb-3 text-xs text-[#6b9e72]">Candidate approved as Shot output.</p>}
+            {candidateDeleted && <p className="mb-3 text-xs text-[#6b9e72]">Candidate deleted.</p>}
+            <ShotVideoCandidatesPanel candidates={candidateRows} shotId={shid} sequenceId={sid} projectId={pid} returnTo={shotDetailReturnTo} />
           </Card>
         )}
 

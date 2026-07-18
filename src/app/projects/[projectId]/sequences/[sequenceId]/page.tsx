@@ -209,6 +209,9 @@ export default async function SequencePage({ params, searchParams }: Props) {
   const rawCastingsError = resolvedSearchParams["castingsError"];
   const castingsError = typeof rawCastingsError === "string" ? rawCastingsError : Array.isArray(rawCastingsError) ? rawCastingsError[0] : null;
 
+  const rawDeleteShotError = resolvedSearchParams["deleteShotError"];
+  const deleteShotError = typeof rawDeleteShotError === "string" ? rawDeleteShotError : Array.isArray(rawDeleteShotError) ? rawDeleteShotError[0] : null;
+
   const llmSettings = await getLLMSettings();
 
   const assignAction = assignAssetToSequence.bind(null, sid, pid);
@@ -644,6 +647,12 @@ npx -y pnpm@9.0.0 dev`}
           </Link>
         }
       />
+
+      {deleteShotError && (
+        <div className="mb-4 rounded border border-[#cf7b6b]/40 bg-[#cf7b6b]/10 px-4 py-2 text-sm text-[#cf7b6b]">
+          {deleteShotError}
+        </div>
+      )}
 
       {shotList.length === 0 ? (
         <EmptyState
