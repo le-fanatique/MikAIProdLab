@@ -126,6 +126,28 @@ export function parseFrameRateModeFromParamsJson(paramsJson: string | null): Fra
 }
 
 /**
+ * SEQGEN.SPLIT.MINFRAMES.1, Lot B — reads back the effective minimum
+ * boundary gap (after `resolveMinGapSeconds`) persisted alongside the raw
+ * `minSegmentDurationSeconds` DB column, for display only ("requested vs
+ * effective"). A legacy run's `paramsJson` simply has no such key —
+ * `null` is returned and the caller falls back to showing only the raw
+ * requested value, never a fabricated one.
+ */
+export function parseMinSegmentDurationEffectiveSecondsFromParamsJson(paramsJson: string | null): number | null {
+  if (!paramsJson) return null;
+  try {
+    const parsed: unknown = JSON.parse(paramsJson);
+    if (parsed && typeof parsed === "object" && "minSegmentDurationEffectiveSeconds" in parsed) {
+      const value = (parsed as { minSegmentDurationEffectiveSeconds: unknown }).minSegmentDurationEffectiveSeconds;
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Confirms the source has a valid video stream and returns duration/fps/
  * dimensions — never reconstructed from the fragile scene-detection stderr
  * scraping.

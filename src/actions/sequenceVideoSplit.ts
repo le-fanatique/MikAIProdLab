@@ -43,7 +43,20 @@ import {
   MAX_MIN_SEGMENT_DURATION,
   parseStrictBoundedFloat,
 } from "@/lib/sequenceVideoSplit/detectionParams";
-import { validateFrameSplit, roundBoundarySeconds, isReliableFps } from "@/lib/sequenceVideoSplit/frameTime";
+import { validateFrameSplit, roundBoundarySeconds, isReliableFps, resolveMinGapSeconds, resolveBoundaryValue } from "@/lib/sequenceVideoSplit/frameTime";
+
+/**
+ * SEQGEN.SPLIT.MINFRAMES.1 — the run's own FPS, but only when explicitly
+ * proven CFR via `paramsJson.frameRateMode` (never `run.sourceFps` alone,
+ * which is only meaningfully non-null for CFR sources by construction but
+ * is re-verified here anyway — mirrors the same authoritative re-check
+ * `splitSegmentAtFrame` already performed before this ticket). Every
+ * frame-exact code path in this file derives its FPS through this one
+ * function, never `run.sourceFps` directly.
+ */
+function resolveRunFps(run: { sourceFps: number | null; paramsJson: string | null }): number | null {
+  return parseFrameRateModeFromParamsJson(run.paramsJson) === "cfr" ? run.sourceFps : null;
+}
 
 function errRedirectTo(returnTo: string, param: string, msg: string): never {
   const sep = returnTo.includes("?") ? "&" : "?";
@@ -169,7 +182,21 @@ export async function startSequenceVideoSplitDetection(formData: FormData): Prom
       // `sceneThreshold`/`minSegmentDurationSeconds` — no schema change) —
       // `sourceFps` alone already gates frame-exact behavior everywhere it
       // matters, but the mode is kept visible/auditable for diagnostics.
-      const finalParamsJson = JSON.stringify({ sceneThreshold, minSegmentDurationSeconds, frameRateMode: result.probed.frameRateMode });
+      // SEQGEN.SPLIT.MINFRAMES.1, Lot B — the EFFECTIVE minimum (after
+      // `resolveMinGapSeconds`) is only knowable once probing resolves
+      // `frameRateMode`/`fps`, so it is computed here and persisted
+      // alongside the raw requested value — "explique le minimum demande et
+      // le minimum effectif," never silently only one or the other.
+      const minSegmentDurationEffectiveSeconds = resolveMinGapSeconds(
+        minSegmentDurationSeconds,
+        result.probed.frameRateMode === "cfr" ? result.probed.fps : null
+      );
+      const finalParamsJson = JSON.stringify({
+        sceneThreshold,
+        minSegmentDurationSeconds,
+        frameRateMode: result.probed.frameRateMode,
+        minSegmentDurationEffectiveSeconds,
+      });
       tx.update(sequenceVideoSplitRuns)
         .set({
           status: "ready",
@@ -351,33 +378,41 @@ export async function adjustSegmentBoundary(formData: FormData): Promise<void> {
     const index = segments.findIndex((s) => s.id === segmentId);
     if (index === -1) throw new Error("Segment not found in this run.");
 
-    const MIN_GAP = 0.05; // sub-frame tolerance floor, never a true zero/negative segment
+    // SEQGEN.SPLIT.MINFRAMES.1, Lot A/C — the old fixed `MIN_GAP = 0.05`
+    // could exceed a full frame at high FPS (12 frames at 240fps) or refuse
+    // a legitimate 1-frame gap. `resolveBoundaryValue` replaces it: on CFR
+    // it quantizes `value` to its nearest frame and compares in integer
+    // frame-index space (a boundary exactly 1 frame from an edge is
+    // accepted); on VFR/unknown it stays high-precision seconds. Either way
+    // the value actually written to the DB is `resolution.valueSeconds`
+    // (server-authoritative), never the raw client-parsed `value`.
+    const fps = resolveRunFps(run);
 
     if (field === "start") {
       if (index === 0) throw new Error("The first segment always starts at 0 and cannot be moved.");
       const prev = segments[index - 1];
       const current = segments[index];
-      if (!(value > prev.startSeconds + MIN_GAP && value < current.endSeconds - MIN_GAP)) {
-        throw new Error("The new boundary would create a zero-length or overlapping segment.");
-      }
+      const resolution = resolveBoundaryValue({ valueSeconds: value, lowerBoundSeconds: prev.startSeconds, upperBoundSeconds: current.endSeconds, fps });
+      if (!resolution.ok) throw new Error("The new boundary would create a zero-length or overlapping segment.");
+      const boundaryValue = resolution.valueSeconds;
       db.transaction((tx) => {
         const [freshRun] = tx.select({ status: sequenceVideoSplitRuns.status }).from(sequenceVideoSplitRuns).where(eq(sequenceVideoSplitRuns.id, runId)).all() as unknown as { status: string }[];
         if (!freshRun || freshRun.status !== "ready") throw new Error("This Split Plan can no longer be edited.");
-        tx.update(sequenceVideoSplitSegments).set({ endSeconds: value, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, prev.id)).run();
-        tx.update(sequenceVideoSplitSegments).set({ startSeconds: value, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, current.id)).run();
+        tx.update(sequenceVideoSplitSegments).set({ endSeconds: boundaryValue, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, prev.id)).run();
+        tx.update(sequenceVideoSplitSegments).set({ startSeconds: boundaryValue, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, current.id)).run();
       });
     } else {
       if (index === segments.length - 1) throw new Error("The last segment always ends at the source duration and cannot be moved.");
       const current = segments[index];
       const next = segments[index + 1];
-      if (!(value > current.startSeconds + MIN_GAP && value < next.endSeconds - MIN_GAP)) {
-        throw new Error("The new boundary would create a zero-length or overlapping segment.");
-      }
+      const resolution = resolveBoundaryValue({ valueSeconds: value, lowerBoundSeconds: current.startSeconds, upperBoundSeconds: next.endSeconds, fps });
+      if (!resolution.ok) throw new Error("The new boundary would create a zero-length or overlapping segment.");
+      const boundaryValue = resolution.valueSeconds;
       db.transaction((tx) => {
         const [freshRun] = tx.select({ status: sequenceVideoSplitRuns.status }).from(sequenceVideoSplitRuns).where(eq(sequenceVideoSplitRuns.id, runId)).all() as unknown as { status: string }[];
         if (!freshRun || freshRun.status !== "ready") throw new Error("This Split Plan can no longer be edited.");
-        tx.update(sequenceVideoSplitSegments).set({ endSeconds: value, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, current.id)).run();
-        tx.update(sequenceVideoSplitSegments).set({ startSeconds: value, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, next.id)).run();
+        tx.update(sequenceVideoSplitSegments).set({ endSeconds: boundaryValue, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, current.id)).run();
+        tx.update(sequenceVideoSplitSegments).set({ startSeconds: boundaryValue, boundaryProvenance: "manual" as BoundaryProvenance, updatedAt: new Date().toISOString() }).where(eq(sequenceVideoSplitSegments.id, next.id)).run();
       });
     }
 
@@ -403,25 +438,34 @@ export async function adjustSegmentBoundary(formData: FormData): Promise<void> {
 
 // ---- Split: insert a cut at an explicit timestamp inside one segment ----
 
-/** Sub-frame tolerance floor shared by every split entry point (numeric and frame-exact) — never a true zero/negative segment on either side. */
-const SPLIT_MIN_GAP_SECONDS = 0.05;
-
 /**
  * Shared core for both `splitSegmentAt` (raw seconds, manual/VFR-safe) and
  * `splitSegmentAtFrame` (frame-exact, SEQGEN.SPLIT.WORKSPACE.1 Lot B) — both
  * ultimately insert a cut at a server-validated `splitAtSeconds` inside one
  * segment. Kept as one implementation so the two entry points can never
  * silently diverge in DB/thumbnail behavior.
+ *
+ * REVISE (SEQGEN.SPLIT.MINFRAMES.1, Lot A/C) — replaces the old fixed
+ * `SPLIT_MIN_GAP_SECONDS = 0.05` universal guard (12 frames at 240fps) with
+ * `resolveBoundaryValue`: on CFR the requested split point is quantized to
+ * its nearest frame and validated in integer frame-index space, leaving a
+ * cut that results in exactly 1 frame on either side; on VFR/unknown it
+ * stays a strictly-positive high-precision check. `requestedSplitAtSeconds`
+ * is never trusted directly — only `resolution.valueSeconds` (the
+ * server-quantized value) is ever persisted.
  */
-async function performSplitAtSeconds(runId: number, sequenceId: number, segmentId: number, splitAtSeconds: number): Promise<{ warning: string | null }> {
+async function performSplitAtSeconds(runId: number, sequenceId: number, segmentId: number, requestedSplitAtSeconds: number): Promise<{ warning: string | null }> {
   const run = await loadEditableRun(runId, sequenceId);
   const segments = await loadRunSegments(runId);
   const target = segments.find((s) => s.id === segmentId);
   if (!target) throw new Error("Segment not found in this run.");
 
-  if (!(splitAtSeconds > target.startSeconds + SPLIT_MIN_GAP_SECONDS && splitAtSeconds < target.endSeconds - SPLIT_MIN_GAP_SECONDS)) {
+  const fps = resolveRunFps(run);
+  const resolution = resolveBoundaryValue({ valueSeconds: requestedSplitAtSeconds, lowerBoundSeconds: target.startSeconds, upperBoundSeconds: target.endSeconds, fps });
+  if (!resolution.ok) {
     throw new Error("Split point must be strictly inside the segment (not touching either edge).");
   }
+  const splitAtSeconds = resolution.valueSeconds;
 
   const after = segments.filter((s) => s.orderIndex > target.orderIndex);
 
@@ -488,8 +532,11 @@ export async function splitSegmentAt(formData: FormData): Promise<void> {
     const segments = await loadRunSegments(runId);
     const target = segments.find((s) => s.id === segmentId);
     if (!target) throw new Error("Segment not found in this run.");
-    const splitAt = parseStrictBoundedFloat(rawAt, target.startSeconds + SPLIT_MIN_GAP_SECONDS, target.endSeconds - SPLIT_MIN_GAP_SECONDS);
-    if (splitAt === null) throw new Error("Split point must be strictly inside the segment (not touching either edge).");
+    // Only a loose sanity bound here — the actual minimum-gap/frame-exact
+    // policy is applied authoritatively by `performSplitAtSeconds` below
+    // (SEQGEN.SPLIT.MINFRAMES.1), which knows the run's real FPS.
+    const splitAt = parseStrictBoundedFloat(rawAt, target.startSeconds, target.endSeconds);
+    if (splitAt === null) throw new Error("Split point must be a number within the segment's own range.");
 
     const result = await performSplitAtSeconds(runId, sequenceId, segmentId, splitAt);
     warning = result.warning;
@@ -535,12 +582,17 @@ export async function splitSegmentAtFrame(formData: FormData): Promise<void> {
     // The server NEVER trusts a client-supplied timestamp directly — only a
     // frame index, re-derived into seconds through the run's own
     // snapshotted FPS (never the player's/client's own notion of FPS).
+    // SEQGEN.SPLIT.MINFRAMES.1, Lot A — the absolute floor (1 source frame),
+    // never the old fixed `SPLIT_MIN_GAP_SECONDS = 0.05`. `validateFrameSplit`
+    // itself already floors `Math.round(minGapSeconds * fps)` at 1, so
+    // passing exactly 1 frame's worth of seconds here is a no-op on top of
+    // that floor, not a second competing constant.
     const validation = validateFrameSplit({
       frame,
       fps: run.sourceFps ?? NaN,
       segmentStartSeconds: target.startSeconds,
       segmentEndSeconds: target.endSeconds,
-      minGapSeconds: SPLIT_MIN_GAP_SECONDS,
+      minGapSeconds: resolveMinGapSeconds(0, run.sourceFps),
     });
     if (!validation.ok) throw new Error(validation.error);
 
@@ -601,16 +653,21 @@ export async function detectSplitsInSegment(formData: FormData): Promise<void> {
     // Quantizing first and filtering the quantized values means the
     // dedupe/min-gap/edge checks below are evaluated against the EXACT
     // values that will actually be persisted.
+    // SEQGEN.SPLIT.MINFRAMES.1 — `effectiveFps` is authoritative CFR (never
+    // `run.sourceFps` alone); both the quantization above and the filter's
+    // own frame-index comparisons below must agree on the exact same FPS.
+    const effectiveFps = resolveRunFps(run);
     const absoluteCandidates = localCandidates.map((c) => ({
       ...c,
-      timestampSeconds: roundBoundarySeconds(c.timestampSeconds + target.startSeconds, run.sourceFps),
+      timestampSeconds: roundBoundarySeconds(c.timestampSeconds + target.startSeconds, effectiveFps),
     }));
 
     const filtered = filterLocalCandidates({
       candidates: absoluteCandidates,
       segmentStartSeconds: target.startSeconds,
       segmentEndSeconds: target.endSeconds,
-      minGapSeconds: localMinSegmentDuration,
+      minGapSeconds: resolveMinGapSeconds(localMinSegmentDuration, effectiveFps),
+      fps: effectiveFps,
     });
 
     if (!filtered.ok) {

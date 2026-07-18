@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type { SceneCandidate } from "./parseFfmpegSceneOutput";
-import { roundBoundarySeconds } from "./frameTime";
+import { roundBoundarySeconds, resolveMinGapSeconds, isReliableFps, secondsToFrame, frameToSeconds } from "./frameTime";
 
 export type BoundaryProvenance = "scene" | "timing-fallback" | "manual";
 
@@ -39,6 +39,14 @@ export function selectSegmentBoundaries(params: {
   expectedShotDurations: (number | null | undefined)[];
   /** Raw, unfiltered candidates — already deduplicated/sorted is NOT assumed; this function sorts and dedupes defensively. */
   candidates: SceneCandidate[];
+  /**
+   * The user's REQUESTED minimum separation — never used directly. Passed
+   * through `resolveMinGapSeconds(minSegmentDurationSeconds, sourceFps)`
+   * (SEQGEN.SPLIT.MINFRAMES.1, Lot A) to get the actually-enforced minimum:
+   * `0` means "exactly 1 source frame" on CFR (never a bigger fixed
+   * constant), or a high-precision epsilon on VFR/unknown; a positive value
+   * still imposes a deliberately larger minimum.
+   */
   minSegmentDurationSeconds: number;
   /**
    * REVISE (SEQGEN.SPLIT.WORKSPACE.1, Lot D) — the run's probed source FPS,
@@ -111,9 +119,40 @@ export function selectSegmentBoundaries(params: {
   const toleranceFraction = params.candidateSearchToleranceFraction ?? 0.35;
   const searchTolerance = Math.max(0.5, Math.min(avgShotDuration * toleranceFraction, videoDurationSeconds / 4));
 
-  const sortedCandidates = [...params.candidates]
+  // REVISE (SEQGEN.SPLIT.MINFRAMES.1, Lot B) — on CFR, every raw candidate is
+  // quantized to its nearest frame FIRST, before any matching/clamping ever
+  // reads its timestamp. Filtering first and quantizing survivors afterward
+  // (the old order) could silently move a boundary onto the same frame as a
+  // neighbor or an edge, a collision the raw-timestamp matching never saw —
+  // exactly the same reasoning already applied to local re-detection
+  // (`detectSplitsInSegment`). On VFR/unknown, `round` is the unchanged
+  // high-precision fallback and candidates are left as-is.
+  const reliable = isReliableFps(sourceFps);
+  const quantizedCandidates = params.candidates
     .filter((c) => Number.isFinite(c.timestampSeconds) && c.timestampSeconds >= 0 && c.timestampSeconds <= videoDurationSeconds)
-    .sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+    .map((c) => (reliable ? { ...c, timestampSeconds: round(c.timestampSeconds) } : c));
+
+  let sortedCandidates: SceneCandidate[];
+  if (reliable) {
+    // REVISE (Codex round 1) — two distinct raw FFmpeg timestamps quantizing
+    // onto the SAME frame must become exactly one candidate here, before
+    // matching ever runs — otherwise both could independently "win" two
+    // different target boundaries as fabricated, duplicate `scene`
+    // detections. Deterministic keep rule: highest `score` for that frame,
+    // then first-in-input-order on a tie (never an arbitrary/unstable pick).
+    const fps = sourceFps as number;
+    const byFrame = new Map<number, SceneCandidate>();
+    for (const c of quantizedCandidates) {
+      const frame = secondsToFrame(c.timestampSeconds, fps);
+      const existing = byFrame.get(frame);
+      if (!existing || (c.score ?? -Infinity) > (existing.score ?? -Infinity)) {
+        byFrame.set(frame, c);
+      }
+    }
+    sortedCandidates = [...byFrame.values()].sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+  } else {
+    sortedCandidates = [...quantizedCandidates].sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+  }
 
   const usedCandidateIndexes = new Set<number>();
   const chosenBoundaries: { position: number; confidence: number | null; provenance: BoundaryProvenance }[] = [];
@@ -142,29 +181,61 @@ export function selectSegmentBoundaries(params: {
   // pass followed by a backward pass, so a local squeeze never cascades
   // into an out-of-range or non-increasing final boundary. This is a
   // best-effort clamp: when the video is genuinely too short for N segments
-  // at the requested minimum, the result may compress below
-  // `minSegmentDurationSeconds` rather than ever crash or go out of bounds
-  // — the caller/UI surfaces the resulting low segment count as a mismatch
-  // for the user to resolve, exactly as the ticket requires ("un ecart...
-  // n'est pas une erreur fatale").
+  // at the effective minimum, the result may compress below it rather than
+  // ever crash or go out of bounds — the caller/UI surfaces the resulting
+  // low segment count as a mismatch for the user to resolve, exactly as the
+  // ticket requires ("un ecart... n'est pas une erreur fatale").
+  //
+  // REVISE (SEQGEN.SPLIT.MINFRAMES.1, Lot A/B) — the enforced minimum is
+  // `resolveMinGapSeconds(minSegmentDurationSeconds, sourceFps)`, never the
+  // raw requested value: on CFR this floors at exactly 1 frame and every
+  // comparison below happens in integer frame-index space (never
+  // approximate floats), so a cut that legitimately leaves exactly 1 frame
+  // on a side is preserved rather than squeezed away by float rounding.
+  const effectiveMinGapSeconds = resolveMinGapSeconds(minSegmentDurationSeconds, reliable ? sourceFps : null);
   const positions = chosenBoundaries.map((b) => b.position);
-  for (let i = 0; i < positions.length; i++) {
-    const prev = i === 0 ? 0 : positions[i - 1];
-    positions[i] = Math.max(positions[i], prev + minSegmentDurationSeconds);
-  }
-  for (let i = positions.length - 1; i >= 0; i--) {
-    const next = i === positions.length - 1 ? videoDurationSeconds : positions[i + 1];
-    positions[i] = Math.min(positions[i], next - minSegmentDurationSeconds);
-  }
-  // Final safety clamp into [0, videoDurationSeconds] and re-enforce
-  // monotonicity forward once more (the backward pass above can only ever
-  // shrink values, so this cannot undo the forward pass's ordering, but a
-  // pathologically short video can still push a position below 0).
-  for (let i = 0; i < positions.length; i++) {
-    positions[i] = Math.max(0, Math.min(positions[i], videoDurationSeconds));
-  }
-  for (let i = 1; i < positions.length; i++) {
-    if (positions[i] < positions[i - 1]) positions[i] = positions[i - 1];
+
+  if (reliable) {
+    const fps = sourceFps as number;
+    const gapFrames = secondsToFrame(effectiveMinGapSeconds, fps);
+    const durationFrame = secondsToFrame(videoDurationSeconds, fps);
+    const posFrames = positions.map((p) => secondsToFrame(p, fps));
+    for (let i = 0; i < posFrames.length; i++) {
+      const prev = i === 0 ? 0 : posFrames[i - 1];
+      posFrames[i] = Math.max(posFrames[i], prev + gapFrames);
+    }
+    for (let i = posFrames.length - 1; i >= 0; i--) {
+      const next = i === posFrames.length - 1 ? durationFrame : posFrames[i + 1];
+      posFrames[i] = Math.min(posFrames[i], next - gapFrames);
+    }
+    for (let i = 0; i < posFrames.length; i++) {
+      posFrames[i] = Math.max(0, Math.min(posFrames[i], durationFrame));
+    }
+    for (let i = 1; i < posFrames.length; i++) {
+      if (posFrames[i] < posFrames[i - 1]) posFrames[i] = posFrames[i - 1];
+    }
+    for (let i = 0; i < positions.length; i++) {
+      positions[i] = frameToSeconds(posFrames[i], fps);
+    }
+  } else {
+    for (let i = 0; i < positions.length; i++) {
+      const prev = i === 0 ? 0 : positions[i - 1];
+      positions[i] = Math.max(positions[i], prev + effectiveMinGapSeconds);
+    }
+    for (let i = positions.length - 1; i >= 0; i--) {
+      const next = i === positions.length - 1 ? videoDurationSeconds : positions[i + 1];
+      positions[i] = Math.min(positions[i], next - effectiveMinGapSeconds);
+    }
+    // Final safety clamp into [0, videoDurationSeconds] and re-enforce
+    // monotonicity forward once more (the backward pass above can only
+    // ever shrink values, so this cannot undo the forward pass's ordering,
+    // but a pathologically short video can still push a position below 0).
+    for (let i = 0; i < positions.length; i++) {
+      positions[i] = Math.max(0, Math.min(positions[i], videoDurationSeconds));
+    }
+    for (let i = 1; i < positions.length; i++) {
+      if (positions[i] < positions[i - 1]) positions[i] = positions[i - 1];
+    }
   }
 
   // REVISE (SEQGEN.SPLIT.WORKSPACE.1-FIX1) — only the INTERNAL cut

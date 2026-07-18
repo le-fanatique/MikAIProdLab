@@ -322,7 +322,7 @@ export default function SplitWorkspaceClient({
                           <label className="text-[10px] text-[#4b5158]">Start</label>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             name="valueSeconds"
                             defaultValue={s.startSeconds}
                             disabled={i === 0}
@@ -346,7 +346,7 @@ export default function SplitWorkspaceClient({
                           <label className="text-[10px] text-[#4b5158]">End</label>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             name="valueSeconds"
                             defaultValue={s.endSeconds}
                             disabled={i === segments.length - 1}
@@ -369,7 +369,7 @@ export default function SplitWorkspaceClient({
                           <label className="text-[10px] text-[#4b5158]">Split at</label>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             name="splitAtSeconds"
                             placeholder={fmtSeconds((s.startSeconds + s.endSeconds) / 2)}
                             className="w-20 bg-[#0d0e10] border border-[#2c3035] rounded px-1.5 py-0.5 text-[10px] text-[#e7e9ec]"

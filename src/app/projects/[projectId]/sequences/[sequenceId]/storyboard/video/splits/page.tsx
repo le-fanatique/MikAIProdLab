@@ -12,7 +12,7 @@ import { refImageUrl } from "@/lib/refImageUrl";
 import { startSequenceVideoSplitDetection } from "@/actions/sequenceVideoSplit";
 import { pushSplitPlanToShots } from "@/actions/sequenceVideoPush";
 import SplitWorkspaceClient from "@/components/sequenceVideoSplit/SplitWorkspaceClient";
-import { parseFrameRateModeFromParamsJson } from "@/lib/sequenceVideoSplit/detectVideoSplits";
+import { parseFrameRateModeFromParamsJson, parseMinSegmentDurationEffectiveSecondsFromParamsJson } from "@/lib/sequenceVideoSplit/detectVideoSplits";
 import {
   DEFAULT_SCENE_THRESHOLD,
   MIN_SCENE_THRESHOLD,
@@ -37,6 +37,19 @@ function sp(raw: string | string[] | undefined): string | null {
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * SEQGEN.SPLIT.MINFRAMES.1, Lot B — "requested vs effective" minimum gap
+ * display. A legacy run's `paramsJson` has no `minSegmentDurationEffectiveSeconds`
+ * key (backward-compatible: `parseMinSegmentDurationEffectiveSecondsFromParamsJson`
+ * returns `null`), so nothing extra is shown for those runs rather than a
+ * fabricated value.
+ */
+function fmtEffectiveMinGap(paramsJson: string | null): string {
+  const effective = parseMinSegmentDurationEffectiveSecondsFromParamsJson(paramsJson);
+  if (effective === null) return "";
+  return ` (effective ${effective.toFixed(4)}s)`;
 }
 
 function statusLabel(status: string): { label: string; className: string } {
@@ -326,7 +339,8 @@ async function SplitWorkspaceBody({
           <p className="text-xs text-[#a4abb2]">Detection is still running for this run. Reload this page in a moment.</p>
         )}
         <p className="text-[10px] text-[#6e767d] mt-2">
-          Threshold {run.sceneThreshold} · Min duration {run.minSegmentDurationSeconds}s
+          Threshold {run.sceneThreshold} · Min duration requested {run.minSegmentDurationSeconds}s
+          {fmtEffectiveMinGap(run.paramsJson)}
         </p>
       </Card>
     );
@@ -355,8 +369,9 @@ async function SplitWorkspaceBody({
             <span className={`text-[9px] uppercase tracking-wider border rounded px-1.5 py-px ${badge.className}`}>{badge.label}</span>
           </div>
           <p className="text-[10px] text-[#a4abb2]">
-            Threshold {run.sceneThreshold} · Min duration {run.minSegmentDurationSeconds}s · {rawCount} raw cut candidate(s) ·{" "}
-            {segments.length} proposed segment(s) · {run.expectedShotCount} expected Shot(s)
+            Threshold {run.sceneThreshold} · Min duration requested {run.minSegmentDurationSeconds}s
+            {fmtEffectiveMinGap(run.paramsJson)} · {rawCount} raw cut candidate(s) · {segments.length} proposed segment(s) ·{" "}
+            {run.expectedShotCount} expected Shot(s)
           </p>
         </div>
         {diverges && (
