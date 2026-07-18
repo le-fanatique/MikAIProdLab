@@ -62,7 +62,12 @@ export async function extractFirstFrame(params: { clipAbsolutePath: string; shot
 
   const attemptUuid = randomUUID();
   const { relative, absolute } = firstFrameImagePathFor(shotId, splitSegmentId, attemptUuid);
-  const tmpAbsolute = `${absolute}.tmp`;
+  // REVISE (SEQGEN.PUSH.2-FIX1) — the temp path keeps the `.png` suffix
+  // (`<name>.png.tmp.png`, not `<name>.png.tmp`) so it stays recognizable
+  // as a PNG target to any extension-based inference, on top of (never
+  // instead of) `buildFirstFrameArgs`'s own explicit `-c:v png`. The final
+  // rename target is unchanged.
+  const tmpAbsolute = `${absolute}.tmp.png`;
 
   try {
     await fs.mkdir(path.dirname(absolute), { recursive: true });

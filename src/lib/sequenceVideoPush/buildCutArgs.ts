@@ -75,9 +75,19 @@ export function clipDurationToleranceSeconds(sourceFps: number | null | undefine
  * itself already starts exactly at the segment's own boundary, so frame 1 of
  * the clip IS the segment's first frame; seeking again would only add a
  * second, unnecessary source of potential drift/black-frame artifacts.
+ *
+ * REVISE (SEQGEN.PUSH.2-FIX1) — `-c:v png` is explicit and mandatory here,
+ * never left to the `image2` muxer's own extension-based guess: the
+ * temporary output path this is written to has historically ended in
+ * `.tmp` (no recognizable image extension), which let FFmpeg silently fall
+ * back to a different still-image codec (observed: MJPEG) — a real, valid
+ * image that nonetheless fails the PNG-signature validation downstream.
+ * Forcing the codec here means the output is a genuine PNG regardless of
+ * what extension the destination path happens to have; never a silent
+ * "encode as JPEG, then just rename it to .png" substitution.
  */
 export function buildFirstFrameArgs(params: { clipAbsolutePath: string; outputAbsolutePath: string }): string[] {
-  return ["-y", "-i", params.clipAbsolutePath, "-frames:v", "1", "-f", "image2", params.outputAbsolutePath];
+  return ["-y", "-i", params.clipAbsolutePath, "-frames:v", "1", "-c:v", "png", "-f", "image2", params.outputAbsolutePath];
 }
 
 export type ClipDurationCheck = { ok: true } | { ok: false; error: string };
