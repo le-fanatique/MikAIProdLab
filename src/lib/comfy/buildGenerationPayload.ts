@@ -19,6 +19,7 @@ import type { WorkflowInput } from "@/lib/comfy/parseWorkflow";
 import {
   mapWorkflowInputs,
   type RuntimeImageOption,
+  type RuntimeVideoOption,
   type WorkflowInputMapping,
 } from "@/lib/comfy/mapWorkflowInputs";
 import {
@@ -134,8 +135,12 @@ export type BuildGenerationPayloadParams = {
   inputs: WorkflowInput[];
   suggestedText: string;
   availableImages: RuntimeImageOption[];
+  /** SHOT.VIDEO.LIBRARY.1, Lot C — additive; empty/omitted for every existing caller (none has a video-input workflow to feed today). */
+  availableVideos?: RuntimeVideoOption[];
   textOverrideByNodeId?: Record<string, string>;
   selectedImageByNodeId?: Record<string, string>;
+  /** SHOT.VIDEO.LIBRARY.1, Lot C — mirrors `selectedImageByNodeId`. */
+  selectedVideoByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
   /** Resolved, in the exact order the Dynamic Batch should clone them. Empty/omitted when the workflow has no Dynamic Batch node, or none are selected yet. */
   batchSelectedImages?: DynamicBatchExpansionImage[];
@@ -161,7 +166,8 @@ export function buildGenerationPayload(
     params.inputs,
     params.suggestedText,
     params.availableImages,
-    params.textOverrideByNodeId
+    params.textOverrideByNodeId,
+    params.availableVideos ?? []
   );
 
   const mode = resolveImageExpansionMode(params.workflowJson);
@@ -205,6 +211,7 @@ export function buildGenerationPayload(
 
   const patch = patchWorkflowPayload(expansion.workflowJson, displayMappings, {
     selectedImageByNodeId: params.selectedImageByNodeId,
+    selectedVideoByNodeId: params.selectedVideoByNodeId,
     scalarOverrideByNodeId: params.scalarOverrideByNodeId,
   });
 

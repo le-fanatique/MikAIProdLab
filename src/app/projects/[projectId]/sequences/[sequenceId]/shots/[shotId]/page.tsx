@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { refImageUrl } from "@/lib/refImageUrl";
-import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, shotVideos, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -35,7 +35,7 @@ import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import ShotNarrativeContextEditor from "@/components/ShotNarrativeContextEditor";
-import ShotVideoCandidatesPanel, { type ShotVideoCandidateRow } from "@/components/sequenceVideoPush/ShotVideoCandidatesPanel";
+import ShotVideoLibraryPanel, { type ShotVideoLibraryRow } from "@/components/shotVideoLibrary/ShotVideoLibraryPanel";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -52,7 +52,7 @@ function SectionLabel({ label }: { label: string }) {
   );
 }
 
-/** Fixed `timeZone: "UTC"` — this Server Component's output is hydrated by a Client Component (`ShotVideoCandidatesPanel`); without an explicit zone, `toLocaleString` would render differently on the server vs. a browser in a different local time zone, causing a hydration mismatch. */
+/** Fixed `timeZone: "UTC"` — this Server Component's output is hydrated by a Client Component (`ShotVideoLibraryPanel`); without an explicit zone, `toLocaleString` would render differently on the server vs. a browser in a different local time zone, causing a hydration mismatch. */
 function formatCandidateDate(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" });
 }
@@ -91,6 +91,11 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const candidateError = sp("candidateError");
   const candidateApproved = sp("candidateApproved");
   const candidateDeleted = sp("candidateDeleted");
+  const libraryError = sp("libraryError");
+  const libraryApproved = sp("libraryApproved");
+  const libraryDeleted = sp("libraryDeleted");
+  const librarySaved = sp("librarySaved");
+  const libraryAlreadySaved = sp("libraryAlreadySaved");
   const thumbnailError = sp("thumbnailError");
   const thumbnailSet = sp("thumbnailSet");
   const referenceImageError = sp("error");
@@ -111,6 +116,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const forceSelector = sp("selector") === "1";
 
   const selectedImageByNodeId: Record<string, string> = {};
+  const selectedVideoByNodeId: Record<string, string> = {};
   const scalarValueByNodeId: Record<string, string> = {};
   const textOverrideByNodeId: Record<string, string> = {};
 
@@ -118,6 +124,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
     if (!strValue) continue;
     if (key.startsWith("imageNode_")) selectedImageByNodeId[key.slice("imageNode_".length)] = strValue;
+    else if (key.startsWith("videoNode_")) selectedVideoByNodeId[key.slice("videoNode_".length)] = strValue;
     else if (key.startsWith("scalarNode_")) scalarValueByNodeId[key.slice("scalarNode_".length)] = strValue;
     else if (key.startsWith("textNode_")) textOverrideByNodeId[key.slice("textNode_".length)] = strValue;
   }
@@ -553,49 +560,51 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     }
   }
 
-  // ── Sequence Video Candidates (SEQGEN.PUSH.1) ───────────────────────────────
-  const rawCandidates = await db
+  // ── Shot Videos (SHOT.VIDEO.LIBRARY.1) — unified, durable library ───────────
+  const libraryRows = await db
     .select()
-    .from(shotVideoCandidates)
-    .where(eq(shotVideoCandidates.shotId, shid))
-    .orderBy(desc(shotVideoCandidates.createdAt));
+    .from(shotVideos)
+    .where(eq(shotVideos.shotId, shid))
+    .orderBy(desc(shotVideos.createdAt));
 
-  const candidateRuns =
-    rawCandidates.length > 0
+  const libraryCandidateIds = libraryRows.map((r) => r.sourceCandidateId).filter((id): id is number => id !== null);
+  const libraryCandidates =
+    libraryCandidateIds.length > 0
+      ? await db.select().from(shotVideoCandidates).where(inArray(shotVideoCandidates.id, libraryCandidateIds))
+      : [];
+  const candidateById = new Map(libraryCandidates.map((c) => [c.id, c]));
+
+  const librarySplitRunIds = [...new Set(libraryCandidates.map((c) => c.splitRunId))];
+  const libraryRuns =
+    librarySplitRunIds.length > 0
       ? await db
           .select({ id: sequenceVideoSplitRuns.id, sequenceVideoDraftId: sequenceVideoSplitRuns.sequenceVideoDraftId })
           .from(sequenceVideoSplitRuns)
-          .where(
-            inArray(
-              sequenceVideoSplitRuns.id,
-              [...new Set(rawCandidates.map((c) => c.splitRunId))]
-            )
-          )
+          .where(inArray(sequenceVideoSplitRuns.id, librarySplitRunIds))
       : [];
-  const draftIdByRunId = new Map(candidateRuns.map((r) => [r.id, r.sequenceVideoDraftId]));
+  const draftIdByRunId = new Map(libraryRuns.map((r) => [r.id, r.sequenceVideoDraftId]));
 
-  const candidateSegments =
-    rawCandidates.length > 0
-      ? await db
-          .select({ id: sequenceVideoSplitSegments.id, orderIndex: sequenceVideoSplitSegments.orderIndex })
-          .from(sequenceVideoSplitSegments)
-          .where(inArray(sequenceVideoSplitSegments.id, rawCandidates.map((c) => c.splitSegmentId)))
+  const librarySegmentIds = libraryCandidates.map((c) => c.splitSegmentId);
+  const librarySegments =
+    librarySegmentIds.length > 0
+      ? await db.select({ id: sequenceVideoSplitSegments.id, orderIndex: sequenceVideoSplitSegments.orderIndex }).from(sequenceVideoSplitSegments).where(inArray(sequenceVideoSplitSegments.id, librarySegmentIds))
       : [];
-  const orderIndexBySegmentId = new Map(candidateSegments.map((s) => [s.id, s.orderIndex]));
+  const orderIndexBySegmentId = new Map(librarySegments.map((s) => [s.id, s.orderIndex]));
 
   const shotDetailReturnTo = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
-  const candidateRows: ShotVideoCandidateRow[] = rawCandidates.map((c) => {
-    const draftId = draftIdByRunId.get(c.splitRunId);
+  const libraryEntryRows: ShotVideoLibraryRow[] = libraryRows.map((row) => {
+    const candidate = row.sourceCandidateId !== null ? candidateById.get(row.sourceCandidateId) : undefined;
+    const draftId = candidate ? draftIdByRunId.get(candidate.splitRunId) : undefined;
     return {
-      id: c.id,
-      clipUrl: refImageUrl(c.clipPath),
-      sourceStartSeconds: c.sourceStartSeconds,
-      sourceEndSeconds: c.sourceEndSeconds,
-      createdAtLabel: formatCandidateDate(c.createdAt),
-      splitRunId: c.splitRunId,
-      splitSegmentOrderIndex: orderIndexBySegmentId.get(c.splitSegmentId) ?? null,
-      splitWorkspaceHref: draftId != null ? `/projects/${pid}/sequences/${sid}/storyboard/video/splits?sequenceVideoDraftId=${draftId}&splitRunId=${c.splitRunId}` : null,
-      isApproved: shot.approvedVideoPath === c.clipPath,
+      id: row.id,
+      videoUrl: refImageUrl(row.videoPath),
+      source: row.source,
+      durationSeconds: row.durationSeconds,
+      createdAtLabel: formatCandidateDate(row.createdAt),
+      isApproved: shot.approvedVideoPath === row.videoPath,
+      splitRunId: candidate?.splitRunId ?? null,
+      splitSegmentOrderIndex: candidate ? orderIndexBySegmentId.get(candidate.splitSegmentId) ?? null : null,
+      splitWorkspaceHref: candidate && draftId != null ? `/projects/${pid}/sequences/${sid}/storyboard/video/splits?sequenceVideoDraftId=${draftId}&splitRunId=${candidate.splitRunId}` : null,
     };
   });
 
@@ -684,13 +693,24 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           </Card>
         )}
 
-        {/* ── Sequence Video Candidates ─────────────────────────────── */}
-        {candidateRows.length > 0 && (
-          <Card title={`Sequence Video Candidates (${candidateRows.length})`}>
-            {candidateError && <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{candidateError}</p>}
-            {candidateApproved && <p className="mb-3 text-xs text-[#6b9e72]">Candidate approved as Shot output.</p>}
-            {candidateDeleted && <p className="mb-3 text-xs text-[#6b9e72]">Candidate deleted.</p>}
-            <ShotVideoCandidatesPanel candidates={candidateRows} shotId={shid} sequenceId={sid} projectId={pid} returnTo={shotDetailReturnTo} />
+        {/* ── Shot Videos (SHOT.VIDEO.LIBRARY.1) ────────────────────── */}
+        {libraryEntryRows.length > 0 && (
+          <Card title={`Shot Videos (${libraryEntryRows.length})`}>
+            {(candidateError || libraryError) && (
+              <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{candidateError ?? libraryError}</p>
+            )}
+            {(candidateApproved || libraryApproved) && <p className="mb-3 text-xs text-[#6b9e72]">Video approved as Shot output.</p>}
+            {(candidateDeleted || libraryDeleted) && <p className="mb-3 text-xs text-[#6b9e72]">Video deleted.</p>}
+            {librarySaved && <p className="mb-3 text-xs text-[#6b9e72]">Video saved to the Shot Video Library.</p>}
+            {libraryAlreadySaved && <p className="mb-3 text-xs text-[#a4abb2]">This output was already saved to the Shot Video Library.</p>}
+            <ShotVideoLibraryPanel
+              entries={libraryEntryRows}
+              shotId={shid}
+              sequenceId={sid}
+              projectId={pid}
+              returnTo={shotDetailReturnTo}
+              openReelExportHref={`/api/projects/${pid}/sequences/${sid}/shots/${shid}/open-in-openreel`}
+            />
           </Card>
         )}
 
@@ -999,6 +1019,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               basePath={detailBaseUrl}
               currentSearchParams={currentSearchParams}
               selectedImageByNodeId={selectedImageByNodeId}
+              selectedVideoByNodeId={selectedVideoByNodeId}
               scalarValueByNodeId={scalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
               generationError={generationError}
@@ -1007,6 +1028,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               attachError={attachError ?? null}
               approvedVideo={approvedVideo === "1"}
               approveError={approveError ?? null}
+              librarySaved={librarySaved === "1"}
+              libraryAlreadySaved={libraryAlreadySaved === "1"}
+              libraryError={libraryError ?? null}
               shotPromptSaved={shotPromptSaved === "1"}
               shotPromptError={shotPromptError ?? null}
               storyboardDraftSaved={storyboardDraftSaved === "1"}

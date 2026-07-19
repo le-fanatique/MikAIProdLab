@@ -4,6 +4,7 @@ import type { WorkflowInputKind } from "@/lib/comfy/parseWorkflow";
 export type WorkflowPayloadPatchKind =
   | "text"
   | "image"
+  | "video"
   | "integer"
   | "float"
   | "boolean"
@@ -13,6 +14,8 @@ export type WorkflowPayloadPatchKind =
 
 export type PatchWorkflowPayloadOptions = {
   selectedImageByNodeId?: Record<string, string>;
+  /** SHOT.VIDEO.LIBRARY.1, Lot C — keyed by `nodeId`, value is the selected `RuntimeVideoOption.shotVideoId` (as a string), mirroring `selectedImageByNodeId`'s exact convention. */
+  selectedVideoByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
 };
 
@@ -140,6 +143,7 @@ export function patchWorkflowPayload(
   }
 
   let hasImagePatch = false;
+  let hasVideoPatch = false;
 
   for (const mapping of mappings) {
     const { nodeId } = mapping.input;
@@ -277,11 +281,75 @@ export function patchWorkflowPayload(
           : `Image '${selectedImage.label}' used for preview on node ${nodeId} (first available). Upload to the ComfyUI input folder before running.`
       );
     }
+
+    // SHOT.VIDEO.LIBRARY.1, Lot C — structurally parallel to the "image"
+    // branch above, never a second patcher. As of this ticket no real
+    // workflow reaches this branch (see `classifyInputKind` in
+    // parseWorkflow.ts and claude_report.md for the full audit); it exists
+    // so a future real video-input node is patched correctly the day one
+    // exists, without inventing a second mapping pass then.
+    if (mapping.mappingKind === "video") {
+      if (!("video" in inputs)) {
+        warnings.push(
+          `Video input '${label}' (node ${nodeId}): no compatible video field found.`
+        );
+        continue;
+      }
+
+      if (mapping.availableVideos.length === 0) {
+        warnings.push(
+          `Video input '${label}' (node ${nodeId}): no Shot Videos available for this shot.`
+        );
+        continue;
+      }
+
+      const requestedVideoId = options.selectedVideoByNodeId?.[nodeId];
+      let selectedVideo = mapping.availableVideos[0];
+      let explicitSelection = false;
+
+      if (requestedVideoId) {
+        const found = mapping.availableVideos.find((v) => String(v.shotVideoId) === requestedVideoId);
+        if (found) {
+          selectedVideo = found;
+          explicitSelection = true;
+        } else {
+          warnings.push(
+            `Selected video '${requestedVideoId}' not found for video input '${label}' (node ${nodeId}). Using first available video.`
+          );
+        }
+      }
+
+      const previousValue = inputs["video"];
+      const nextValue = selectedVideo.videoPath;
+      inputs["video"] = nextValue;
+      hasVideoPatch = true;
+
+      patches.push({
+        nodeId,
+        label,
+        kind: "video",
+        inputKey: "video",
+        previousValue,
+        nextValue,
+      });
+
+      warnings.push(
+        explicitSelection
+          ? `Video '${selectedVideo.label}' selected for preview on node ${nodeId}. Upload to the ComfyUI input folder before running.`
+          : `Video '${selectedVideo.label}' used for preview on node ${nodeId} (first available). Upload to the ComfyUI input folder before running.`
+      );
+    }
   }
 
   if (hasImagePatch) {
     warnings.push(
       "Image paths in this preview are local app paths. They must be copied or uploaded to the ComfyUI input folder before running this workflow."
+    );
+  }
+
+  if (hasVideoPatch) {
+    warnings.push(
+      "Video paths in this preview are local app paths. No confirmed ComfyUI upload endpoint exists for a video input node yet (unlike /upload/image) — this must be verified against a real workflow/ComfyUI instance before this warning is relied on to mean the same thing as it does for images."
     );
   }
 

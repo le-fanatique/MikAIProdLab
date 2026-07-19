@@ -35,13 +35,30 @@ export type MikAIEditorialExportV1 = {
     durationSeconds: number;
   };
   /**
+   * SHOT.VIDEO.LIBRARY.1, Lot D — additive. Absent/undefined means the
+   * established full-sequence-timeline export (unchanged, current
+   * behavior). `"shot-videos"` marks a Shot-local, read-only, multi-video
+   * export built by `buildShotVideoLibraryExport`
+   * (src/lib/editorial/shotVideoExport.ts) — NOT backed by real
+   * `sequence_editorial_items` rows, so its `tracks[].items[].id` values
+   * are `shot_videos.id`, never an editorial item id. The OpenReel sidecar
+   * MUST refuse any write-back action (Validate/Apply Patch, Publish
+   * Sequence Result, Push Duration, Insert Shot) for a project tagged with
+   * this mode — see the sidecar's own `openReelToMikaiPatch.ts` guard.
+   */
+  sourceMode?: "shot-videos";
+  /** SHOT.VIDEO.LIBRARY.1, Lot D — present only when `sourceMode === "shot-videos"`; every item in every track then belongs to this one Shot. */
+  shot?: { id: number; title: string };
+  /**
    * Structural fingerprint of the sequence's editorial state at export
    * time (OPENREEL.CONFLICT.1) — additive field, existing consumers that
    * don't know about it are unaffected. A patch built from this export
    * should echo it back so MikAI can detect staleness before applying
    * editorial decisions. See src/lib/editorial/editorialSnapshot.ts.
+   * Omitted (never fabricated) for a `sourceMode: "shot-videos"` export,
+   * which has no real sequence-timeline structure to fingerprint.
    */
-  editorialSnapshot: EditorialSnapshot;
+  editorialSnapshot?: EditorialSnapshot;
   tracks: Array<{
     trackIndex: number;
     items: Array<{

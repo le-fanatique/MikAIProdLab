@@ -664,6 +664,86 @@ export type ShotVideoCandidate = typeof shotVideoCandidates.$inferSelect;
 export type NewShotVideoCandidate = typeof shotVideoCandidates.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// Shot Videos (SHOT.VIDEO.LIBRARY.1) — a Shot's durable, unified, reusable
+// video library: every video a Shot has ever produced/saved, regardless of
+// whether it is currently `shots.approvedVideoPath`. `shots.approvedVideoPath`
+// remains the single source of truth for which video is "the" approved one
+// — a row here becomes the approved one ONLY by equality
+// (`shots.approvedVideoPath === videoPath`), exactly mirroring
+// `shot_video_candidates`'s own established convention. Adding a row here
+// NEVER approves it automatically.
+//
+// Two sources, deliberately not a duplicated file-owning model:
+//   - "generation": this row OWNS its own durable file
+//     (`uploads/shot-videos/shot-<id>/<uuid>.<ext>`, the same convention
+//     `approveVideoOutput` already used pre-ticket), copied once from a
+//     `generation_jobs.outputPath` and never re-copied. `generationJobId`
+//     is the provenance pointer — nullable because the source job may since
+//     have been deleted (a runtime log, never required for the durable copy
+//     to remain valid) or, for backfilled legacy `approvedVideoPath` rows,
+//     never reconstructible at all.
+//   - "sequence_split": this row NEVER owns a file — it mirrors an existing
+//     `shot_video_candidates` row (the established, hardened, single owner
+//     of that clip's file and its full Split Run/Segment provenance chain).
+//     `sourceCandidateId` is NOT NULL for this source and is UNIQUE: exactly
+//     one library row per candidate, so a re-push (already idempotent on
+//     `shot_video_candidates` via its own unique `splitSegmentId`) can never
+//     fan out into two library rows either. `onDelete: "cascade"` on
+//     `sourceCandidateId` — deleting the candidate (via the existing,
+//     unchanged `deleteShotVideoCandidate`, which already refuses an
+//     approved candidate and quarantines its file) deletes this mirror row
+//     in the very same transaction; there is never a library row left
+//     pointing at a file that action has already removed.
+//
+// `videoPath` is UNIQUE across the whole table — the two sources can never
+// coincidentally (or through a retried operation) register the same durable
+// file twice.
+// ---------------------------------------------------------------------------
+
+export const shotVideos = sqliteTable(
+  "shot_videos",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    // REVISE (round 1, finding 4) — deliberately NO `onDelete` action
+    // (defaults to RESTRICT under `PRAGMA foreign_keys=ON`), NOT cascade:
+    // mirrors `shot_video_candidates.shotId`'s own established convention
+    // exactly, so this table is protected against EVERY path that could
+    // delete a Shot row — not just `deleteShot` itself, but also a cascaded
+    // delete from removing the Shot's own parent Sequence
+    // (`sequences.id -> shots.sequenceId` IS cascade). `deleteShot`
+    // (src/actions/shots.ts) is the explicit, atomic, user-facing guard;
+    // this FK is the fail-safe that turns any path that bypasses it into a
+    // clean, loud FK error instead of a silently orphaned durable file.
+    shotId: int("shot_id")
+      .notNull()
+      .references(() => shots.id),
+    source: text("source", { enum: ["generation", "sequence_split"] }).notNull(),
+    videoPath: text("video_path").notNull(),
+    /** Only ever set when actually probed (e.g. a Split segment's known exact boundaries) — never a guessed/derived value. Null is a legitimate, honestly-unknown state. */
+    durationSeconds: real("duration_seconds"),
+    /** Set only for source="generation". Nullable — see header comment. UNIQUE (nullable-safe: SQLite treats NULLs as distinct) — the DB itself, not just an app-level SELECT-before-INSERT, is what actually closes the concurrent-double-save race (REVISE round 1, finding 2): two simultaneous saves of the same job can now only ever leave one committed row, never two. */
+    generationJobId: int("generation_job_id").references(() => generationJobs.id, { onDelete: "set null" }),
+    /** Set only for source="sequence_split", and unique. See header comment. */
+    sourceCandidateId: int("source_candidate_id").references(() => shotVideoCandidates.id, { onDelete: "cascade" }),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    unique("shot_videos_video_path_unique").on(table.videoPath),
+    unique("shot_videos_source_candidate_id_unique").on(table.sourceCandidateId),
+    unique("shot_videos_generation_job_id_unique").on(table.generationJobId),
+    index("shot_videos_shot_id_idx").on(table.shotId),
+  ]
+);
+
+export type ShotVideo = typeof shotVideos.$inferSelect;
+export type NewShotVideo = typeof shotVideos.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // Shot Storyboard thumbnail selection (SEQGEN.PUSH.2) — at most one explicit,
 // durable thumbnail choice per Shot, always a `shot_reference_images` row
 // (never a `storyboard_images` draft — an approved draft is a content

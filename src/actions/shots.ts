@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { shots, sequences, sequenceEditorialItems, shotVideoCandidates } from "@/db/schema";
+import { shots, sequences, sequenceEditorialItems, shotVideoCandidates, shotVideos } from "@/db/schema";
 import { eq, max, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -190,7 +190,19 @@ export async function deleteShot(
   // delete commits first (the push's own insert then correctly fails its
   // FK constraint inside ITS OWN transaction and reports a clean error via
   // its existing catch path) — never a raw, unhandled FK exception.
+  // SHOT.VIDEO.LIBRARY.1 (REVISE round 1, finding 4) — `shot_videos.shotId`
+  // uses `onDelete: "cascade"` (see schema.ts's own comment on why: that
+  // table's scope explicitly excluded touching this file). Left unguarded,
+  // deleting a Shot whose ONLY video is a "generation"-sourced library row
+  // (no `shot_video_candidates` row at all, so the check below would miss
+  // it) would cascade-delete the DB row while leaving its durable file on
+  // disk permanently orphaned — the exact silent-orphan the ticket forbids.
+  // Blocked here on ANY `shot_videos` row, not just "generation" ones: a
+  // "sequence_split" row already implies a live candidate row that the
+  // check below also catches, so this is a deliberately simple superset
+  // rather than two narrower checks that must be kept in sync by hand.
   let blockedByCandidates = false;
+  let blockedByLibraryVideos = false;
   try {
     db.transaction((tx) => {
       const existingCandidates = tx.select({ id: shotVideoCandidates.id }).from(shotVideoCandidates).where(eq(shotVideoCandidates.shotId, id)).all();
@@ -198,11 +210,19 @@ export async function deleteShot(
         blockedByCandidates = true;
         throw new Error("SHOT_HAS_VIDEO_CANDIDATES");
       }
+      const existingLibraryVideos = tx.select({ id: shotVideos.id }).from(shotVideos).where(eq(shotVideos.shotId, id)).all();
+      if (existingLibraryVideos.length > 0) {
+        blockedByLibraryVideos = true;
+        throw new Error("SHOT_HAS_LIBRARY_VIDEOS");
+      }
       tx.delete(shots).where(eq(shots.id, id)).run();
     });
   } catch (e) {
     if (blockedByCandidates) {
       redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("This Shot has one or more Sequence Video Candidates. Delete them from Shot Detail before deleting the Shot.")}`);
+    }
+    if (blockedByLibraryVideos) {
+      redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("This Shot has one or more Shot Videos in its library. Delete them from Shot Detail before deleting the Shot.")}`);
     }
     redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("Failed to delete this Shot — nothing was changed. Please try again.")}`);
   }

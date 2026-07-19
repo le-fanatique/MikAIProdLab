@@ -36,6 +36,9 @@ import {
   type GenerationSnapshot,
 } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
+import { ensureVideoOutputSavedToLibrary } from "@/lib/shotVideoLibrary/ensureSaved";
+import { approveShotVideoPath } from "@/lib/shotVideoLibrary/approve";
+import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,6 +133,8 @@ export async function runWorkflowGeneration(args: {
   shotId: number;
   workflowId: number;
   selectedImageByNodeId?: Record<string, string>;
+  /** SHOT.VIDEO.LIBRARY.1, Lot C */
+  selectedVideoByNodeId?: Record<string, string>;
   scalarOverrideByNodeId?: Record<string, string>;
   textOverrideByNodeId?: Record<string, string>;
   /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
@@ -280,19 +285,40 @@ export async function runWorkflowGeneration(args: {
     }
   }
 
+  // SHOT.VIDEO.LIBRARY.1, Lot C
+  const availableVideos = await loadRuntimeVideoOptionsForShot(shotId);
+
   const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,
     inputs: parsed.inputs,
     suggestedText: compiledShotPrompt.text,
     availableImages,
+    availableVideos,
     textOverrideByNodeId: args.textOverrideByNodeId,
     selectedImageByNodeId: args.selectedImageByNodeId,
+    selectedVideoByNodeId: args.selectedVideoByNodeId,
     scalarOverrideByNodeId: args.scalarOverrideByNodeId,
     batchSelectedImages: resolvedBatchImages,
   });
 
   if (!built.ok) {
     return { ok: false, error: built.error };
+  }
+
+  // REVISE (round 1, finding 5) — a video input can be MAPPED (preview
+  // works, `Video Sources`/`Video Inputs` shows a real selector) but
+  // ComfyUI generation must still be explicitly refused here: unlike
+  // `/upload/image`, no confirmed ComfyUI endpoint exists to upload a local
+  // video file for a `LoadVideo`-class node (`prepareComfyPayloadForQueue`
+  // deliberately does not attempt one — see its own doc comment). Refusing
+  // BEFORE any `generation_jobs` row is created means Generate never
+  // silently queues a payload ComfyUI cannot actually run.
+  if (built.displayMappings.some((m) => m.mappingKind === "video")) {
+    return {
+      ok: false,
+      error:
+        "This workflow requires a video input, but MikAI has no confirmed way to upload a video to ComfyUI yet. Generation is blocked for this workflow until that transport is confirmed.",
+    };
   }
 
   const overrideUsed = args.patchedJsonOverride !== undefined;
@@ -431,6 +457,17 @@ export async function runWorkflowGenerationFromForm(
     selectedImageByNodeId[nodeId] = imageId;
   }
 
+  // SHOT.VIDEO.LIBRARY.1, Lot C
+  const selectedVideoByNodeId: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("videoNode_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("videoNode_".length).trim();
+    const videoId = value.trim();
+    if (!nodeId || !videoId) continue;
+    selectedVideoByNodeId[nodeId] = videoId;
+  }
+
   const scalarOverrideByNodeId: Record<string, string> = {};
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("scalarNode_")) continue;
@@ -500,6 +537,7 @@ export async function runWorkflowGenerationFromForm(
     shotId,
     workflowId,
     selectedImageByNodeId,
+    selectedVideoByNodeId,
     scalarOverrideByNodeId,
     textOverrideByNodeId,
     patchedJsonOverride,
@@ -866,8 +904,6 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
 // approveVideoOutput
 // ---------------------------------------------------------------------------
 
-const APPROVABLE_VIDEO_EXTS = new Set([".mp4", ".webm", ".mov"]);
-
 export async function approveVideoOutput(formData: FormData): Promise<void> {
   const shotId  = parseInt(formData.get("shotId")  as string, 10);
   const jobId   = parseInt(formData.get("jobId")   as string, 10);
@@ -883,64 +919,30 @@ export async function approveVideoOutput(formData: FormData): Promise<void> {
     errRedirect("Invalid request.");
   }
 
-  const [job] = await db.select().from(generationJobs).where(eq(generationJobs.id, jobId));
-  if (!job) errRedirect("Output not found.");
-  if (job.shotId !== shotId) errRedirect("Output does not belong to this shot.");
-  if (job.status !== "done") errRedirect("Output is not ready.");
-  if (!job.outputPath) errRedirect("Output path is missing.");
-  if (!job.outputPath.startsWith("outputs/jobs/")) {
-    errRedirect("Output path is not in the expected location.");
-  }
+  // SHOT.VIDEO.LIBRARY.1, Lot A — approving a Generation Content output
+  // always goes through the same durable Shot Video Library entry a plain
+  // "Save to Shot Videos" would create (idempotent: reuses it if this job
+  // was already saved, never a second copy of the same file) before ever
+  // touching `shots.approvedVideoPath`. The copy and the approval are no
+  // longer two independently-hardcoded code paths.
+  const result = await ensureVideoOutputSavedToLibrary(jobId, shotId);
+  if (!result.ok) errRedirect(result.error);
 
-  const ext = path.extname(job.outputPath).toLowerCase();
-  if (!APPROVABLE_VIDEO_EXTS.has(ext)) {
-    errRedirect("Only video outputs (.mp4, .webm, .mov) can be approved as shot output.");
-  }
-
-  const publicRoot = path.join(process.cwd(), "public");
-  const allowedOutputsRoot = path.join(publicRoot, "outputs", "jobs");
-  const sourceAbsolute = path.resolve(publicRoot, job.outputPath);
-
-  if (
-    !sourceAbsolute.startsWith(allowedOutputsRoot + path.sep) &&
-    sourceAbsolute !== allowedOutputsRoot
-  ) {
-    errRedirect("Output path is not in the expected location.");
-  }
-
-  try {
-    await fs.access(sourceAbsolute);
-  } catch {
-    errRedirect("Output file not found on disk.");
-  }
-
-  const uuid = randomUUID();
-  const destFilename = `${uuid}${ext}`;
-  const destSubfolder = `shot-${shotId}`;
-  const destRelative = `uploads/shot-videos/${destSubfolder}/${destFilename}`;
-  const destDir = path.join(publicRoot, "uploads", "shot-videos", destSubfolder);
-  const destAbsolute = path.join(destDir, destFilename);
-
-  try {
-    await fs.mkdir(destDir, { recursive: true });
-    await fs.copyFile(sourceAbsolute, destAbsolute);
-  } catch {
-    errRedirect("Failed to copy video file. Please try again.");
-  }
-
-  // Remove previous approved video file best-effort before updating DB
-  const [existingShot] = await db.select({ approvedVideoPath: shots.approvedVideoPath }).from(shots).where(eq(shots.id, shotId));
-  if (existingShot?.approvedVideoPath) {
-    const oldAbsolute = path.join(publicRoot, existingShot.approvedVideoPath);
-    try { await fs.unlink(oldAbsolute); } catch { /* best-effort */ }
-  }
-
-  try {
-    await db.update(shots).set({ approvedVideoPath: destRelative }).where(eq(shots.id, shotId));
-  } catch {
-    try { await fs.unlink(destAbsolute); } catch { /* best-effort */ }
-    errRedirect("Failed to save approved output. Please try again.");
-  }
+  // REVISE (SHOT.VIDEO.LIBRARY.1, round 1) — shares the exact same
+  // transactional approve+invalidate helper `approveShotVideo`
+  // (src/actions/shotVideoLibrary.ts) uses, instead of writing
+  // `shots.approvedVideoPath` directly: a real change made through this
+  // quick one-click button now always outdates dependent active/published
+  // Sequence/Film Results exactly like every other approval surface — it
+  // can no longer silently bypass that invalidation. The previous approved
+  // file is deliberately NEVER deleted here: every approved video now has
+  // (or, for a legacy row, has been backfilled into) a durable
+  // `shot_videos` entry, and "a shared file must never be deleted while
+  // another row still references it" now applies to the previously
+  // approved file too. Removing the old file is the Shot Video Library's
+  // own explicit `Delete` action, subject to its own approved-video guard.
+  const approveResult = await approveShotVideoPath(shotId, result.videoPath);
+  if (!approveResult.ok) errRedirect(approveResult.error);
 
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}approvedVideo=1`);

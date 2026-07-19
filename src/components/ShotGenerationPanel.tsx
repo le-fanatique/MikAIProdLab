@@ -22,8 +22,11 @@ import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPrevi
 import InlineShotPromptEditor from "@/components/InlineShotPromptEditor";
 import ShotPanelImagePreviewForm from "@/components/ShotPanelImagePreviewForm";
 import type { ShotPanelImageNode } from "@/components/ShotPanelImagePreviewForm";
+import ShotPanelVideoSelectionForm from "@/components/ShotPanelVideoSelectionForm";
+import type { ShotPanelVideoNode } from "@/components/ShotPanelVideoSelectionForm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
+import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
 import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
 import {
   buildGenerationPayload,
@@ -37,6 +40,7 @@ import {
   attachOutputAsShotReference,
   approveVideoOutput,
 } from "@/actions/generation";
+import { saveVideoOutputToLibrary } from "@/actions/shotVideoLibrary";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -65,6 +69,8 @@ type Props = {
   basePath: string;
   currentSearchParams: Record<string, string>;
   selectedImageByNodeId: Record<string, string>;
+  /** SHOT.VIDEO.LIBRARY.1, Lot C */
+  selectedVideoByNodeId: Record<string, string>;
   scalarValueByNodeId: Record<string, string>;
   textOverrideByNodeId: Record<string, string>;
   generationError: string | undefined;
@@ -73,6 +79,10 @@ type Props = {
   attachError?: string | null;
   approvedVideo?: boolean;
   approveError?: string | null;
+  /** SHOT.VIDEO.LIBRARY.1 — feedback for "Save to Shot Videos" (save-only, never approves). */
+  librarySaved?: boolean;
+  libraryAlreadySaved?: boolean;
+  libraryError?: string | null;
   shotPromptSaved?: boolean;
   shotPromptError?: string | null;
   /** SEQGEN.STORYBOARD.2 feedback after saveStoryboardDraftFromJob — same shape as attachedReference/attachError above. */
@@ -90,6 +100,7 @@ export default async function ShotGenerationPanel({
   basePath,
   currentSearchParams,
   selectedImageByNodeId,
+  selectedVideoByNodeId,
   scalarValueByNodeId,
   textOverrideByNodeId,
   generationError,
@@ -98,6 +109,9 @@ export default async function ShotGenerationPanel({
   attachError,
   approvedVideo,
   approveError,
+  librarySaved,
+  libraryAlreadySaved,
+  libraryError,
   shotPromptSaved,
   shotPromptError,
   storyboardDraftSaved,
@@ -383,6 +397,12 @@ export default async function ShotGenerationPanel({
     ? filterAvailableImagesBySelection(allAvailableImages, storyboardSelectedRefIds)
     : allAvailableImages;
 
+  // SHOT.VIDEO.LIBRARY.1, Lot C — this Shot's own durable video library,
+  // ready for a ComfyUI video-input picker. No real workflow has one today
+  // (see claude_report.md), so this list is queried unconditionally but
+  // only ever rendered/used when `videoMappings` below is non-empty.
+  const availableVideos = await loadRuntimeVideoOptionsForShot(shid);
+
   // --- Dynamic Batch UI info (detect + trace + titles) — shared helper, same
   // result the /map page and AssetGenerationPanel compute for this workflow. ---
   const batchUiInfo = parsed !== null ? detectDynamicBatchUiInfo(workflow.workflowJson) : { kind: "none" as const };
@@ -428,8 +448,10 @@ export default async function ShotGenerationPanel({
           inputs: parsed.inputs,
           suggestedText: compiledShotPrompt.text,
           availableImages,
+          availableVideos,
           textOverrideByNodeId,
           selectedImageByNodeId,
+          selectedVideoByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
@@ -437,6 +459,23 @@ export default async function ShotGenerationPanel({
 
   const mappings = built?.ok ? built.mappings : [];
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
+  // SHOT.VIDEO.LIBRARY.1, Lot C
+  const videoMappings = mappings.filter((m) => m.mappingKind === "video");
+  const panelVideoNodes: ShotPanelVideoNode[] = videoMappings.map((mapping) => {
+    const nodeId = mapping.input.nodeId;
+    return {
+      nodeId,
+      displayLabel: mapping.input.label || mapping.input.title || "Load Video",
+      initialValue: selectedVideoByNodeId[nodeId] ?? "",
+      videos: mapping.availableVideos.map((v) => ({
+        id: String(v.shotVideoId),
+        label: v.label,
+        source: v.source,
+        durationSeconds: v.durationSeconds,
+        isApproved: v.isApproved,
+      })),
+    };
+  });
   const promptCompilerTextNodeCandidates = mappings
     .filter((m) => m.mappingKind === "text")
     .map((m) => ({ nodeId: m.input.nodeId, label: m.input.label, title: m.input.title }));
@@ -581,6 +620,9 @@ export default async function ShotGenerationPanel({
   const selectionParams = new URLSearchParams({ generation: "open", workflowId: String(wid) });
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
     selectionParams.set(`imageNode_${nodeId}`, imageId);
+  }
+  for (const [nodeId, videoId] of Object.entries(selectedVideoByNodeId)) {
+    selectionParams.set(`videoNode_${nodeId}`, videoId);
   }
   for (const [nodeId, value] of Object.entries(scalarValueByNodeId)) {
     selectionParams.set(`scalarNode_${nodeId}`, value);
@@ -754,6 +796,20 @@ export default async function ShotGenerationPanel({
               </div>
             )}
 
+            {/* SHOT.VIDEO.LIBRARY.1, Lot C — renders only when the workflow
+                has a real, structurally-detected video input node. No such
+                workflow exists in this library today (see the audit in
+                claude_report.md), so this block is a no-op on every current
+                workflow. */}
+            {videoMappings.length > 0 && (
+              <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+                  Video Sources
+                </p>
+                <ShotPanelVideoSelectionForm nodes={panelVideoNodes} passthroughParams={currentSearchParams} basePath={basePath} />
+              </div>
+            )}
+
             {/* Dynamic Image Batch (WFBUILD.1A) */}
             {batchDetectionOk && (
               <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
@@ -827,6 +883,10 @@ export default async function ShotGenerationPanel({
                   name={`imageNode_${nodeId}`}
                   value={String(imageId)}
                 />
+              ))}
+              {/* SHOT.VIDEO.LIBRARY.1, Lot C */}
+              {Object.entries(selectedVideoByNodeId).map(([nodeId, videoId]) => (
+                <input key={`video-${nodeId}`} type="hidden" name={`videoNode_${nodeId}`} value={String(videoId)} />
               ))}
               {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
                 <input
@@ -933,6 +993,28 @@ export default async function ShotGenerationPanel({
                   className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
                 >
                   Approve Output
+                </button>
+              </form>
+            ) : null}
+            {/* SHOT.VIDEO.LIBRARY.1 — save-only (never approves), always
+                available whenever the same output is video-approvable, so a
+                video becomes a reusable Shot media asset even before/without
+                ever being approved as the Shot's output. */}
+            {libraryError && <p className="text-xs text-[#cf7b6b]">{libraryError}</p>}
+            {librarySaved ? (
+              <p className="text-xs text-[#6b9e72]">Saved to the Shot Video Library.</p>
+            ) : libraryAlreadySaved ? (
+              <p className="text-xs text-[#a4abb2]">Already saved to the Shot Video Library.</p>
+            ) : canApproveVideo ? (
+              <form action={saveVideoOutputToLibrary}>
+                <input type="hidden" name="shotId" value={String(shid)} />
+                <input type="hidden" name="jobId" value={String(activeJobId)} />
+                <input type="hidden" name="returnTo" value={approveReturnTo} />
+                <button
+                  type="submit"
+                  className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+                >
+                  Save to Shot Videos
                 </button>
               </form>
             ) : null}

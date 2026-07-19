@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `shot_videos_generation_job_id_unique` ON `shot_videos` (`generation_job_id`);

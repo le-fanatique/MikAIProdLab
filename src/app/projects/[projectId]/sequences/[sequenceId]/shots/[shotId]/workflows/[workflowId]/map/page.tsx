@@ -30,6 +30,9 @@ import {
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
+import ShotPanelVideoSelectionForm from "@/components/ShotPanelVideoSelectionForm";
+import type { ShotPanelVideoNode } from "@/components/ShotPanelVideoSelectionForm";
+import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
@@ -100,6 +103,18 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
     if (strValue && strValue.trim()) {
       selectedImageByNodeId[nodeId] = strValue.trim();
+    }
+  }
+
+  // SHOT.VIDEO.LIBRARY.1, Lot C
+  const selectedVideoByNodeId: Record<string, string> = {};
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (!key.startsWith("videoNode_")) continue;
+    const nodeId = key.slice("videoNode_".length);
+    if (!nodeId) continue;
+    const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue && strValue.trim()) {
+      selectedVideoByNodeId[nodeId] = strValue.trim();
     }
   }
 
@@ -396,6 +411,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     ? filterAvailableImagesBySelection(allAvailableImages, storyboardSelectedRefIds)
     : allAvailableImages;
 
+  // SHOT.VIDEO.LIBRARY.1, Lot C — see ShotGenerationPanel.tsx's identical comment.
+  const availableVideos = await loadRuntimeVideoOptionsForShot(shid);
+
   // SEQGEN.STORYBOARD.2 (retake 3) — storyboard=1/storyboardRefs must survive
   // the Image Inputs "Update Preview" GET form and the Generate redirect's
   // returnTo, not just this page's initial render. Reused below both as
@@ -457,14 +475,33 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           inputs: parsed.inputs,
           suggestedText: compiledShotPrompt.text,
           availableImages,
+          availableVideos,
           textOverrideByNodeId,
           selectedImageByNodeId,
+          selectedVideoByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
 
   const mappings = built?.ok ? built.mappings : [];
+  // SHOT.VIDEO.LIBRARY.1, Lot C
+  const videoMappings = mappings.filter((m) => m.mappingKind === "video");
+  const panelVideoNodes: ShotPanelVideoNode[] = videoMappings.map((mapping) => {
+    const nodeId = mapping.input.nodeId;
+    return {
+      nodeId,
+      displayLabel: mapping.input.label || mapping.input.title || "Load Video",
+      initialValue: selectedVideoByNodeId[nodeId] ?? "",
+      videos: mapping.availableVideos.map((v) => ({
+        id: String(v.shotVideoId),
+        label: v.label,
+        source: v.source,
+        durationSeconds: v.durationSeconds,
+        isApproved: v.isApproved,
+      })),
+    };
+  });
   const displayMappings = built?.ok ? built.displayMappings : mappings;
   const promptCompilerTextNodeCandidates = mappings
     .filter((m) => m.mappingKind === "text")
@@ -555,6 +592,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   const selectionParams = new URLSearchParams();
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
     selectionParams.set(`imageNode_${nodeId}`, imageId);
+  }
+  for (const [nodeId, videoId] of Object.entries(selectedVideoByNodeId)) {
+    selectionParams.set(`videoNode_${nodeId}`, videoId);
   }
   for (const [nodeId, value] of Object.entries(scalarValueByNodeId)) {
     selectionParams.set(`scalarNode_${nodeId}`, value);
@@ -736,6 +776,15 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </Card>
         )}
 
+        {/* SHOT.VIDEO.LIBRARY.1, Lot C — renders only when the workflow has
+            a real, structurally-detected video input node. No such workflow
+            exists in this library today (see claude_report.md). */}
+        {videoMappings.length > 0 && (
+          <Card title="Video Inputs">
+            <ShotPanelVideoSelectionForm nodes={panelVideoNodes} passthroughParams={currentSearchParams} basePath={basePath} />
+          </Card>
+        )}
+
         {/* ── Dynamic Image Batch (GEN.SEEDANCE.1) ─────────────
             Previously absent from this page entirely — a workflow with a
             Dynamic Batch node had no way to select batch images here, and
@@ -815,6 +864,10 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                       name={`imageNode_${nodeId}`}
                       value={String(imageId)}
                     />
+                  ))}
+                  {/* SHOT.VIDEO.LIBRARY.1, Lot C */}
+                  {Object.entries(selectedVideoByNodeId).map(([nodeId, videoId]) => (
+                    <input key={`video-${nodeId}`} type="hidden" name={`videoNode_${nodeId}`} value={String(videoId)} />
                   ))}
                   {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
                     <input

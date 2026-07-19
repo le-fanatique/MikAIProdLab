@@ -31,6 +31,7 @@ import {
   sequenceVideoSplitSegments,
   shots,
   shotVideoCandidates,
+  shotVideos,
   shotReferenceImages,
   shotStoryboardThumbnails,
   sequenceResults,
@@ -265,6 +266,25 @@ export async function pushSplitPlanToShots(formData: FormData): Promise<void> {
           })
           .run();
         const candidateId = Number(candidateInsert.lastInsertRowid);
+
+        // SHOT.VIDEO.LIBRARY.1, Lot A — publishes the library row and the
+        // candidate row atomically, in the same transaction: a validated
+        // Split Plan's clip is a reusable Shot media asset from the moment
+        // it's pushed, never requiring a separate re-push/backfill step to
+        // appear in `shot_videos`. Mirrors (never duplicates) the
+        // candidate's own file via `sourceCandidateId` — this row never
+        // owns the file itself, see shot_videos's own schema comment.
+        tx.insert(shotVideos)
+          .values({
+            shotId: p.shotId,
+            source: "sequence_split",
+            videoPath: p.relativePath,
+            durationSeconds: p.endSeconds - p.startSeconds,
+            sourceCandidateId: candidateId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
 
         // Lot B — durable `first_frame` reference, never approved for
         // generation automatically, always provenanced back to the candidate.

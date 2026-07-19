@@ -49,13 +49,30 @@ export type RuntimeAssignedAsset = {
   assetType: string;
 };
 
-export type WorkflowInputMappingKind = "text" | "image" | "unknown";
+// SHOT.VIDEO.LIBRARY.1, Lot C — a video eligible as a ComfyUI workflow
+// input. Deliberately a separate type from `RuntimeImageOption`: a video
+// must never be offered to an image input or vice versa (see
+// `mapWorkflowInputs`'s own kind-gated branches below). Scoped to the
+// current Shot's own durable library only — never cross-Shot.
+export type RuntimeVideoSource = "generation" | "sequence_split";
+
+export type RuntimeVideoOption = {
+  shotVideoId: number;
+  videoPath: string;
+  label: string;
+  source: RuntimeVideoSource;
+  durationSeconds: number | null;
+  isApproved: boolean;
+};
+
+export type WorkflowInputMappingKind = "text" | "image" | "video" | "unknown";
 
 export type WorkflowInputMapping = {
   input: WorkflowInput;
   mappingKind: WorkflowInputMappingKind;
   suggestedText: string | null;
   availableImages: RuntimeImageOption[];
+  availableVideos: RuntimeVideoOption[];
 };
 
 export function getRuntimeImageLabel(input: {
@@ -108,11 +125,35 @@ export function buildRuntimeImageOptions(
   return options;
 }
 
+export type RuntimeShotVideo = {
+  id: number;
+  videoPath: string;
+  source: RuntimeVideoSource;
+  durationSeconds: number | null;
+  isApproved: boolean;
+  /** e.g. "Split Run #12 · Segment #3" or "Generation Content" — precomputed server-side, same convention as `ShotVideoLibraryRow`'s own provenance label. */
+  provenanceLabel: string;
+};
+
+/** SHOT.VIDEO.LIBRARY.1, Lot C — mirrors `buildRuntimeImageOptions`, scoped to one Shot's own durable video library only (never cross-Shot, never Asset/board videos — there are none). */
+export function buildRuntimeVideoOptions(shotVideos: RuntimeShotVideo[]): RuntimeVideoOption[] {
+  return shotVideos.map((v) => ({
+    shotVideoId: v.id,
+    videoPath: v.videoPath,
+    label: v.provenanceLabel,
+    source: v.source,
+    durationSeconds: v.durationSeconds,
+    isApproved: v.isApproved,
+  }));
+}
+
 export function mapWorkflowInputs(
   inputs: WorkflowInput[],
   suggestedText: string,
   availableImages: RuntimeImageOption[],
-  textOverrideByNodeId?: Record<string, string>
+  textOverrideByNodeId?: Record<string, string>,
+  /** SHOT.VIDEO.LIBRARY.1, Lot C — additive, defaults to none so every existing caller (none of which has a video-input workflow to feed) keeps working unchanged. */
+  availableVideos: RuntimeVideoOption[] = []
 ): WorkflowInputMapping[] {
   return inputs.map((input): WorkflowInputMapping => {
     if (input.kind === "text") {
@@ -122,6 +163,7 @@ export function mapWorkflowInputs(
         mappingKind: "text",
         suggestedText: effectiveText,
         availableImages: [],
+        availableVideos: [],
       };
     }
     if (input.kind === "image") {
@@ -130,6 +172,16 @@ export function mapWorkflowInputs(
         mappingKind: "image",
         suggestedText: null,
         availableImages,
+        availableVideos: [],
+      };
+    }
+    if (input.kind === "video") {
+      return {
+        input,
+        mappingKind: "video",
+        suggestedText: null,
+        availableImages: [],
+        availableVideos,
       };
     }
     return {
@@ -137,6 +189,7 @@ export function mapWorkflowInputs(
       mappingKind: "unknown",
       suggestedText: null,
       availableImages: [],
+      availableVideos: [],
     };
   });
 }

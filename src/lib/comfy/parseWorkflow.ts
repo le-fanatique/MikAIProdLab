@@ -11,6 +11,7 @@ type ComfyWorkflowJson = Record<string, ComfyNode>;
 export type WorkflowInputKind =
   | "text"
   | "image"
+  | "video"
   | "integer"
   | "float"
   | "boolean"
@@ -77,6 +78,17 @@ function classifyInputKind(
   // Image — checked before text to avoid false matches
   if (classType === "LoadImage" || /Image.*Load|Load.*Image/i.test(classType)) return "image";
 
+  // SHOT.VIDEO.LIBRARY.1, Lot C — video, mirroring the image rule above
+  // structurally (never a workflow-name-based profile). As of this ticket
+  // no workflow in this app's library actually has a node matching this —
+  // both "video"-kind workflows found in the DB (SeedanceLow/SeedanceMid)
+  // are image-to-video *generators* (their own input is `LoadImage`, only
+  // their *output* is video); see claude_report.md for the full audit.
+  // This rule exists so a REAL video-input node (e.g. a future
+  // `LoadVideo`/`VHS_LoadVideo`-class node) is picked up automatically the
+  // day one is added, without a second detection pass.
+  if (classType === "LoadVideo" || /Video.*Load|Load.*Video/i.test(classType)) return "video";
+
   // Text — PrimitiveStringMultiline exact match, then broad pattern
   if (classType === "PrimitiveStringMultiline" || /Text|String/i.test(classType)) return "text";
 
@@ -112,7 +124,7 @@ function extractDefaultValue(
   classType: string,
   inputs: Record<string, unknown>
 ): string | null {
-  if (kind === "image") return null;
+  if (kind === "image" || kind === "video") return null;
 
   // Preserve existing behaviour: only PrimitiveStringMultiline yields a default for text
   if (kind === "text") {
