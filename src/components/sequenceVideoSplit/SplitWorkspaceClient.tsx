@@ -17,7 +17,7 @@
 // and re-validate everything).
 // ---------------------------------------------------------------------------
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import VideoFrameReviewPlayer, { type VideoFrameReviewPlayerHandle } from "@/components/VideoFrameReviewPlayer";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { refImageUrl } from "@/lib/refImageUrl";
@@ -81,7 +81,18 @@ type Props = {
   shots: SplitShotDTO[];
   isEditable: boolean;
   returnTo: string;
+  /**
+   * SEQGEN.SPLIT.CLEANUP.1 retake (`FB-20260719-002`) — the exact id of the
+   * segment the server just inserted via "Split at Current Frame" (or the
+   * numeric Split control), read from the redirect URL by the page and
+   * passed straight through. `null` on a normal page load (no split just
+   * happened). Never re-derived from `startSeconds`/order — see the effect
+   * below.
+   */
+  newSegmentId: number | null;
 };
+
+const SCROLL_RESTORE_KEY = "splitWorkspaceScrollY";
 
 function fmtSeconds(n: number): string {
   return n.toFixed(2);
@@ -121,11 +132,22 @@ export default function SplitWorkspaceClient({
   shots,
   isEditable,
   returnTo,
+  newSegmentId,
 }: Props) {
   const playerRef = useRef<VideoFrameReviewPlayerHandle>(null);
   const [frameInfo, setFrameInfo] = useState<{ frame: number; totalFrames: number; fps: number; currentTimeSeconds: number } | null>(null);
-  const [selectedSegmentId, setSelectedSegmentId] = useState<number | null>(segments[0]?.id ?? null);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<number | null>(
+    newSegmentId !== null && segments.some((s) => s.id === newSegmentId) ? newSegmentId : (segments[0]?.id ?? null)
+  );
   const [refineOpenForId, setRefineOpenForId] = useState<number | null>(null);
+  // REVISE (round 4, Codex finding 2) — `VideoFrameReviewPlayer.seekToFrame`
+  // is a no-op until its internal `hasMetadataRef`/`totalFramesRef` are
+  // ready (i.e. until it has fired at least one `onFrameChange`, which is
+  // exactly this component's own `frameInfo` becoming non-null). A seek
+  // attempted before that point is silently dropped, never retried. This
+  // holds the exact segment id that still needs to be seeked-to once the
+  // player IS ready — `null` means "nothing pending."
+  const [pendingSeekSegmentId, setPendingSeekSegmentId] = useState<number | null>(null);
 
   const handleSelectSegment = useCallback(
     (seg: SplitSegmentDTO) => {
@@ -135,6 +157,64 @@ export default function SplitWorkspaceClient({
     },
     [frameInfo?.fps, sourceFps]
   );
+
+  // SEQGEN.SPLIT.CLEANUP.1 retake (`FB-20260719-002`) — selects the exact
+  // new second half by its server-provided id ONLY (never "last in list"
+  // or a float `startSeconds` match), restores the scroll position
+  // captured just before that form submitted (see its own `onSubmit`
+  // below, instead of a fragile fixed pixel offset), and arms the pending
+  // seek above rather than seeking immediately — the player may not be
+  // ready yet. The App Router can keep this component instance alive
+  // across a same-route redirect (only props change, no full remount), so
+  // this cannot be a mount-only effect — it must re-run every time
+  // `newSegmentId` itself changes, including the very first render if the
+  // URL already carries one (e.g. a direct reload). A `null`/stale id
+  // (absent from the current `segments`) is a clean no-op on both counts.
+  useEffect(() => {
+    if (newSegmentId === null) return;
+
+    const seg = segments.find((s) => s.id === newSegmentId);
+    if (seg) {
+      setSelectedSegmentId(seg.id);
+      setPendingSeekSegmentId(seg.id);
+    }
+
+    try {
+      const saved = sessionStorage.getItem(SCROLL_RESTORE_KEY);
+      if (saved !== null) {
+        sessionStorage.removeItem(SCROLL_RESTORE_KEY);
+        const y = Number(saved);
+        if (Number.isFinite(y)) window.scrollTo(0, y);
+      }
+    } catch {
+      // sessionStorage unavailable (privacy mode, etc.) — scroll simply
+      // isn't restored; never a functional failure.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newSegmentId]);
+
+  // REVISE (round 4, Codex finding 2) — consumes `pendingSeekSegmentId`
+  // exactly once, only once `frameInfo` is actually available (proof the
+  // player's metadata is loaded and `seekToFrame` will not be a no-op).
+  // Covers BOTH required cases: if the player is already ready at the
+  // moment `pendingSeekSegmentId` is armed (App-Router same-instance
+  // navigation), this effect re-runs immediately because its OWN
+  // dependency (`pendingSeekSegmentId`) just changed, and `frameInfo` is
+  // already truthy — seeks right away. If the player is NOT ready yet
+  // (remount / slow metadata load), this effect first no-ops (`frameInfo`
+  // still `null`) and naturally re-runs later when `frameInfo` itself
+  // transitions to non-null. Either way `pendingSeekSegmentId` is cleared
+  // immediately after the seek, so subsequent `frameInfo` updates during
+  // normal playback (which fire continuously) never re-trigger a seek.
+  useEffect(() => {
+    if (pendingSeekSegmentId === null || !frameInfo) return;
+    const seg = segments.find((s) => s.id === pendingSeekSegmentId);
+    if (seg) {
+      playerRef.current?.seekToFrame(secondsToFrame(seg.startSeconds, frameInfo.fps));
+    }
+    setPendingSeekSegmentId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSeekSegmentId, frameInfo]);
 
   // "Split at Current Frame" (and every frame/timecode display projected
   // from the source) is only ever available when BOTH a numerically
@@ -204,7 +284,21 @@ export default function SplitWorkspaceClient({
         </div>
 
         {isEditable && (
-          <form action={splitSegmentAtFrame} className="flex items-center gap-2">
+          <form
+            action={splitSegmentAtFrame}
+            onSubmit={() => {
+              // SEQGEN.SPLIT.CLEANUP.1 retake (`FB-20260719-002`) — capture
+              // the real current scroll position right before this Server
+              // Action navigates away; restored by the effect above once
+              // the new segment list/id come back. Never a fixed offset.
+              try {
+                sessionStorage.setItem(SCROLL_RESTORE_KEY, String(window.scrollY));
+              } catch {
+                /* sessionStorage unavailable — scroll simply won't be restored */
+              }
+            }}
+            className="flex items-center gap-2"
+          >
             <input type="hidden" name="runId" value={runId} />
             <input type="hidden" name="sequenceId" value={sequenceId} />
             <input type="hidden" name="segmentId" value={selectedSegment?.id ?? ""} />

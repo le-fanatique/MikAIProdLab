@@ -301,7 +301,7 @@ export async function runFfmpegSceneDetectionInRange(
   }
 }
 
-const THUMBNAIL_ROOT_RELATIVE = "uploads/sequence-video-split-thumbnails";
+export const THUMBNAIL_ROOT_RELATIVE = "uploads/sequence-video-split-thumbnails";
 
 function thumbnailAbsolutePathFor(splitRunUuid: string, thumbnailKey: string): { relative: string; absolute: string } {
   const relative = `${THUMBNAIL_ROOT_RELATIVE}/run-${splitRunUuid}/segment-${thumbnailKey}.jpg`;
@@ -312,16 +312,30 @@ function thumbnailAbsolutePathFor(splitRunUuid: string, thumbnailKey: string): {
 export type ThumbnailGenerationResult = { ok: true; path: string } | { ok: false; error: string };
 
 /**
- * Generates a single mid-segment thumbnail via `ffmpeg -ss <mid> -i <src> -frames:v 1 <out>`.
- * Writes to a `.tmp` path first, renames on success — a partial/corrupt file
- * is never left at the servable path. A missing thumbnail is a
- * degraded-but-recoverable review experience (never a reason to fail the
- * whole detection run/edit), BUT the failure itself is always returned as an
- * actionable diagnostic — REVISE (round 2) explicitly rejected a bare
- * `console.error` + `null` return here, since that made an ffmpeg failure
- * indistinguishable from a `.tmp` file that failed to clean up; callers must
- * be able to tell the user something went wrong, not just silently show "No
- * thumbnail."
+ * Which instant inside the segment the thumbnail is captured at —
+ * `"midpoint"` (the historical, still-default behavior for detection and
+ * every non-split edit) or `"segment-start"` (SEQGEN.SPLIT.CLEANUP.1
+ * retake, `FB-20260719-001`: after a manual split, BOTH resulting halves
+ * must show their own real first frame, not their midpoint — the second
+ * half in particular must show exactly the frame the cut created). An
+ * explicit opt-in parameter, never an implicit global change: every
+ * existing caller that doesn't pass it keeps the exact previous behavior.
+ */
+export type ThumbnailFrameStrategy = "midpoint" | "segment-start";
+
+/**
+ * Generates a single segment thumbnail via
+ * `ffmpeg -ss <target> -i <src> -frames:v 1 <out>`, where `<target>` is
+ * either the segment's midpoint (default) or its own `startSeconds`
+ * (`frameStrategy: "segment-start"`). Writes to a `.tmp` path first,
+ * renames on success — a partial/corrupt file is never left at the
+ * servable path. A missing thumbnail is a degraded-but-recoverable review
+ * experience (never a reason to fail the whole detection run/edit), BUT
+ * the failure itself is always returned as an actionable diagnostic —
+ * REVISE (round 2) explicitly rejected a bare `console.error` + `null`
+ * return here, since that made an ffmpeg failure indistinguishable from a
+ * `.tmp` file that failed to clean up; callers must be able to tell the
+ * user something went wrong, not just silently show "No thumbnail."
  *
  * `thumbnailKey` MUST be stable and unique per segment for the lifetime of
  * the run — `orderIndex` is only safe to use for the initial detection
@@ -336,12 +350,14 @@ export async function generateSegmentThumbnail(
   sourceAbsolutePath: string,
   segment: Pick<ProposedSegment, "startSeconds" | "endSeconds">,
   splitRunUuid: string,
-  thumbnailKey: string
+  thumbnailKey: string,
+  frameStrategy: ThumbnailFrameStrategy = "midpoint"
 ): Promise<ThumbnailGenerationResult> {
   const ffmpegPath = getFfmpegPath();
   if (!ffmpegPath) return { ok: false, error: "FFmpeg binary is not available for this platform/architecture." };
 
-  const midSeconds = segment.startSeconds + (segment.endSeconds - segment.startSeconds) / 2;
+  const targetSeconds =
+    frameStrategy === "segment-start" ? segment.startSeconds : segment.startSeconds + (segment.endSeconds - segment.startSeconds) / 2;
   const { relative, absolute } = thumbnailAbsolutePathFor(splitRunUuid, thumbnailKey);
   const tmpAbsolute = `${absolute}.tmp`;
 
@@ -350,7 +366,7 @@ export async function generateSegmentThumbnail(
   try {
     await execFileAsync(
       ffmpegPath,
-      ["-ss", midSeconds.toFixed(3), "-i", sourceAbsolutePath, "-frames:v", "1", "-y", "-f", "image2", tmpAbsolute],
+      ["-ss", targetSeconds.toFixed(3), "-i", sourceAbsolutePath, "-frames:v", "1", "-y", "-f", "image2", tmpAbsolute],
       { timeout: THUMBNAIL_TIMEOUT_MS, windowsHide: true, maxBuffer: 5 * 1024 * 1024 }
     );
     await fs.access(tmpAbsolute);

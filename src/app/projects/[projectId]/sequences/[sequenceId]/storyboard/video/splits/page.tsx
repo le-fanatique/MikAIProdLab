@@ -9,7 +9,7 @@ import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { refImageUrl } from "@/lib/refImageUrl";
-import { startSequenceVideoSplitDetection } from "@/actions/sequenceVideoSplit";
+import { startSequenceVideoSplitDetection, startManualSplit, clearUnusedSplitRuns } from "@/actions/sequenceVideoSplit";
 import { pushSplitPlanToShots } from "@/actions/sequenceVideoPush";
 import SplitWorkspaceClient from "@/components/sequenceVideoSplit/SplitWorkspaceClient";
 import { parseFrameRateModeFromParamsJson, parseMinSegmentDurationEffectiveSecondsFromParamsJson } from "@/lib/sequenceVideoSplit/detectVideoSplits";
@@ -117,6 +117,12 @@ export default async function SequenceVideoSplitWorkspacePage({ params, searchPa
   const pushed = sp(resolvedSearchParams["pushed"]) === "1";
   const pushNoop = sp(resolvedSearchParams["pushNoop"]) === "1";
   const pushCount = sp(resolvedSearchParams["pushCount"]);
+  const splitCleanupMessage = sp(resolvedSearchParams["splitCleanupMessage"]);
+  // SEQGEN.SPLIT.CLEANUP.1 retake (`FB-20260719-002`) — the exact id of the
+  // segment `performSplitAtSeconds` just inserted, provided by the server.
+  // Never re-derived here by matching a boundary value.
+  const newSegmentIdRaw = sp(resolvedSearchParams["newSegmentId"]);
+  const newSegmentId = newSegmentIdRaw && /^\d+$/.test(newSegmentIdRaw) ? parseInt(newSegmentIdRaw, 10) : null;
 
   // `splitRunId`, when present, is authoritative for which run is "current"
   // — it always wins over a (possibly stale/absent) `sequenceVideoDraftId`
@@ -203,6 +209,9 @@ export default async function SequenceVideoSplitWorkspacePage({ params, searchPa
       {pushError && <p className="mb-4 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{pushError}</p>}
       {pushed && <p className="mb-4 text-xs text-[#6b9e72]">Pushed {pushCount ?? ""} clip(s) to their mapped Shots.</p>}
       {pushNoop && <p className="mb-4 text-xs text-[#a4abb2]">This plan was already pushed — no new clips were created ({pushCount ?? "0"} existing candidate(s)).</p>}
+      {splitCleanupMessage && (
+        <p className="mb-4 text-xs text-[#a4abb2] border border-[#232629] rounded px-3 py-2 bg-[#141618]">{splitCleanupMessage}</p>
+      )}
 
       <Card title="Source draft" className="mb-4">
         <p className="text-xs text-[#a4abb2] mb-4">
@@ -249,13 +258,24 @@ export default async function SequenceVideoSplitWorkspacePage({ params, searchPa
           >
             Run Detection {allRuns.length > 0 ? "Again" : ""} →
           </button>
+          <button
+            type="submit"
+            formAction={startManualSplit}
+            className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Manual Detection →
+          </button>
+          <p className="w-full text-[10px] text-[#4b5158]">
+            Manual Detection skips scene detection and creates one full-length segment covering the whole source video — split it
+            yourself in the player below using Split at Current Frame.
+          </p>
         </form>
       </Card>
 
       {!currentRun ? (
         <EmptyState title="No detection run yet." description="Use “Run Detection” above to propose a Split Plan for this draft." />
       ) : (
-        <SplitWorkspaceBody pid={pid} sid={sid} run={currentRun} workspaceReturnTo={workspaceReturnTo} />
+        <SplitWorkspaceBody pid={pid} sid={sid} run={currentRun} workspaceReturnTo={workspaceReturnTo} newSegmentId={newSegmentId} />
       )}
 
       {allRuns.length > 1 && (
@@ -263,6 +283,18 @@ export default async function SequenceVideoSplitWorkspacePage({ params, searchPa
           <summary className="text-xs text-[#6e767d] cursor-pointer hover:text-[#a4abb2]">
             {allRuns.length - 1} other past run(s) for this draft
           </summary>
+          <form action={clearUnusedSplitRuns} className="mt-3">
+            <input type="hidden" name="sequenceId" value={sid} />
+            <input type="hidden" name="sequenceVideoDraftId" value={draftId} />
+            <input type="hidden" name="currentRunId" value={currentRun!.id} />
+            <input type="hidden" name="returnTo" value={workspaceReturnTo} />
+            <ConfirmSubmitButton
+              confirmMessage="Delete every past run of this draft that is not currently shown and has no candidate pushed to a Shot? This cannot be undone."
+              className="rounded border border-[#3d2323]/60 text-[#cf7b6b] px-3 py-1 text-[10px] hover:border-[#3d2323] hover:bg-[#3d2323]/10 transition-colors"
+            >
+              Clear unused past runs
+            </ConfirmSubmitButton>
+          </form>
           <div className="mt-3 flex flex-col gap-2">
             {allRuns
               .filter((r) => r.id !== currentRun!.id)
@@ -317,11 +349,13 @@ async function SplitWorkspaceBody({
   sid,
   run,
   workspaceReturnTo,
+  newSegmentId,
 }: {
   pid: number;
   sid: number;
   run: typeof sequenceVideoSplitRuns.$inferSelect;
   workspaceReturnTo: string;
+  newSegmentId: number | null;
 }) {
   const badge = runStatusBadge(run.status);
   const rawCount = rawCandidateCount(run.rawCandidatesJson);
@@ -416,6 +450,7 @@ async function SplitWorkspaceBody({
           shots={sequenceShots.map((s) => ({ id: s.id, shotCode: s.shotCode, title: s.title }))}
           isEditable={isEditable}
           returnTo={workspaceReturnTo}
+          newSegmentId={newSegmentId}
         />
       )}
     </div>
