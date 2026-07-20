@@ -92,7 +92,21 @@ type Props = {
   newSegmentId: number | null;
 };
 
-const SCROLL_RESTORE_KEY = "splitWorkspaceScrollY";
+/**
+ * SEQGEN.SPLIT.CLEANUP.1-FIX2 — persisted "Player size" preference. SSR and
+ * the very first client render must always agree on `DEFAULT_PLAYER_SIZE_PCT`
+ * (see the `useState` initializer below, which never reads `localStorage`
+ * synchronously) — the stored value, if any, is only applied from a
+ * post-mount `useEffect`, so no hydration mismatch is ever introduced.
+ */
+const PLAYER_SIZE_STORAGE_KEY = "splitWorkspacePlayerSizePct";
+const MIN_PLAYER_SIZE_PCT = 40;
+const MAX_PLAYER_SIZE_PCT = 100;
+const DEFAULT_PLAYER_SIZE_PCT = 50;
+
+function clampPlayerSizePct(value: number): number {
+  return Math.min(MAX_PLAYER_SIZE_PCT, Math.max(MIN_PLAYER_SIZE_PCT, value));
+}
 
 function fmtSeconds(n: number): string {
   return n.toFixed(2);
@@ -140,6 +154,39 @@ export default function SplitWorkspaceClient({
     newSegmentId !== null && segments.some((s) => s.id === newSegmentId) ? newSegmentId : (segments[0]?.id ?? null)
   );
   const [refineOpenForId, setRefineOpenForId] = useState<number | null>(null);
+  // SEQGEN.SPLIT.CLEANUP.1-FIX2 — always `DEFAULT_PLAYER_SIZE_PCT` on the
+  // server AND on the very first client render (this initializer never
+  // touches `localStorage`) — a stored preference is only ever applied
+  // afterward, from the dedicated mount effect below, so hydration can
+  // never mismatch.
+  const [playerSizePct, setPlayerSizePct] = useState<number>(DEFAULT_PLAYER_SIZE_PCT);
+
+  // Reads the persisted preference once, after mount (client-only). A
+  // missing/corrupted/out-of-range stored value is a clean no-op — the SSR
+  // default stays in effect rather than risking an invalid layout.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PLAYER_SIZE_STORAGE_KEY);
+      if (raw !== null) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed) && parsed >= MIN_PLAYER_SIZE_PCT && parsed <= MAX_PLAYER_SIZE_PCT) {
+          setPlayerSizePct(parsed);
+        }
+      }
+    } catch {
+      // localStorage unavailable (privacy mode, etc.) — the default simply stays in effect.
+    }
+  }, []);
+
+  const handlePlayerSizeChange = useCallback((raw: string) => {
+    const value = clampPlayerSizePct(Number(raw));
+    setPlayerSizePct(value);
+    try {
+      localStorage.setItem(PLAYER_SIZE_STORAGE_KEY, String(value));
+    } catch {
+      // localStorage unavailable — the choice simply isn't persisted for next time.
+    }
+  }, []);
   // REVISE (round 4, Codex finding 2) — `VideoFrameReviewPlayer.seekToFrame`
   // is a no-op until its internal `hasMetadataRef`/`totalFramesRef` are
   // ready (i.e. until it has fired at least one `onFrameChange`, which is
@@ -160,35 +207,28 @@ export default function SplitWorkspaceClient({
 
   // SEQGEN.SPLIT.CLEANUP.1 retake (`FB-20260719-002`) — selects the exact
   // new second half by its server-provided id ONLY (never "last in list"
-  // or a float `startSeconds` match), restores the scroll position
-  // captured just before that form submitted (see its own `onSubmit`
-  // below, instead of a fragile fixed pixel offset), and arms the pending
-  // seek above rather than seeking immediately — the player may not be
-  // ready yet. The App Router can keep this component instance alive
-  // across a same-route redirect (only props change, no full remount), so
-  // this cannot be a mount-only effect — it must re-run every time
-  // `newSegmentId` itself changes, including the very first render if the
-  // URL already carries one (e.g. a direct reload). A `null`/stale id
-  // (absent from the current `segments`) is a clean no-op on both counts.
+  // or a float `startSeconds` match), and arms the pending seek below
+  // rather than seeking immediately — the player may not be ready yet. The
+  // App Router can keep this component instance alive across a same-route
+  // redirect (only props change, no full remount), so this cannot be a
+  // mount-only effect — it must re-run every time `newSegmentId` itself
+  // changes, including the very first render if the URL already carries
+  // one (e.g. a direct reload). A `null`/stale id (absent from the current
+  // `segments`) is a clean no-op.
+  //
+  // REVISE (FIX2) — this effect used to also capture/restore a DOM-anchor-
+  // based scroll position (FIX1). That mechanism failed real-browser
+  // validation twice and has been removed entirely (per `FB-20260719-002`
+  // and the FIX2 ticket): this workspace no longer attempts to restore
+  // scroll at all. Instead the Frame/Split bandeau now renders directly
+  // above the player (see the JSX below) so it stays reachable regardless
+  // of wherever the browser's own navigation leaves the scroll position.
   useEffect(() => {
     if (newSegmentId === null) return;
-
     const seg = segments.find((s) => s.id === newSegmentId);
     if (seg) {
       setSelectedSegmentId(seg.id);
       setPendingSeekSegmentId(seg.id);
-    }
-
-    try {
-      const saved = sessionStorage.getItem(SCROLL_RESTORE_KEY);
-      if (saved !== null) {
-        sessionStorage.removeItem(SCROLL_RESTORE_KEY);
-        const y = Number(saved);
-        if (Number.isFinite(y)) window.scrollTo(0, y);
-      }
-    } catch {
-      // sessionStorage unavailable (privacy mode, etc.) — scroll simply
-      // isn't restored; never a functional failure.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newSegmentId]);
@@ -249,15 +289,68 @@ export default function SplitWorkspaceClient({
 
   return (
     <div className="flex flex-col gap-4">
-      <VideoFrameReviewPlayer
-        ref={playerRef}
-        src={videoUrl}
-        projectId={projectId}
-        captureDestinations={[]}
-        defaultFps={isReliableFps(sourceFps) ? sourceFps : 24}
-        onFrameChange={setFrameInfo}
-      />
+      {/*
+        SEQGEN.SPLIT.CLEANUP.1-FIX2 — "Player size" control: a compact
+        `input type="range"` (40–100%, default 50%) plus the current
+        percentage. Persisted defensively in `localStorage` (see
+        `handlePlayerSizeChange`/the mount effect above) — never affects
+        the video itself, its FPS, the current frame, or the selection.
+      */}
+      <div className="flex items-center gap-2 text-[10px] text-[#6e767d]">
+        <label htmlFor="split-player-size" className="text-[#4b5158]">
+          Player size
+        </label>
+        <input
+          id="split-player-size"
+          type="range"
+          min={MIN_PLAYER_SIZE_PCT}
+          max={MAX_PLAYER_SIZE_PCT}
+          step={1}
+          value={playerSizePct}
+          onChange={(e) => handlePlayerSizeChange(e.target.value)}
+          className="w-32 accent-[#5b93d6]"
+        />
+        <span className="font-mono text-[#a4abb2] w-9 text-right">{playerSizePct}%</span>
+      </div>
 
+      {/*
+        Centered horizontally, width driven by the persisted percentage,
+        but never exceeding its parent's width (`max-w-full`) and never
+        collapsing below an ergonomic floor on small viewports (CSS
+        `min()` — pure CSS, no JS viewport measurement/resize listener
+        needed, and it's inherently bounded by `100%` on its own).
+      */}
+      {/*
+        SEQGEN.SPLIT.CLEANUP.1-FIX4 — `id="split-video-player"` is now the
+        landing target for the native URL fragment appended server-side
+        (`splitOkRedirectTo` in `sequenceVideoSplit.ts`) only to "Split at
+        Current Frame"'s success redirect — placed on this resizable
+        OUTER container (not the inner `<video>` tag, not the shared
+        `VideoFrameReviewPlayer` component itself), so navigating to the
+        fragment lands on the player regardless of its current FIX2 size.
+        FIX3 had this same role on the segment bar below, but user
+        validation found that landed the viewport too far down (at the
+        newly-created last segment) — the player is now the target
+        instead. No `scrollIntoView`/`requestAnimationFrame`/
+        `sessionStorage`/`scrollTo` — the browser's own fragment
+        navigation handles this entirely.
+      */}
+      <div id="split-video-player" className="mx-auto w-full max-w-full" style={{ width: `${playerSizePct}%`, minWidth: "min(240px, 100%)" }}>
+        <VideoFrameReviewPlayer
+          ref={playerRef}
+          src={videoUrl}
+          projectId={projectId}
+          captureDestinations={[]}
+          defaultFps={isReliableFps(sourceFps) ? sourceFps : 24}
+          onFrameChange={setFrameInfo}
+        />
+      </div>
+
+      {/*
+        SEQGEN.SPLIT.CLEANUP.1-FIX3 — moved back BELOW the player, its
+        original position before FIX2. All text, disabled states, titles
+        and hidden fields are unchanged from before.
+      */}
       <div className="flex items-center justify-between gap-4 flex-wrap rounded border border-[#2c3035] bg-[#141618] px-3 py-2">
         <div className="flex items-center gap-4 flex-wrap text-xs">
           {frameSplitAvailable && sourceFrame !== null && sourceTotalFrames !== null ? (
@@ -284,21 +377,7 @@ export default function SplitWorkspaceClient({
         </div>
 
         {isEditable && (
-          <form
-            action={splitSegmentAtFrame}
-            onSubmit={() => {
-              // SEQGEN.SPLIT.CLEANUP.1 retake (`FB-20260719-002`) — capture
-              // the real current scroll position right before this Server
-              // Action navigates away; restored by the effect above once
-              // the new segment list/id come back. Never a fixed offset.
-              try {
-                sessionStorage.setItem(SCROLL_RESTORE_KEY, String(window.scrollY));
-              } catch {
-                /* sessionStorage unavailable — scroll simply won't be restored */
-              }
-            }}
-            className="flex items-center gap-2"
-          >
+          <form action={splitSegmentAtFrame} className="flex items-center gap-2">
             <input type="hidden" name="runId" value={runId} />
             <input type="hidden" name="sequenceId" value={sequenceId} />
             <input type="hidden" name="segmentId" value={selectedSegment?.id ?? ""} />
@@ -329,6 +408,13 @@ export default function SplitWorkspaceClient({
         </p>
       )}
 
+      {/*
+        SEQGEN.SPLIT.CLEANUP.1-FIX4 — no longer a fragment-navigation
+        target: FIX3 anchored here (`id="split-segment-bar"`), but user
+        validation found it landed the viewport too far down. The anchor
+        now lives on the player container above (`id="split-video-player"`)
+        — this bar is a plain segment timeline again.
+      */}
       <div className="flex h-8 w-full rounded overflow-hidden border border-[#2c3035]">
         {segments.map((s) => {
           const widthPct = sourceDurationSeconds > 0 ? ((s.endSeconds - s.startSeconds) / sourceDurationSeconds) * 100 : 0;

@@ -1162,11 +1162,28 @@ async function performSplitAtSeconds(
  * client can select and seek to the exact newly-inserted second half —
  * never guessing it client-side via a float `startSeconds` match or "the
  * last segment in the list."
+ *
+ * REVISE (FIX3) — optional `hashAnchor`: appended as a native URL fragment,
+ * strictly AFTER every query param (including `splitWarning`) has already
+ * been appended below — a `#fragment` is never valid before a `?query`, so
+ * building it in this fixed order is the "explicitly safe" construction
+ * the ticket asks for, without needing the full `URL` API for a
+ * same-origin relative path. Only `splitSegmentAtFrame`'s success redirect
+ * passes one — the numeric `splitSegmentAt` keeps its historical redirect
+ * unchanged, and no error/refusal path ever receives or forwards a stale
+ * anchor (both call `errRedirectTo`, entirely separate from this
+ * function).
+ *
+ * REVISE (FIX4) — the anchor target moved from `"split-segment-bar"` to
+ * `"split-video-player"`: user validation of FIX3 found the segment bar
+ * landed the viewport too far down (at the newly-created last segment);
+ * the player itself is now the native navigation target instead.
  */
-function splitOkRedirectTo(returnTo: string, newSegmentId: number, warning?: string): never {
+function splitOkRedirectTo(returnTo: string, newSegmentId: number, options?: { warning?: string; hashAnchor?: string }): never {
   const sep = returnTo.includes("?") ? "&" : "?";
   let url = `${returnTo}${sep}splitEdited=1&newSegmentId=${newSegmentId}`;
-  if (warning) url += `&splitWarning=${encodeURIComponent(warning)}`;
+  if (options?.warning) url += `&splitWarning=${encodeURIComponent(options.warning)}`;
+  if (options?.hashAnchor) url += `#${options.hashAnchor}`;
   redirect(url);
 }
 
@@ -1196,7 +1213,9 @@ export async function splitSegmentAt(formData: FormData): Promise<void> {
     errRedirectTo(returnTo, "splitError", e instanceof Error ? e.message : "Failed to split segment.");
   }
 
-  splitOkRedirectTo(returnTo, newSegmentId, warning ?? undefined);
+  // REVISE (FIX3/FIX4) — numeric Split keeps its historical redirect: no
+  // anchor here, only `splitSegmentAtFrame` gets one.
+  splitOkRedirectTo(returnTo, newSegmentId, { warning: warning ?? undefined });
 }
 
 // ---- Split at Current Frame (SEQGEN.SPLIT.WORKSPACE.1, Lot B) — frame-exact, server-derived from the run's own FPS snapshot ----
@@ -1256,7 +1275,10 @@ export async function splitSegmentAtFrame(formData: FormData): Promise<void> {
     errRedirectTo(returnTo, "splitError", e instanceof Error ? e.message : "Failed to split at the current frame.");
   }
 
-  splitOkRedirectTo(returnTo, newSegmentId, warning ?? undefined);
+  // REVISE (FIX4) — native URL anchor to the resizable player container
+  // (was the segment bar in FIX3), so the browser itself scrolls there on
+  // navigation — no scroll JavaScript of any kind.
+  splitOkRedirectTo(returnTo, newSegmentId, { warning: warning ?? undefined, hashAnchor: "split-video-player" });
 }
 
 // ---- Refine Detection in This Segment (SEQGEN.SPLIT.WORKSPACE.1, Lot C) — local FFmpeg re-detection scoped to one segment's own [start, end] range ----
