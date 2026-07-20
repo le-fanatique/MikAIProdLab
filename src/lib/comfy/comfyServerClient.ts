@@ -3,6 +3,11 @@ import "server-only";
 import fs from "fs/promises";
 import path from "path";
 import { getComfySettings } from "@/lib/settings";
+import {
+  extractPlyFromHistoryOutputs,
+  isSafePlyFilename,
+  type PlyArtifactExtraction,
+} from "@/lib/comfy/plyArtifact";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -314,6 +319,45 @@ export async function freeComfyVRAM(
       error: err instanceof Error ? err.message : "Network error calling /free.",
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// PLY artifact support (CAMLAB.PLY.1) — additive, does not change the
+// image/video/gif extraction semantics above or below.
+// ---------------------------------------------------------------------------
+
+/**
+ * Scans the history entry of a prompt for a Gaussian Splat PLY artifact.
+ * Purely structural detection — see plyArtifact.ts for the contract.
+ */
+export function extractPlyComfyOutput(
+  history: ComfyHistoryResponse,
+  promptId: string
+): PlyArtifactExtraction {
+  const entry = history[promptId];
+  if (!entry || !isRecord(entry["outputs"])) return { status: "none" };
+  return extractPlyFromHistoryOutputs(entry["outputs"]);
+}
+
+/**
+ * Builds a /view URL for a validated PLY basename. Strict by construction:
+ * throws on any unsafe filename, always type=output, never a subfolder.
+ * Kept separate from buildComfyViewUrl so legacy image/video URLs are
+ * untouched.
+ */
+export function buildComfyPlyViewUrl(args: {
+  baseUrl: string;
+  filename: string;
+}): string {
+  if (!isSafePlyFilename(args.filename)) {
+    throw new Error(
+      `Refusing to build ComfyUI /view URL for unsafe PLY filename.`
+    );
+  }
+  const params = new URLSearchParams();
+  params.set("filename", args.filename);
+  params.set("type", "output");
+  return `${args.baseUrl}/view?${params.toString()}`;
 }
 
 // ---------------------------------------------------------------------------

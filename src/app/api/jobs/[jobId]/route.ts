@@ -1,17 +1,21 @@
 import fs from "fs/promises";
 import path from "path";
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { generationJobs } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { GenerationJob } from "@/db/schema";
 import {
   getConfiguredComfyBaseUrl,
   getComfyHistory,
   extractFirstComfyOutput,
+  extractPlyComfyOutput,
   buildComfyViewUrl,
+  buildComfyPlyViewUrl,
   isPromptInComfyQueue,
 } from "@/lib/comfy/comfyServerClient";
+import { PLY_MAX_BYTES, validatePlyFile } from "@/lib/comfy/plyArtifact";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -143,6 +147,138 @@ async function downloadAndSaveOutput(
 }
 
 // ---------------------------------------------------------------------------
+// PLY output download (CAMLAB.PLY.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Streams a PLY artifact from the configured ComfyUI /view endpoint into the
+ * job's output directory. Enforces the 512 MiB cap during streaming (never
+ * trusting Content-Length alone), writes to a temp file, validates the PLY
+ * header and size, then renames atomically. Any failure cleans up this
+ * attempt's files and throws — the caller fails the job.
+ */
+async function downloadAndSavePlyOutput(
+  jobId: number,
+  baseUrl: string,
+  comfyFilename: string
+): Promise<{ relativePath: string; finalPath: string }> {
+  const url = buildComfyPlyViewUrl({ baseUrl, filename: comfyFilename });
+
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `ComfyUI /view responded ${response.status} for the PLY output.`
+    );
+  }
+
+  const contentLength = parseInt(
+    response.headers.get("content-length") ?? "",
+    10
+  );
+  if (Number.isFinite(contentLength) && contentLength > PLY_MAX_BYTES) {
+    throw new Error(
+      `PLY output exceeds the ${PLY_MAX_BYTES} byte limit (Content-Length ${contentLength}).`
+    );
+  }
+
+  // Random suffix guarantees concurrent polls can never collide on the same
+  // local name — a loser's compensation must only ever delete its own file.
+  const localFilename = `output-${Date.now()}-${randomUUID().slice(0, 8)}.ply`;
+  const outputDir = path.join(
+    process.cwd(),
+    "public",
+    "outputs",
+    "jobs",
+    String(jobId)
+  );
+  const finalPath = path.join(outputDir, localFilename);
+  const tmpPath = `${finalPath}.tmp`;
+
+  await fs.mkdir(outputDir, { recursive: true });
+
+  let handle: Awaited<ReturnType<typeof fs.open>> | null = null;
+  try {
+    handle = await fs.open(tmpPath, "wx");
+    const reader = response.body.getReader();
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > PLY_MAX_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new Error(
+          `PLY output exceeds the ${PLY_MAX_BYTES} byte limit while streaming.`
+        );
+      }
+      await handle.write(value);
+    }
+    await handle.close();
+    handle = null;
+
+    const validation = await validatePlyFile(tmpPath);
+    if (!validation.ok) {
+      throw new Error(`Downloaded PLY failed validation: ${validation.reason}`);
+    }
+
+    await fs.rename(tmpPath, finalPath);
+  } catch (err) {
+    await handle?.close().catch(() => {});
+    await fs.unlink(tmpPath).catch(() => {});
+    await fs.unlink(finalPath).catch(() => {});
+    throw err;
+  }
+
+  // Relative path from public/ — same convention as image/video outputs.
+  // finalPath is returned so the caller can compensate (delete the file)
+  // if the DB publication fails or loses a concurrent race.
+  return {
+    relativePath: `outputs/jobs/${jobId}/${localFilename}`,
+    finalPath,
+  };
+}
+
+/**
+ * Atomically publishes a PLY output on the job row: the transition only
+ * succeeds if the job is still `running` with no outputPath, so exactly one
+ * concurrent poll can win. Returns the updated row on win, null on loss.
+ */
+async function publishPlyOutputIfStillRunning(
+  jobId: number,
+  outputPath: string
+): Promise<JobRow | null> {
+  const now = new Date().toISOString();
+  const [updated] = await db
+    .update(generationJobs)
+    .set({
+      status: "done",
+      outputPath,
+      completedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(generationJobs.id, jobId),
+        eq(generationJobs.status, "running"),
+        isNull(generationJobs.outputPath)
+      )
+    )
+    .returning({
+      id: generationJobs.id,
+      status: generationJobs.status,
+      promptId: generationJobs.promptId,
+      outputPath: generationJobs.outputPath,
+      errorMessage: generationJobs.errorMessage,
+      createdAt: generationJobs.createdAt,
+      updatedAt: generationJobs.updatedAt,
+      startedAt: generationJobs.startedAt,
+      completedAt: generationJobs.completedAt,
+      payloadSnapshot: generationJobs.payloadSnapshot,
+    });
+  return updated ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/jobs/[jobId]
 // ---------------------------------------------------------------------------
 
@@ -212,9 +348,53 @@ export async function GET(
       return NextResponse.json({ ok: true, job: serializeJob(job) });
     }
 
-    // Mark as running if still queued
+    // Mark as running only if still queued — conditional so a stale poll
+    // that read `queued` long ago can never downgrade a job another poll
+    // has already completed (done/failed/timeout) in the meantime.
     if (job.status === "queued") {
-      job = await updateJobFields(jobId, { status: "running" });
+      const now = new Date().toISOString();
+      const [transitioned] = await db
+        .update(generationJobs)
+        .set({ status: "running", updatedAt: now })
+        .where(
+          and(eq(generationJobs.id, jobId), eq(generationJobs.status, "queued"))
+        )
+        .returning({
+          id: generationJobs.id,
+          status: generationJobs.status,
+          promptId: generationJobs.promptId,
+          outputPath: generationJobs.outputPath,
+          errorMessage: generationJobs.errorMessage,
+          createdAt: generationJobs.createdAt,
+          updatedAt: generationJobs.updatedAt,
+          startedAt: generationJobs.startedAt,
+          completedAt: generationJobs.completedAt,
+          payloadSnapshot: generationJobs.payloadSnapshot,
+        });
+
+      if (!transitioned) {
+        // Another poll changed the status since our read — return the
+        // current row untouched instead of overwriting it.
+        const [fresh] = await db
+          .select({
+            id: generationJobs.id,
+            status: generationJobs.status,
+            promptId: generationJobs.promptId,
+            outputPath: generationJobs.outputPath,
+            errorMessage: generationJobs.errorMessage,
+            createdAt: generationJobs.createdAt,
+            updatedAt: generationJobs.updatedAt,
+            startedAt: generationJobs.startedAt,
+            completedAt: generationJobs.completedAt,
+            payloadSnapshot: generationJobs.payloadSnapshot,
+          })
+          .from(generationJobs)
+          .where(eq(generationJobs.id, jobId));
+        job = fresh ?? job;
+        return NextResponse.json({ ok: true, job: serializeJob(job) });
+      }
+
+      job = transitioned;
     }
 
     // Poll ComfyUI history — one check, no loop
@@ -253,6 +433,94 @@ export async function GET(
       }
 
       const outputFile = extractFirstComfyOutput(history, promptId);
+
+      // CAMLAB.PLY.1 — PLY artifact path, only when no image/video output
+      // was recognized (priority videos -> gifs -> images is preserved).
+      if (!outputFile) {
+        const plyResult = extractPlyComfyOutput(history, promptId);
+
+        if (plyResult.status === "invalid") {
+          job = await failJob(
+            jobId,
+            `Invalid PLY output metadata: ${plyResult.reason}`
+          );
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+
+        if (plyResult.status === "found") {
+          const baseUrl = await getConfiguredComfyBaseUrl();
+          const { relativePath, finalPath } = await downloadAndSavePlyOutput(
+            jobId,
+            baseUrl,
+            plyResult.filename
+          );
+
+          let published: JobRow | null;
+          try {
+            published = await publishPlyOutputIfStillRunning(
+              jobId,
+              relativePath
+            );
+          } catch (dbErr) {
+            // DB failed after the file was renamed into place — compensate
+            // by removing the final file so no orphan survives, and surface
+            // any cleanup failure explicitly.
+            let cleanupNote = "";
+            try {
+              await fs.unlink(finalPath);
+            } catch {
+              cleanupNote = ` Cleanup of the cached PLY file also failed; a stray file may remain at outputs/jobs/${jobId}.`;
+            }
+            const dbMsg =
+              dbErr instanceof Error ? dbErr.message : "Unknown DB error.";
+            throw new Error(
+              `Failed to record PLY output in the database: ${dbMsg}${cleanupNote}`
+            );
+          }
+
+          if (!published) {
+            // A concurrent poll already published an output for this job.
+            // Delete our duplicate, then return the winner's state. A failed
+            // cleanup is an explicit error — never a silent success with a
+            // stray 66 MB file left behind.
+            try {
+              await fs.unlink(finalPath);
+            } catch (cleanupErr) {
+              const msg =
+                cleanupErr instanceof Error
+                  ? cleanupErr.message
+                  : "Unknown cleanup error.";
+              return NextResponse.json(
+                {
+                  ok: false,
+                  error: `A concurrent poll already published this job's output, but cleanup of the duplicate PLY failed (${msg}). A stray file may remain in outputs/jobs/${jobId}.`,
+                },
+                { status: 500 }
+              );
+            }
+            const [fresh] = await db
+              .select({
+                id: generationJobs.id,
+                status: generationJobs.status,
+                promptId: generationJobs.promptId,
+                outputPath: generationJobs.outputPath,
+                errorMessage: generationJobs.errorMessage,
+                createdAt: generationJobs.createdAt,
+                updatedAt: generationJobs.updatedAt,
+                startedAt: generationJobs.startedAt,
+                completedAt: generationJobs.completedAt,
+                payloadSnapshot: generationJobs.payloadSnapshot,
+              })
+              .from(generationJobs)
+              .where(eq(generationJobs.id, jobId));
+            job = fresh ?? job;
+            return NextResponse.json({ ok: true, job: serializeJob(job) });
+          }
+
+          job = published;
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+      }
 
       if (!outputFile) {
         // Detect orphaned job: not in history and not in ComfyUI queue
