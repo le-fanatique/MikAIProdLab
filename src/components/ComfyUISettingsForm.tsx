@@ -2,20 +2,42 @@
 
 import { useState, useTransition } from "react";
 import { saveComfySettings, testComfyConnection } from "@/actions/settings";
+import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
 
 type Props = {
+  initialProvider: RuntimeProvider;
   initialBaseUrl: string;
-  initialApiKey: string;
+  initialHasApiKey: boolean;
+  initialHasCloudApiKey: boolean;
   initialLocalVramAutoManagement: boolean;
+  cloudBaseUrl: string;
 };
 
+const inputClass =
+  "rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:border-[#3a4046] focus:outline-none transition-colors";
+
 export default function ComfyUISettingsForm({
+  initialProvider,
   initialBaseUrl,
-  initialApiKey,
+  initialHasApiKey,
+  initialHasCloudApiKey,
   initialLocalVramAutoManagement,
+  cloudBaseUrl,
 }: Props) {
+  const [provider, setProvider] = useState<RuntimeProvider>(initialProvider);
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
-  const [apiKey, setApiKey] = useState(initialApiKey);
+
+  // Partner Node key (local + Cloud submissions) — never pre-filled with the
+  // real value; only a "configured" indicator until the user types a new one.
+  const [hasApiKey, setHasApiKey] = useState(initialHasApiKey);
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyTouched, setApiKeyTouched] = useState(false);
+
+  // Comfy Cloud's own auth key — same never-prefilled discipline.
+  const [hasCloudApiKey, setHasCloudApiKey] = useState(initialHasCloudApiKey);
+  const [cloudApiKey, setCloudApiKey] = useState("");
+  const [cloudApiKeyTouched, setCloudApiKeyTouched] = useState(false);
+
   const [localVramAutoManagement, setLocalVramAutoManagement] = useState(initialLocalVramAutoManagement);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -25,16 +47,30 @@ export default function ComfyUISettingsForm({
   async function handleTestConnection() {
     setIsTesting(true);
     setTestResult(null);
-    const res = await testComfyConnection(baseUrl);
+    const res = await testComfyConnection(provider, baseUrl, cloudApiKeyTouched ? cloudApiKey : "");
     setTestResult({ ok: res.ok, message: res.ok ? res.message : res.error });
     setIsTesting(false);
   }
 
   function handleSave() {
     startTransition(async () => {
-      const res = await saveComfySettings(baseUrl, apiKey, localVramAutoManagement);
+      const res = await saveComfySettings(
+        provider,
+        baseUrl,
+        apiKeyTouched ? apiKey : "",
+        apiKeyTouched ? "replace" : "keep",
+        cloudApiKeyTouched ? cloudApiKey : "",
+        cloudApiKeyTouched ? "replace" : "keep",
+        localVramAutoManagement
+      );
       if (res.ok) {
         setResult({ ok: true, message: "ComfyUI settings saved." });
+        setHasApiKey(apiKeyTouched ? apiKey.trim().length > 0 : hasApiKey);
+        setHasCloudApiKey(cloudApiKeyTouched ? cloudApiKey.trim().length > 0 : hasCloudApiKey);
+        setApiKey("");
+        setApiKeyTouched(false);
+        setCloudApiKey("");
+        setCloudApiKeyTouched(false);
       } else {
         setResult({ ok: false, message: res.error });
       }
@@ -44,68 +80,139 @@ export default function ComfyUISettingsForm({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-base-url">
-          Base URL
+        <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-provider">
+          Runtime
         </label>
-        <input
-          id="comfyui-base-url"
-          type="text"
-          value={baseUrl}
+        <select
+          id="comfyui-provider"
+          value={provider}
           onChange={(e) => {
-            setBaseUrl(e.target.value);
+            setProvider(e.target.value as RuntimeProvider);
             setResult(null);
+            setTestResult(null);
           }}
-          placeholder="http://127.0.0.1:8188"
-          className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:border-[#3a4046] focus:outline-none transition-colors"
-        />
+          className={inputClass + " cursor-pointer"}
+        >
+          <option value="local">Local ComfyUI</option>
+          <option value="cloud">Comfy Cloud</option>
+        </select>
         <p className="text-xs text-[#4b5158]">
-          Local ComfyUI server used for workflow generation.
+          Only new generations use this setting — jobs already queued keep the
+          runtime they were started with.
         </p>
       </div>
 
+      {provider === "local" ? (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-base-url">
+            Base URL
+          </label>
+          <input
+            id="comfyui-base-url"
+            type="text"
+            value={baseUrl}
+            onChange={(e) => {
+              setBaseUrl(e.target.value);
+              setResult(null);
+            }}
+            placeholder="http://127.0.0.1:8188"
+            className={inputClass}
+          />
+          <p className="text-xs text-[#4b5158]">
+            Local ComfyUI server used for workflow generation.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-[#a4abb2]">Base URL</label>
+          <input type="text" value={cloudBaseUrl} disabled readOnly className={inputClass + " opacity-60"} />
+          <p className="text-xs text-[#4b5158]">Comfy Cloud's endpoint is fixed and not editable.</p>
+        </div>
+      )}
+
+      {provider === "cloud" && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-cloud-api-key">
+              Comfy Cloud API Key
+            </label>
+            {hasCloudApiKey && !cloudApiKeyTouched && (
+              <span className="text-[10px] text-[#6b9e72]">Key saved</span>
+            )}
+          </div>
+          <input
+            id="comfyui-cloud-api-key"
+            type="password"
+            value={cloudApiKey}
+            onChange={(e) => {
+              setCloudApiKey(e.target.value);
+              setCloudApiKeyTouched(true);
+              setResult(null);
+              setTestResult(null);
+            }}
+            placeholder={hasCloudApiKey ? "•••• (unchanged)" : "Comfy Cloud API key"}
+            className={inputClass}
+          />
+          <p className="text-xs text-[#4b5158]">
+            Required. Sent as X-API-Key on every Comfy Cloud request. Get it
+            from your platform.comfy.org profile.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-api-key">
-          API Key
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-api-key">
+            Comfy.org API Key for Partner Nodes
+          </label>
+          {hasApiKey && !apiKeyTouched && (
+            <span className="text-[10px] text-[#6b9e72]">Key saved</span>
+          )}
+        </div>
         <input
           id="comfyui-api-key"
           type="password"
           value={apiKey}
           onChange={(e) => {
             setApiKey(e.target.value);
+            setApiKeyTouched(true);
             setResult(null);
           }}
-          placeholder="Optional ComfyUI API key"
-          className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:border-[#3a4046] focus:outline-none transition-colors"
+          placeholder={hasApiKey ? "•••• (unchanged)" : "Optional ComfyUI API key"}
+          className={inputClass}
         />
         <p className="text-xs text-[#4b5158]">
-          Optional. Used for ComfyUI API / partner nodes through extra_data.
+          Optional. Billing key for Partner Nodes (e.g. Gemini/GPT image
+          nodes), sent via extra_data — used for both Local and Comfy Cloud
+          submissions. Distinct from the Comfy Cloud API key above.
         </p>
       </div>
 
-      <div className="flex items-start gap-3">
-        <input
-          id="comfyui-local-vram-auto"
-          type="checkbox"
-          checked={localVramAutoManagement}
-          onChange={(e) => {
-            setLocalVramAutoManagement(e.target.checked);
-            setResult(null);
-          }}
-          className="mt-0.5 rounded border border-[#2c3035] bg-[#0d0e10] accent-[#5b93d6] cursor-pointer"
-        />
-        <div className="flex flex-col gap-0.5">
-          <label
-            htmlFor="comfyui-local-vram-auto"
-            className="text-xs font-medium text-[#a4abb2] cursor-pointer select-none"
-          >
-            Auto manage local VRAM between ComfyUI and Ollama
-          </label>
-          <p className="text-xs text-[#4b5158]">
-            When enabled, MikAI unloads the inactive local runtime before starting a local Ollama request or a ComfyUI generation.
-          </p>
+      {provider === "local" && (
+        <div className="flex items-start gap-3">
+          <input
+            id="comfyui-local-vram-auto"
+            type="checkbox"
+            checked={localVramAutoManagement}
+            onChange={(e) => {
+              setLocalVramAutoManagement(e.target.checked);
+              setResult(null);
+            }}
+            className="mt-0.5 rounded border border-[#2c3035] bg-[#0d0e10] accent-[#5b93d6] cursor-pointer"
+          />
+          <div className="flex flex-col gap-0.5">
+            <label
+              htmlFor="comfyui-local-vram-auto"
+              className="text-xs font-medium text-[#a4abb2] cursor-pointer select-none"
+            >
+              Auto manage local VRAM between ComfyUI and Ollama
+            </label>
+            <p className="text-xs text-[#4b5158]">
+              When enabled, MikAI unloads the inactive local runtime before starting a local Ollama request or a ComfyUI generation.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
@@ -132,7 +239,7 @@ export default function ComfyUISettingsForm({
             disabled={isTesting || isPending}
             className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isTesting ? "Testing..." : "Test ComfyUI Connection"}
+            {isTesting ? "Testing..." : `Test ${provider === "cloud" ? "Comfy Cloud" : "ComfyUI"} Connection`}
           </button>
 
           {testResult && (

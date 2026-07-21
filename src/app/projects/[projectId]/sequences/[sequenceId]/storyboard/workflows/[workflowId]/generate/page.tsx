@@ -23,6 +23,7 @@ import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPane
 import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
+import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
@@ -49,6 +50,8 @@ import {
 } from "@/lib/prompts/buildSequenceStoryboardPrompt";
 import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { getComfySettings } from "@/lib/settings";
+import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -162,6 +165,16 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   const [workflow] = await db.select().from(comfyWorkflows).where(eq(comfyWorkflows.id, wid));
   if (!workflow) notFound();
   if (workflow.kind !== "image") notFound();
+
+  // COMFY.PROVIDER.1 — same Cloud preflight as ShotGenerationPanel.
+  const comfySettings = await getComfySettings();
+  const cloudPreflight = await computeCloudPreflightForPanel(workflow.workflowJson, comfySettings);
+  const cloudPreflightBlocksGeneration =
+    cloudPreflight !== null && ("error" in cloudPreflight || cloudPreflight.missingClasses.length > 0);
+  const partnerNodeConfirmMessage =
+    cloudPreflight !== null && !("error" in cloudPreflight) && cloudPreflight.apiNodeClasses.length > 0
+      ? `This will call paid Comfy Cloud Partner Node(s): ${cloudPreflight.apiNodeClasses.join(", ")}. Continue and incur cost?`
+      : null;
 
   const shotList = await db
     .select()
@@ -769,7 +782,35 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                   </div>
                 )}
 
-                <form action={runSequenceGenerationFromForm} className="flex flex-col gap-4">
+                {/* COMFY.PROVIDER.1 — see identical blocks in ShotGenerationPanel. */}
+                {cloudPreflight !== null &&
+                  ("error" in cloudPreflight || cloudPreflight.missingClasses.length > 0) && (
+                    <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                      <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                        {"error" in cloudPreflight
+                          ? cloudPreflight.error
+                          : `This workflow uses node type(s) not available on Comfy Cloud: ${cloudPreflight.missingClasses.join(", ")}. It cannot be generated with Comfy Cloud selected.`}
+                      </p>
+                    </div>
+                  )}
+                {cloudPreflight !== null &&
+                  !("error" in cloudPreflight) &&
+                  cloudPreflight.missingClasses.length === 0 &&
+                  cloudPreflight.apiNodeClasses.length > 0 && (
+                    <div className="rounded border border-[#3d3320] bg-[#1a1712] px-3 py-2">
+                      <p className="text-xs text-[#c9a24b] leading-relaxed">
+                        This workflow calls paid Comfy Cloud Partner Node(s):{" "}
+                        <span className="font-mono">{cloudPreflight.apiNodeClasses.join(", ")}</span>. Generating
+                        will incur Comfy Cloud usage cost. You will be asked to confirm before it runs.
+                      </p>
+                    </div>
+                  )}
+                {!cloudPreflightBlocksGeneration && (
+                <PartnerNodeConfirmForm
+                  action={runSequenceGenerationFromForm}
+                  partnerNodeConfirmMessage={partnerNodeConfirmMessage}
+                  className="flex flex-col gap-4"
+                >
                   <input type="hidden" name="projectId" value={String(pid)} />
                   <input type="hidden" name="sequenceId" value={String(sid)} />
                   <input type="hidden" name="workflowId" value={String(wid)} />
@@ -791,12 +832,16 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                       initialValue={batchSelectedIds.join(",")}
                     />
                   )}
+                  {/* COMFY.PROVIDER.1 — confirmPartnerNodeCost is deliberately
+                      NOT rendered here: PartnerNodeConfirmForm sets it itself,
+                      only on the confirmed submit path. */}
 
                   <WorkflowGenerateActions
                     initialJsonText={payloadPreview.patchedJsonText}
                     buttonLabel="Generate Sequence Storyboard"
                   />
-                </form>
+                </PartnerNodeConfirmForm>
+                )}
               </div>
             </Card>
           </>

@@ -274,6 +274,13 @@
       "when": 1784425533234,
       "tag": "0038_chunky_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1784649362341,
+      "tag": "0039_shocking_kat_farrell",
+      "breakpoints": true
     }
   ]
 }

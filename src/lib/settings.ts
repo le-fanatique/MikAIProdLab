@@ -2,6 +2,8 @@ import { db } from "@/db";
 import { appSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { LLMConfig, LLMProvider, ProviderSettings } from "@/types/llm";
+import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
+import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
 
 // ---------------------------------------------------------------------------
 // Module-level provider prefix map (used by new chat config functions)
@@ -373,20 +375,41 @@ export async function getChatLLMConfig(): Promise<LLMConfig | null> {
 // ---------------------------------------------------------------------------
 
 export interface ComfySettings {
+  /** COMFY.PROVIDER.1 — which backend new generations queue against. Existing behavior ("local") is the default and non-regression reference. */
+  provider: RuntimeProvider;
   baseUrl: string;
+  /** Comfy.org Partner Node billing key (extra_data.api_key_comfy_org). Same semantics for local AND Cloud submissions — unrelated to the Cloud service's own auth below. */
   apiKey: string;
+  /** True iff `apiKey` is non-empty. Settings UI must render this, never the raw value, to avoid putting a secret in rendered HTML. */
+  hasApiKey: boolean;
+  /** COMFY.PROVIDER.1 — Comfy Cloud's own `X-API-Key` auth key (cloud.comfy.org), distinct from the Partner Node key above. */
+  cloudApiKey: string;
+  hasCloudApiKey: boolean;
   localVramAutoManagement: boolean;
 }
 
 const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
 
+/** Comfy Cloud's fixed base URL — never user-configurable (see docs/audits/COMFY_CLOUD_SPIKE.md). */
+export const COMFY_CLOUD_BASE_URL = "https://cloud.comfy.org";
+
 export async function getComfySettings(): Promise<ComfySettings> {
   const rows = await db.select().from(appSettings);
   const map = new Map(rows.map((r) => [r.key, r.value]));
+  const provider = normalizeRuntimeProvider(map.get("comfyui_provider"));
   const baseUrl = map.get("comfyui_base_url") ?? COMFY_BASE_URL_DEFAULT;
   const apiKey = map.get("comfyui_api_key") ?? "";
+  const cloudApiKey = map.get("comfyui_cloud_api_key") ?? "";
   const localVramAutoManagement = map.get("local_vram_auto_management_enabled") === "true";
-  return { baseUrl, apiKey, localVramAutoManagement };
+  return {
+    provider,
+    baseUrl,
+    apiKey,
+    hasApiKey: apiKey.trim().length > 0,
+    cloudApiKey,
+    hasCloudApiKey: cloudApiKey.trim().length > 0,
+    localVramAutoManagement,
+  };
 }
 
 // ---------------------------------------------------------------------------

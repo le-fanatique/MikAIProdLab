@@ -8,6 +8,10 @@ import { fetchOpenAICompatibleModelNames, testOpenAICompatibleConnection } from 
 import { redirect } from "next/navigation";
 import type { ChatSystemPrompt, LLMProvider } from "@/types/llm";
 import { validateTemplate, DEFAULT_SEQUENCE_TEMPLATE, DEFAULT_SHOT_TEMPLATE } from "@/lib/nomenclature";
+import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
+import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
+import { COMFY_CLOUD_BASE_URL } from "@/lib/settings";
+import { getCloudObjectInfo } from "@/lib/comfy/comfyCloudClient";
 
 // ---------------------------------------------------------------------------
 // Save LLM settings to DB (per-provider)
@@ -139,9 +143,22 @@ export async function fetchOllamaModels(
 
 const COMFY_BASE_URL_DEFAULT = "http://127.0.0.1:8188";
 
+/**
+ * COMFY.PROVIDER.1 — saves the ComfyUI provider selection plus both key
+ * material fields, each with its own keep/replace mode (mirrors
+ * saveLLMSettings' apiKeyMode) so a Settings save never has to resend a
+ * secret the form was never given in the first place (see
+ * ComfyUISettingsForm.tsx / settings/page.tsx no-leak design). Neither key
+ * is ever logged, echoed in the return value, or written anywhere but this
+ * upsert.
+ */
 export async function saveComfySettings(
+  provider: RuntimeProvider,
   baseUrl: string,
   apiKey: string,
+  apiKeyMode: "replace" | "keep",
+  cloudApiKey: string,
+  cloudApiKeyMode: "replace" | "keep",
   localVramAutoManagement: boolean = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
@@ -150,23 +167,17 @@ export async function saveComfySettings(
     const valid =
       cleaned.startsWith("http://") || cleaned.startsWith("https://");
     const finalUrl = cleaned && valid ? cleaned : COMFY_BASE_URL_DEFAULT;
+    const finalProvider = normalizeRuntimeProvider(provider);
 
-    const finalApiKey = apiKey.trim();
-
-    const now = new Date().toISOString();
-
-    const upsert = (key: string, value: string) =>
-      db
-        .insert(appSettings)
-        .values({ key, value, updatedAt: now })
-        .onConflictDoUpdate({
-          target: appSettings.key,
-          set: { value, updatedAt: now },
-        });
-
-    await upsert("comfyui_base_url", finalUrl);
-    await upsert("comfyui_api_key", finalApiKey);
-    await upsert("local_vram_auto_management_enabled", localVramAutoManagement ? "true" : "false");
+    await upsertSetting("comfyui_provider", finalProvider);
+    await upsertSetting("comfyui_base_url", finalUrl);
+    if (apiKeyMode === "replace") {
+      await upsertSetting("comfyui_api_key", apiKey.trim());
+    }
+    if (cloudApiKeyMode === "replace") {
+      await upsertSetting("comfyui_cloud_api_key", cloudApiKey.trim());
+    }
+    await upsertSetting("local_vram_auto_management_enabled", localVramAutoManagement ? "true" : "false");
 
     return { ok: true };
   } catch {
@@ -178,7 +189,7 @@ export async function saveComfySettings(
 // Test ComfyUI connection (read-only ping via /system_stats)
 // ---------------------------------------------------------------------------
 
-export async function testComfyConnection(
+async function testLocalComfyConnection(
   baseUrl: string
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
@@ -230,6 +241,52 @@ export async function testComfyConnection(
   }
 
   return { ok: true, message: "ComfyUI connection successful." };
+}
+
+/**
+ * COMFY.PROVIDER.1 — tests the Cloud connection with GET /api/object_info
+ * (authenticated, read-only — never a generation). `cloudApiKeyOverride` is
+ * the value currently typed in the form; when empty (field untouched), the
+ * already-saved key is read server-side so "Test Connection" still works
+ * without the client ever holding the saved secret (no-leak design).
+ */
+async function testCloudComfyConnection(
+  cloudApiKeyOverride: string
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const typed = cloudApiKeyOverride.trim();
+  let apiKey = typed;
+  if (!apiKey) {
+    const rows = await db
+      .select()
+      .from(appSettings)
+      .where(eq(appSettings.key, "comfyui_cloud_api_key"));
+    apiKey = rows[0]?.value?.trim() ?? "";
+  }
+  if (!apiKey) {
+    return { ok: false, error: "Set a Comfy Cloud API key before testing the connection." };
+  }
+
+  try {
+    await getCloudObjectInfo(apiKey);
+    return { ok: true, message: `Comfy Cloud connection successful (${COMFY_CLOUD_BASE_URL}).` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    if (/responded 401/.test(message)) {
+      return { ok: false, error: "Comfy Cloud connection failed. Check the Comfy Cloud API key." };
+    }
+    return { ok: false, error: `Comfy Cloud connection failed: ${message}` };
+  }
+}
+
+export async function testComfyConnection(
+  provider: RuntimeProvider,
+  baseUrl: string,
+  cloudApiKeyOverride: string = ""
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const finalProvider = normalizeRuntimeProvider(provider);
+  return finalProvider === "cloud"
+    ? testCloudComfyConnection(cloudApiKeyOverride)
+    : testLocalComfyConnection(baseUrl);
 }
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsFor
 import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
 import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
 import ThemeModeToggle from "@/components/ThemeModeToggle";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl } from "@/lib/settings";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -208,9 +208,12 @@ export default async function SettingsPage({ searchParams }: Props) {
 
       <Card title="ComfyUI Connection" className="mb-6">
         <ComfyUISettingsForm
+          initialProvider={comfySettings.provider}
           initialBaseUrl={comfySettings.baseUrl}
-          initialApiKey={comfySettings.apiKey}
+          initialHasApiKey={comfySettings.hasApiKey}
+          initialHasCloudApiKey={comfySettings.hasCloudApiKey}
           initialLocalVramAutoManagement={comfySettings.localVramAutoManagement}
+          cloudBaseUrl={COMFY_CLOUD_BASE_URL}
         />
       </Card>
 

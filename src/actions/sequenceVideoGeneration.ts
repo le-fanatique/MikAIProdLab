@@ -63,6 +63,9 @@ import {
 import type { SequenceStoryboardReferenceInput } from "@/lib/prompts/buildSequenceStoryboardPrompt";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
+import { queueCloudPrompt } from "@/lib/comfy/comfyCloudClient";
+import { runCloudPreflight } from "@/lib/comfy/cloudPreflight";
+import { getComfySettings } from "@/lib/settings";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
@@ -444,7 +447,15 @@ async function buildReferenceMetaByRefId(sequenceId: number): Promise<Map<string
 // runSequenceVideoGeneration
 // ---------------------------------------------------------------------------
 
-export type RunSequenceVideoGenerationResult = { ok: true; jobId: number } | { ok: false; error: string };
+export type RunSequenceVideoGenerationResult =
+  | { ok: true; jobId: number }
+  | {
+      ok: false;
+      error: string;
+      /** COMFY.PROVIDER.1 — same opt-in confirmation contract as runWorkflowGeneration. */
+      requiresPartnerNodeConfirmation?: boolean;
+      apiNodeClasses?: string[];
+    };
 
 export async function runSequenceVideoGeneration(input: {
   projectId: number;
@@ -459,8 +470,15 @@ export async function runSequenceVideoGeneration(input: {
   textOverrideByNodeId?: Record<string, string>;
   patchedJsonOverride?: Record<string, unknown>;
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
+  /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
+  confirmPartnerNodeCost?: boolean;
 }): Promise<RunSequenceVideoGenerationResult> {
   const { projectId, sequenceId, workflowId, sourceStoryboardImageId } = input;
+
+  const comfySettings = await getComfySettings();
+  if (comfySettings.provider === "cloud" && !comfySettings.hasCloudApiKey) {
+    return { ok: false, error: "Comfy Cloud is selected but no Comfy Cloud API key is configured." };
+  }
 
   if (
     !Number.isInteger(projectId) || projectId <= 0 ||
@@ -592,6 +610,29 @@ export async function runSequenceVideoGeneration(input: {
     return { ok: false, error: provenanceCheck.error };
   }
 
+  // COMFY.PROVIDER.1 — Cloud preflight before any job row is created: same
+  // opt-in confirmation contract as runWorkflowGeneration (Shot).
+  if (comfySettings.provider === "cloud") {
+    let preflight;
+    try {
+      preflight = await runCloudPreflight(finalPatchedJson, comfySettings.cloudApiKey);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      return { ok: false, error: `Could not verify this workflow against Comfy Cloud before queueing: ${message}` };
+    }
+    if (preflight.missingClasses.length > 0) {
+      return { ok: false, error: `This workflow uses node type(s) not available on Comfy Cloud: ${preflight.missingClasses.join(", ")}. It cannot be queued on Comfy Cloud.` };
+    }
+    if (preflight.apiNodeClasses.length > 0 && !input.confirmPartnerNodeCost) {
+      return {
+        ok: false,
+        error: `This workflow calls paid Comfy Cloud Partner Node(s): ${preflight.apiNodeClasses.join(", ")}. Confirm the cost to continue.`,
+        requiresPartnerNodeConfirmation: true,
+        apiNodeClasses: preflight.apiNodeClasses,
+      };
+    }
+  }
+
   if (!isSingleGenerationTarget({ shotId: null, assetId: null, sequenceId })) {
     return { ok: false, error: "Invalid generation job target." };
   }
@@ -608,6 +649,7 @@ export async function runSequenceVideoGeneration(input: {
       workflowId,
       status: "pending",
       clientId,
+      runtimeProvider: comfySettings.provider,
       startedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -622,7 +664,12 @@ export async function runSequenceVideoGeneration(input: {
       .set({ status: "uploading", updatedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, jobId));
 
-    const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
+    const prepared = await prepareComfyPayloadForQueue(
+      finalPatchedJson,
+      comfySettings.provider === "cloud"
+        ? { provider: "cloud", cloudApiKey: comfySettings.cloudApiKey }
+        : { provider: "local" }
+    );
 
     const textNodes = parsed.inputs.filter((i) => i.kind === "text").map((i) => ({ nodeId: i.nodeId, classType: i.classType }));
     const queuedTextValues = extractQueuedTextValues(prepared.workflow, textNodes);
@@ -667,7 +714,14 @@ export async function runSequenceVideoGeneration(input: {
       .where(eq(generationJobs.id, jobId));
 
     await maybeUnloadOllamaBeforeComfy();
-    const queued = await queueComfyPrompt({ workflow: prepared.workflow, clientId });
+    const queued =
+      comfySettings.provider === "cloud"
+        ? await queueCloudPrompt({
+            workflow: prepared.workflow,
+            cloudApiKey: comfySettings.cloudApiKey,
+            partnerNodeApiKey: comfySettings.apiKey,
+          })
+        : await queueComfyPrompt({ workflow: prepared.workflow, clientId });
 
     await db
       .update(generationJobs)
@@ -745,6 +799,10 @@ export async function runSequenceVideoGenerationFromForm(formData: FormData): Pr
     }
   }
 
+  // COMFY.PROVIDER.1 — only ever present in the DOM when this page's own
+  // preflight already showed the Partner Node cost warning.
+  const confirmPartnerNodeCost = (formData.get("confirmPartnerNodeCost") as string | null) === "1";
+
   const result = await runSequenceVideoGeneration({
     projectId,
     sequenceId,
@@ -756,6 +814,7 @@ export async function runSequenceVideoGenerationFromForm(formData: FormData): Pr
     textOverrideByNodeId,
     patchedJsonOverride,
     batchImagesByNodeId,
+    confirmPartnerNodeCost,
   });
 
   const sep = returnTo.includes("?") ? "&" : "?";

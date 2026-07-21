@@ -373,6 +373,17 @@ export const generationJobs = sqliteTable(
     // this ticket, and jobs that fail before a snapshot could be built,
     // simply have none.
     payloadSnapshot: text("payload_snapshot"),
+    // COMFY.PROVIDER.1 — the ComfyUI runtime provider (local server vs Comfy
+    // Cloud) this job was actually queued against, captured durably at
+    // creation time so a later Settings switch can never make an in-flight
+    // or historical job get polled/downloaded from the wrong backend.
+    // Additive column, NOT NULL DEFAULT 'local': existing rows backfill to
+    // 'local' automatically (they all predate Cloud support), new rows
+    // always stamp the provider active at creation time explicitly — see
+    // src/actions/generation.ts / sequenceGeneration.ts / sequenceVideoGeneration.ts.
+    runtimeProvider: text("runtime_provider", { enum: ["local", "cloud"] })
+      .notNull()
+      .default("local"),
     startedAt: text("started_at"),
     completedAt: text("completed_at"),
     createdAt: text("created_at")

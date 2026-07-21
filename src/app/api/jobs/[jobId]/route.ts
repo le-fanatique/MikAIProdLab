@@ -14,8 +14,11 @@ import {
   buildComfyViewUrl,
   buildComfyPlyViewUrl,
   isPromptInComfyQueue,
+  type ComfyHistoryResponse,
 } from "@/lib/comfy/comfyServerClient";
 import { PLY_MAX_BYTES, validatePlyFile } from "@/lib/comfy/plyArtifact";
+import { getComfySettings } from "@/lib/settings";
+import { getCloudJobDetail, fetchCloudOutputResponse } from "@/lib/comfy/comfyCloudClient";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -41,6 +44,9 @@ type JobRow = Pick<
   | "completedAt"
   // GEN.SEEDANCE.1 — read-only addition, no change to polling/status logic.
   | "payloadSnapshot"
+  // COMFY.PROVIDER.1 — the provider this job was queued against; read-only
+  // here, never reassigned after creation.
+  | "runtimeProvider"
 >;
 
 // ---------------------------------------------------------------------------
@@ -90,6 +96,7 @@ async function updateJobFields(
       startedAt: generationJobs.startedAt,
       completedAt: generationJobs.completedAt,
       payloadSnapshot: generationJobs.payloadSnapshot,
+      runtimeProvider: generationJobs.runtimeProvider,
     });
   return updated;
 }
@@ -146,29 +153,86 @@ async function downloadAndSaveOutput(
   return `outputs/jobs/${jobId}/${localFilename}`;
 }
 
+/**
+ * COMFY.PROVIDER.1 — Cloud equivalent of downloadAndSaveOutput above: same
+ * local storage convention (outputs/jobs/<id>/output-<ts><ext>), same
+ * relative-path contract, so a rehosted Cloud output reads through the
+ * exact same generated-outputs route as a local one. Only the transport
+ * differs (GET /api/view redirect -> signed URL, per comfyCloudClient.ts).
+ *
+ * Random suffix (same convention as the PLY path) guarantees two polls in
+ * the same millisecond can never collide on the same local name — a
+ * loser's compensation must only ever delete its own attempt's file.
+ * Written to an exclusive temp file, then renamed atomically: no partial
+ * file is ever left at a servable path.
+ */
+async function downloadAndSaveOutputFromCloud(
+  jobId: number,
+  cloudApiKey: string,
+  file: { filename: string }
+): Promise<{ relativePath: string; finalPath: string }> {
+  const response = await fetchCloudOutputResponse({ filename: file.filename, cloudApiKey });
+  if (!response.ok) {
+    throw new Error(`Comfy Cloud output download responded ${response.status} for ${file.filename}`);
+  }
+
+  const buffer = await response.arrayBuffer();
+
+  const ext = path.extname(file.filename) || ".bin";
+  const localFilename = `output-${Date.now()}-${randomUUID().slice(0, 8)}${ext}`;
+  const outputDir = path.join(process.cwd(), "public", "outputs", "jobs", String(jobId));
+  const finalPath = path.join(outputDir, localFilename);
+  const tmpPath = `${finalPath}.tmp`;
+
+  await fs.mkdir(outputDir, { recursive: true });
+  try {
+    await fs.writeFile(tmpPath, Buffer.from(buffer), { flag: "wx" });
+    await fs.rename(tmpPath, finalPath);
+  } catch (err) {
+    // Honest cleanup: collect every failed removal with its path — never a
+    // silent .catch(() => {}) that could hide a stray file behind a clean-
+    // looking error (same discipline as the PLY path's own compensation).
+    const cleanupFailures: string[] = [];
+    for (const p of [tmpPath, finalPath]) {
+      try {
+        await fs.unlink(p);
+      } catch (rmErr) {
+        const rmCode = (rmErr as NodeJS.ErrnoException)?.code;
+        if (rmCode !== "ENOENT") {
+          cleanupFailures.push(`"${p}": ${rmErr instanceof Error ? rmErr.message : String(rmErr)}`);
+        }
+      }
+    }
+    const baseMsg = err instanceof Error ? err.message : String(err);
+    const suffix = cleanupFailures.length > 0
+      ? ` Additionally, cleanup failed and stray file(s) may remain — ${cleanupFailures.join("; ")}.`
+      : "";
+    throw new Error(`${baseMsg}${suffix}`);
+  }
+
+  return { relativePath: `outputs/jobs/${jobId}/${localFilename}`, finalPath };
+}
+
 // ---------------------------------------------------------------------------
 // PLY output download (CAMLAB.PLY.1)
 // ---------------------------------------------------------------------------
 
 /**
- * Streams a PLY artifact from the configured ComfyUI /view endpoint into the
- * job's output directory. Enforces the 512 MiB cap during streaming (never
- * trusting Content-Length alone), writes to a temp file, validates the PLY
- * header and size, then renames atomically. Any failure cleans up this
- * attempt's files and throws — the caller fails the job.
+ * Streams an already-fetched PLY `Response` (local or Cloud — the caller
+ * resolved the transport) into the job's output directory. Enforces the 512
+ * MiB cap during streaming (never trusting Content-Length alone), writes to
+ * a temp file, validates the PLY header and size, then renames atomically.
+ * Any failure cleans up this attempt's files and throws — the caller fails
+ * the job. Shared by downloadAndSavePlyOutput (local) and its Cloud sibling
+ * below so the validation/cap/atomic-publish discipline can never diverge
+ * between providers.
  */
-async function downloadAndSavePlyOutput(
+async function streamResponseToPlyFile(
   jobId: number,
-  baseUrl: string,
-  comfyFilename: string
+  response: Response
 ): Promise<{ relativePath: string; finalPath: string }> {
-  const url = buildComfyPlyViewUrl({ baseUrl, filename: comfyFilename });
-
-  const response = await fetch(url);
   if (!response.ok || !response.body) {
-    throw new Error(
-      `ComfyUI /view responded ${response.status} for the PLY output.`
-    );
+    throw new Error(`PLY output download responded ${response.status}.`);
   }
 
   const contentLength = parseInt(
@@ -238,12 +302,34 @@ async function downloadAndSavePlyOutput(
   };
 }
 
+/** Local ComfyUI transport for streamResponseToPlyFile — unchanged behavior. */
+async function downloadAndSavePlyOutput(
+  jobId: number,
+  baseUrl: string,
+  comfyFilename: string
+): Promise<{ relativePath: string; finalPath: string }> {
+  const url = buildComfyPlyViewUrl({ baseUrl, filename: comfyFilename });
+  const response = await fetch(url);
+  return streamResponseToPlyFile(jobId, response);
+}
+
+/** COMFY.PROVIDER.1 — Cloud transport for streamResponseToPlyFile: resolves the /api/view redirect to a signed URL first (see comfyCloudClient.ts), then streams identically to the local path. */
+async function downloadAndSavePlyOutputFromCloud(
+  jobId: number,
+  cloudApiKey: string,
+  comfyFilename: string
+): Promise<{ relativePath: string; finalPath: string }> {
+  const response = await fetchCloudOutputResponse({ filename: comfyFilename, cloudApiKey });
+  return streamResponseToPlyFile(jobId, response);
+}
+
 /**
- * Atomically publishes a PLY output on the job row: the transition only
- * succeeds if the job is still `running` with no outputPath, so exactly one
- * concurrent poll can win. Returns the updated row on win, null on loss.
+ * Atomically publishes any downloaded output (PLY, or — COMFY.PROVIDER.1 —
+ * a Cloud image/video/gif) on the job row: the transition only succeeds if
+ * the job is still `running` with no outputPath, so exactly one concurrent
+ * poll can win. Returns the updated row on win, null on loss.
  */
-async function publishPlyOutputIfStillRunning(
+async function publishOutputIfStillRunning(
   jobId: number,
   outputPath: string
 ): Promise<JobRow | null> {
@@ -274,6 +360,7 @@ async function publishPlyOutputIfStillRunning(
       startedAt: generationJobs.startedAt,
       completedAt: generationJobs.completedAt,
       payloadSnapshot: generationJobs.payloadSnapshot,
+      runtimeProvider: generationJobs.runtimeProvider,
     });
   return updated ?? null;
 }
@@ -306,6 +393,7 @@ export async function GET(
       startedAt: generationJobs.startedAt,
       completedAt: generationJobs.completedAt,
       payloadSnapshot: generationJobs.payloadSnapshot,
+      runtimeProvider: generationJobs.runtimeProvider,
     })
     .from(generationJobs)
     .where(eq(generationJobs.id, jobId));
@@ -370,6 +458,7 @@ export async function GET(
           startedAt: generationJobs.startedAt,
           completedAt: generationJobs.completedAt,
           payloadSnapshot: generationJobs.payloadSnapshot,
+      runtimeProvider: generationJobs.runtimeProvider,
         });
 
       if (!transitioned) {
@@ -387,6 +476,7 @@ export async function GET(
             startedAt: generationJobs.startedAt,
             completedAt: generationJobs.completedAt,
             payloadSnapshot: generationJobs.payloadSnapshot,
+      runtimeProvider: generationJobs.runtimeProvider,
           })
           .from(generationJobs)
           .where(eq(generationJobs.id, jobId));
@@ -395,6 +485,179 @@ export async function GET(
       }
 
       job = transitioned;
+    }
+
+    // COMFY.PROVIDER.1 — Cloud gets its own poll, entirely separate from the
+    // local block below (which stays byte-for-byte the pre-existing logic,
+    // the non-regression reference). Every Cloud branch returns.
+    if (job.runtimeProvider === "cloud") {
+      try {
+        const comfySettings = await getComfySettings();
+        if (!comfySettings.hasCloudApiKey) {
+          job = await failJob(jobId, "Comfy Cloud API key is not configured; cannot poll this job.");
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+        const cloudApiKey = comfySettings.cloudApiKey;
+
+        const detail = await getCloudJobDetail(promptId, cloudApiKey);
+
+        if (detail.status === "failed" || detail.status === "cancelled") {
+          const e = detail.executionError;
+          const msg =
+            detail.status === "cancelled"
+              ? "Comfy Cloud job was cancelled."
+              : e?.exceptionMessage
+                ? `${e.nodeType ? `${e.nodeType}: ` : ""}${e.exceptionMessage}`
+                : "Comfy Cloud execution error.";
+          job = await failJob(jobId, msg.slice(0, 500));
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+
+        if (detail.status !== "completed" || !detail.outputs) {
+          // pending / in_progress — nothing to download yet
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+
+        // Reuse the EXACT SAME priority extraction (videos -> gifs -> images)
+        // and PLY detection as local, by wrapping Cloud's outputs dict into
+        // the same shape getComfyHistory() would have returned.
+        const historyLike: ComfyHistoryResponse = { [promptId]: { outputs: detail.outputs } };
+        const outputFile = extractFirstComfyOutput(historyLike, promptId);
+
+        if (!outputFile) {
+          const plyResult = extractPlyComfyOutput(historyLike, promptId);
+
+          if (plyResult.status === "invalid") {
+            job = await failJob(jobId, `Invalid PLY output metadata: ${plyResult.reason}`);
+            return NextResponse.json({ ok: true, job: serializeJob(job) });
+          }
+
+          if (plyResult.status === "found") {
+            const { relativePath, finalPath } = await downloadAndSavePlyOutputFromCloud(
+              jobId,
+              cloudApiKey,
+              plyResult.filename
+            );
+
+            let published: JobRow | null;
+            try {
+              published = await publishOutputIfStillRunning(jobId, relativePath);
+            } catch (dbErr) {
+              let cleanupNote = "";
+              try {
+                await fs.unlink(finalPath);
+              } catch {
+                cleanupNote = ` Cleanup of the cached PLY file also failed; a stray file may remain at outputs/jobs/${jobId}.`;
+              }
+              const dbMsg = dbErr instanceof Error ? dbErr.message : "Unknown DB error.";
+              throw new Error(`Failed to record PLY output in the database: ${dbMsg}${cleanupNote}`);
+            }
+
+            if (!published) {
+              try {
+                await fs.unlink(finalPath);
+              } catch (cleanupErr) {
+                const msg = cleanupErr instanceof Error ? cleanupErr.message : "Unknown cleanup error.";
+                return NextResponse.json(
+                  {
+                    ok: false,
+                    error: `A concurrent poll already published this job's output, but cleanup of the duplicate PLY failed (${msg}). A stray file may remain in outputs/jobs/${jobId}.`,
+                  },
+                  { status: 500 }
+                );
+              }
+              const [fresh] = await db
+                .select({
+                  id: generationJobs.id,
+                  status: generationJobs.status,
+                  promptId: generationJobs.promptId,
+                  outputPath: generationJobs.outputPath,
+                  errorMessage: generationJobs.errorMessage,
+                  createdAt: generationJobs.createdAt,
+                  updatedAt: generationJobs.updatedAt,
+                  startedAt: generationJobs.startedAt,
+                  completedAt: generationJobs.completedAt,
+                  payloadSnapshot: generationJobs.payloadSnapshot,
+                  runtimeProvider: generationJobs.runtimeProvider,
+                })
+                .from(generationJobs)
+                .where(eq(generationJobs.id, jobId));
+              job = fresh ?? job;
+              return NextResponse.json({ ok: true, job: serializeJob(job) });
+            }
+
+            job = published;
+            return NextResponse.json({ ok: true, job: serializeJob(job) });
+          }
+
+          // Completed on Cloud but no recognizable image/video/gif/PLY output.
+          job = await failJob(jobId, "Comfy Cloud job completed but produced no recognizable output.");
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+
+        const { relativePath, finalPath } = await downloadAndSaveOutputFromCloud(jobId, cloudApiKey, outputFile);
+
+        let publishedGeneric: JobRow | null;
+        try {
+          publishedGeneric = await publishOutputIfStillRunning(jobId, relativePath);
+        } catch (dbErr) {
+          // DB failed after the file was written — compensate by removing
+          // it so no orphan survives, and surface any cleanup failure
+          // explicitly. Same discipline as the PLY path above.
+          let cleanupNote = "";
+          try {
+            await fs.unlink(finalPath);
+          } catch {
+            cleanupNote = ` Cleanup of the cached output file also failed; a stray file may remain at outputs/jobs/${jobId}.`;
+          }
+          const dbMsg = dbErr instanceof Error ? dbErr.message : "Unknown DB error.";
+          throw new Error(`Failed to record Comfy Cloud output in the database: ${dbMsg}${cleanupNote}`);
+        }
+
+        if (!publishedGeneric) {
+          // A concurrent poll already published an output for this job.
+          // Delete our duplicate, then return the winner's state. A failed
+          // cleanup is an explicit error — never a silent success with a
+          // stray file left behind.
+          try {
+            await fs.unlink(finalPath);
+          } catch (cleanupErr) {
+            const msg = cleanupErr instanceof Error ? cleanupErr.message : "Unknown cleanup error.";
+            return NextResponse.json(
+              {
+                ok: false,
+                error: `A concurrent poll already published this job's output, but cleanup of the duplicate file failed (${msg}). A stray file may remain in outputs/jobs/${jobId}.`,
+              },
+              { status: 500 }
+            );
+          }
+          const [fresh] = await db
+            .select({
+              id: generationJobs.id,
+              status: generationJobs.status,
+              promptId: generationJobs.promptId,
+              outputPath: generationJobs.outputPath,
+              errorMessage: generationJobs.errorMessage,
+              createdAt: generationJobs.createdAt,
+              updatedAt: generationJobs.updatedAt,
+              startedAt: generationJobs.startedAt,
+              completedAt: generationJobs.completedAt,
+              payloadSnapshot: generationJobs.payloadSnapshot,
+              runtimeProvider: generationJobs.runtimeProvider,
+            })
+            .from(generationJobs)
+            .where(eq(generationJobs.id, jobId));
+          job = fresh ?? job;
+          return NextResponse.json({ ok: true, job: serializeJob(job) });
+        }
+
+        job = publishedGeneric;
+        return NextResponse.json({ ok: true, job: serializeJob(job) });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error checking Comfy Cloud.";
+        job = await failJob(jobId, message);
+        return NextResponse.json({ ok: true, job: serializeJob(job) });
+      }
     }
 
     // Poll ComfyUI history — one check, no loop
@@ -457,7 +720,7 @@ export async function GET(
 
           let published: JobRow | null;
           try {
-            published = await publishPlyOutputIfStillRunning(
+            published = await publishOutputIfStillRunning(
               jobId,
               relativePath
             );
@@ -510,6 +773,7 @@ export async function GET(
                 startedAt: generationJobs.startedAt,
                 completedAt: generationJobs.completedAt,
                 payloadSnapshot: generationJobs.payloadSnapshot,
+      runtimeProvider: generationJobs.runtimeProvider,
               })
               .from(generationJobs)
               .where(eq(generationJobs.id, jobId));

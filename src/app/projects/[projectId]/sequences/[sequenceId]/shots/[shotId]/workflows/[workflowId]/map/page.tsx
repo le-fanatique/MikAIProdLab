@@ -54,6 +54,9 @@ import {
 } from "@/lib/comfy/workflowProfiles";
 import WorkflowProfilePanel from "@/components/WorkflowProfilePanel";
 import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
+import { getComfySettings } from "@/lib/settings";
+import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
+import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -162,6 +165,18 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     .from(comfyWorkflows)
     .where(eq(comfyWorkflows.id, wid));
   if (!workflow) notFound();
+
+  // COMFY.PROVIDER.1 — same Cloud preflight as ShotGenerationPanel; this
+  // page is a separate, standalone Shot generation surface (not the panel
+  // embedded via ?generation=open) and needs the identical gate.
+  const comfySettings = await getComfySettings();
+  const cloudPreflight = await computeCloudPreflightForPanel(workflow.workflowJson, comfySettings);
+  const cloudPreflightBlocksGeneration =
+    cloudPreflight !== null && ("error" in cloudPreflight || cloudPreflight.missingClasses.length > 0);
+  const partnerNodeConfirmMessage =
+    cloudPreflight !== null && !("error" in cloudPreflight) && cloudPreflight.apiNodeClasses.length > 0
+      ? `This will call paid Comfy Cloud Partner Node(s): ${cloudPreflight.apiNodeClasses.join(", ")}. Continue and incur cost?`
+      : null;
 
   // Assigned cast assets
   const assignedRows = await db
@@ -851,7 +866,35 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                   </div>
                 )}
 
-                <form action={runWorkflowGenerationFromForm} className="flex flex-col gap-4">
+                {/* COMFY.PROVIDER.1 — see identical blocks in ShotGenerationPanel. */}
+                {cloudPreflight !== null &&
+                  ("error" in cloudPreflight || cloudPreflight.missingClasses.length > 0) && (
+                    <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                      <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                        {"error" in cloudPreflight
+                          ? cloudPreflight.error
+                          : `This workflow uses node type(s) not available on Comfy Cloud: ${cloudPreflight.missingClasses.join(", ")}. It cannot be generated with Comfy Cloud selected.`}
+                      </p>
+                    </div>
+                  )}
+                {cloudPreflight !== null &&
+                  !("error" in cloudPreflight) &&
+                  cloudPreflight.missingClasses.length === 0 &&
+                  cloudPreflight.apiNodeClasses.length > 0 && (
+                    <div className="rounded border border-[#3d3320] bg-[#1a1712] px-3 py-2">
+                      <p className="text-xs text-[#c9a24b] leading-relaxed">
+                        This workflow calls paid Comfy Cloud Partner Node(s):{" "}
+                        <span className="font-mono">{cloudPreflight.apiNodeClasses.join(", ")}</span>. Generating
+                        will incur Comfy Cloud usage cost. You will be asked to confirm before it runs.
+                      </p>
+                    </div>
+                  )}
+                {!cloudPreflightBlocksGeneration && (
+                <PartnerNodeConfirmForm
+                  action={runWorkflowGenerationFromForm}
+                  partnerNodeConfirmMessage={partnerNodeConfirmMessage}
+                  className="flex flex-col gap-4"
+                >
                   <input type="hidden" name="projectId" value={String(pid)} />
                   <input type="hidden" name="sequenceId" value={String(sid)} />
                   <input type="hidden" name="shotId" value={String(shid)} />
@@ -897,7 +940,8 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                     initialJsonText={payloadPreview.patchedJsonText}
                     buttonLabel={workflow.kind === "video" ? "Generate Video" : "Generate"}
                   />
-                </form>
+                </PartnerNodeConfirmForm>
+                )}
               </div>
             </Card>
           </>

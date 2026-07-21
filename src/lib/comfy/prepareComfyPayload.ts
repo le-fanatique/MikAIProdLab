@@ -1,6 +1,8 @@
 import "server-only";
 
 import { uploadImageToComfy } from "@/lib/comfy/comfyServerClient";
+import { uploadImageToCloud } from "@/lib/comfy/comfyCloudClient";
+import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,8 +37,19 @@ function isLocalAppImagePath(imagePath: string): boolean {
   );
 }
 
+/**
+ * COMFY.PROVIDER.1 — which backend receives the uploaded reference images.
+ * Defaults to "local" (existing behavior, unchanged) when omitted. Cloud
+ * requires `cloudApiKey`; queueing must already have refused to reach this
+ * point without one (see runWorkflowGeneration's provider gate).
+ */
+export type PrepareComfyPayloadProvider =
+  | { provider: "local" }
+  | { provider: "cloud"; cloudApiKey: string };
+
 export async function prepareComfyPayloadForQueue(
-  workflow: Record<string, unknown>
+  workflow: Record<string, unknown>,
+  target: PrepareComfyPayloadProvider = { provider: "local" }
 ): Promise<PrepareComfyPayloadResult> {
   const clone = JSON.parse(JSON.stringify(workflow)) as Record<string, unknown>;
   const uploadedImages: PrepareComfyPayloadResult["uploadedImages"] = [];
@@ -52,7 +65,10 @@ export async function prepareComfyPayloadForQueue(
     if (typeof imagePath !== "string") continue;
     if (!isLocalAppImagePath(imagePath)) continue;
 
-    const uploaded = await uploadImageToComfy({ localImagePath: imagePath });
+    const uploaded =
+      target.provider === "cloud"
+        ? await uploadImageToCloud({ localImagePath: imagePath, cloudApiKey: target.cloudApiKey })
+        : await uploadImageToComfy({ localImagePath: imagePath });
 
     inputs["image"] = uploaded.filename;
 
@@ -67,7 +83,9 @@ export async function prepareComfyPayloadForQueue(
 
   if (uploadedImages.length > 0) {
     warnings.push(
-      "Local reference images were uploaded to ComfyUI and LoadImage inputs were rewritten to ComfyUI filenames."
+      target.provider === "cloud"
+        ? "Local reference images were uploaded to Comfy Cloud and LoadImage inputs were rewritten to Cloud's opaque filenames."
+        : "Local reference images were uploaded to ComfyUI and LoadImage inputs were rewritten to ComfyUI filenames."
     );
   }
 

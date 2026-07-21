@@ -28,6 +28,9 @@ import {
 } from "@/lib/comfy/mapWorkflowInputs";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
+import { queueCloudPrompt } from "@/lib/comfy/comfyCloudClient";
+import { runCloudPreflight } from "@/lib/comfy/cloudPreflight";
+import { getComfySettings } from "@/lib/settings";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
@@ -46,7 +49,56 @@ import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRunti
 
 export type RunWorkflowGenerationResult =
   | { ok: true; jobId: number }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /** COMFY.PROVIDER.1 — set only when the block is specifically "this Comfy Cloud workflow calls paid Partner Node(s) and needs explicit confirmation", so the caller can offer a confirm-and-resubmit flow instead of a dead-end error. */
+      requiresPartnerNodeConfirmation?: boolean;
+      apiNodeClasses?: string[];
+    };
+
+/**
+ * COMFY.PROVIDER.1 — runs the Cloud preflight (missing classes hard-block;
+ * Partner Node classes require explicit confirmation) against a prepared
+ * workflow payload. Returns null when queueing may proceed (local, or Cloud
+ * with nothing blocking); otherwise the exact result to return to the
+ * caller. Shared by every job-creation call site so Cloud safety can never
+ * be bypassed by one of them forgetting the check.
+ */
+async function checkCloudPreflightGate(
+  workflow: Record<string, unknown>,
+  cloudApiKey: string,
+  confirmPartnerNodeCost: boolean | undefined
+): Promise<RunWorkflowGenerationResult | null> {
+  let preflight;
+  try {
+    preflight = await runCloudPreflight(workflow, cloudApiKey);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return {
+      ok: false,
+      error: `Could not verify this workflow against Comfy Cloud before queueing: ${message}`,
+    };
+  }
+
+  if (preflight.missingClasses.length > 0) {
+    return {
+      ok: false,
+      error: `This workflow uses node type(s) not available on Comfy Cloud: ${preflight.missingClasses.join(", ")}. It cannot be queued on Comfy Cloud.`,
+    };
+  }
+
+  if (preflight.apiNodeClasses.length > 0 && !confirmPartnerNodeCost) {
+    return {
+      ok: false,
+      error: `This workflow calls paid Comfy Cloud Partner Node(s): ${preflight.apiNodeClasses.join(", ")}. Confirm the cost to continue.`,
+      requiresPartnerNodeConfirmation: true,
+      apiNodeClasses: preflight.apiNodeClasses,
+    };
+  }
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -140,8 +192,15 @@ export async function runWorkflowGeneration(args: {
   /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
   patchedJsonOverride?: Record<string, unknown>;
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
+  /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
+  confirmPartnerNodeCost?: boolean;
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, sequenceId, shotId, workflowId } = args;
+
+  const comfySettings = await getComfySettings();
+  if (comfySettings.provider === "cloud" && !comfySettings.hasCloudApiKey) {
+    return { ok: false, error: "Comfy Cloud is selected but no Comfy Cloud API key is configured." };
+  }
 
   // --- 1. Validate numeric IDs ---
   if (
@@ -331,6 +390,17 @@ export async function runWorkflowGeneration(args: {
     };
   }
 
+  // --- 5b. Comfy Cloud preflight (COMFY.PROVIDER.1) — before any job row is
+  //         created, never a silent paid submission. No-op for local. ---
+  if (comfySettings.provider === "cloud") {
+    const gate = await checkCloudPreflightGate(
+      finalPatchedJson,
+      comfySettings.cloudApiKey,
+      args.confirmPartnerNodeCost
+    );
+    if (gate) return gate;
+  }
+
   // --- 6. Create generation_jobs row (pending) ---
   if (!isSingleGenerationTarget({ shotId, assetId: null, sequenceId: null })) {
     return { ok: false, error: "Invalid generation job target." };
@@ -346,6 +416,7 @@ export async function runWorkflowGeneration(args: {
       workflowId,
       status: "pending",
       clientId,
+      runtimeProvider: comfySettings.provider,
       startedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -363,7 +434,12 @@ export async function runWorkflowGeneration(args: {
       .set({ status: "uploading", updatedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, jobId));
 
-    const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
+    const prepared = await prepareComfyPayloadForQueue(
+      finalPatchedJson,
+      comfySettings.provider === "cloud"
+        ? { provider: "cloud", cloudApiKey: comfySettings.cloudApiKey }
+        : { provider: "local" }
+    );
 
     // --- 7a. Snapshot (GEN.SEEDANCE.1) — created before queueing, from the
     //        exact payload about to be sent, so it stays accurate even if
@@ -405,10 +481,17 @@ export async function runWorkflowGeneration(args: {
 
     // --- 8. Queue prompt ---
     await maybeUnloadOllamaBeforeComfy();
-    const queued = await queueComfyPrompt({
-      workflow: prepared.workflow,
-      clientId,
-    });
+    const queued =
+      comfySettings.provider === "cloud"
+        ? await queueCloudPrompt({
+            workflow: prepared.workflow,
+            cloudApiKey: comfySettings.cloudApiKey,
+            partnerNodeApiKey: comfySettings.apiKey,
+          })
+        : await queueComfyPrompt({
+            workflow: prepared.workflow,
+            clientId,
+          });
 
     // --- 9. Update job → queued ---
     const nodeErrorSummary = summarizeComfyNodeErrors(queued.node_errors);
@@ -531,6 +614,11 @@ export async function runWorkflowGenerationFromForm(
     }
   }
 
+  // COMFY.PROVIDER.1 — only ever present in the DOM when the panel's own
+  // preflight already showed the user a Partner Node cost warning (see
+  // ShotGenerationPanel.tsx) — never a default-on field.
+  const confirmPartnerNodeCost = (formData.get("confirmPartnerNodeCost") as string | null) === "1";
+
   const result = await runWorkflowGeneration({
     projectId,
     sequenceId,
@@ -542,6 +630,7 @@ export async function runWorkflowGenerationFromForm(
     textOverrideByNodeId,
     patchedJsonOverride,
     batchImagesByNodeId,
+    confirmPartnerNodeCost,
   });
 
   if (result.ok) {
@@ -594,8 +683,15 @@ export async function runAssetGeneration(input: {
   /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
   patchedJsonOverride?: Record<string, unknown>;
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
-}): Promise<{ ok: true; jobId: number } | { ok: false; error: string }> {
+  /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
+  confirmPartnerNodeCost?: boolean;
+}): Promise<RunWorkflowGenerationResult> {
   const { projectId, assetId, workflowId } = input;
+
+  const comfySettings = await getComfySettings();
+  if (comfySettings.provider === "cloud" && !comfySettings.hasCloudApiKey) {
+    return { ok: false, error: "Comfy Cloud is selected but no Comfy Cloud API key is configured." };
+  }
 
   // --- 1. Validate numeric IDs ---
   if (
@@ -706,6 +802,16 @@ export async function runAssetGeneration(input: {
     };
   }
 
+  // --- 9b. Comfy Cloud preflight (COMFY.PROVIDER.1) — see runWorkflowGeneration. ---
+  if (comfySettings.provider === "cloud") {
+    const gate = await checkCloudPreflightGate(
+      finalPatchedJson,
+      comfySettings.cloudApiKey,
+      input.confirmPartnerNodeCost
+    );
+    if (gate) return gate;
+  }
+
   // --- 10. Create job row (pending) ---
   if (!isSingleGenerationTarget({ shotId: null, assetId, sequenceId: null })) {
     return { ok: false, error: "Invalid generation job target." };
@@ -722,6 +828,7 @@ export async function runAssetGeneration(input: {
       workflowId,
       status: "pending",
       clientId,
+      runtimeProvider: comfySettings.provider,
       startedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -738,7 +845,12 @@ export async function runAssetGeneration(input: {
       .set({ status: "uploading", updatedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, jobId));
 
-    const prepared = await prepareComfyPayloadForQueue(finalPatchedJson);
+    const prepared = await prepareComfyPayloadForQueue(
+      finalPatchedJson,
+      comfySettings.provider === "cloud"
+        ? { provider: "cloud", cloudApiKey: comfySettings.cloudApiKey }
+        : { provider: "local" }
+    );
 
     // --- 11a. Snapshot (GEN.SEEDANCE.1) ---
     const snapshot: GenerationSnapshot = {
@@ -777,10 +889,17 @@ export async function runAssetGeneration(input: {
       .where(eq(generationJobs.id, jobId));
 
     await maybeUnloadOllamaBeforeComfy();
-    const queued = await queueComfyPrompt({
-      workflow: prepared.workflow,
-      clientId,
-    });
+    const queued =
+      comfySettings.provider === "cloud"
+        ? await queueCloudPrompt({
+            workflow: prepared.workflow,
+            cloudApiKey: comfySettings.cloudApiKey,
+            partnerNodeApiKey: comfySettings.apiKey,
+          })
+        : await queueComfyPrompt({
+            workflow: prepared.workflow,
+            clientId,
+          });
 
     const nodeErrorSummary = summarizeComfyNodeErrors(queued.node_errors);
     await db
@@ -876,6 +995,12 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     }
   }
 
+  // COMFY.PROVIDER.1 — see runWorkflowGenerationFromForm; no asset panel
+  // currently renders this field, so a Cloud Partner Node workflow started
+  // from an Asset stays safely blocked (clear error) rather than silently
+  // charged, until that UI is built.
+  const confirmPartnerNodeCost = (formData.get("confirmPartnerNodeCost") as string | null) === "1";
+
   const result = await runAssetGeneration({
     projectId,
     assetId,
@@ -885,6 +1010,7 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     textOverrideByNodeId,
     patchedJsonOverride,
     batchImagesByNodeId: assetBatchImagesByNodeId,
+    confirmPartnerNodeCost,
   });
 
   if (result.ok) {

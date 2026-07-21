@@ -8,6 +8,11 @@ type Props = {
   buttonLabel: string;
 };
 
+// COMFY.PROVIDER.1 — Partner Node cost confirmation is gated at the parent
+// <form>'s submit event (see PartnerNodeConfirmForm.tsx), not here: a
+// button onClick handler never fires when the form is submitted by
+// pressing Enter in a field, which would silently bypass a confirm() kept
+// on this button alone.
 export default function WorkflowGenerateActions({ initialJsonText, buttonLabel }: Props) {
   const [isJsonValid, setIsJsonValid] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);

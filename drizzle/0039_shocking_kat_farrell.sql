@@ -1,0 +1,1 @@
+ALTER TABLE `generation_jobs` ADD `runtime_provider` text DEFAULT 'local' NOT NULL;

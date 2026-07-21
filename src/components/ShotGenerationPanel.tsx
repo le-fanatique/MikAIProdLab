@@ -17,6 +17,7 @@ import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
+import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
 import InlineShotPromptEditor from "@/components/InlineShotPromptEditor";
@@ -58,6 +59,8 @@ import {
 } from "@/lib/comfy/workflowProfiles";
 import WorkflowProfilePanel from "@/components/WorkflowProfilePanel";
 import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
+import { getComfySettings } from "@/lib/settings";
+import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 
 type Props = {
   projectId: number;
@@ -134,6 +137,15 @@ export default async function ShotGenerationPanel({
 
   const [workflow] = await db.select().from(comfyWorkflows).where(eq(comfyWorkflows.id, wid));
   if (!workflow) return null;
+
+  // COMFY.PROVIDER.1 — Cloud preflight, computed from the workflow's stored
+  // class_type set (unaffected by Dynamic Batch node cloning or per-node
+  // input overrides — those never introduce a new class_type). Never
+  // inferred from local availability; a missing class always blocks,
+  // read/network failure always blocks too (never assume safe). Shared with
+  // AssetGenerationPanel and both Sequence generate pages.
+  const comfySettings = await getComfySettings();
+  const cloudPreflight = await computeCloudPreflightForPanel(workflow.workflowJson, comfySettings);
 
   const [project, sequence, assignedRows] = await Promise.all([
     db
@@ -678,6 +690,17 @@ export default async function ShotGenerationPanel({
       .map((img) => ({ id: img.id, label: img.label, source: img.source, assetName: img.assetName }))
   );
 
+  // COMFY.PROVIDER.1 — derived from cloudPreflight computed earlier: Generate
+  // is entirely hidden when Cloud can't run this workflow at all, and gated
+  // behind an explicit native confirm() naming the Partner Node cost when
+  // that's the only concern.
+  const cloudPreflightBlocksGeneration =
+    cloudPreflight !== null && ("error" in cloudPreflight || cloudPreflight.missingClasses.length > 0);
+  const partnerNodeConfirmMessage =
+    cloudPreflight !== null && !("error" in cloudPreflight) && cloudPreflight.apiNodeClasses.length > 0
+      ? `This will call paid Comfy Cloud Partner Node(s): ${cloudPreflight.apiNodeClasses.join(", ")}. Continue and incur cost?`
+      : null;
+
   return (
     <div className="flex flex-col">
       {/* Header */}
@@ -870,7 +893,37 @@ export default async function ShotGenerationPanel({
                 <p className="text-xs text-[#cf7b6b] leading-relaxed">{generationError}</p>
               </div>
             )}
-            <form action={runWorkflowGenerationFromForm} className="flex flex-col gap-4">
+            {/* COMFY.PROVIDER.1 — Cloud preflight blocks Generate outright
+                when the workflow cannot even be checked or uses a node
+                class Comfy Cloud does not expose. Never a silent submission. */}
+            {cloudPreflight !== null &&
+              ("error" in cloudPreflight || cloudPreflight.missingClasses.length > 0) && (
+                <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3">
+                  <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                    {"error" in cloudPreflight
+                      ? cloudPreflight.error
+                      : `This workflow uses node type(s) not available on Comfy Cloud: ${cloudPreflight.missingClasses.join(", ")}. It cannot be generated with Comfy Cloud selected.`}
+                  </p>
+                </div>
+              )}
+            {cloudPreflight !== null &&
+              !("error" in cloudPreflight) &&
+              cloudPreflight.missingClasses.length === 0 &&
+              cloudPreflight.apiNodeClasses.length > 0 && (
+                <div className="rounded border border-[#3d3320] bg-[#1a1712] px-3 py-2 mb-3">
+                  <p className="text-xs text-[#c9a24b] leading-relaxed">
+                    This workflow calls paid Comfy Cloud Partner Node(s):{" "}
+                    <span className="font-mono">{cloudPreflight.apiNodeClasses.join(", ")}</span>. Generating
+                    will incur Comfy Cloud usage cost. You will be asked to confirm before it runs.
+                  </p>
+                </div>
+              )}
+            {!cloudPreflightBlocksGeneration && (
+            <PartnerNodeConfirmForm
+              action={runWorkflowGenerationFromForm}
+              partnerNodeConfirmMessage={partnerNodeConfirmMessage}
+              className="flex flex-col gap-4"
+            >
               <input type="hidden" name="projectId" value={String(pid)} />
               <input type="hidden" name="sequenceId" value={String(sid)} />
               <input type="hidden" name="shotId" value={String(shid)} />
@@ -913,11 +966,16 @@ export default async function ShotGenerationPanel({
               {batchDetectionOk && (
                 <DynamicBatchFormSync batchNodeId={batchNodeId} workflowId={String(wid)} />
               )}
+              {/* COMFY.PROVIDER.1 — confirmPartnerNodeCost is deliberately NOT
+                  rendered here: PartnerNodeConfirmForm sets it itself, only on
+                  the confirmed submit path, so it never exists in the SSR/
+                  pre-hydration HTML. */}
               <WorkflowGenerateActions
                 initialJsonText={payloadPreview.patchedJsonText}
                 buttonLabel={workflow.kind === "video" ? "Generate Video" : "Generate Keyframe"}
               />
-            </form>
+            </PartnerNodeConfirmForm>
+            )}
           </div>
         )}
         </PromptCompilerHandoffGate>
