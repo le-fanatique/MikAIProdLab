@@ -233,6 +233,11 @@ export default async function CameraLabPage({ params, searchParams }: Props) {
         {bothSelected && selectedPly && selectedRef && (
           <CameraLabWorkspace
             key={`${selectedPly.jobId}-${selectedRef.id}`}
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            jobId={selectedPly.jobId}
+            refId={selectedRef.id}
             plyUrl={buildCameraLabPlyUrl(selectedPly)}
             plyLabel={`Job #${selectedPly.jobId} — ${selectedPly.filename}`}
             sourceImageUrl={refImageUrl(selectedRef.imagePath)}

@@ -12,6 +12,12 @@ const GaussianViewerPanel = dynamic(() => import("./GaussianViewerPanel"), {
 });
 
 type Props = {
+  /** Verified server-side by the Camera Lab page — never derived client-side. */
+  projectId: number;
+  sequenceId: number;
+  shotId: number;
+  jobId: number;
+  refId: number;
   plyUrl: string;
   plyLabel: string;
   sourceImageUrl: string;
@@ -29,6 +35,11 @@ type SourceDimensions =
  * that exact capture target.
  */
 export default function CameraLabWorkspace({
+  projectId,
+  sequenceId,
+  shotId,
+  jobId,
+  refId,
   plyUrl,
   plyLabel,
   sourceImageUrl,
@@ -76,6 +87,11 @@ export default function CameraLabWorkspace({
 
   return (
     <GaussianViewerPanel
+      projectId={projectId}
+      sequenceId={sequenceId}
+      shotId={shotId}
+      jobId={jobId}
+      refId={refId}
       plyUrl={plyUrl}
       plyLabel={plyLabel}
       sourceImageLabel={sourceImageLabel}

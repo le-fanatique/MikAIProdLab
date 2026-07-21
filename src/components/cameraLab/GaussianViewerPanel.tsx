@@ -7,8 +7,15 @@ import {
   type GpuCaptureLimits,
   type CaptureResolutionCheck,
 } from "@/lib/cameraLab/captureGuard";
+import { confirmCameraSnapshot } from "@/actions/cameraLabSnapshot";
 
 type Props = {
+  /** Verified server-side by the Camera Lab page — never derived client-side. */
+  projectId: number;
+  sequenceId: number;
+  shotId: number;
+  jobId: number;
+  refId: number;
   plyUrl: string;
   plyLabel: string;
   sourceImageLabel: string;
@@ -58,6 +65,11 @@ function computeInitialOrbit(aabb: { center: pc.Vec3; halfExtents: pc.Vec3 } | n
 }
 
 export default function GaussianViewerPanel({
+  projectId,
+  sequenceId,
+  shotId,
+  jobId,
+  refId,
   plyUrl,
   plyLabel,
   sourceImageLabel,
@@ -76,6 +88,9 @@ export default function GaussianViewerPanel({
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<{ referenceId: number; width: number; height: number } | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
   snapshotRef.current = snapshot;
 
@@ -325,6 +340,8 @@ export default function GaussianViewerPanel({
 
     setCapturing(true);
     setCaptureError(null);
+    setSaveError(null);
+    setSaveSuccess(null);
     try {
       const device = app.graphicsDevice;
       const width = sourceWidth;
@@ -415,7 +432,43 @@ export default function GaussianViewerPanel({
     if (current) URL.revokeObjectURL(current.objectUrl);
     setSnapshot(null);
     setCaptureError(null);
+    setSaveError(null);
   }, []);
+
+  // ── Explicit confirmation: add the local draft as a `camera` reference.
+  //    Success only after the real server response; the draft survives any
+  //    failure, and is released (Object URL revoked) only on success. ──────
+  const addToShotReferences = useCallback(async () => {
+    const current = snapshotRef.current;
+    if (!current || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const blob = await (await fetch(current.objectUrl)).blob();
+      const file = new File([blob], "gaussian-camera-snapshot.png", { type: "image/png" });
+      const result = await confirmCameraSnapshot({
+        projectId,
+        sequenceId,
+        shotId,
+        jobId,
+        refId,
+        imageFile: file,
+      });
+      if (result.ok) {
+        URL.revokeObjectURL(current.objectUrl);
+        setSnapshot(null);
+        setSaveSuccess({ referenceId: result.referenceId, width: result.width, height: result.height });
+      } else {
+        setSaveError(result.error);
+      }
+    } catch (err) {
+      setSaveError(
+        `Saving failed: ${err instanceof Error ? err.message : "unknown error"}. The local draft is kept.`
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, projectId, sequenceId, shotId, jobId, refId]);
 
   const ready = loadState.status === "ready";
   const captureBlocked = gpuCheck !== null && !gpuCheck.ok;
@@ -464,7 +517,7 @@ export default function GaussianViewerPanel({
         <button
           type="button"
           onClick={resetCamera}
-          disabled={!ready}
+          disabled={!ready || saving}
           title="Reset camera"
           aria-label="Reset camera"
           className="rounded border border-[#2c3035] px-2.5 py-1.5 text-sm text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -474,7 +527,7 @@ export default function GaussianViewerPanel({
         <button
           type="button"
           onClick={captureSnapshot}
-          disabled={!ready || capturing || captureBlocked}
+          disabled={!ready || capturing || captureBlocked || saving}
           className="rounded border border-[#2c3035] px-3 py-1.5 text-sm text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {capturing ? "Capturing…" : "Capture snapshot"}
@@ -482,7 +535,7 @@ export default function GaussianViewerPanel({
         {captureError && <span className="text-xs text-[#cf7b6b]">{captureError}</span>}
       </div>
 
-      {/* Snapshot preview — local draft only */}
+      {/* Snapshot preview — local draft until explicitly confirmed */}
       {snapshot && (
         <div className="flex flex-col gap-2 border-t border-[#232629] pt-3">
           <p className="text-xs text-[#a4abb2]">
@@ -490,8 +543,7 @@ export default function GaussianViewerPanel({
             <span className="font-mono text-[#e7e9ec]">
               {snapshot.width} × {snapshot.height}
             </span>{" "}
-            — local draft only. Adding it to the Shot references arrives in the
-            next confirmation step.
+            — local draft. Add it to this Shot's references, or retake.
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -499,15 +551,47 @@ export default function GaussianViewerPanel({
             alt={`Snapshot at ${snapshot.width} x ${snapshot.height}`}
             className="max-h-[40vh] w-auto max-w-full rounded border border-[#2c3035] object-contain self-start"
           />
-          <div>
+          {saveError && (
+            <p className="text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">
+              {saveError}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={addToShotReferences}
+              disabled={saving}
+              className="rounded border border-[#2c6142] bg-[#12241a] px-3 py-1.5 text-sm text-[#8fc9a0] hover:border-[#3a8158] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving ? "Saving…" : "Add to Shot references"}
+            </button>
             <button
               type="button"
               onClick={retake}
-              className="rounded border border-[#2c3035] px-3 py-1.5 text-sm text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+              disabled={saving}
+              className="rounded border border-[#2c3035] px-3 py-1.5 text-sm text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Retake
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Confirmed — real server success only */}
+      {saveSuccess && !snapshot && (
+        <div className="flex flex-col gap-2 border-t border-[#232629] pt-3">
+          <p className="text-xs text-[#6b9e72]">
+            Snapshot added to this Shot's Reference Images as{" "}
+            <span className="font-mono">Camera</span> (
+            <span className="font-mono">{saveSuccess.width} × {saveSuccess.height}</span>
+            ). Capture another framing, or go back to the Shot.
+          </p>
+          <a
+            href={`/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`}
+            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors self-start"
+          >
+            ← Back to Shot
+          </a>
         </div>
       )}
     </div>
