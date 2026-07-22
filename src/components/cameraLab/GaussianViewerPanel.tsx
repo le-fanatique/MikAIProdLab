@@ -8,6 +8,26 @@ import {
   type CaptureResolutionCheck,
 } from "@/lib/cameraLab/captureGuard";
 import { confirmCameraSnapshot } from "@/actions/cameraLabSnapshot";
+import FieldTooltip from "@/components/FieldTooltip";
+import {
+  clampDepthScale,
+  DEPTH_SCALE_DEFAULT,
+  DEPTH_SCALE_MIN,
+  DEPTH_SCALE_MAX,
+  DEPTH_SCALE_STEP,
+  transformLocalAabbToWorld,
+  computeInitialOrbitFromAabb,
+  normalizeWheelDelta,
+  resolveWheelCoefficient,
+  computeNextDollyDistance,
+  ZOOM_SENSITIVITY_PRESETS,
+  ZOOM_SENSITIVITY_DEFAULT,
+  parseZoomSensitivityPreset,
+  type ZoomSensitivityPreset,
+  type Vec3Like,
+} from "@/lib/cameraLab/viewerControls";
+
+const ZOOM_SENSITIVITY_STORAGE_KEY = "mikai:camera-lab:zoom-sensitivity";
 
 type Props = {
   /** Verified server-side by the Camera Lab page — never derived client-side. */
@@ -59,17 +79,14 @@ type OrbitState = {
  */
 const SHARP_TO_PLAYCANVAS_X_ROTATION_DEG = 180;
 
-function computeInitialOrbit(aabb: { center: pc.Vec3; halfExtents: pc.Vec3 } | null): OrbitState {
-  if (aabb) {
-    const radius = Math.max(aabb.halfExtents.length(), 0.1);
-    return {
-      yaw: 0,
-      pitch: 0,
-      distance: Math.max(radius * 0.9, 0.3),
-      target: aabb.center.clone(),
-    };
-  }
-  return { yaw: 0, pitch: 0, distance: 2, target: new pc.Vec3(0, 0, -2) };
+/** Converts the pure `{x,y,z}`-based orbit data from `viewerControls.ts` into a `pc.Vec3`-backed `OrbitState`. */
+function orbitDataToState(data: { yaw: number; pitch: number; distance: number; target: Vec3Like }): OrbitState {
+  return {
+    yaw: data.yaw,
+    pitch: data.pitch,
+    distance: data.distance,
+    target: new pc.Vec3(data.target.x, data.target.y, data.target.z),
+  };
 }
 
 export default function GaussianViewerPanel({
@@ -91,6 +108,12 @@ export default function GaussianViewerPanel({
   const cameraEntityRef = useRef<pc.Entity | null>(null);
   const orbitRef = useRef<OrbitState | null>(null);
   const initialOrbitRef = useRef<OrbitState | null>(null);
+  // CAMLAB.VIEWER.CONTROLS.1 — the splat entity and its ORIGINAL local-space
+  // AABB (untransformed, exactly as read from the asset), so the depth
+  // effect can recompute world bounds at any depthScale without re-reading
+  // the asset or touching the main app-lifecycle effect's dependencies.
+  const splatParentRef = useRef<pc.Entity | null>(null);
+  const localAabbRef = useRef<{ center: Vec3Like; halfExtents: Vec3Like } | null>(null);
 
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [gpuCheck, setGpuCheck] = useState<CaptureResolutionCheck | null>(null);
@@ -102,6 +125,43 @@ export default function GaussianViewerPanel({
   const [saveSuccess, setSaveSuccess] = useState<{ referenceId: number; width: number; height: number } | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
   snapshotRef.current = snapshot;
+
+  // CAMLAB.VIEWER.CONTROLS.1 — depth correction, specific to this loaded PLY
+  // (resets to 1.00 on every remount, since the parent keys this component
+  // by job/reference and forces a fresh mount on PLY change).
+  const [depthScale, setDepthScale] = useState(DEPTH_SCALE_DEFAULT);
+  // Codex retake — the numeric field's own free-typing draft, distinct from
+  // the committed `depthScale`. Never clamped on every keystroke: the user
+  // can clear the field, type partial values like "0." or "0.5", and only
+  // commits (clamp + apply) on blur or Enter. Kept in sync with the slider
+  // and `Reset depth`, which both apply immediately (no free-typing there).
+  const [depthInputDraft, setDepthInputDraft] = useState(DEPTH_SCALE_DEFAULT.toFixed(2));
+
+  // Zoom sensitivity — a global interaction preference. First render is
+  // always "Normal" (SSR-safe, no hydration mismatch); the persisted value
+  // is only read from localStorage after mount, client-side.
+  const [zoomSensitivity, setZoomSensitivity] = useState<ZoomSensitivityPreset>(ZOOM_SENSITIVITY_DEFAULT);
+  const sensitivityRef = useRef<ZoomSensitivityPreset>(zoomSensitivity);
+  sensitivityRef.current = zoomSensitivity;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ZOOM_SENSITIVITY_STORAGE_KEY);
+      setZoomSensitivity(parseZoomSensitivityPreset(stored));
+    } catch {
+      // Absent/corrupt/unavailable storage — silently keep "Normal".
+    }
+  }, []);
+
+  const selectZoomSensitivity = useCallback((preset: ZoomSensitivityPreset) => {
+    setZoomSensitivity(preset);
+    try {
+      window.localStorage.setItem(ZOOM_SENSITIVITY_STORAGE_KEY, preset);
+    } catch {
+      // Storage unavailable (private browsing, quota) — preference still
+      // applies for this session via React state, just not persisted.
+    }
+  }, []);
 
   const applyOrbit = useCallback(() => {
     const orbit = orbitRef.current;
@@ -141,6 +201,12 @@ export default function GaussianViewerPanel({
     setLoadState({ status: "loading" });
     setGpuCheck(null);
     setCaptureError(null);
+    // CAMLAB.VIEWER.CONTROLS.1 — depth correction is specific to this PLY;
+    // a fresh app/asset load always starts from the original, uncorrected
+    // depth (defensive — the parent already remounts this component on PLY
+    // change via its key, which resets useState on its own).
+    setDepthScale(DEPTH_SCALE_DEFAULT);
+    setDepthInputDraft(DEPTH_SCALE_DEFAULT.toFixed(2));
 
     let disposed = false;
     let app: pc.Application | null = null;
@@ -204,6 +270,7 @@ export default function GaussianViewerPanel({
     const splatParent = new pc.Entity("sharp-splat");
     splatParent.setEulerAngles(SHARP_TO_PLAYCANVAS_X_ROTATION_DEG, 0, 0);
     app.root.addChild(splatParent);
+    splatParentRef.current = splatParent;
 
     app.start();
 
@@ -230,20 +297,24 @@ export default function GaussianViewerPanel({
       loadedAsset = asset;
       splatParent.addComponent("gsplat", { asset });
 
-      // Frame the scene from its real bounds when available.
+      // Frame the scene from its real bounds when available. The RAW
+      // local-space AABB (never rotated/scaled here) is kept in
+      // `localAabbRef` so the depth-scale effect can recompute the world
+      // bounds later at any `depthScale`, using the exact same transform
+      // (180° X rotation + local Z scale) the splat entity itself carries —
+      // never applied twice.
       const resource = asset.resource as unknown as {
         aabb?: { center: pc.Vec3; halfExtents: pc.Vec3 };
       } | null;
-      let aabb = resource?.aabb ?? null;
-      if (aabb) {
-        // The container is rotated 180° about X — mirror the local-space
-        // bounds into world space so the initial orbit looks at the scene.
-        aabb = {
-          center: new pc.Vec3(aabb.center.x, -aabb.center.y, -aabb.center.z),
-          halfExtents: aabb.halfExtents.clone(),
-        };
-      }
-      const initial = computeInitialOrbit(aabb);
+      const rawAabb = resource?.aabb ?? null;
+      localAabbRef.current = rawAabb
+        ? {
+            center: { x: rawAabb.center.x, y: rawAabb.center.y, z: rawAabb.center.z },
+            halfExtents: { x: rawAabb.halfExtents.x, y: rawAabb.halfExtents.y, z: rawAabb.halfExtents.z },
+          }
+        : null;
+      const worldAabb = localAabbRef.current ? transformLocalAabbToWorld(localAabbRef.current, DEPTH_SCALE_DEFAULT) : null;
+      const initial = orbitDataToState(computeInitialOrbitFromAabb(worldAabb));
       initialOrbitRef.current = initial;
       orbitRef.current = {
         yaw: initial.yaw,
@@ -297,11 +368,19 @@ export default function GaussianViewerPanel({
       if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
     };
     const onWheel = (e: WheelEvent) => {
+      // Codex retake — must never let the page scroll on the canvas even
+      // before the orbit is ready (asset still loading), so this is called
+      // unconditionally on entry, BEFORE the orbit-readiness guard.
+      e.preventDefault();
       const orbit = orbitRef.current;
       if (!orbit) return;
-      orbit.distance = Math.min(500, Math.max(0.05, orbit.distance * Math.exp(e.deltaY * 0.0011)));
+      // Sensitivity preset read from a ref (current value, no dependency on
+      // the handler itself) so changing it never re-registers this listener
+      // or recreates the PlayCanvas app.
+      const normalizedDelta = normalizeWheelDelta(e.deltaY, e.deltaMode, window.innerHeight);
+      const coefficient = resolveWheelCoefficient(sensitivityRef.current, e.altKey);
+      orbit.distance = computeNextDollyDistance(orbit.distance, normalizedDelta, coefficient);
       applyOrbit();
-      e.preventDefault();
     };
     const onContextMenu = (e: Event) => e.preventDefault();
 
@@ -324,6 +403,8 @@ export default function GaussianViewerPanel({
       cameraEntityRef.current = null;
       orbitRef.current = null;
       initialOrbitRef.current = null;
+      splatParentRef.current = null;
+      localAabbRef.current = null;
       if (loadedAsset) {
         loadedAsset.unload();
         app?.assets.remove(loadedAsset);
@@ -339,6 +420,43 @@ export default function GaussianViewerPanel({
     // a full remount because the parent keys this panel by PLY + reference.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plyUrl, applyOrbit]);
+
+  // ── Depth correction — deliberately its OWN effect, depending only on
+  //    `depthScale`. Never touches `orbitRef` (the current camera pose
+  //    stays stable while the slider moves) — only the entity's local Z
+  //    scale and the bounds `resetCamera` will use NEXT time. Never in the
+  //    main lifecycle effect's deps, so adjusting depth never recreates the
+  //    PlayCanvas app or reloads the PLY. ─────────────────────────────────
+  useEffect(() => {
+    const splatParent = splatParentRef.current;
+    if (!splatParent) return;
+    const clamped = clampDepthScale(depthScale);
+    // Non-uniform local scale, Z only — X/Y strictly unchanged. Never
+    // touches the PLY file itself, only this entity's render transform.
+    splatParent.setLocalScale(1, 1, clamped);
+
+    const localAabb = localAabbRef.current;
+    if (localAabb) {
+      const worldAabb = transformLocalAabbToWorld(localAabb, clamped);
+      initialOrbitRef.current = orbitDataToState(computeInitialOrbitFromAabb(worldAabb));
+    }
+  }, [depthScale]);
+
+  const resetDepth = useCallback(() => {
+    setDepthScale(DEPTH_SCALE_DEFAULT);
+    setDepthInputDraft(DEPTH_SCALE_DEFAULT.toFixed(2));
+  }, []);
+
+  /** Parses and clamps the numeric field's free-typing draft on blur/Enter — invalid or empty input falls back to the current committed `depthScale`, never `0`. */
+  const commitDepthDraft = useCallback(
+    (raw: string) => {
+      const parsed = Number(raw.trim());
+      const next = raw.trim() !== "" && Number.isFinite(parsed) ? clampDepthScale(parsed) : depthScale;
+      setDepthScale(next);
+      setDepthInputDraft(next.toFixed(2));
+    },
+    [depthScale]
+  );
 
   // ── Exact offscreen capture ───────────────────────────────────────────────
   const captureSnapshot = useCallback(async () => {
@@ -520,9 +638,98 @@ export default function GaussianViewerPanel({
         <canvas ref={canvasRef} className="h-full w-full touch-none" />
         {ready && (
           <div className="pointer-events-none absolute bottom-1.5 left-2 text-[9px] text-[#6e767d]">
-            Drag orbit · Shift/right-drag pan · Wheel dolly
+            Drag orbit · Shift/right-drag pan · Wheel dolly · Alt+Wheel fine dolly
           </div>
         )}
+      </div>
+
+      {/* Depth scale — non-destructive, this PLY only; resets to 1.00 on reload */}
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor="camera-lab-depth-scale" className="text-xs text-[#a4abb2] shrink-0">
+          Depth scale
+        </label>
+        <input
+          id="camera-lab-depth-scale"
+          type="range"
+          min={DEPTH_SCALE_MIN}
+          max={DEPTH_SCALE_MAX}
+          step={DEPTH_SCALE_STEP}
+          value={depthScale}
+          disabled={!ready}
+          onChange={(e) => {
+            const next = clampDepthScale(Number(e.target.value));
+            setDepthScale(next);
+            setDepthInputDraft(next.toFixed(2));
+          }}
+          className="flex-1 min-w-[120px] accent-[#5b93d6] disabled:opacity-40"
+        />
+        {/* Codex retake — a free-typing text draft, not a native <input
+            type="number">: clamping on every keystroke made it impossible to
+            clear the field or type a value like "0.5" progressively
+            (Number("") === 0 would immediately snap to the minimum). Only
+            blur/Enter validate and clamp; Escape discards the in-progress
+            edit and restores the committed value. */}
+        <input
+          type="text"
+          inputMode="decimal"
+          value={depthInputDraft}
+          disabled={!ready}
+          onChange={(e) => setDepthInputDraft(e.target.value)}
+          onBlur={(e) => commitDepthDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commitDepthDraft(e.currentTarget.value);
+            } else if (e.key === "Escape") {
+              setDepthInputDraft(depthScale.toFixed(2));
+            }
+          }}
+          className="w-16 rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-1.5 py-1 text-right disabled:opacity-40"
+          aria-label="Depth scale value"
+        />
+        <button
+          type="button"
+          onClick={resetDepth}
+          disabled={!ready}
+          title="Reset depth"
+          className="rounded border border-[#2c3035] px-2.5 py-1 text-xs text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        >
+          Reset depth
+        </button>
+      </div>
+
+      {/* Zoom sensitivity — global interaction preference, persisted.
+          Codex retake — plain buttons with `aria-pressed`, the simpler
+          alternative the ticket explicitly authorizes, instead of an
+          incomplete `role="radio"` pattern (which would require arrow-key/
+          Home/End roving-tabindex handling to be a valid ARIA radio group).
+          The explanation is reachable via mouse hover AND keyboard focus
+          through the existing `FieldTooltip` component (`title` alone is
+          hover-only, never focus-reachable). */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs text-[#a4abb2] shrink-0 inline-flex items-center gap-1.5">
+          Zoom sensitivity
+          <FieldTooltip text="Adjust how far the camera moves for each wheel step." />
+        </span>
+        <div className="inline-flex rounded border border-[#2c3035] overflow-hidden">
+          {ZOOM_SENSITIVITY_PRESETS.map((preset) => {
+            const active = zoomSensitivity === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                aria-pressed={active}
+                onClick={() => selectZoomSensitivity(preset)}
+                className={`px-2.5 py-1 text-xs transition-colors ${
+                  active
+                    ? "bg-[#14202e] text-[#e7e9ec]"
+                    : "text-[#a4abb2] hover:text-[#e7e9ec] hover:bg-[#1a1d20]"
+                }`}
+              >
+                {preset}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Controls */}
