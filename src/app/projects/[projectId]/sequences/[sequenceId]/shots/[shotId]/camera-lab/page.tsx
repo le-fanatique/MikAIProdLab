@@ -20,7 +20,12 @@ import CameraLabPolishWorkspace from "@/components/cameraLab/CameraLabPolishWork
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { clearShotPlyCaches } from "@/actions/cameraLabPlyCache";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
-import { requireSingleImageInput, classifyNonImageInputs, type ClassifiedNonImageInput } from "@/lib/cameraLab/workflowInputContract";
+import {
+  requireSingleImageInput,
+  resolveGaussianToImageMapping,
+  classifyNonImageInputs,
+  type ClassifiedNonImageInput,
+} from "@/lib/cameraLab/workflowInputContract";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -134,6 +139,40 @@ export default async function CameraLabPage({ params, searchParams }: Props) {
     }
   }
 
+  // CAMLAB.POLISH.2 — every non-image `(Input)` node of the configured
+  // Default Gaussian-to-image workflow, re-derived server-side on every page
+  // load, mirroring Column 1's own pattern above. The image-node mapping
+  // (Lot A) is also re-validated here so Column 3 can block BEFORE the user
+  // even attempts Generate, not only inside the server action.
+  let gaussianToImageNonImageInputs: ClassifiedNonImageInput[] = [];
+  let gaussianToImageInputsError: string | null = null;
+  if (gaussianToImageWorkflowRow[0]) {
+    const [fullWorkflow] = await db
+      .select({ workflowJson: comfyWorkflows.workflowJson })
+      .from(comfyWorkflows)
+      .where(eq(comfyWorkflows.id, gaussianToImageWorkflowRow[0].id));
+    if (!fullWorkflow) {
+      gaussianToImageInputsError = "The configured Default Gaussian-to-image workflow no longer exists.";
+    } else {
+      const parsed = parseComfyWorkflow(fullWorkflow.workflowJson);
+      if (!parsed) {
+        gaussianToImageInputsError = "The Default Gaussian-to-image workflow's JSON could not be parsed.";
+      } else {
+        const mapping = resolveGaussianToImageMapping(parsed.inputs);
+        if (!mapping.ok) {
+          gaussianToImageInputsError = mapping.error;
+        } else {
+          const classified = classifyNonImageInputs(parsed.inputs, "Gaussian-to-image");
+          if (!classified.ok) {
+            gaussianToImageInputsError = classified.error;
+          } else {
+            gaussianToImageNonImageInputs = classified.inputs;
+          }
+        }
+      }
+    }
+  }
+
   // Explicit selections via URL — every id must be one of THIS Shot's
   // admissible entries; anything else 404s without detail.
   const rawJobId = sp("jobId");
@@ -196,6 +235,8 @@ export default async function CameraLabPage({ params, searchParams }: Props) {
         gaussianToImageWorkflow={gaussianToImageWorkflowRow[0] ?? null}
         gaussianPlyNonImageInputs={gaussianPlyNonImageInputs}
         gaussianPlyInputsError={gaussianPlyInputsError}
+        gaussianToImageNonImageInputs={gaussianToImageNonImageInputs}
+        gaussianToImageInputsError={gaussianToImageInputsError}
         attachedReference={sp("attachedReference") === "1"}
         attachError={sp("attachError") ?? null}
       />

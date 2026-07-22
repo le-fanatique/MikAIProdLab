@@ -32,7 +32,7 @@ import {
   queueGaussianToImageGeneration,
 } from "@/actions/cameraLabGeneration";
 import { attachOutputAsShotReference } from "@/actions/generation";
-import type { ClassifiedNonImageInput } from "@/lib/cameraLab/workflowInputContract";
+import { LOAD_IMAGE_GAUSSIAN_LABEL, LOAD_IMAGE_LABEL, type ClassifiedNonImageInput } from "@/lib/cameraLab/workflowInputContract";
 
 const GaussianViewerPanel = dynamic(() => import("./GaussianViewerPanel"), {
   ssr: false,
@@ -61,10 +61,109 @@ type Props = {
   gaussianPlyNonImageInputs: ClassifiedNonImageInput[];
   /** Set instead of `gaussianPlyNonImageInputs` when the workflow's structure could not be revalidated (unparseable JSON, wrong image-input count, or an unrecognized input kind) — Column 1 must block on this, never render a silently empty control list. */
   gaussianPlyInputsError: string | null;
+  /** CAMLAB.POLISH.2 — every non-image `(Input)` node of the configured Default Gaussian-to-image workflow, re-derived server-side. */
+  gaussianToImageNonImageInputs: ClassifiedNonImageInput[];
+  /** Set instead of `gaussianToImageNonImageInputs` when the workflow's structure could not be revalidated (unparseable JSON, wrong image-node mapping, or an unrecognized input kind) — Column 3 must block on this. */
+  gaussianToImageInputsError: string | null;
   /** CAMLAB.POLISH.1 retake — feedback from `attachOutputAsShotReference`'s redirect, read server-side from the URL. */
   attachedReference: boolean;
   attachError: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// NonImageInputsFieldset — CAMLAB.POLISH.2
+//
+// Shared rendering for the "Other inputs" section of both Column 1 and
+// Column 3: same controls and ergonomic conventions (textarea/number/
+// boolean/select), each column keeping its own separate override state.
+// ---------------------------------------------------------------------------
+function NonImageInputsFieldset({
+  nonImageInputs,
+  textOverrideByNodeId,
+  scalarOverrideByNodeId,
+  onTextChange,
+  onScalarChange,
+  disabled,
+}: {
+  nonImageInputs: ClassifiedNonImageInput[];
+  textOverrideByNodeId: Record<string, string>;
+  scalarOverrideByNodeId: Record<string, string>;
+  onTextChange: (nodeId: string, value: string) => void;
+  onScalarChange: (nodeId: string, value: string) => void;
+  disabled: boolean;
+}) {
+  if (nonImageInputs.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 border-t border-[#232629] pt-3">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+        Other inputs ({nonImageInputs.length})
+      </p>
+      {nonImageInputs.map(({ input, formKind }) => {
+        const nodeId = input.nodeId;
+        const badge = `${input.kind} · node ${nodeId}`;
+        if (formKind === "text") {
+          const value = textOverrideByNodeId[nodeId] ?? input.defaultValue ?? "";
+          return (
+            <div key={nodeId} className="flex flex-col gap-1">
+              <label className="text-[10px] text-[#6e767d]" title={badge}>
+                {input.label} <span className="text-[#4b5158]">({badge})</span>
+              </label>
+              <textarea
+                value={value}
+                onChange={(e) => onTextChange(nodeId, e.target.value)}
+                disabled={disabled}
+                rows={2}
+                className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046] resize-y"
+              />
+            </div>
+          );
+        }
+        // Scalar kinds: integer, float, boolean, select, seed.
+        const scalarValue = scalarOverrideByNodeId[nodeId] ?? input.defaultValue ?? "";
+        return (
+          <div key={nodeId} className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#6e767d]" title={badge}>
+              {input.label} <span className="text-[#4b5158]">({badge})</span>
+            </label>
+            {input.kind === "boolean" ? (
+              <select
+                value={scalarValue === "true" ? "true" : "false"}
+                onChange={(e) => onScalarChange(nodeId, e.target.value)}
+                disabled={disabled}
+                className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+              >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            ) : input.kind === "select" && input.inputOptions ? (
+              <select
+                value={scalarValue}
+                onChange={(e) => onScalarChange(nodeId, e.target.value)}
+                disabled={disabled}
+                className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+              >
+                {input.inputOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="number"
+                step={input.kind === "float" ? "any" : "1"}
+                value={scalarValue}
+                onChange={(e) => onScalarChange(nodeId, e.target.value)}
+                disabled={disabled}
+                className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 type RefreshedViewer = {
   jobId: number;
@@ -191,6 +290,8 @@ export default function CameraLabPolishWorkspace({
   gaussianToImageWorkflow,
   gaussianPlyNonImageInputs,
   gaussianPlyInputsError,
+  gaussianToImageNonImageInputs,
+  gaussianToImageInputsError,
   attachedReference,
   attachError,
 }: Props) {
@@ -264,6 +365,12 @@ export default function CameraLabPolishWorkspace({
   const [col3Submitting, setCol3Submitting] = useState(false);
   const [col3Error, setCol3Error] = useState<string | null>(null);
   const [col3JobId, setCol3JobId] = useState<number | null>(null);
+  // CAMLAB.POLISH.2 — Column 3's own non-image `(Input)` node drafts, kept
+  // strictly separate from Column 1's `textOverrideByNodeId`/
+  // `scalarOverrideByNodeId` state above, even though both workflows could
+  // in principle reuse the same node id numbering.
+  const [col3TextOverrideByNodeId, setCol3TextOverrideByNodeId] = useState<Record<string, string>>({});
+  const [col3ScalarOverrideByNodeId, setCol3ScalarOverrideByNodeId] = useState<Record<string, string>>({});
   const [col3CleanupWarning, setCol3CleanupWarning] = useState<string | null>(null);
   const [col3JobDoneImagePath, setCol3JobDoneImagePath] = useState<string | null>(null);
   const handleCol3StatusChange = useCallback((job: { status: string; outputPath: string | null }) => {
@@ -346,6 +453,8 @@ export default function CameraLabPolishWorkspace({
           sourcePlyJobId: refreshed.jobId,
           snapshotFile: file,
           snapshotSource,
+          textOverrideByNodeId: Object.keys(col3TextOverrideByNodeId).length > 0 ? col3TextOverrideByNodeId : undefined,
+          scalarOverrideByNodeId: Object.keys(col3ScalarOverrideByNodeId).length > 0 ? col3ScalarOverrideByNodeId : undefined,
           confirmPartnerNodeCost,
         })
       );
@@ -361,9 +470,24 @@ export default function CameraLabPolishWorkspace({
     } finally {
       setCol3Submitting(false);
     }
-  }, [gaussianToImageWorkflow, refreshed, effectiveSnapshot, snapshotSource, projectId, sequenceId, shotId]);
+  }, [
+    gaussianToImageWorkflow,
+    refreshed,
+    effectiveSnapshot,
+    snapshotSource,
+    col3TextOverrideByNodeId,
+    col3ScalarOverrideByNodeId,
+    projectId,
+    sequenceId,
+    shotId,
+  ]);
 
-  const col3Ready = refreshed !== null && !stale && effectiveSnapshot !== null && gaussianToImageWorkflow !== null;
+  const col3Ready =
+    refreshed !== null &&
+    !stale &&
+    effectiveSnapshot !== null &&
+    gaussianToImageWorkflow !== null &&
+    !gaussianToImageInputsError;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] gap-4 items-start">
@@ -421,83 +545,15 @@ export default function CameraLabPolishWorkspace({
               <p className="text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{gaussianPlyInputsError}</p>
             )}
 
-            {!gaussianPlyInputsError && gaussianPlyNonImageInputs.length > 0 && (
-              <div className="flex flex-col gap-2 border-t border-[#232629] pt-3">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
-                  Other inputs ({gaussianPlyNonImageInputs.length})
-                </p>
-                {gaussianPlyNonImageInputs.map(({ input, formKind }) => {
-                  const nodeId = input.nodeId;
-                  const badge = `${input.kind} · node ${nodeId}`;
-                  if (formKind === "text") {
-                    const value = textOverrideByNodeId[nodeId] ?? input.defaultValue ?? "";
-                    return (
-                      <div key={nodeId} className="flex flex-col gap-1">
-                        <label className="text-[10px] text-[#6e767d]" title={badge}>
-                          {input.label} <span className="text-[#4b5158]">({badge})</span>
-                        </label>
-                        <textarea
-                          value={value}
-                          onChange={(e) =>
-                            setTextOverrideByNodeId((prev) => ({ ...prev, [nodeId]: e.target.value }))
-                          }
-                          disabled={col1Submitting}
-                          rows={2}
-                          className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046] resize-y"
-                        />
-                      </div>
-                    );
-                  }
-                  // Scalar kinds: integer, float, boolean, select, seed.
-                  const scalarValue = scalarOverrideByNodeId[nodeId] ?? input.defaultValue ?? "";
-                  return (
-                    <div key={nodeId} className="flex flex-col gap-1">
-                      <label className="text-[10px] text-[#6e767d]" title={badge}>
-                        {input.label} <span className="text-[#4b5158]">({badge})</span>
-                      </label>
-                      {input.kind === "boolean" ? (
-                        <select
-                          value={scalarValue === "true" ? "true" : "false"}
-                          onChange={(e) =>
-                            setScalarOverrideByNodeId((prev) => ({ ...prev, [nodeId]: e.target.value }))
-                          }
-                          disabled={col1Submitting}
-                          className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                        >
-                          <option value="true">true</option>
-                          <option value="false">false</option>
-                        </select>
-                      ) : input.kind === "select" && input.inputOptions ? (
-                        <select
-                          value={scalarValue}
-                          onChange={(e) =>
-                            setScalarOverrideByNodeId((prev) => ({ ...prev, [nodeId]: e.target.value }))
-                          }
-                          disabled={col1Submitting}
-                          className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                        >
-                          {input.inputOptions.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="number"
-                          step={input.kind === "float" ? "any" : "1"}
-                          value={scalarValue}
-                          onChange={(e) =>
-                            setScalarOverrideByNodeId((prev) => ({ ...prev, [nodeId]: e.target.value }))
-                          }
-                          disabled={col1Submitting}
-                          className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            {!gaussianPlyInputsError && (
+              <NonImageInputsFieldset
+                nonImageInputs={gaussianPlyNonImageInputs}
+                textOverrideByNodeId={textOverrideByNodeId}
+                scalarOverrideByNodeId={scalarOverrideByNodeId}
+                onTextChange={(nodeId, value) => setTextOverrideByNodeId((prev) => ({ ...prev, [nodeId]: value }))}
+                onScalarChange={(nodeId, value) => setScalarOverrideByNodeId((prev) => ({ ...prev, [nodeId]: value }))}
+                disabled={col1Submitting}
+              />
             )}
 
             <button
@@ -590,7 +646,7 @@ export default function CameraLabPolishWorkspace({
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#6e767d]">
-                  Input 1 (snapshot) — active source:{" "}
+                  {LOAD_IMAGE_GAUSSIAN_LABEL} (Input) — active source:{" "}
                   <span className="text-[#a4abb2]">
                     {snapshotSource === "uploaded-override" ? "Uploaded override" : "Captured snapshot"}
                   </span>
@@ -653,9 +709,26 @@ export default function CameraLabPolishWorkspace({
               )}
 
               <span className="text-[10px] text-[#6e767d]">
-                Input 2 (source): {refreshed && !stale ? <span className="text-[#8fc9a0]">{refreshed.sourceLabel}</span> : <span className="text-[#cf7b6b]">missing</span>}
+                {LOAD_IMAGE_LABEL} (Input): {refreshed && !stale ? <span className="text-[#8fc9a0]">{refreshed.sourceLabel}</span> : <span className="text-[#cf7b6b]">missing</span>}
               </span>
             </div>
+
+            {gaussianToImageInputsError && (
+              <p className="text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">
+                {gaussianToImageInputsError}
+              </p>
+            )}
+
+            {!gaussianToImageInputsError && (
+              <NonImageInputsFieldset
+                nonImageInputs={gaussianToImageNonImageInputs}
+                textOverrideByNodeId={col3TextOverrideByNodeId}
+                scalarOverrideByNodeId={col3ScalarOverrideByNodeId}
+                onTextChange={(nodeId, value) => setCol3TextOverrideByNodeId((prev) => ({ ...prev, [nodeId]: value }))}
+                onScalarChange={(nodeId, value) => setCol3ScalarOverrideByNodeId((prev) => ({ ...prev, [nodeId]: value }))}
+                disabled={col3Submitting}
+              />
+            )}
 
             <button
               type="button"

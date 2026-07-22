@@ -23,9 +23,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
+import type { WorkflowInputMapping } from "@/lib/comfy/mapWorkflowInputs";
+import { patchWorkflowPayload } from "@/lib/comfy/patchWorkflowPayload";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { runWorkflowGeneration, type RunWorkflowGenerationResult } from "@/actions/generation";
-import { requireSingleImageInput, resolveGaussianToImageMapping, classifyNonImageInputs } from "@/lib/cameraLab/workflowInputContract";
+import {
+  requireSingleImageInput,
+  resolveGaussianToImageMapping,
+  classifyNonImageInputs,
+  type ClassifiedNonImageInput,
+} from "@/lib/cameraLab/workflowInputContract";
 import { resolvePlyJobProvenance } from "@/lib/cameraLab/plyJobProvenance";
 import { parsePngDimensions } from "@/lib/cameraLab/pngValidation";
 import { isFullyDecodableImage } from "@/lib/cameraLab/decodePng";
@@ -206,6 +213,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// ---------------------------------------------------------------------------
+// CAMLAB.POLISH.2, Lot C — builds a `WorkflowInputMapping[]` containing ONLY
+// the classified non-image nodes the caller actually edited, so
+// `patchWorkflowPayload` (the canonical patcher, reused as-is — never a
+// second value patcher) only ever touches those exact nodes. A node with no
+// entry in either override map is simply absent from `mappings`, so the
+// patcher's loop never visits it and its stored workflow value is never
+// replaced by an empty string or any implicit default — unlike Column 1,
+// Column 3 must never inject a Shot prompt or "" into an untouched input.
+//
+// `kind === "text"` (e.g. PrimitiveStringMultiline) routes through the
+// patcher's `mappingKind: "text"` branch; every other classified kind
+// (including "string", which the shared `classifyNonImageInputs` groups
+// under the `formKind: "text"` UI bucket together with "text") routes
+// through the patcher's scalar branch, since only that branch actually
+// applies a `scalarOverrideByNodeId` value for those kinds.
+// ---------------------------------------------------------------------------
+function buildColumnThreeOverrideMappings(
+  classified: ClassifiedNonImageInput[],
+  textOverrideByNodeId: Record<string, string>,
+  scalarOverrideByNodeId: Record<string, string>
+): { mappings: WorkflowInputMapping[]; effectiveScalarOverrideByNodeId: Record<string, string> } {
+  const mappings: WorkflowInputMapping[] = [];
+  const effectiveScalarOverrideByNodeId: Record<string, string> = {};
+
+  for (const { input } of classified) {
+    const nodeId = input.nodeId;
+    if (input.kind === "text") {
+      const override = textOverrideByNodeId[nodeId];
+      if (override === undefined) continue;
+      mappings.push({ input, mappingKind: "text", suggestedText: override, availableImages: [], availableVideos: [] });
+      continue;
+    }
+    // Every other classified kind (string/integer/float/boolean/select/seed)
+    // is scalar-routed. "string" is classified as `formKind: "text"` by
+    // `classifyNonImageInputs`, so its override arrives via
+    // `textOverrideByNodeId` — read from whichever map the node's own
+    // `formKind` would have used.
+    const isTextFormKind = input.kind === "string";
+    const override = isTextFormKind ? textOverrideByNodeId[nodeId] : scalarOverrideByNodeId[nodeId];
+    if (override === undefined) continue;
+    mappings.push({ input, mappingKind: "unknown", suggestedText: null, availableImages: [], availableVideos: [] });
+    effectiveScalarOverrideByNodeId[nodeId] = override;
+  }
+
+  return { mappings, effectiveScalarOverrideByNodeId };
+}
+
 export type QueueGaussianToImageResult =
   | { ok: true; jobId: number; cleanupWarning?: string }
   | {
@@ -223,6 +278,9 @@ export async function queueGaussianToImageGeneration(input: {
   snapshotFile: File;
   /** CAMLAB.POLISH.1 retake round 2 — which draft `snapshotFile` actually is; recorded verbatim in `cameraLabProvenance`, never inferred. */
   snapshotSource: "captured-snapshot" | "uploaded-override";
+  /** CAMLAB.POLISH.2 — non-image `(Input)` node overrides for Column 3 (e.g. Seed, Additional Prompy). Same contract as Column 1: every key is re-validated below against the workflow's real current structure; an unknown or kind-incompatible node id refuses the whole request before any file/job work. A node absent from both maps keeps its own stored workflow value untouched — never implicitly replaced by a Shot prompt or an empty string. */
+  textOverrideByNodeId?: Record<string, string>;
+  scalarOverrideByNodeId?: Record<string, string>;
   confirmPartnerNodeCost?: boolean;
 }): Promise<QueueGaussianToImageResult> {
   const { projectId, sequenceId, shotId, sourcePlyJobId, snapshotSource } = input;
@@ -268,6 +326,59 @@ export async function queueGaussianToImageGeneration(input: {
   if (!mapping.ok) {
     return { ok: false, error: mapping.error };
   }
+
+  // ── CAMLAB.POLISH.2, Lot B/C — every non-image `(Input)` node the
+  //    workflow ACTUALLY has right now, re-derived server-side; never trust
+  //    the client's set of override keys blindly. Same discipline as Column
+  //    1's `queueGaussianPlyGeneration`. ───────────────────────────────────
+  const classified = classifyNonImageInputs(parsed.inputs, "Gaussian-to-image");
+  if (!classified.ok) {
+    return { ok: false, error: classified.error };
+  }
+  const textNodeIds = new Set(
+    classified.inputs.filter((c) => c.formKind === "text").map((c) => c.input.nodeId)
+  );
+  const scalarNodeIds = new Set(
+    classified.inputs.filter((c) => c.formKind === "scalar").map((c) => c.input.nodeId)
+  );
+  const textOverrideByNodeId = input.textOverrideByNodeId ?? {};
+  for (const nodeId of Object.keys(textOverrideByNodeId)) {
+    if (!textNodeIds.has(nodeId)) {
+      return { ok: false, error: `Unknown or incompatible text override for node ${nodeId}.` };
+    }
+  }
+  const scalarOverrideByNodeId = input.scalarOverrideByNodeId ?? {};
+  for (const nodeId of Object.keys(scalarOverrideByNodeId)) {
+    if (!scalarNodeIds.has(nodeId)) {
+      return { ok: false, error: `Unknown or incompatible scalar override for node ${nodeId}.` };
+    }
+  }
+
+  // ── Codex retake (P1) — the canonical text/scalar patch is built and
+  //    validated HERE, before any snapshot file work: it needs only the
+  //    workflow JSON and the overrides, never the snapshot bytes. Since
+  //    `overrideMappings` contains ONLY the nodes the caller explicitly
+  //    edited, ANY warning `patchWorkflowPayload` produces here means one of
+  //    those explicit overrides was NOT actually applied (invalid value,
+  //    missing compatible field, node not found, unparseable JSON, …) — the
+  //    request must be refused outright rather than silently queueing the
+  //    workflow's original, un-overridden value while the user believes
+  //    their edit took effect. ──────────────────────────────────────────────
+  const { mappings: overrideMappings, effectiveScalarOverrideByNodeId } = buildColumnThreeOverrideMappings(
+    classified.inputs,
+    textOverrideByNodeId,
+    scalarOverrideByNodeId
+  );
+  const canonicalPatch = patchWorkflowPayload(workflow.workflowJson, overrideMappings, {
+    scalarOverrideByNodeId: effectiveScalarOverrideByNodeId,
+  });
+  if (canonicalPatch.warnings.length > 0) {
+    return {
+      ok: false,
+      error: `Could not apply the requested input override(s): ${canonicalPatch.warnings.join(" ")}`,
+    };
+  }
+  const patchedJson: Record<string, unknown> = canonicalPatch.patchedJson;
 
   // ── Validate the captured snapshot bytes (no target dims to match here —
   //    Gaussian-to-image accepts the snapshot at whatever exact resolution
@@ -352,17 +463,10 @@ export async function queueGaussianToImageGeneration(input: {
     };
   }
 
-  // ── Build the exact payload override: node-by-node, never a second
-  //    generic patcher — only the two structurally-identified nodes are
-  //    touched, everything else in the workflow JSON is passed through as-is.
-  let patchedJson: Record<string, unknown>;
-  try {
-    patchedJson = JSON.parse(workflow.workflowJson) as Record<string, unknown>;
-  } catch {
-    const failures = await cleanup();
-    return { ok: false, error: withCleanupNote("The Default Gaussian-to-image workflow's JSON could not be parsed.", failures) };
-  }
-
+  // ── Inject the two image nodes on TOP of the already-patched JSON built
+  //    and validated above (before any of this snapshot file work), so a
+  //    text/scalar override on the same node id a hypothetical future
+  //    workflow shares would never be silently discarded. ──────────────────
   const applyImage = (nodeId: string, imagePath: string): string | null => {
     const node = patchedJson[nodeId];
     if (!isRecord(node)) return `Node ${nodeId} not found in workflow JSON.`;
@@ -395,6 +499,12 @@ export async function queueGaussianToImageGeneration(input: {
       shotId,
       workflowId: defaults.gaussianToImageId,
       patchedJsonOverride: patchedJson,
+      // CAMLAB.POLISH.2 — recorded on payloadSnapshot.selections for
+      // provenance/proof; the ACTUAL values already applied to `patchedJson`
+      // above are what gets queued regardless (patchedJsonOverride always
+      // wins over runWorkflowGeneration's own internal recomputation).
+      textOverrideByNodeId: Object.keys(textOverrideByNodeId).length > 0 ? textOverrideByNodeId : undefined,
+      scalarOverrideByNodeId: Object.keys(scalarOverrideByNodeId).length > 0 ? scalarOverrideByNodeId : undefined,
       confirmPartnerNodeCost: input.confirmPartnerNodeCost,
       cameraLabProvenance: {
         sourcePlyJobId,
