@@ -29,28 +29,8 @@ import {
   validateSnapshotPng,
   isConfinableUploadsPath,
 } from "@/lib/cameraLab/pngValidation";
-import { runFfprobeJson, getFfmpegPath } from "@/lib/ffmpeg";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
-const DECODE_TIMEOUT_MS = 30_000;
-
-/** Fully decodes the written PNG with the bundled FFmpeg (`-f null -`) — a probed header is not proof of a displayable image; a truncated or corrupt stream must fail here. */
-async function isFullyDecodableImage(absolutePath: string): Promise<boolean> {
-  const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath) return false;
-  try {
-    await execFileAsync(
-      ffmpegPath,
-      ["-v", "error", "-i", absolutePath, "-frames:v", "1", "-f", "null", "-"],
-      { timeout: DECODE_TIMEOUT_MS, windowsHide: true, maxBuffer: 1024 * 1024 }
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { runFfprobeJson } from "@/lib/ffmpeg";
+import { isFullyDecodableImage } from "@/lib/cameraLab/decodePng";
 
 export type ConfirmCameraSnapshotResult =
   | { ok: true; referenceId: number; width: number; height: number }

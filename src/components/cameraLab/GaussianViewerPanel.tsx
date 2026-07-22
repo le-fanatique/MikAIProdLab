@@ -21,6 +21,14 @@ type Props = {
   sourceImageLabel: string;
   sourceWidth: number;
   sourceHeight: number;
+  /**
+   * CAMLAB.POLISH.1 — optional: lifts the local snapshot draft to a parent
+   * that needs it before "Add to Shot references" is clicked (Column 3,
+   * Gaussian-to-image). Called with `null` on retake or after a successful
+   * save. Never a substitute for `confirmCameraSnapshot` — the draft still
+   * only becomes a Shot reference via that explicit action.
+   */
+  onSnapshotChange?: (snapshot: { objectUrl: string; width: number; height: number } | null) => void;
 };
 
 type LoadState =
@@ -75,6 +83,7 @@ export default function GaussianViewerPanel({
   sourceImageLabel,
   sourceWidth,
   sourceHeight,
+  onSnapshotChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -410,7 +419,9 @@ export default function GaussianViewerPanel({
 
         const previous = snapshotRef.current;
         if (previous) URL.revokeObjectURL(previous.objectUrl);
-        setSnapshot({ objectUrl: URL.createObjectURL(blob), width, height });
+        const next = { objectUrl: URL.createObjectURL(blob), width, height };
+        setSnapshot(next);
+        onSnapshotChange?.(next);
       } finally {
         camera.renderTarget = null as unknown as pc.RenderTarget;
         camera.aspectRatioMode = previousAspectMode;
@@ -425,7 +436,7 @@ export default function GaussianViewerPanel({
     } finally {
       setCapturing(false);
     }
-  }, [gpuCheck, sourceWidth, sourceHeight]);
+  }, [gpuCheck, sourceWidth, sourceHeight, onSnapshotChange]);
 
   const retake = useCallback(() => {
     const current = snapshotRef.current;
@@ -433,7 +444,8 @@ export default function GaussianViewerPanel({
     setSnapshot(null);
     setCaptureError(null);
     setSaveError(null);
-  }, []);
+    onSnapshotChange?.(null);
+  }, [onSnapshotChange]);
 
   // ── Explicit confirmation: add the local draft as a `camera` reference.
   //    Success only after the real server response; the draft survives any
@@ -457,6 +469,7 @@ export default function GaussianViewerPanel({
       if (result.ok) {
         URL.revokeObjectURL(current.objectUrl);
         setSnapshot(null);
+        onSnapshotChange?.(null);
         setSaveSuccess({ referenceId: result.referenceId, width: result.width, height: result.height });
       } else {
         setSaveError(result.error);
@@ -468,7 +481,7 @@ export default function GaussianViewerPanel({
     } finally {
       setSaving(false);
     }
-  }, [saving, projectId, sequenceId, shotId, jobId, refId]);
+  }, [saving, projectId, sequenceId, shotId, jobId, refId, onSnapshotChange]);
 
   const ready = loadState.status === "ready";
   const captureBlocked = gpuCheck !== null && !gpuCheck.ok;

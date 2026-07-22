@@ -194,6 +194,8 @@ export async function runWorkflowGeneration(args: {
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
   /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
   confirmPartnerNodeCost?: boolean;
+  /** CAMLAB.POLISH.1 — set only by the Camera Lab's Gaussian-to-image caller; recorded as-is on the job's payloadSnapshot, never inferred here. */
+  cameraLabProvenance?: GenerationSnapshot["cameraLabProvenance"];
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, sequenceId, shotId, workflowId } = args;
 
@@ -473,6 +475,7 @@ export async function runWorkflowGeneration(args: {
       warnings: [...new Set([...built.patch.warnings, ...prepared.warnings])],
       uploadedImages: prepared.uploadedImages,
       queuedWorkflow: prepared.workflow,
+      ...(args.cameraLabProvenance ? { cameraLabProvenance: args.cameraLabProvenance } : {}),
     };
     await db
       .update(generationJobs)

@@ -211,7 +211,6 @@ export default async function SettingsPage({ searchParams }: Props) {
           initialProvider={comfySettings.provider}
           initialBaseUrl={comfySettings.baseUrl}
           initialHasApiKey={comfySettings.hasApiKey}
-          initialHasCloudApiKey={comfySettings.hasCloudApiKey}
           initialLocalVramAutoManagement={comfySettings.localVramAutoManagement}
           cloudBaseUrl={COMFY_CLOUD_BASE_URL}
         />
@@ -293,6 +292,39 @@ export default async function SettingsPage({ searchParams }: Props) {
             >
               <option value="">-- None --</option>
               {videoWorkflows.map((wf) => (
+                <option key={wf.id} value={String(wf.id)}>
+                  {wf.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* CAMLAB.POLISH.1 — Lot A. Same "-- None --" absent/invalid
+              behavior as the three defaults above; lists existing workflows
+              only, never inferred by name/id/SHARP class. */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-[#6e767d]">Default Gaussian PLY</label>
+            <select
+              name="gaussianPlyWorkflowId"
+              defaultValue={String(defaults.gaussianPlyId ?? "")}
+              className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+            >
+              <option value="">-- None --</option>
+              {imageWorkflows.map((wf) => (
+                <option key={wf.id} value={String(wf.id)}>
+                  {wf.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-[#6e767d]">Default Gaussian-to-image</label>
+            <select
+              name="gaussianToImageWorkflowId"
+              defaultValue={String(defaults.gaussianToImageId ?? "")}
+              className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+            >
+              <option value="">-- None --</option>
+              {imageWorkflows.map((wf) => (
                 <option key={wf.id} value={String(wf.id)}>
                   {wf.name}
                 </option>

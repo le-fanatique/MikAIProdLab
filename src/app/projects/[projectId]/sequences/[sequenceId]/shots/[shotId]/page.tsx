@@ -36,8 +36,6 @@ import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import ShotNarrativeContextEditor from "@/components/ShotNarrativeContextEditor";
 import ShotVideoLibraryPanel, { type ShotVideoLibraryRow } from "@/components/shotVideoLibrary/ShotVideoLibraryPanel";
-import { extractEligiblePlyOutput } from "@/lib/cameraLab/eligibility";
-import { isNotNull } from "drizzle-orm";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -610,28 +608,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     };
   });
 
-  // ── Gaussian Camera entry (CAMLAB.VIEWER.1) — shown only when this Shot
-  // has at least one done job with a confinable PLY output. Read-only check;
-  // the strict rule lives in src/lib/cameraLab/eligibility.ts.
-  const cameraLabJobRows = await db
-    .select({
-      id: generationJobs.id,
-      shotId: generationJobs.shotId,
-      status: generationJobs.status,
-      outputPath: generationJobs.outputPath,
-    })
-    .from(generationJobs)
-    .where(
-      and(
-        eq(generationJobs.shotId, shid),
-        eq(generationJobs.status, "done"),
-        isNotNull(generationJobs.outputPath)
-      )
-    );
-  const hasEligibleGaussianPly = cameraLabJobRows.some(
-    (row) => extractEligiblePlyOutput(row, shid) !== null
-  );
-
   const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const closeUrl = detailBaseUrl;
   const openPanelUrl = `${detailBaseUrl}?generation=open`;
@@ -658,15 +634,13 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         }
         actions={
           <>
-            {hasEligibleGaussianPly && (
-              <Link
-                href={`${detailBaseUrl}/camera-lab`}
-                title="Explore a finished Gaussian PLY and capture a framing at the exact source resolution"
-                className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-              >
-                Gaussian Camera
-              </Link>
-            )}
+            <Link
+              href={`${detailBaseUrl}/camera-lab`}
+              title="Generate a Gaussian PLY, explore it in the viewer, and capture a framing at the exact source resolution"
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Gaussian Camera
+            </Link>
             <Link
               href={openPanelUrl}
               className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"

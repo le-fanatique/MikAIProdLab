@@ -29,6 +29,13 @@ type JobData = {
 
 type Props = {
   jobId: number;
+  /**
+   * CAMLAB.POLISH.1 retake — optional: lifts the polled job's status/output
+   * to a parent that needs to react to it (e.g. Camera Lab Column 3 showing
+   * "Add to Shot references" only once the tracked job is a finished
+   * image). Called on every successful poll; never on a fetch error.
+   */
+  onStatusChange?: (job: { status: JobStatus; outputPath: string | null }) => void;
 };
 
 const TERMINAL_STATUSES: JobStatus[] = ["done", "failed", "timeout"];
@@ -71,7 +78,7 @@ function isVideoPath(outputPath: string): boolean {
   return ["mp4", "webm", "mov"].includes(getOutputExt(outputPath));
 }
 
-export default function GenerationJobStatusPanel({ jobId }: Props) {
+export default function GenerationJobStatusPanel({ jobId, onStatusChange }: Props) {
   const router = useRouter();
   const [job, setJob] = useState<JobData | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -92,6 +99,7 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
 
       setFetchError(null);
       setJob(data.job);
+      onStatusChange?.({ status: data.job.status, outputPath: data.job.outputPath });
       if (
         TERMINAL_STATUSES.includes(data.job.status as JobStatus) &&
         !hasRefreshedForTerminalStatus.current
@@ -104,7 +112,7 @@ export default function GenerationJobStatusPanel({ jobId }: Props) {
       setFetchError("Could not reach the job status endpoint.");
       return null;
     }
-  }, [jobId]);
+  }, [jobId, onStatusChange]);
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;

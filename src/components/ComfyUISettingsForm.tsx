@@ -8,7 +8,6 @@ type Props = {
   initialProvider: RuntimeProvider;
   initialBaseUrl: string;
   initialHasApiKey: boolean;
-  initialHasCloudApiKey: boolean;
   initialLocalVramAutoManagement: boolean;
   cloudBaseUrl: string;
 };
@@ -20,23 +19,19 @@ export default function ComfyUISettingsForm({
   initialProvider,
   initialBaseUrl,
   initialHasApiKey,
-  initialHasCloudApiKey,
   initialLocalVramAutoManagement,
   cloudBaseUrl,
 }: Props) {
   const [provider, setProvider] = useState<RuntimeProvider>(initialProvider);
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
 
-  // Partner Node key (local + Cloud submissions) — never pre-filled with the
-  // real value; only a "configured" indicator until the user types a new one.
+  // CAMLAB.POLISH.1 retake — single canonical key, serving both the Partner
+  // Node billing key (extra_data.api_key_comfy_org, local + Cloud) and Comfy
+  // Cloud's own X-API-Key auth. Never pre-filled with the real value; only a
+  // "configured" indicator until the user types a new one.
   const [hasApiKey, setHasApiKey] = useState(initialHasApiKey);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
-
-  // Comfy Cloud's own auth key — same never-prefilled discipline.
-  const [hasCloudApiKey, setHasCloudApiKey] = useState(initialHasCloudApiKey);
-  const [cloudApiKey, setCloudApiKey] = useState("");
-  const [cloudApiKeyTouched, setCloudApiKeyTouched] = useState(false);
 
   const [localVramAutoManagement, setLocalVramAutoManagement] = useState(initialLocalVramAutoManagement);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -47,7 +42,7 @@ export default function ComfyUISettingsForm({
   async function handleTestConnection() {
     setIsTesting(true);
     setTestResult(null);
-    const res = await testComfyConnection(provider, baseUrl, cloudApiKeyTouched ? cloudApiKey : "");
+    const res = await testComfyConnection(provider, baseUrl, apiKeyTouched ? apiKey : "");
     setTestResult({ ok: res.ok, message: res.ok ? res.message : res.error });
     setIsTesting(false);
   }
@@ -59,18 +54,13 @@ export default function ComfyUISettingsForm({
         baseUrl,
         apiKeyTouched ? apiKey : "",
         apiKeyTouched ? "replace" : "keep",
-        cloudApiKeyTouched ? cloudApiKey : "",
-        cloudApiKeyTouched ? "replace" : "keep",
         localVramAutoManagement
       );
       if (res.ok) {
         setResult({ ok: true, message: "ComfyUI settings saved." });
         setHasApiKey(apiKeyTouched ? apiKey.trim().length > 0 : hasApiKey);
-        setHasCloudApiKey(cloudApiKeyTouched ? cloudApiKey.trim().length > 0 : hasCloudApiKey);
         setApiKey("");
         setApiKeyTouched(false);
-        setCloudApiKey("");
-        setCloudApiKeyTouched(false);
       } else {
         setResult({ ok: false, message: res.error });
       }
@@ -130,36 +120,6 @@ export default function ComfyUISettingsForm({
         </div>
       )}
 
-      {provider === "cloud" && (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-cloud-api-key">
-              Comfy Cloud API Key
-            </label>
-            {hasCloudApiKey && !cloudApiKeyTouched && (
-              <span className="text-[10px] text-[#6b9e72]">Key saved</span>
-            )}
-          </div>
-          <input
-            id="comfyui-cloud-api-key"
-            type="password"
-            value={cloudApiKey}
-            onChange={(e) => {
-              setCloudApiKey(e.target.value);
-              setCloudApiKeyTouched(true);
-              setResult(null);
-              setTestResult(null);
-            }}
-            placeholder={hasCloudApiKey ? "•••• (unchanged)" : "Comfy Cloud API key"}
-            className={inputClass}
-          />
-          <p className="text-xs text-[#4b5158]">
-            Required. Sent as X-API-Key on every Comfy Cloud request. Get it
-            from your platform.comfy.org profile.
-          </p>
-        </div>
-      )}
-
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <label className="text-xs font-medium text-[#a4abb2]" htmlFor="comfyui-api-key">
@@ -177,14 +137,15 @@ export default function ComfyUISettingsForm({
             setApiKey(e.target.value);
             setApiKeyTouched(true);
             setResult(null);
+            setTestResult(null);
           }}
-          placeholder={hasApiKey ? "•••• (unchanged)" : "Optional ComfyUI API key"}
+          placeholder={hasApiKey ? "•••• (unchanged)" : provider === "cloud" ? "Required for Comfy Cloud" : "Optional ComfyUI API key"}
           className={inputClass}
         />
         <p className="text-xs text-[#4b5158]">
-          Optional. Billing key for Partner Nodes (e.g. Gemini/GPT image
-          nodes), sent via extra_data — used for both Local and Comfy Cloud
-          submissions. Distinct from the Comfy Cloud API key above.
+          {provider === "cloud"
+            ? "Required for Comfy Cloud. Sent as X-API-Key on every Comfy Cloud request, and as the Partner Node billing key (e.g. Gemini/GPT image nodes) via extra_data. Get it from your platform.comfy.org profile."
+            : "Optional. Billing key for Partner Nodes (e.g. Gemini/GPT image nodes), sent via extra_data for Local submissions. The same key also authenticates Comfy Cloud if you switch runtime."}
         </p>
       </div>
 

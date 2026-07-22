@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { appSettings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { fetchOllamaModelNames } from "@/lib/llm/ollama";
 import { fetchOpenAICompatibleModelNames, testOpenAICompatibleConnection } from "@/lib/llm/openaiCompatible";
 import { redirect } from "next/navigation";
@@ -157,8 +157,6 @@ export async function saveComfySettings(
   baseUrl: string,
   apiKey: string,
   apiKeyMode: "replace" | "keep",
-  cloudApiKey: string,
-  cloudApiKeyMode: "replace" | "keep",
   localVramAutoManagement: boolean = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
@@ -171,11 +169,16 @@ export async function saveComfySettings(
 
     await upsertSetting("comfyui_provider", finalProvider);
     await upsertSetting("comfyui_base_url", finalUrl);
+    // CAMLAB.POLISH.1 retake — a single canonical key now serves both the
+    // Partner Node billing key and Comfy Cloud's X-API-Key auth. Only this
+    // key is ever written on Save going forward; the legacy
+    // "comfyui_cloud_api_key" row (if any) is left as-is (never deleted,
+    // never rewritten here) — getComfySettings() only reads it as a
+    // one-time fallback when this canonical key is empty, so the very next
+    // successful Save of a real key converges the account onto the
+    // canonical key without any explicit migration.
     if (apiKeyMode === "replace") {
       await upsertSetting("comfyui_api_key", apiKey.trim());
-    }
-    if (cloudApiKeyMode === "replace") {
-      await upsertSetting("comfyui_cloud_api_key", cloudApiKey.trim());
     }
     await upsertSetting("local_vram_auto_management_enabled", localVramAutoManagement ? "true" : "false");
 
@@ -245,25 +248,30 @@ async function testLocalComfyConnection(
 
 /**
  * COMFY.PROVIDER.1 — tests the Cloud connection with GET /api/object_info
- * (authenticated, read-only — never a generation). `cloudApiKeyOverride` is
+ * (authenticated, read-only — never a generation). `apiKeyOverride` is
  * the value currently typed in the form; when empty (field untouched), the
  * already-saved key is read server-side so "Test Connection" still works
  * without the client ever holding the saved secret (no-leak design).
  */
 async function testCloudComfyConnection(
-  cloudApiKeyOverride: string
+  apiKeyOverride: string
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  const typed = cloudApiKeyOverride.trim();
+  const typed = apiKeyOverride.trim();
   let apiKey = typed;
   if (!apiKey) {
+    // CAMLAB.POLISH.1 retake — same canonical-then-legacy-fallback read as
+    // getComfySettings(), so "Test Connection" behaves identically to a
+    // real Cloud submission would.
     const rows = await db
       .select()
       .from(appSettings)
-      .where(eq(appSettings.key, "comfyui_cloud_api_key"));
-    apiKey = rows[0]?.value?.trim() ?? "";
+      .where(inArray(appSettings.key, ["comfyui_api_key", "comfyui_cloud_api_key"]));
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    const canonical = map.get("comfyui_api_key")?.trim() ?? "";
+    apiKey = canonical || (map.get("comfyui_cloud_api_key")?.trim() ?? "");
   }
   if (!apiKey) {
-    return { ok: false, error: "Set a Comfy Cloud API key before testing the connection." };
+    return { ok: false, error: "Set a Comfy.org API Key for Partner Nodes before testing the connection." };
   }
 
   try {
@@ -281,11 +289,11 @@ async function testCloudComfyConnection(
 export async function testComfyConnection(
   provider: RuntimeProvider,
   baseUrl: string,
-  cloudApiKeyOverride: string = ""
+  apiKeyOverride: string = ""
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   const finalProvider = normalizeRuntimeProvider(provider);
   return finalProvider === "cloud"
-    ? testCloudComfyConnection(cloudApiKeyOverride)
+    ? testCloudComfyConnection(apiKeyOverride)
     : testLocalComfyConnection(baseUrl);
 }
 
@@ -499,6 +507,11 @@ export async function saveWorkflowDefaults(formData: FormData): Promise<void> {
   const assetImageId = formData.get("assetImageWorkflowId")?.toString().trim() ?? "";
   const shotImageId = formData.get("shotImageWorkflowId")?.toString().trim() ?? "";
   const shotVideoId = formData.get("shotVideoWorkflowId")?.toString().trim() ?? "";
+  // CAMLAB.POLISH.1 — same absent/invalid behavior as the three defaults
+  // above: an empty or unparsable value is stored/read back as "no default",
+  // never inferred from a workflow's name, id, or SHARP node class.
+  const gaussianPlyId = formData.get("gaussianPlyWorkflowId")?.toString().trim() ?? "";
+  const gaussianToImageId = formData.get("gaussianToImageWorkflowId")?.toString().trim() ?? "";
 
   const now = new Date().toISOString();
   const upsert = (key: string, value: string) =>
@@ -510,6 +523,8 @@ export async function saveWorkflowDefaults(formData: FormData): Promise<void> {
   await upsert("default_workflow_asset_image", assetImageId);
   await upsert("default_workflow_shot_image", shotImageId);
   await upsert("default_workflow_shot_video", shotVideoId);
+  await upsert("default_workflow_gaussian_ply", gaussianPlyId);
+  await upsert("default_workflow_gaussian_to_image", gaussianToImageId);
 
   redirect("/settings?defaultsSaved=1");
 }

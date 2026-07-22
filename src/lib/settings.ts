@@ -378,12 +378,27 @@ export interface ComfySettings {
   /** COMFY.PROVIDER.1 — which backend new generations queue against. Existing behavior ("local") is the default and non-regression reference. */
   provider: RuntimeProvider;
   baseUrl: string;
-  /** Comfy.org Partner Node billing key (extra_data.api_key_comfy_org). Same semantics for local AND Cloud submissions — unrelated to the Cloud service's own auth below. */
+  /**
+   * CAMLAB.POLISH.1 retake — the single canonical Comfy.org key. Serves BOTH
+   * as the Partner Node billing key (`extra_data.api_key_comfy_org`, local
+   * and Cloud) AND as Comfy Cloud's own `X-API-Key` auth header. Only one
+   * visible Settings field writes this going forward
+   * (`comfyui_api_key`); the legacy `comfyui_cloud_api_key` row (if any) is
+   * read here ONLY as a fallback when the canonical key was never set, so an
+   * account that previously only filled in the old "Comfy Cloud API Key"
+   * field keeps working without re-entry. Never rendered in HTML.
+   */
   apiKey: string;
   /** True iff `apiKey` is non-empty. Settings UI must render this, never the raw value, to avoid putting a secret in rendered HTML. */
   hasApiKey: boolean;
-  /** COMFY.PROVIDER.1 — Comfy Cloud's own `X-API-Key` auth key (cloud.comfy.org), distinct from the Partner Node key above. */
+  /**
+   * @deprecated CAMLAB.POLISH.1 retake — kept only so existing Cloud call
+   * sites (`comfyCloudClient.ts`, `cloudPreflight.ts`, etc.) keep compiling
+   * and behaving correctly without touching every one of them; always equal
+   * to `apiKey` now. Do not read this for anything new — use `apiKey`.
+   */
   cloudApiKey: string;
+  /** @deprecated always equal to `hasApiKey` now — kept for existing call sites. */
   hasCloudApiKey: boolean;
   localVramAutoManagement: boolean;
 }
@@ -398,16 +413,20 @@ export async function getComfySettings(): Promise<ComfySettings> {
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const provider = normalizeRuntimeProvider(map.get("comfyui_provider"));
   const baseUrl = map.get("comfyui_base_url") ?? COMFY_BASE_URL_DEFAULT;
-  const apiKey = map.get("comfyui_api_key") ?? "";
-  const cloudApiKey = map.get("comfyui_cloud_api_key") ?? "";
+  const canonicalKeyRaw = map.get("comfyui_api_key") ?? "";
+  // Legacy fallback: only consulted when the canonical key was never set —
+  // never overrides a real canonical value, never written back here (a
+  // write only happens on the next explicit Save, see saveComfySettings).
+  const legacyCloudKeyRaw = map.get("comfyui_cloud_api_key") ?? "";
+  const apiKey = canonicalKeyRaw.trim().length > 0 ? canonicalKeyRaw : legacyCloudKeyRaw;
   const localVramAutoManagement = map.get("local_vram_auto_management_enabled") === "true";
   return {
     provider,
     baseUrl,
     apiKey,
     hasApiKey: apiKey.trim().length > 0,
-    cloudApiKey,
-    hasCloudApiKey: cloudApiKey.trim().length > 0,
+    cloudApiKey: apiKey,
+    hasCloudApiKey: apiKey.trim().length > 0,
     localVramAutoManagement,
   };
 }

@@ -11,6 +11,7 @@ import {
   SaveReferenceImageError,
 } from "@/lib/uploadImage";
 import { isReferenceImageRoleAvailableFor } from "@/lib/referenceImageRoles";
+import { isValidCameraLabReturnTo } from "@/lib/cameraLab/returnToGuard";
 
 // REFROLE.MVP.1 — validated against the shared catalogue
 // (src/lib/referenceImageRoles.ts) instead of a locally duplicated
@@ -76,6 +77,11 @@ export async function createShotReferenceImage(
   const imageRole = imageRoleRaw && isImageRole(imageRoleRaw) ? imageRoleRaw : null;
   const notes = normalizeOptionalString(getString(formData, "notes"));
 
+  const returnToRaw = getString(formData, "returnTo");
+  const returnTo =
+    returnToRaw && isValidCameraLabReturnTo(returnToRaw, projectId, sequenceId, shotId) ? returnToRaw : null;
+  const returnToQuery = returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
+
   let imagePath: string;
   let sourceFilename: string | null;
 
@@ -85,7 +91,7 @@ export async function createShotReferenceImage(
     sourceFilename = result.sourceFilename;
   } catch (err) {
     redirect(
-      `${shotDetailPath(projectId, sequenceId, shotId)}/reference-images/new?error=${mapUploadError(err)}`
+      `${shotDetailPath(projectId, sequenceId, shotId)}/reference-images/new?error=${mapUploadError(err)}${returnToQuery}`
     );
   }
 
@@ -107,11 +113,11 @@ export async function createShotReferenceImage(
   } catch {
     await deleteStoredReferenceImage(imagePath);
     redirect(
-      `${shotDetailPath(projectId, sequenceId, shotId)}/reference-images/new?error=upload_failed`
+      `${shotDetailPath(projectId, sequenceId, shotId)}/reference-images/new?error=upload_failed${returnToQuery}`
     );
   }
 
-  redirect(shotDetailPath(projectId, sequenceId, shotId));
+  redirect(returnTo ?? shotDetailPath(projectId, sequenceId, shotId));
 }
 
 export async function updateShotReferenceImage(

@@ -85,6 +85,28 @@ export type GenerationSnapshot = {
         roleLabel: string | null;
       }
   )[];
+  /**
+   * CAMLAB.POLISH.1 — only ever set for the Camera Lab's Gaussian-to-image
+   * generation (Column 3): the real provenance of the two queued image
+   * inputs. `sourcePlyJobId`/`sourceReferenceId` identify the upstream PLY
+   * job and Shot reference image the snapshot was framed against;
+   * `snapshotWidth/Height` are the captured snapshot's real pixel
+   * dimensions; `inputMapping` records which node id received the
+   * transient snapshot vs. the persisted source image, in queued order.
+   * Never an API key or signed URL.
+   */
+  cameraLabProvenance?: {
+    sourcePlyJobId: number;
+    sourceReferenceId: number;
+    snapshotWidth: number;
+    snapshotHeight: number;
+    inputMapping: {
+      snapshotNodeId: string;
+      sourceNodeId: string;
+    };
+    /** CAMLAB.POLISH.1 retake round 2 — whether input 1 was the PlayCanvas capture or an explicit local PNG upload replacing it. Never the file content, a local path, or a secret. */
+    snapshotSource: "captured-snapshot" | "uploaded-override";
+  };
 };
 
 export function serializeGenerationSnapshot(snapshot: GenerationSnapshot): string {

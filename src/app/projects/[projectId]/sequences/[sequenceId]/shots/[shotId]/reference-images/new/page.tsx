@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; returnTo?: string }>;
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -34,7 +34,7 @@ const labelClass = "text-xs font-medium uppercase tracking-wider text-[#6e767d]"
 
 export default async function NewShotReferenceImagePage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId } = await params;
-  const { error } = await searchParams;
+  const { error, returnTo } = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -49,6 +49,18 @@ export default async function NewShotReferenceImagePage({ params, searchParams }
   if (!shot || shot.sequenceId !== sid) notFound();
 
   const action = createShotReferenceImage.bind(null, shid, sid, pid);
+
+  // CAMLAB.POLISH.1 retake — "Upload Source" from Camera Lab links here with
+  // `?returnTo=`. Confined to this exact Shot's camera-lab path before ever
+  // being used as a link target or threaded through to the server action
+  // (which re-validates it independently — this page's own check is only
+  // for what it renders itself, never the source of truth).
+  const expectedCameraLabPath = `/projects/${pid}/sequences/${sid}/shots/${shid}/camera-lab`;
+  const validReturnTo =
+    returnTo && (returnTo === expectedCameraLabPath || returnTo.startsWith(`${expectedCameraLabPath}?`))
+      ? returnTo
+      : null;
+  const cancelHref = validReturnTo ?? `/projects/${pid}/sequences/${sid}/shots/${shid}`;
 
   return (
     <div>
@@ -76,6 +88,7 @@ export default async function NewShotReferenceImagePage({ params, searchParams }
       )}
 
       <form action={action} className="flex flex-col gap-5 max-w-lg">
+        {validReturnTo && <input type="hidden" name="returnTo" value={validReturnTo} />}
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>
             Image File <span className="text-[#cf7b6b] ml-1">*</span>
@@ -133,7 +146,7 @@ export default async function NewShotReferenceImagePage({ params, searchParams }
             Add Reference Image
           </button>
           <Link
-            href={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
+            href={cancelHref}
             className="text-sm text-[#6e767d] hover:text-[#a4abb2] transition-colors"
           >
             Cancel
