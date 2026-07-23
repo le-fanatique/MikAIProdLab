@@ -106,9 +106,8 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
     },
     {
       label: "Project Style",
-      href: "#",
-      active: false,
-      disabled: true,
+      href: `/projects/${pid}/style`,
+      active: pathname === `/projects/${pid}/style`,
     },
   ];
 }

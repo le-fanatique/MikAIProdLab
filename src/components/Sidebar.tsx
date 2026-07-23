@@ -28,7 +28,7 @@ type Props = {
   tree: SidebarProject[];
 };
 
-const PROJECT_FUTURE = ["Project Style", "Prompt Packages"] as const;
+const PROJECT_FUTURE = ["Prompt Packages"] as const;
 
 export default function Sidebar({ tree }: Props) {
   const pathname = usePathname();
@@ -56,6 +56,7 @@ export default function Sidebar({ tree }: Props) {
             const isProjectActive =
               activeProjectId === project.id && !isSettingsActive;
             const isAssetsActive = pathname.startsWith(`/projects/${project.id}/assets`);
+            const isStyleActive = pathname.startsWith(`/projects/${project.id}/style`);
             const isStoryActive =
               pathname.startsWith(`/projects/${project.id}/story`) ||
               pathname.startsWith(`/projects/${project.id}/outline`);
@@ -66,7 +67,7 @@ export default function Sidebar({ tree }: Props) {
                 <Link
                   href={`/projects/${project.id}`}
                   className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
-                    isProjectActive && !isAssetsActive && !isStoryActive
+                    isProjectActive && !isAssetsActive && !isStoryActive && !isStyleActive
                       ? "text-[#e7e9ec] bg-[#5b93d6]/10"
                       : "text-[#a4abb2] hover:text-[#e7e9ec] hover:bg-[#1a1d20]"
                   }`}
@@ -150,6 +151,18 @@ export default function Sidebar({ tree }: Props) {
                       }`}
                     >
                       Assets
+                    </Link>
+
+                    {/* Project Style */}
+                    <Link
+                      href={`/projects/${project.id}/style`}
+                      className={`flex items-center gap-1.5 pl-6 pr-2 py-1 rounded text-xs transition-colors ${
+                        isStyleActive
+                          ? "text-[#a4abb2] bg-[#1a1d20]"
+                          : "text-[#6e767d] hover:text-[#a4abb2] hover:bg-[#1a1d20]"
+                      }`}
+                    >
+                      Project Style
                     </Link>
 
                     {/* Future project-level modules */}

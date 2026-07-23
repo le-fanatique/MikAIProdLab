@@ -1,6 +1,6 @@
 # MikAI User Feedback Log
 
-Last updated: 2026-07-17
+Last updated: 2026-07-23
 
 ## Purpose
 
@@ -38,11 +38,471 @@ conversation needs these notes, this file is the shared source of truth.
 - `DECLINED`: intentionally not pursued, with the reason recorded.
 - `DUPLICATE`: covered by another feedback ID, which must be referenced.
 
+## Category Index And Consolidation Map
+
+The entries below remain in their capture/history order so their original
+context and development history are preserved. This index provides a
+category-first view without deleting or silently merging feedback.
+
+### Product shell, navigation, settings and visual system
+
+`FB-20260715-001`, `FB-20260715-002`, `FB-20260715-003`,
+`FB-20260715-004`, `FB-20260715-005`, `FB-20260715-006`,
+`FB-20260715-007`, `FB-20260715-032`, `FB-20260715-034`,
+`FB-20260716-037`, `FB-20260716-040`, `FB-20260722-002`.
+
+### LLM assistance, prompts, translation and creative direction
+
+`FB-20260715-010`, `FB-20260715-013`, `FB-20260716-033`,
+`FB-20260716-035`, `FB-20260716-036`, `FB-20260716-038`,
+`FB-20260716-039`, `FB-20260716-041`, `FB-20260716-037`,
+`FB-20260723-001`.
+
+### Assets, references and image preparation
+
+`FB-20260715-008`, `FB-20260716-021`, `FB-20260716-022` through
+`FB-20260716-031`, `FB-20260716-039`, `FB-20260716-040`,
+`FB-20260717-042`, `FB-20260723-001`.
+
+### Storyboard generation and Sequence storyboard workflow
+
+`FB-20260715-011`, `FB-20260715-012`, `FB-20260715-015`,
+`FB-20260715-016`, `FB-20260715-017`, `FB-20260715-018`,
+`FB-20260715-019`, `FB-20260715-020`, `FB-20260717-043`,
+`FB-20260717-044`, `FB-20260718-001`, `FB-20260718-002`,
+`FB-20260722-006`.
+
+### Sequence video, split detection and split review
+
+`FB-20260717-046`, `FB-20260717-047`, `FB-20260718-003`,
+`FB-20260718-004`, `FB-20260718-007`, `FB-20260719-001`,
+`FB-20260719-002`.
+
+### Shot video library and OpenReel round-trip
+
+`FB-20260716-021`, `FB-20260717-042`, `FB-20260718-005`,
+`FB-20260718-008`, `FB-20260722-002`.
+
+### Camera and Workflow Tools
+
+`FB-20260715-014`, `FB-20260716-041`, `FB-20260717-045`,
+`FB-20260717-048`, `FB-20260722-001`, `FB-20260722-003`,
+`FB-20260721-001`, `FB-20260722-004`, `FB-20260723-002`.
+
+### Player and editorial presentation
+
+`FB-20260715-009`, `FB-20260718-004`, `FB-20260718-005`,
+`FB-20260718-008`.
+
+### Proposed regroupings (not automatic merges)
+
+- `FB-20260716-022` through `FB-20260716-031` form one Storyboard
+  Extraction/Diagnostics epic. Keep the individual entries because they cover
+  detection, crop, upload, diagnostics, and ratio behavior separately.
+- `FB-20260717-046`, `FB-20260717-047`, `FB-20260719-001`,
+  `FB-20260719-002`, `FB-20260718-003`, `FB-20260718-004`, and
+  `FB-20260718-007` can later be planned as one Split Review epic, with
+  cleanup and frame-accurate editing as separate subtasks.
+- `FB-20260716-021`, `FB-20260717-042`, `FB-20260718-005`,
+  `FB-20260718-008`, and `FB-20260722-002` belong to a Shot Video Library /
+  OpenReel round-trip epic. The first concerns reference-video scope, while
+  the others concern storage, compact review, reuse, and write-back.
+- `FB-20260717-043` and `FB-20260717-044` should share one Sequence Video
+  generation ticket: the first defines the capability and the second its CTA
+  visibility.
+- `FB-20260716-034` and `FB-20260716-037` are the clearest visual duplicate:
+  both request one consistent color treatment for LLM `Apply` actions. Keep
+  both original observations, but use one shared implementation ticket later.
+- `FB-20260715-002` and `FB-20260715-005` can share one LLM Chat theme polish
+  ticket because both request `Text Primary`; the logo and title remain
+  separately testable surfaces.
+- `FB-20260716-035`, `FB-20260716-036`, and `FB-20260722-003` form a broader
+  LLM Assist / Director / Workflow Tools discussion. Do not merge them until
+  the product contract and boundaries are agreed.
+- `FB-20260716-038` and `FB-20260716-039` can share an Asset LLM enhancement
+  ticket while retaining separate actions and acceptance tests.
+
+### ID hygiene
+
+Two entries had accidentally received `FB-20260717-046`. The Split Review
+entry keeps `FB-20260717-046`; the Camera workflow entry is now uniquely named
+`FB-20260717-048`. Its content and history are unchanged.
+
+Two entries also received `FB-20260723-001` during concurrent documentation
+work. The Project Style V1 entry keeps `FB-20260723-001`; the later Camera Lab
+copy-fix entry is uniquely named `FB-20260723-002`. Its content and history
+are unchanged.
+
+Two entries had also received `FB-20260722-004`. The Gaussian Viewer controls
+entry keeps `FB-20260722-004`; the later Sequence Generation Package
+presentation entry is uniquely named `FB-20260722-006`. Its content and
+history are unchanged.
+
 ## Active Feedback
+
+### FB-20260723-001 - Define the Project Style V1 workspace
+
+- Status: `IN PROGRESS`
+- Date observed: 2026-07-23
+- Area: Project Style / Assets / Sequences / Shots / Storyboard / Generation
+- Context: Defining the Project Style MVP after completing Story, extracting
+  Asset drafts and preparing to generate visually coherent Assets and Shots.
+- Original observation:
+
+  > c est à ce moment là que je vais devoir commencer à penser project style.
+  > [...] les resultat seront de style variable [...] et de registre variable.
+  > Ces informations devrait etre defini à echelle du projet, car se
+  > repercuter sur tout les assets et les shots pour avoir une unité de style.
+  >
+  > la creative Influences devrait avoir un espece d'auto feed, qui
+  > permettrait à un llm de fill les information basique et proposerai des
+  > informations pertinante trouvé sur internet à injecter.
+  >
+  > si un field n'est pas rempli, alors le critere ne devra pas etre injecté
+  > dans le prompt composer. [...] Il faut que je sois capable de faire simple.
+  >
+  > il faut ajouter un champ général à la sequence "Project Style", qui par
+  > defaut vient du Project Style actif projet. [...] cela permet de faire un
+  > override à la sequence, et ainsi spread facilement l'override sur tout les
+  > shots de cette sequence.
+
+- Expected outcome: A dedicated Project Style workspace lets the user build a
+  sparse, source-grounded and versioned artistic direction from a brief,
+  Creative Influences, visual references and optional AI analysis. The active
+  Style informs Asset design and generation. Sequences inherit it by default
+  or replace it with one local override used by their Storyboard, Sequence
+  generations and Shots.
+- Impact: Without this layer, individually plausible Asset and Shot prompts
+  can drift between eras, genres, design languages, rendering styles and
+  photographic treatments, preventing project-wide visual unity.
+- Related ticket: `STYLE.1` epic; specification
+  `docs/PROJECT_STYLE_MVP_SPEC.md`
+- Resolution: Product contract agreed; implementation split into foundation,
+  research, references/influences, Sequence inheritance, prompt integration,
+  Asset alignment and Look Development tickets.
+- Resolved or validated on: Product design validated 2026-07-23;
+  implementation not started.
+
+#### Follow-up notes
+
+- 2026-07-23: The Style Bible has two pillars: `World & Design Language`
+  changes the design of content itself; `Visual Treatment` changes how that
+  content is represented.
+- 2026-07-23: All fields are optional. Empty fields, empty headings and
+  internal metadata must never appear in compiled prompts.
+- 2026-07-23: Creative Influence research is user-triggered, source-grounded
+  and approval-gated. Saved URLs, metadata, bounded evidence and syntheses are
+  durable; full third-party articles are not copied by default.
+- 2026-07-23: Project Style uses Working Draft and immutable published
+  versions. Normal generations use the published version; Look Development
+  may use a selected draft revision.
+- 2026-07-23: A Sequence dynamically inherits the active Project Style until
+  `Customize for Sequence` creates a complete local replacement. Shots have no
+  Style override in the MVP and always resolve their Sequence Style.
+- 2026-07-23: No semantic clash detector or style-conflict warning is part of
+  the MVP.
+- 2026-07-23: The original eleven-step user story is preserved in
+  `docs/PROJECT_STYLE_ORIGINAL_USER_STORY.md`. Accepted decisions are
+  separated into `docs/PROJECT_STYLE_MVP_DECISIONS.md`, while
+  `docs/PROJECT_STYLE_SUPERVISOR_HANDOFF.md` records the implementation order,
+  repository baseline and supervision gates.
+- 2026-07-23: `STYLE.RESEARCH.SPIKE.1` approved (`GO WITH LIMITS`) — the
+  OpenRouter `openrouter:web_search` Server Tool is the selected retrieval/
+  citation contract for the future research ticket; no arbitrary page
+  re-fetch by MikAI for the MVP.
+- 2026-07-23: `STYLE.1.A` implemented by Claude — durable Working Draft +
+  immutable published version foundation. Additive migration
+  (`drizzle/0040_sharp_raza.sql`) adds `project_style_drafts` (DB-unique per
+  Project, optimistic-concurrency `revision` column),
+  `project_style_sections`, `project_style_rules`, `project_style_versions`
+  (immutable, DB-unique version number per Project), and
+  `project_style_active_pointers` (the only mutable row that can change
+  which version is active — never a write to a version row itself). A pure
+  compiler (`src/lib/projectStyle/compileStyleSnapshot.ts`) turns a sparse
+  snapshot into exact prompt text, omitting every empty field/heading/
+  disabled rule and never injecting rule metadata as literal prompt
+  content, per the "internal metadata is not literal prompt content"
+  decision above. The `/projects/{id}/style` workspace (Direction Brief,
+  both Style Bible pillars, sparse specialized sections, atomic rules,
+  exact compiled preview, Versions & Publish with history) is live; the
+  `Project Style` navigation entry is enabled in both `ContextStrip` and
+  `Sidebar`. Real proofs on a dedicated, deleted-after test Project:
+  migration preserved all 26 pre-existing tables' row counts byte-for-byte;
+  a real two-tab double-publish race produced exactly one new version,
+  never a duplicate or partial state, with the earlier version proven
+  byte-identical afterward; editing after publish never touches the
+  published version. No Web research, no Creative Influences, no Sequence
+  inheritance, and no prompt/generation integration in this ticket — those
+  remain their own tickets. Awaiting Codex review.
+- 2026-07-23: `STYLE.1.A`'s report documents one honest limitation: the
+  double-publish race's exact per-tab error message could not be captured
+  from the test script (a Puppeteer `click()` hung on the losing tab during
+  the winning tab's page reload); the invariant itself (never two vN rows,
+  never a partial state) was instead verified directly against the real
+  post-race database state, which is an equally direct — arguably more
+  direct — source of truth.
+- 2026-07-23: Codex review returned `REVISE` on `STYLE.1.A` (4 findings):
+  the compiled preview could show unsaved edits while Publish read stale
+  DB text; fields stayed blank-but-editable after publication, letting a
+  stray keystroke create a throwaway draft that bypassed `Edit Active
+  Style`; Server Actions trusted TypeScript enum types with no runtime
+  check; version history showed only version/date with no way to inspect
+  what was actually published. Claude applied the retake: `Publish Style`
+  now sends the exact live field values the preview was computed from,
+  publishing them atomically in the same transaction (never a stale DB
+  read); fields are read-only and show the real active version's content
+  until `Edit Active Style` is clicked; every Server Action now runs a
+  real runtime validator (new `src/lib/projectStyle/validation.ts`) on
+  every enum/id/revision before touching the database; each version's
+  compiled text is now inspectable inline in History. Re-validated: 43/43
+  pure validator tests, 37/37 real adversarial DB proofs (every invalid
+  enum/direction/id/revision rejected with zero row mutation, verified
+  against real row counts), and 21/21 real-browser checks proving all four
+  fixes end-to-end on a live server. Full detail in
+  `.agents/claude_report.md` (retake section). Awaiting fresh Codex
+  verdict.
+- 2026-07-23: Codex review returned a second `REVISE` on `STYLE.1.A` (2
+  findings, both in `ProjectStyleWorkspace.tsx`): Reorder persisted the new
+  `orderIndex` in the database but never re-sorted the local React array,
+  so the moved item didn't visually move and the Up/Down button states
+  went stale; and a rejected Add/Edit (stale revision, validation refusal,
+  server error) still cleared the typed heading/content or closed the
+  editor, silently discarding the user's input. Claude applied retake 2: a
+  new `sortByOrderIndex` helper keeps `sections`/`rules` state always
+  sorted after every mutation; `onAdd`/`onUpdate` callbacks now return a
+  real success boolean, and the form/editor is only cleared or closed on
+  an actual success. Re-validated with 24/24 real-browser checks,
+  including four real stale-rejection scenarios (Add/Edit × Section/Rule)
+  driven by a genuine concurrent `UPDATE` on the draft's revision column,
+  each proving byte-identical input preservation. Full detail in
+  `.agents/claude_report.md` (retake 2 section). Awaiting fresh Codex
+  verdict.
+
+### FB-20260722-004 - Correct Gaussian depth and wheel precision
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-22
+- Area: Shot / Camera Lab / Gaussian Viewer
+- Context: Framing real SHARP Gaussian Splats before capturing a Shot camera
+  reference.
+- Original observation: Some wide shots look excessively stretched in depth,
+  and one mouse-wheel step moves the camera too far for precise framing.
+- Expected outcome: The viewer provides a reversible `Depth scale` control
+  affecting only local Z, plus normalized Fine/Normal/Fast wheel sensitivity
+  and `Alt + Wheel` for temporary ultra-fine dolly. Reset Camera must frame the
+  transformed scene and captures must match the visible corrected rendering at
+  exact source resolution.
+- Impact: Makes Gaussian Camera useful for precise art-directed framing across
+  different splats and input devices without altering the generated PLY.
+- Related ticket: `CAMLAB.VIEWER.CONTROLS.1`
+- Resolution: Implemented by Claude — `Depth scale` slider/numeric control
+  (0.10–2.00, default 1.00) applies a non-destructive local Z-only scale to
+  the `sharp-splat` entity; the PLY file is never touched. `Reset depth`
+  restores 1.00 without moving the camera; `Reset camera` reframes using
+  bounds recomputed at the current depth. `Zoom sensitivity` (Fine/Normal/
+  Fast, default Normal) normalizes `deltaMode` (pixel/line/page) before
+  applying a fixed coefficient, with `Alt + Wheel` for a temporary ×0.2
+  fine-dolly; only the sensitivity preset persists in `localStorage`, read
+  after hydration so SSR/first paint always shows "Normal". A new pure
+  module (`src/lib/cameraLab/viewerControls.ts`) holds all numeric contracts
+  (depth clamp, bounds transform, wheel normalization, presets, distance
+  calculation), covered by 69 deterministic unit tests. No schema,
+  migration, dependency, or ComfyUI/PLY change. Awaiting Codex review and
+  user validation checklist before this is marked resolved.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-22: Product decision: `depthScale` remains local to the loaded PLY
+  and resets to `1.00`; only the validated zoom-sensitivity preset persists in
+  localStorage. No migration, dependency, PLY rewrite or ComfyUI runtime change
+  is authorized.
+- 2026-07-22: Codex review round 1 returned `REVISE` (3D engine and captures
+  compliant, 3 targeted findings confined to `GaussianViewerPanel.tsx`): the
+  depth numeric field clamped on every keystroke instead of allowing natural
+  typing; the Fine/Normal/Fast control used an incomplete `role="radio"`
+  pattern with a hover-only `title` tooltip; `preventDefault()` on wheel ran
+  after the orbit-readiness guard, allowing page scroll during PLY loading.
+  Claude applied the retake: depth field now separates a free-typing draft
+  from the clamped committed value (clamp only on Enter/blur, Escape
+  discards); Fine/Normal/Fast are real `<button aria-pressed>` elements
+  reusing the existing `FieldTooltip` component (hover and keyboard focus
+  both show the tooltip); `preventDefault()` is now unconditional at handler
+  entry, before the orbit guard. `viewerControls.ts` untouched (re-verified
+  byte-for-byte). Re-validated: 11/11 pure regression, 19/19 real-browser
+  checks (production server, real completed PLY job #298), `tsc`/`build`/
+  `db:generate`/`git diff --check` all clean. Full detail in
+  `.agents/claude_report.md` (retake section). Awaiting fresh Codex verdict.
+
+### FB-20260722-001 - Camera Lab needs a guided three-stage workspace
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-22
+- Area: Shot / Camera Lab / Generation
+- Context: Continuing the Gaussian Camera MVP after PLY retrieval, viewer and
+  Shot-reference capture were delivered.
+- Original observation: Camera Lab should show three columns above Setup: a
+  preloaded Gaussian PLY generation workflow, the Gaussian viewer with Refresh
+  and Capture Snapshot, and a preloaded Gaussian-to-image workflow receiving
+  the snapshot first and the original source image second.
+- Expected outcome: The user can complete the image -> PLY -> camera snapshot
+  -> Gaussian-to-image flow without leaving Camera Lab or manually remapping
+  the intermediate media.
+- Impact: The current page exposes the viewer but leaves generation and media
+  handoff fragmented across generic generation surfaces.
+- Related ticket: `CAMLAB.POLISH.1`
+- Resolution: Implemented by Claude — three-column workspace added above
+  Setup: Column 1 queues a Gaussian PLY generation through the canonical
+  Local/Cloud pipeline (source picked via a visual `ImageSourcePicker` with
+  an "Upload Source" shortcut); Column 2 adds a server-revalidated Refresh
+  Viewer bound to Column 1's own tracked job, with the job's actual
+  workflow re-validated against the Gaussian PLY contract on every refresh;
+  Column 3 queues a Gaussian-to-image generation with a deterministic
+  snapshot-then-source input mapping (structural order only, never
+  label-inverted) and a transient (never persisted) snapshot upload, with
+  an "Add to Shot references" action once the output is a finished image.
+  The source image for Column 3 is always derived from the PLY job's own
+  recorded provenance server-side, never from a caller-supplied id. Two new
+  Generation Defaults added in Settings; Comfy Cloud now shares a single
+  canonical API key field with Partner Node billing (legacy key still read
+  as a fallback, no migration). Round 3 adds: an explicit `Upload Snapshot
+  Override` in Column 3 (captured draft never lost, provenance records
+  which source was actually queued); `Setup` is now collapsed by default
+  and read-only (no selection controls, legacy `jobId`/`refId` deep links
+  still work underneath); a Shot-scoped `Clear Shot PLY caches` action using
+  a dedicated quarantine/conditional-transaction/restore-on-failure
+  discipline (jobs kept as history, never deleted); and every non-image
+  `(Input)` workflow node in Column 1 (text/integer/float/boolean/select/
+  seed) is now editable and threaded through the canonical override
+  pipeline, re-validated server-side against the workflow's real structure.
+  Round 4 makes the "Gaussian Camera" entry point on Shot Detail permanent:
+  it no longer hides behind a Shot already having a finished PLY — every
+  valid Shot now shows the link, pointing to its own Camera Lab, so the
+  three-column workspace (including PLY generation from zero) is reachable
+  before any PLY exists. Round 5 hardens `Clear Shot PLY caches`: a race on
+  any single cached PLY now cancels the whole clear operation instead of
+  partially committing (all-or-nothing); a failed final cleanup now
+  attempts full compensation (file and database both restored) and, if
+  that compensation itself can't fully succeed, names the exact job and
+  file path left incomplete rather than reporting a false success; and its
+  `returnTo` redirect target is now confined server-side to the Shot's own
+  Camera Lab page (never an arbitrary caller-supplied URL), via a helper
+  now shared with the existing Upload Source flow. Round 6 fixes two more
+  issues in `Clear Shot PLY caches`: the Camera Lab page was still reading
+  stale feedback parameter names from before round 5, so a real cleanup
+  failure could silently show as "nothing to clear" — now fixed and
+  showing the real reverted/incomplete-compensation state. The database
+  compensation after a failed final cleanup is now conditional and coupled
+  to a confirmed file restore — it never points the database at a file
+  that wasn't actually restored, and never overwrites a newer value
+  written by a concurrent process. Five Codex REVISE rounds addressed
+  (provenance/ordering findings, a round-2 user retake, the permanent-entry
+  retake, cache-clearing hardening, then this feedback/compensation fix).
+  Awaiting Codex review and user validation checklist before this is
+  marked resolved.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-22: During hands-on validation, the user configured `gaussianPLY`
+  and `GaussianQwen`. Column 1 still needs the standard visual source picker:
+  selectable thumbnails with the existing enlarged hover preview.
+- 2026-07-22: Clicking `Generate Gaussian PLY` first returned `fetch failed`
+  because the runtime/key configuration was incomplete. The user then confirmed
+  Cloud generation works after entering the API key. Accepted retake: expose
+  one canonical Comfy.org key and use it for both Cloud auth and Partner Nodes,
+  while preserving legacy saved-key compatibility without rendering secrets.
+- 2026-07-22: Add `Upload Source` beside the visual picker in Column 1, and an
+  explicit `Add to Shot references` action directly below a completed Column 3
+  image output. Neither action may create an implicit approval.
+- 2026-07-22: Additional Camera Lab retake requested before approval: Column 3
+  must allow a local uploaded snapshot override while preserving the captured
+  draft; legacy Setup must be collapsed by default and read-only; the user
+  needs a safe Shot-scoped action to clear all cached PLY artifacts; and every
+  non-image workflow node marked `(Input)` in Column 1 must be editable through
+  the canonical text/scalar override pipeline. The Load Image input remains
+  exclusively represented by the existing visual source picker.
+- 2026-07-22: User validation found that the `Gaussian Camera` shortcut still
+  appears only on a Shot that already owns an eligible PLY. Since Camera Lab
+  can now create that PLY itself, the shortcut must be present on every Shot
+  Detail; PLY eligibility remains enforced inside the workspace and actions.
+
+### FB-20260719-001 - Manual split thumbnails must show the segment first frame
+
+- Status: `IN PROGRESS`
+- Date observed: 2026-07-19
+- Area: Storyboard / Sequence Video Split
+- Context: Manually cutting a Sequence Video Draft with Split at Current Frame.
+- Original observation: The thumbnail generated after a manual split does not
+  correspond to the first frame of the resulting segment.
+- Expected outcome: Each half created by a manual split uses its own exact
+  first source frame as thumbnail, especially the new second half beginning at
+  the selected split frame.
+- Impact: The visual review can suggest the wrong opening frame and makes
+  short segments harder to identify.
+- Related ticket: `SEQGEN.SPLIT.CLEANUP.1-FIX1`
+- Resolution: Selection and seek were corrected in `b007f87`, but user
+  validation confirmed that the App Router navigation still resets the page
+  to the top after every Split at Current Frame. A focused scroll-restoration
+  fix is in progress.
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-19: The current shared thumbnail helper seeks to the midpoint of
+  every segment. The retake must preserve existing automatic-detection
+  behavior unless explicitly needed, while manual Split actions request the
+  true segment start frame.
+
+### FB-20260719-002 - Preserve Split Workspace position and select the new segment
+
+- Status: `RESOLVED`
+- Date observed: 2026-07-19
+- Area: Storyboard / Sequence Video Split
+- Context: Clicking Split at Current Frame while reviewing a selected segment.
+- Original observation: The page scrolls back to the top after the split and
+  the newly created segment is not selected.
+- Expected outcome: The Split Workspace remains at the user's working
+  position after submission, and the newly created second half is selected
+  automatically and loaded in the player.
+- Impact: Every manual cut currently interrupts the review flow and requires
+  finding/selecting the new segment again.
+- Related ticket: `SEQGEN.SPLIT.CLEANUP.1-FIX4`
+- Resolution: Exact new-segment selection, seek, and the compact resizable
+  player are working. Two JavaScript scroll-restoration attempts failed in the
+  real browser. The final retake uses a native `#split-video-player` fragment
+  after successful frame splits and keeps the Frame/Split toolbar below the
+  resizable player.
+- Resolved or validated on: 2026-07-20
+
+#### Follow-up notes
+
+- 2026-07-19: Select the exact inserted segment returned by the server, not a
+  heuristic such as "last segment". Preserve scroll without relying on a
+  fragile fixed pixel offset.
+- 2026-07-20: User validation after `b007f87` confirms selection and seek are
+  correct, but scroll restoration still fails: every split returns to the top
+  of the page. Follow-up moved to `SEQGEN.SPLIT.CLEANUP.1-FIX1`.
+- 2026-07-20: User manually validated `SEQGEN.SPLIT.CLEANUP.1-FIX4` in a real
+  browser. The native `#split-video-player` anchor lands on the resizable
+  player after Split at Current Frame and the resulting workflow is confirmed
+  functional.
+- 2026-07-20: The DOM-anchor/multi-frame FIX1 also failed user validation.
+  Product decision: remove that mechanism, move Frame/Split controls above the
+  player, and make the player 50% wide by default with adjustable width in
+  `SEQGEN.SPLIT.CLEANUP.1-FIX2`.
+- 2026-07-20: User visually validated the FIX2 player sizing. Final product
+  retake: keep the resizable player, restore the Frame/Split toolbar below it,
+  and use the native `#split-segment-bar` URL fragment after a successful
+  Split at Current Frame instead of any JavaScript scroll restoration.
+- 2026-07-20: FIX3 native navigation works, but anchoring the segment bar
+  lands visually too low, around the newest segment. Final retake moves the
+  native fragment target to the resizable video-player container via
+  `#split-video-player`.
 
 ### FB-20260717-047 - Split Plan rejects frame-quantized source endpoint
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-17
 - Area: Storyboard / Sequence video splits / Validation / Frame accuracy
 - Context: Validating a reviewed Split Plan produced by the current CFR-aware
@@ -73,7 +533,7 @@ conversation needs these notes, this file is the shared source of truth.
   rollback on a co-occurring failure, non-CFR/legacy exclusion, thumbnail
   deletion-failure surfacing via `splitWarning`, and immutability of already
   validated runs. See `.agents/claude_report.md` for full proof log.
-- Resolved or validated on: Implemented 2026-07-17; awaiting user validation.
+- Resolved or validated on: User validated 2026-07-18.
 
 #### Follow-up notes
 
@@ -84,6 +544,8 @@ conversation needs these notes, this file is the shared source of truth.
 - 2026-07-17: Fixed and validated via `SEQGEN.SPLIT.WORKSPACE.1-FIX1`. Runs
   35/36 (the exact reported runs) now validate cleanly with `end_seconds`
   normalized to `15.104` and their stale thumbnails nulled and deleted.
+- 2026-07-18: User confirmed that `Validate Split Plan` succeeds and the EOF
+  duration error no longer appears. Feedback closed.
 
 ### FB-20260717-046 - Unify Split review and refine cuts locally
 
@@ -1632,7 +2094,7 @@ conversation needs these notes, this file is the shared source of truth.
   Projects with no configured format. This observation alone does not
   authorize schema, migration, provider, or generation-runtime changes.
 
-### FB-20260717-046 - Expose a visual camera control interface in workflows
+### FB-20260717-048 - Expose a visual camera control interface in workflows
 
 - Status: `INBOX`
 - Date observed: 2026-07-17
@@ -1665,6 +2127,521 @@ conversation needs these notes, this file is the shared source of truth.
   raw/API view available for completeness and debugging.
 - 2026-07-17: The visual controls should be workflow-aware and additive; they
   must not alter unrelated ComfyUI workflows or generation-runtime behavior.
+
+### FB-20260718-001 - Enrich pushed clips with duration and first frame
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-18
+- Area: Storyboard / Split Workspace / Shot
+- Context: Pushing a validated Split Plan to its mapped Shots.
+- Original observation: Add an optional `Push durations` checkbox and generate
+  a first frame for every pushed clip so the Storyboard thumbnail is updated.
+- Expected outcome: When explicitly enabled, Shot durations use the produced
+  clip durations. Every pushed clip creates a durable `first_frame` reference
+  and updates the Shot's explicit Storyboard thumbnail.
+- Impact: Completes the Sequence-video-to-Shot handoff with timing and visual
+  orientation while preserving explicit user control over duration mutation.
+- Related ticket: `SEQGEN.PUSH.2`
+- Resolution: `pushSplitPlanToShots` gained an off-by-default `Push durations`
+  checkbox; when checked, each Shot's `durationSeconds` is set to its
+  produced clip's exact ffprobe-measured duration (never a client value or
+  approximation), written in the same final transaction as the candidate/
+  frame/thumbnail rows, and only when the value actually differs. Dependent
+  Sequence/Film Results are marked outdated only on a real change;
+  `sequence_editorial_items` is never touched. Every newly pushed clip also
+  gets an automatically extracted `first_frame` `shot_reference_images` row
+  (never approved-for-generation, exact provenance to its Shot Video
+  Candidate), which becomes the Shot's explicit Storyboard thumbnail unless
+  a manual choice already exists.
+- Resolved or validated on: Implemented 2026-07-18; awaiting user validation.
+
+#### Follow-up notes
+
+- 2026-07-18: `Push durations` should default to off. Duration changes must be
+  atomic with the push and invalidate dependent Sequence/Film Results when a
+  value actually changes; Editorial timing remains separate.
+- 2026-07-18: An additive migration for an explicit Storyboard-thumbnail source
+  of truth is authorized if confirmed by the implementation audit.
+- 2026-07-18: Implemented and validated live via `SEQGEN.PUSH.2` — probed
+  durations confirmed to match ffprobe output (not segment boundaries) on
+  real pushed clips of Sequence 50; Sequence/Film Results confirmed outdated
+  only on a real duration change (a no-op re-push and an unchecked push both
+  left durations/Results/Editorial byte-identical).
+
+### FB-20260718-002 - Choose a Storyboard thumbnail from Shot references
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-18
+- Area: Shot / Reference Images / Storyboard
+- Context: Reviewing reference images on Shot Detail.
+- Original observation: Add `Make Storyboard Thumbnail` beside a Shot reference
+  image so the Storyboard grid can use that image explicitly.
+- Expected outcome: One explicit thumbnail selection per Shot, with the
+  Storyboard grid preferring it over legacy fallback heuristics.
+- Impact: Lets the user correct or art-direct the visual used in the Storyboard
+  without duplicating image files.
+- Related ticket: `SEQGEN.PUSH.2`
+- Resolution: New `shot_storyboard_thumbnails` table (one row per Shot,
+  unique) records the explicit selection and its `source`
+  (`manual`/`automatic_push`). `Make Storyboard Thumbnail` on Shot Detail
+  sets it with `source: "manual"`, which a future push can never overwrite;
+  an automatic push may only replace an existing `automatic_push` selection.
+  The Storyboard grid now prioritizes a valid explicit selection above its
+  existing (unchanged) legacy heuristic, falling back safely if the
+  selection is ever absent or corrupted. Deleting the currently-selected
+  Reference Image auto-clears the selection in the same transaction
+  (documented policy choice — a presentation preference, not a content
+  approval, so blocking the delete would be unnecessary friction).
+- Resolved or validated on: Implemented 2026-07-18; awaiting user validation.
+
+### FB-20260718-003 - Clear unused past Split runs
+
+- Status: `INBOX`
+- Date observed: 2026-07-18
+- Area: Storyboard / Split Workspace
+- Context: The `Other past run(s)` list accumulates obsolete detection runs.
+- Original observation: Add a clear button to clean old drafts/runs.
+- Expected outcome: `Clear unused past runs` removes only non-current runs that
+  have no pushed candidates, with explicit confirmation and honest thumbnail
+  cleanup. Provenance-linked runs remain protected.
+- Impact: Keeps the Split Workspace readable without destroying production
+  provenance.
+- Related ticket: `SEQGEN.SPLIT.CLEANUP.1`
+- Resolution: None
+- Resolved or validated on: None
+
+### FB-20260718-004 - Remove a frame range from a Sequence Video Draft
+
+- Status: `INBOX`
+- Date observed: 2026-07-18
+- Area: Storyboard / Sequence Video Drafts
+- Context: A generated Sequence video may contain a short unwanted passage,
+  often only a few frames long.
+- Original observation: Define a start and end, remove that range, concatenate
+  the parts before and after it, review the result, then publish it.
+- Expected outcome: A frame-aware, non-destructive In/Out workflow previews the
+  cut and saves a new derived Sequence Video Draft with durable provenance; the
+  source video is never overwritten.
+- Impact: Repairs short generation artifacts before split detection while
+  preserving version history and rollback.
+- Related ticket: `SEQGEN.VIDEO.CUT.1`
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-18: An additive migration for parent-draft and edit provenance is
+  authorized if confirmed by the ticket audit. Frame units are required at the
+  UI boundary; FFmpeg output must be reviewed before explicit publication.
+
+### FB-20260718-005 - Open OpenReel for a Shot with selected videos
+
+- Status: `OPEN`
+- Date observed: 2026-07-18
+- Area: Shot / OpenReel / Editorial round-trip
+- Context: Editing the videos associated with a Shot and sending the edited
+  result back into MikAI.
+- Original observation:
+
+  > pouvoir ouvrir open reel pour le shot, avec les videos du shot
+  > selectionné au préalable , pour pouvoir apres faire un montage, et le
+  > resultat pouvoir le push dans mikai
+
+- Expected outcome: From a Shot, the user can open OpenReel with the Shot's
+  selected video items already loaded or selected, perform an edit, and
+  explicitly push the resulting media or editorial result back to that Shot in
+  MikAI.
+- Impact: This would provide a direct Shot-level editing loop without manually
+  rebuilding the source selection in OpenReel or losing the relationship to
+  the originating Shot.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-18: Ticket preparation should define which Shot videos are eligible
+  (generated candidates, approved video, references, or all), the initial
+  ordering, and whether the pushed result becomes a candidate, approved video,
+  or a separate editorial result. Preserve source provenance and require an
+  explicit publish/push action; opening OpenReel must not mutate the Shot.
+- 2026-07-18: Reuse the existing OpenReel bridge and stale/snapshot safeguards
+  where possible. Clarify whether the first version supports one Shot only or
+  a Shot-local mini-sequence, without expanding into a general timeline change
+  model implicitly.
+- 2026-07-19: `SHOT.VIDEO.LIBRARY.1` delivers the "open OpenReel with the
+  Shot's selected videos already loaded" half of this request: `Shot Videos`
+  → select videos → `Open Selected in OpenReel`, Shot-local, one Shot only,
+  reusing the existing `mikai-editorial-export-v1` bridge with an additive
+  `sourceMode: "shot-videos"` tag. Explicitly read-only — the sidecar refuses
+  Validate/Apply Patch/Publish for this mode. The other half of this
+  feedback (perform an edit in OpenReel, then push the result back into this
+  Shot) remains unimplemented; still `OPEN`, not resolved by this ticket.
+- 2026-07-19: User confirms the remaining blocker: the current MikAI Bridge
+  is designed around Sequence editing, so a Shot can export videos to
+  OpenReel but cannot receive the edited result back. The requested completion
+  is a Shot-scoped round trip: edit in OpenReel, explicitly publish/push the
+  result, and attach it to the originating Shot without requiring a Sequence
+  context. The unrelated `SEQGEN.SPLIT.CLEANUP.1` work must not be treated as
+  resolving this limitation.
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-18
+- Area: Storyboard / Split Workspace / Shot
+- Context: Pushing a validated Split Plan after `SEQGEN.PUSH.2`.
+- Original observation: `First frame produced for segment #776 is not a valid PNG file.`
+- Expected outcome: Every pushed candidate produces a real, decodable PNG
+  first frame and the push completes without weakening image validation.
+- Impact: Blocking; the entire push batch currently fails before candidates,
+  first frames, and thumbnails can be published.
+- Related ticket: `SEQGEN.PUSH.2-FIX1`
+- Resolution: `buildFirstFrameArgs` now passes `-c:v png` explicitly, never
+  relying on the `image2` muxer's own extension-based codec guess. The
+  temporary output path was also renamed to keep a `.png` suffix
+  (`<name>.png.tmp.png` instead of `<name>.png.tmp`) as a second, defensive
+  layer. Both existing validations (PNG signature, ffprobe dimensions) are
+  unchanged and unweakened.
+- Resolved or validated on: Implemented and reproduced fixed 2026-07-18;
+  awaiting user validation.
+
+#### Follow-up notes
+
+- 2026-07-18: Codex confirmed the producer writes to `*.png.tmp` with the
+  generic `image2` muxer but no explicit PNG codec. The consumer correctly
+  rejects the resulting non-PNG signature. The fix must correct production,
+  not relax validation.
+- 2026-07-18: Fixed via `SEQGEN.PUSH.2-FIX1`. The exact originally-failing
+  Split Plan (run #68, segment #776) was re-pushed live and now succeeds;
+  the produced first frame for that exact segment was inspected byte-for-
+  byte (`89 50 4E 47 0D 0A 1A 0A` PNG signature) and via ffprobe
+  (`codec_name: "png"`, real positive dimensions).
+
+### FB-20260718-007 - Allow very short frame-exact split segments
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-18
+- Area: Storyboard / Split Workspace
+- Context: Correcting cuts between very short adjacent Shots.
+- Original observation: Split boundaries do not land correctly and a segment
+  as short as three frames must remain valid.
+- Expected outcome: For a reliable CFR source, manual and detected boundaries
+  may create segments down to one source frame; the UI and server reason in
+  frames rather than imposing the current 0.1-second floor.
+- Impact: Blocking for short transitions and rapid generated Shots.
+- Related ticket: `SEQGEN.SPLIT.MINFRAMES.1`
+- Resolution: Every boundary-creating/moving path (global detection, local
+  re-detection, Adjust Start/End, numeric Split, Split at Current Frame) now
+  goes through one shared policy (`resolveMinGapSeconds`/`resolveBoundaryValue`
+  in `frameTime.ts`): on a proven-CFR source the absolute floor is exactly 1
+  source frame, enforced via integer frame-index comparisons, never a fixed
+  0.05s/0.1s constant; `0` in the "Minimum segment duration" setting now
+  means that floor (and is the new default) instead of being rejected; a
+  positive value still imposes a deliberately larger minimum. VFR/unknown
+  sources never promise frame precision and use a strictly-positive
+  high-precision epsilon instead. Live-proven end-to-end on Sequence 50 /
+  Project 17 (real 24fps CFR source): a fresh detection run with minimum `0`,
+  a manually created exactly-1-frame segment via Split at Current Frame, a
+  successful Split Plan validation containing it, and a real FFmpeg push
+  producing a genuine `nb_frames: 1` clip for that segment.
+- Resolved or validated on: 2026-07-18 (implementation + live proofs; awaiting
+  user validation)
+
+#### Follow-up notes
+
+- 2026-07-18: The current implementation exposes a 0.1-second minimum and
+  converts it to a multi-frame gap at common frame rates. Codex keeps the
+  one-frame safety invariant so zero/negative segments remain impossible;
+  no larger arbitrary duration floor should remain for reliable CFR media.
+
+### FB-20260718-008 - Treat Shot videos as reusable media
+
+- Status: `TO VALIDATE`
+- Date observed: 2026-07-18
+- Area: Shot / Generation / OpenReel
+- Context: Reviewing clips pushed from a Sequence Video Split Plan.
+- Original observation: Pushed clips can only be previewed as Sequence Video
+  Candidates; they cannot be listed and reused like Shot media, selected for
+  ComfyUI workflows, or exported reliably to OpenReel.
+- Expected outcome: A Shot has a durable, provenance-aware video library with
+  explicit list/preview/delete/approve/reuse controls. Eligible videos can be
+  mapped into compatible ComfyUI video inputs and explicitly sent to OpenReel
+  with MikAI metadata.
+- Impact: The generated split clips are currently a terminal review surface
+  rather than reusable production assets.
+- Related ticket: `SHOT.VIDEO.LIBRARY.1`
+- Resolution: New additive `shot_videos` table unifies Split-pushed clips and
+  Generation Content saves into one durable, provenance-aware library
+  (`shots.approvedVideoPath` remains the single approved pointer). Backfilled
+  179 rows from existing candidates/legacy approved videos. `Shot Videos`
+  section on Shot Detail replaces the old terminal `Sequence Video
+  Candidates` list: list/preview/approve/delete, multi-select, and `Open
+  Selected in OpenReel`. ComfyUI: the canonical input mapping/patch pipeline
+  now structurally supports a video input kind, live-verified with fixture
+  tests — no real workflow with a video input exists in this library today,
+  so no live ComfyUI generation was run for this path (documented limit, no
+  fabricated proof). OpenReel: a new Shot-local, read-only, multi-video
+  export (`sourceMode: "shot-videos"`) reuses the existing
+  `mikai-editorial-export-v1` bridge verbatim; the sidecar was given a
+  minimal additive guard (distinct Project id namespace, explicit refusal of
+  Validate/Apply Patch/Publish for this mode) — live-verified against the
+  real sidecar code: the export produces clips carrying all 5 MikAI metadata
+  fields the Bridge requires (fixing "No MikAI clips detected" for this
+  flow) and write-back is cleanly refused.
+- Resolved or validated on: 2026-07-19 (implementation + live proofs;
+  awaiting user validation)
+
+#### Follow-up notes
+
+- 2026-07-18: `shot_video_candidates` currently stores split provenance and
+  review state, while ComfyUI runtime options are built only from image
+  references. The OpenReel editorial export currently exposes only
+  `shots.approvedVideoPath` for editorial items. Codex authorizes an additive
+  migration if the ticket audit confirms a dedicated Shot-video relation is
+  the clean model; do not overload image references or generation jobs.
+- 2026-07-18: The OpenReel message `No MikAI clips detected` means the current
+  OpenReel project contains no imported editorial clips carrying the required
+  MikAI metadata. Candidate storage alone cannot satisfy that bridge contract.
+
+### FB-20260721-001 - Preserve custom presets across server restarts
+
+- Status: `OPEN`
+- Date observed: 2026-07-21
+- Area: Settings / Presets / Persistence
+- Context: Using custom presets, then restarting the MikAI server.
+- Original observation:
+
+  > je ne comprend pas pourquoi mais je perd mes presset custom save, a croire
+  > qu ils ne sont plus enregistré quand je redemarre mon server
+
+- Expected outcome: A custom preset saved by the user remains available after
+  stopping and restarting the server, with the same values and name.
+- Impact: Losing presets makes the configuration unreliable and forces the
+  user to recreate saved work after each server restart.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-21: Investigation should trace the complete save/load path, confirm
+  whether the preset is written to durable server storage or only browser
+  state, and check startup errors, path/permission issues, and environment
+  differences. The UI should distinguish `Saved` from merely edited or
+  session-only state.
+- 2026-07-21: Any fix must preserve existing presets, avoid silently resetting
+  invalid entries, and provide a clear error when persistence fails. No schema,
+  migration, or dependency change is authorized by this observation alone.
+
+### FB-20260722-002 - Rework the Shot video section into a compact workspace
+
+- Status: `INBOX`
+- Date observed: 2026-07-22
+- Area: Shot / Video library / UX
+- Context: Reviewing the validated Shot video and the other candidate videos
+  in the Shot Detail page.
+- Original observation:
+
+  > je n'aime pas la parti video dans les shots, le fait d'avoir une premiere
+  > video qui est le shot validé, et apres un autre player avec la liste des
+  > autre video candidate, et le fait que les player soit grand, c est genant.
+  > J aimerai que lors du traitement de ce ticket, tu me propose qu on en parle
+  > plus
+
+- Expected outcome: The Shot video area is redesigned as a compact, coherent
+  workspace instead of two large independent players. The approved video and
+  candidate videos should remain clearly identifiable, while the user can
+  select a video to inspect in one appropriately sized player or preview.
+- Impact: The current layout consumes too much vertical space and makes the
+  relationship between the approved video and candidate library feel awkward,
+  slowing Shot review and editing.
+- Related ticket: None; related feedback: `FB-20260718-008`
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-22: Before implementation, Codex must schedule a product discussion
+  with the user to decide the target information hierarchy and interaction:
+  compact thumbnails/list versus a single selected player, placement of approve,
+  delete, reuse, and OpenReel actions, and how the approved state is displayed.
+  Do not treat this observation as sufficient authorization for a visual rewrite
+  until that discussion is complete.
+- 2026-07-22: Preserve the existing Shot-video provenance, approval, and
+  deletion safeguards while exploring the new layout. The visual redesign alone
+  does not authorize schema, migration, or media-storage changes.
+
+### FB-20260722-003 - Revisit workflows as tool-oriented interfaces
+
+- Status: `INBOX`
+- Date observed: 2026-07-22
+- Area: Workflows / Tooling / UX architecture
+- Context: Considering how users should configure and run different workflow
+  types in MikAI.
+- Original observation:
+
+  > il faudrait revoir l'approche des workflow, avoir un system de workflow
+  > Tool, avec des interface sur mesure pour certain workflow, un peut comme
+  > pour le camera-lab, mais pour d'autre utilisation. Faut qu on en reparle
+
+- Expected outcome: Workflows can be exposed as task-oriented tools, with
+  custom interfaces for workflows that need specialized controls, following the
+  Camera Lab approach while retaining a generic fallback for other workflows.
+- Impact: Purpose-built interfaces could make complex workflows easier to use
+  than editing raw node/API fields and provide a clearer mental model for each
+  production task.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-22: A product discussion is required before implementation to define
+  what qualifies as a Workflow Tool, how its UI maps to real workflow inputs,
+  how presets and advanced/raw controls coexist, and how unsupported or changed
+  workflow schemas are handled.
+- 2026-07-22: Keep this as a product direction only for now. Do not introduce
+  a new workflow registry, schema, dependency, or generation-runtime change
+  until the tool contract and first target workflows are agreed.
+
+### FB-20260722-006 - Collapse Sequence Generation Package and reduce warnings
+
+- Status: `OPEN`
+- Date observed: 2026-07-22
+- Area: Storyboard / Sequence Generation Package / UX
+- Context: Reviewing the `Sequence Generation Package` information displayed
+  in the Storyboard or Sequence generation workspace.
+- Original observation:
+
+  > ajouter un ticket pour collapse le "sequence generation package" et
+  > supprimer les informations de warning
+
+- Expected outcome: The `Sequence Generation Package` section is collapsed by
+  default to keep the workspace focused, and non-actionable warning or status
+  information is removed or moved behind an intentional details affordance.
+- Impact: The current package and warning content add visual noise and make the
+  primary generation actions harder to find.
+- Related ticket: None
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-22: Ticket preparation should inventory every message in the package
+  and classify it as actionable error, blocking warning, useful status, or
+  informational noise. Do not hide errors or warnings that protect against an
+  invalid generation; those may instead be summarized with an expandable
+  details view.
+- 2026-07-22: Preserve the package data and existing generation behavior. This
+  observation authorizes a presentation change only, not changes to payload
+  compilation, validation, schema, or generation runtime.
+
+### FB-20260722-005 - Correct Gaussian-to-image mapping and expose inputs
+
+- Status: `RESOLVED`
+- Date observed: 2026-07-22
+- Area: Shot / Gaussian Camera / Generation UX
+- Context: Testing Column 3 of the Gaussian Camera workspace with the real
+  `GaussianQwen` default workflow.
+- Original observation:
+
+  > le workflow de la colonne de droite doit exposer les input, nomme avec
+  > (Input), additionnelle du workflow
+  >
+  > l'output snapshot de la colonne 2 doit ce retrouver dans l'input
+  > "Load Image Gaussian (Input)", ainsi l'input image de la colonne 1 devra
+  > se retrouver dans l'input nommee "Load Image (Input)" du workflow de la
+  > colonne 3
+
+- Expected outcome: Column 3 maps its two visual sources by their exact
+  workflow labels, never by JSON order, and renders every additional supported
+  `(Input)` node as an editable control whose explicit override reaches the
+  queued payload.
+- Impact: The current structural-order fallback can invert the Gaussian
+  snapshot and source image, while hidden Seed/prompt inputs prevent the user
+  from controlling the real Gaussian-to-image workflow.
+- Related ticket: `CAMLAB.POLISH.2`
+- Resolution: Implemented by Claude — `resolveGaussianToImageMapping` now
+  resolves the snapshot/source roles strictly by exact label
+  (`Load Image Gaussian` / `Load Image`), never by JSON/node order; the old
+  CAMLAB.POLISH.1 structural-order fallback and its recommended labels
+  (`Gaussian Snapshot (Input)` / `Source Image (Input)`) are retired and now
+  block with a diagnostic if seen. Column 3 renders an "Other inputs" section
+  (shared with Column 1 via a new local `NonImageInputsFieldset` component)
+  exposing every other supported `(Input)` node — confirmed against the real
+  `GaussianQwen` workflow: `Seed (Input)` and `Additional Prompy (Input)`.
+  Server-side, `queueGaussianToImageGeneration` now re-validates every
+  override key against the workflow's real current structure, applies only
+  the explicitly-edited overrides through the existing canonical
+  `patchWorkflowPayload` (never a second patcher), then injects the two
+  images on top of that already-patched JSON — an unedited additional input
+  keeps its own stored workflow value, never implicitly replaced by an empty
+  string or a Shot prompt. No schema, migration, dependency, or
+  ComfyUI/job-runner/polling change. Awaiting Codex review and user
+  validation checklist before this is marked resolved.
+- Resolved or validated on: 2026-07-23
+
+#### Follow-up notes
+
+- 2026-07-22: The real dev workflow `GaussianQwen` confirms two image labels,
+  `Load Image Gaussian (Input)` and `Load Image (Input)`, plus `Seed (Input)`
+  and `Additional Prompy (Input)`. Node ids are fixture evidence only and must
+  never be hard-coded.
+- 2026-07-22: No migration, dependency, provider, job-runner, or polling change
+  is authorized. Server-side revalidation and proof against the actual queued
+  payload are mandatory.
+- 2026-07-23: User validation passed. The exact snapshot/source mapping,
+  additional Gaussian-to-image inputs, generation flow, and resulting output
+  work as expected. Feedback closed after commit `41d7004`.
+- 2026-07-22: Implementation complete. Mapping resolution proven order-
+  independent (reversed JSON node-key order produces the identical mapping)
+  with both pure tests and a harness run directly against the real stored
+  `GaussianQwen` JSON. The canonical-patcher/image-injection payload pipeline
+  was proven with a mock/harness of the real payload rather than a real Comfy
+  Cloud submission, since this workspace's configured provider is Cloud with
+  a real API key — a real submission would have incurred real Partner Node
+  cost for a proof that a harness already covers, per the ticket's own
+  explicit instruction not to spend on Cloud when a harness suffices. See
+  `.agents/claude_report.md` for full proof detail and limits.
+- 2026-07-22: Codex review returned `REVISE` (mapping correct, 3 targeted
+  findings): patcher warnings on explicit overrides were only partially
+  enforced (only the "could not be parsed" case blocked); that validation
+  ran after the snapshot file was already written; and the UI/shared
+  classifier still referenced the retired ordinal contract (`Input 1`/
+  `Input 2`) or the wrong column name. Claude applied the retake: any
+  warning from the canonical patcher on an explicit override now blocks
+  generation outright, and that check now runs before any snapshot
+  file/job work; Column 3 now shows the real `Load Image Gaussian (Input)`
+  / `Load Image (Input)` labels; `classifyNonImageInputs` takes an
+  optional caller-context so its diagnostic names "Gaussian-to-image" for
+  Column 3 while Column 1's original wording is unchanged. Re-validated:
+  12/12 pure tests, a real (zero-cost) end-to-end call proving an invalid
+  override creates zero temp files and zero jobs, a re-verification that
+  valid overrides still land byte-exact, and a real-browser check that the
+  new labels render. Full detail in `.agents/claude_report.md` (retake
+  section). Awaiting fresh Codex verdict.
+
+### FB-20260723-002 - Correct the Camera Lab Additional Prompt label
+
+- Status: `OPEN`
+- Date observed: 2026-07-23
+- Area: Camera Lab / UI copy
+- Context: Reading the label for the additional prompt input in Camera Lab.
+- Original observation:
+
+  > Il y a une erreur d'orthograph à "Additonal Prompy" dans la camera-lab .
+  > ca devrait etre "Additonal Prompt"
+
+- Expected outcome: The label is displayed as `Additional Prompt`.
+- Impact: The current typo reduces interface quality and makes the workflow
+  UI look unfinished.
+- Related ticket: `CAMLAB.POLISH.1` / Gaussian Camera workflow inputs
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-23: The user's quoted target omits the second `i` in `Additional`;
+  the canonical English UI spelling is `Additional Prompt`.
 
 ## Entry Template
 
