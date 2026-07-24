@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useMemo, useState } from "react";
+import type { ProjectStyleReferenceView } from "@/actions/projectStyleReferences";
 import Collapsible from "@/components/Collapsible";
 import {
   saveDraftFieldsAction,
@@ -42,6 +43,9 @@ import type {
   StyleRuleStrength,
   StyleRuleStatus,
 } from "@/lib/projectStyle/styleSnapshot";
+import type { ProjectStyleInfluenceView } from "@/actions/projectStyleInfluences";
+import ReferenceBoardSection from "@/components/projectStyle/ReferenceBoardSection";
+import InfluenceSection from "@/components/projectStyle/InfluenceSection";
 
 type SectionRow = { id: number; pillar: StylePillar; heading: string; content: string; orderIndex: number };
 type RuleRow = {
@@ -66,6 +70,8 @@ type Props = {
   projectId: number;
   initialDraft: WorkingDraftView | null;
   initialVersions: ActiveVersionView;
+  initialReferences: ProjectStyleReferenceView[];
+  initialInfluences: ProjectStyleInfluenceView[];
 };
 
 function StateBadge({ tone, children }: { tone: "muted" | "warn" | "info" | "ok" | "error"; children: React.ReactNode }) {
@@ -490,8 +496,10 @@ function RulesPanel({
   );
 }
 
-export default function ProjectStyleWorkspace({ projectId, initialDraft, initialVersions }: Props) {
+export default function ProjectStyleWorkspace({ projectId, initialDraft, initialVersions, initialReferences, initialInfluences }: Props) {
   const [hasDraft, setHasDraft] = useState<boolean>(initialDraft !== null);
+  const [references, setReferences] = useState<ProjectStyleReferenceView[]>(initialReferences);
+  const [influences, setInfluences] = useState<ProjectStyleInfluenceView[]>(initialInfluences);
 
   // Codex P1 retake — a Project can have a published active version with NO
   // Working Draft. Previously the top-level fields still initialized to ""
@@ -873,6 +881,42 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
     }
   }, [projectId, revision, directionBrief, worldGeneral, worldNegative, visualGeneral, visualNegative]);
 
+  const handleInfluenceCreated = useCallback((view: ProjectStyleInfluenceView) => {
+    setInfluences((prev) => [...prev, view]);
+  }, []);
+
+  const handleInfluenceUpdated = useCallback((updated: ProjectStyleInfluenceView) => {
+    setInfluences((prev) =>
+      prev.map((v) => (v.influence.id === updated.influence.id ? updated : v))
+    );
+  }, []);
+
+  const handleInfluenceDeleted = useCallback((influenceId: number) => {
+    setInfluences((prev) => prev.filter((v) => v.influence.id !== influenceId));
+  }, []);
+
+  const handleReferenceAdded = useCallback((view: ProjectStyleReferenceView) => {
+    setReferences((prev) => [...prev, view]);
+  }, []);
+
+  const handleReferenceUpdated = useCallback((updated: ProjectStyleReferenceView) => {
+    setReferences((prev) =>
+      prev.map((v) => (v.reference.id === updated.reference.id ? updated : v))
+    );
+  }, []);
+
+  const handleReferenceDeleted = useCallback((referenceId: number) => {
+    setReferences((prev) => prev.filter((v) => v.reference.id !== referenceId));
+    // Cascade: strip deleted reference id from any Influence card that links it.
+    // This keeps the Influence picker/thumbnails in sync without a reload.
+    setInfluences((prev) =>
+      prev.map((inf) => ({
+        ...inf,
+        referenceIds: inf.referenceIds.filter((id) => id !== referenceId),
+      }))
+    );
+  }, []);
+
   const stateLabel = hasDraft ? "Working Draft" : versions.activeVersion ? `Active v${versions.activeVersion.versionNumber}` : "No published style";
   const stateTone: "muted" | "info" | "ok" = hasDraft ? "info" : versions.activeVersion ? "ok" : "muted";
 
@@ -937,6 +981,23 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         onToggle={handleToggleRule}
         onDelete={handleDeleteRule}
         onReorder={handleReorderRule}
+      />
+
+      <InfluenceSection
+        projectId={projectId}
+        influences={influences}
+        references={references}
+        onInfluenceCreated={handleInfluenceCreated}
+        onInfluenceUpdated={handleInfluenceUpdated}
+        onInfluenceDeleted={handleInfluenceDeleted}
+      />
+
+      <ReferenceBoardSection
+        projectId={projectId}
+        references={references}
+        onReferenceAdded={handleReferenceAdded}
+        onReferenceUpdated={handleReferenceUpdated}
+        onReferenceDeleted={handleReferenceDeleted}
       />
 
       {!isReadOnlyActiveView && (

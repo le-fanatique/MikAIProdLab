@@ -342,5 +342,3 @@ export async function unlinkInfluenceReferenceAction(
   revalidatePath(`/projects/${projectId}/style`);
   return { ok: true };
 }
-
-export type { InfluenceSubjectType, InfluenceStatus, InfluenceDomainWeight };

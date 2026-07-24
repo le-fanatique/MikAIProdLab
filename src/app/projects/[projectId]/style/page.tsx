@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import { getWorkingDraft, getVersionHistory } from "@/actions/projectStyle";
+import { listProjectStyleReferences } from "@/actions/projectStyleReferences";
+import { listProjectStyleInfluences } from "@/actions/projectStyleInfluences";
 import ProjectStyleWorkspace from "@/components/projectStyle/ProjectStyleWorkspace";
 
 type Props = {
@@ -19,7 +21,12 @@ export default async function ProjectStylePage({ params }: Props) {
   const [project] = await db.select().from(projects).where(eq(projects.id, pid));
   if (!project) notFound();
 
-  const [draftView, versionView] = await Promise.all([getWorkingDraft(pid), getVersionHistory(pid)]);
+  const [draftView, versionView, references, influences] = await Promise.all([
+    getWorkingDraft(pid),
+    getVersionHistory(pid),
+    listProjectStyleReferences(pid),
+    listProjectStyleInfluences(pid),
+  ]);
 
   return (
     <div>
@@ -31,7 +38,13 @@ export default async function ProjectStylePage({ params }: Props) {
         ]}
       />
       <PageHeader title="Project Style" meta={project.name} />
-      <ProjectStyleWorkspace projectId={pid} initialDraft={draftView} initialVersions={versionView} />
+      <ProjectStyleWorkspace
+        projectId={pid}
+        initialDraft={draftView}
+        initialVersions={versionView}
+        initialReferences={references}
+        initialInfluences={influences}
+      />
     </div>
   );
 }
