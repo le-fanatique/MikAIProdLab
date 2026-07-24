@@ -1254,3 +1254,169 @@ export const projectStyleActivePointers = sqliteTable(
 
 export type ProjectStyleActivePointer = typeof projectStyleActivePointers.$inferSelect;
 export type NewProjectStyleActivePointer = typeof projectStyleActivePointers.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Project Style — References And Influence Data (STYLE.1.B.CORE).
+//
+// Six tables, all Project-scoped and separate from the existing Asset/Shot
+// reference-image tables (`assetReferenceImages`/`shotReferenceImages`),
+// which are generation-input roles, not Style research/provenance data:
+//
+//   - projectStyleReferenceImages    — one uploaded Reference Board image.
+//                                      Domains and consumers are relational
+//                                      facts (below), never a JSON blob, per
+//                                      the ticket's explicit rule.
+//   - projectStyleReferenceDomains   — zero/one/many free-text analysis
+//                                      domains per reference. Unique per
+//                                      (referenceId, domain) — the action
+//                                      layer normalizes/case-folds before
+//                                      insert, this is the DB-level backstop.
+//   - projectStyleReferenceConsumers — zero/one/many intended consumers per
+//                                      reference, from a fixed enum. Unique
+//                                      per (referenceId, consumer).
+//   - projectStyleInfluences         — one Creative Influence dossier
+//                                      (person/studio/work/movement).
+//   - projectStyleInfluenceDomains   — zero/one/many weighted domains per
+//                                      influence (primary/supporting/accent).
+//                                      Unique per (influenceId, domain).
+//   - projectStyleInfluenceReferences — many-to-many link from an influence
+//                                      to a Project Style reference image
+//                                      ("supporting references"). The action
+//                                      layer verifies both rows share the
+//                                      same projectId before insert — SQLite
+//                                      cannot express a cross-table equality
+//                                      check as a plain FK/CHECK constraint.
+//                                      Unique per (influenceId, referenceId).
+//
+// All six cascade-delete from `projects` (directly, or via
+// projectStyleReferenceImages/projectStyleInfluences -> their child rows),
+// so deleting a Project removes every DB row automatically under
+// `PRAGMA foreign_keys=ON`. The underlying uploaded FILES are NOT covered by
+// any FK — see the explicit file-cleanup step added to `deleteProject`
+// (src/actions/projects.ts) for STYLE.1.B.CORE.
+// ---------------------------------------------------------------------------
+
+export const projectStyleReferenceImages = sqliteTable("project_style_reference_images", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  projectId: int("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  imagePath: text("image_path").notNull(),
+  sourceFilename: text("source_filename"),
+  label: text("label"),
+  sourceUrl: text("source_url"),
+  provenanceNotes: text("provenance_notes"),
+  whatInterestsMe: text("what_interests_me"),
+  whatToAvoid: text("what_to_avoid"),
+  approvedForAnalysis: int("approved_for_analysis", { mode: "boolean" }).notNull().default(false),
+  approvedForGeneration: int("approved_for_generation", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type ProjectStyleReferenceImage = typeof projectStyleReferenceImages.$inferSelect;
+export type NewProjectStyleReferenceImage = typeof projectStyleReferenceImages.$inferInsert;
+
+export const projectStyleReferenceDomains = sqliteTable(
+  "project_style_reference_domains",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    referenceId: int("reference_id")
+      .notNull()
+      .references(() => projectStyleReferenceImages.id, { onDelete: "cascade" }),
+    domain: text("domain").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("project_style_reference_domains_unique").on(table.referenceId, table.domain)]
+);
+
+export type ProjectStyleReferenceDomain = typeof projectStyleReferenceDomains.$inferSelect;
+export type NewProjectStyleReferenceDomain = typeof projectStyleReferenceDomains.$inferInsert;
+
+export const projectStyleReferenceConsumers = sqliteTable(
+  "project_style_reference_consumers",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    referenceId: int("reference_id")
+      .notNull()
+      .references(() => projectStyleReferenceImages.id, { onDelete: "cascade" }),
+    consumer: text("consumer", { enum: ["asset", "storyboard", "image", "video", "shot"] }).notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("project_style_reference_consumers_unique").on(table.referenceId, table.consumer)]
+);
+
+export type ProjectStyleReferenceConsumer = typeof projectStyleReferenceConsumers.$inferSelect;
+export type NewProjectStyleReferenceConsumer = typeof projectStyleReferenceConsumers.$inferInsert;
+
+export const projectStyleInfluences = sqliteTable("project_style_influences", {
+  id: int("id").primaryKey({ autoIncrement: true }),
+  projectId: int("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  subjectType: text("subject_type", { enum: ["person", "studio", "work", "movement"] }).notNull(),
+  subjectName: text("subject_name").notNull(),
+  disambiguation: text("disambiguation"),
+  roleOrDiscipline: text("role_or_discipline"),
+  periodOrWorks: text("period_or_works"),
+  whatInterestsMe: text("what_interests_me"),
+  whatToAvoid: text("what_to_avoid"),
+  researchNotes: text("research_notes"),
+  status: text("status", { enum: ["draft", "approved"] }).notNull().default("draft"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type ProjectStyleInfluence = typeof projectStyleInfluences.$inferSelect;
+export type NewProjectStyleInfluence = typeof projectStyleInfluences.$inferInsert;
+
+export const projectStyleInfluenceDomains = sqliteTable(
+  "project_style_influence_domains",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    influenceId: int("influence_id")
+      .notNull()
+      .references(() => projectStyleInfluences.id, { onDelete: "cascade" }),
+    domain: text("domain").notNull(),
+    weight: text("weight", { enum: ["primary", "supporting", "accent"] }).notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("project_style_influence_domains_unique").on(table.influenceId, table.domain)]
+);
+
+export type ProjectStyleInfluenceDomain = typeof projectStyleInfluenceDomains.$inferSelect;
+export type NewProjectStyleInfluenceDomain = typeof projectStyleInfluenceDomains.$inferInsert;
+
+export const projectStyleInfluenceReferences = sqliteTable(
+  "project_style_influence_references",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    influenceId: int("influence_id")
+      .notNull()
+      .references(() => projectStyleInfluences.id, { onDelete: "cascade" }),
+    referenceId: int("reference_id")
+      .notNull()
+      .references(() => projectStyleReferenceImages.id, { onDelete: "cascade" }),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("project_style_influence_references_unique").on(table.influenceId, table.referenceId)]
+);
+
+export type ProjectStyleInfluenceReference = typeof projectStyleInfluenceReferences.$inferSelect;
+export type NewProjectStyleInfluenceReference = typeof projectStyleInfluenceReferences.$inferInsert;
