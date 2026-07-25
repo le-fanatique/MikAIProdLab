@@ -64,6 +64,7 @@ import {
   isValidOptionalText,
   isValidRequiredText,
 } from "@/lib/projectStyle/validation";
+import { insertApprovedRuleIntoDraft } from "@/lib/projectStyle/insertDraftRule";
 
 type OwnershipResult = { ok: true } | { ok: false; error: string };
 
@@ -536,42 +537,23 @@ export async function addRuleAction(input: { projectId: number; expectedRevision
       return { kind: "stale" as const, currentRevision: draft.revision };
     }
 
-    const siblings = tx
-      .select({ maxOrder: sql<number>`COALESCE(MAX(${projectStyleRules.orderIndex}), -1)` })
-      .from(projectStyleRules)
-      .where(eq(projectStyleRules.draftId, draft.id))
-      .all() as unknown as { maxOrder: number }[];
-    const nextOrder = (siblings[0]?.maxOrder ?? -1) + 1;
-
     const section = normalizeOptional(input.section);
     const category = normalizeOptional(input.category);
     const applicability = normalizeOptional(input.applicability);
     const provenanceNotes = normalizeOptional(input.provenanceNotes);
 
-    const inserted = tx
-      .insert(projectStyleRules)
-      .values({
-        draftId: draft.id,
-        instruction,
-        pillar: input.pillar,
-        section,
-        category,
-        strength: input.strength,
-        applicability,
-        provenanceNotes,
-        status: "approved",
-        orderIndex: nextOrder,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    const insertResult = insertApprovedRuleIntoDraft(
+      tx,
+      draft,
+      { instruction, pillar: input.pillar, section, category, strength: input.strength, applicability, provenanceNotes },
+      now
+    );
 
-    tx.update(projectStyleDrafts).set({ revision: draft.revision + 1, updatedAt: now }).where(eq(projectStyleDrafts.id, draft.id)).run();
     return {
       kind: "ok" as const,
-      revision: draft.revision + 1,
+      revision: insertResult.newRevision,
       rule: {
-        id: Number(inserted.lastInsertRowid),
+        id: insertResult.ruleId,
         instruction,
         pillar: input.pillar,
         section,
@@ -580,7 +562,7 @@ export async function addRuleAction(input: { projectId: number; expectedRevision
         applicability,
         provenanceNotes,
         status: "approved" as StyleRuleStatus,
-        orderIndex: nextOrder,
+        orderIndex: insertResult.orderIndex,
       },
     };
   });

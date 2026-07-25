@@ -60,6 +60,48 @@ function key(prefix: string, name: string): string {
 }
 
 /**
+ * The single source of truth for OpenRouter API key precedence:
+ * provider-specific DB key -> env var -> legacy DB key. Pure — no DB
+ * access — so every caller that already has a loaded settings map
+ * (`readAllLLMSettings`'s `readProvider`, `getLLMConfig`,
+ * `buildChatConfigFromMap`) can call this directly instead of recomputing
+ * the same three lines locally, which is exactly how it previously drifted
+ * into three independently-maintained copies (STYLE.1.C.CORE retake round
+ * 2). `resolveOpenRouterApiKey` below is a thin async wrapper around this
+ * same function for callers (the Research provider's `keyResolver.ts`)
+ * that do not already have a map in hand.
+ */
+function resolveOpenRouterApiKeyFromMap(map: Map<string, string>): string | null {
+  const specificKey = map.get("llm_openrouter_api_key") || null;
+  const envKey = process.env.OPENROUTER_API_KEY?.trim() || null;
+  const legacyKey = map.get("llm_api_key") || null;
+  return specificKey ?? envKey ?? legacyKey ?? null;
+}
+
+export async function resolveOpenRouterApiKey(): Promise<string | null> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  return resolveOpenRouterApiKeyFromMap(map);
+}
+
+/**
+ * Shared per-provider API key precedence for all three LLM providers:
+ * provider-specific DB key -> provider env var -> legacy DB key (ollama has
+ * no key concept at all). OpenRouter delegates to the single
+ * `resolveOpenRouterApiKeyFromMap` above. Used by `readProvider`,
+ * `getLLMConfig` and `buildChatConfigFromMap` so none of the three
+ * re-derives this shape locally.
+ */
+function resolveApiKeyForProviderFromMap(provider: LLMProvider, prefix: string, map: Map<string, string>): string | null {
+  if (provider === "openrouter") return resolveOpenRouterApiKeyFromMap(map);
+  // Use || not ?? so a stored "" is treated as absent.
+  const specificKey = map.get(`${prefix}api_key`) || null;
+  const envKey = provider === "openai-compatible" ? (process.env.OPENAI_API_KEY?.trim() || null) : null;
+  const legacyKey = provider !== "ollama" ? (map.get("llm_api_key") || null) : null;
+  return specificKey ?? envKey ?? legacyKey ?? null;
+}
+
+/**
  * Reads all LLM settings per provider.
  * Priority: provider-specific key → legacy key → env var → hardcoded default.
  */
@@ -123,17 +165,7 @@ async function readAllLLMSettings(): Promise<AllLLMSettings> {
       String(def.temperature)
     );
 
-    // API key priority: provider-specific DB key → provider env var → legacy DB key.
-    // Use || not ?? so a stored "" is treated as absent.
-    const specificKey = map.get(key(prefix, "api_key")) || null;
-    const envKey =
-      p === "openrouter"
-        ? (process.env.OPENROUTER_API_KEY?.trim() || null)
-        : p === "openai-compatible"
-          ? (process.env.OPENAI_API_KEY?.trim() || null)
-          : null;
-    const legacyKey = p !== "ollama" ? (map.get("llm_api_key") || null) : null;
-    const apiKey = specificKey ?? envKey ?? legacyKey;
+    const apiKey = resolveApiKeyForProviderFromMap(p, prefix, map);
     const hasApiKey = !!apiKey;
 
     return { baseUrl, model, timeoutMs, temperature, hasApiKey };
@@ -231,17 +263,7 @@ export async function getLLMConfig(): Promise<LLMConfig | null> {
 
   if (!model.trim()) return null;
 
-  // API key priority: provider-specific DB key → provider env var → legacy DB key.
-  // Use || not ?? so a stored "" is treated as absent.
-  const specificKey = map.get(key(prefix, "api_key")) || null;
-  const envKey =
-    provider === "openrouter"
-      ? (process.env.OPENROUTER_API_KEY?.trim() || null)
-      : provider === "openai-compatible"
-        ? (process.env.OPENAI_API_KEY?.trim() || null)
-        : null;
-  const legacyKey = provider !== "ollama" ? (map.get("llm_api_key") || null) : null;
-  const apiKey = specificKey ?? envKey ?? legacyKey;
+  const apiKey = resolveApiKeyForProviderFromMap(provider, prefix, map);
 
   return {
     provider,
@@ -337,15 +359,7 @@ function buildChatConfigFromMap(map: Map<string, string>): LLMConfig {
     map.get(`${prefix}temperature`) ?? legacyTemp ?? String(def.temperature)
   );
 
-  const specificKey = map.get(`${prefix}api_key`) || null;
-  const envKey =
-    provider === "openrouter"
-      ? (process.env.OPENROUTER_API_KEY?.trim() || null)
-      : provider === "openai-compatible"
-        ? (process.env.OPENAI_API_KEY?.trim() || null)
-        : null;
-  const legacyKey = provider !== "ollama" ? (map.get("llm_api_key") || null) : null;
-  const apiKey = specificKey ?? envKey ?? legacyKey;
+  const apiKey = resolveApiKeyForProviderFromMap(provider, prefix, map);
 
   return { provider, baseUrl, model: model || "", apiKey, timeoutMs, temperature };
 }

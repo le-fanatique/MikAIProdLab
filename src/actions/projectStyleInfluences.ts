@@ -15,6 +15,7 @@ import {
   projectStyleInfluenceDomains,
   projectStyleInfluenceReferences,
   projectStyleReferenceImages,
+  projectStyleResearchSources,
   type ProjectStyleInfluence,
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
@@ -244,11 +245,20 @@ export async function deleteInfluenceAction(projectId: number, influenceId: numb
     const influence = rows[0];
     if (!influence || influence.projectId !== projectId) return { kind: "not-found" as const };
 
+    // STYLE.1.C.CORE — refuse deletion when any saved source exists
+    const savedSources = tx
+      .select({ id: projectStyleResearchSources.id })
+      .from(projectStyleResearchSources)
+      .where(eq(projectStyleResearchSources.influenceId, influenceId))
+      .all() as { id: number }[];
+    if (savedSources.length > 0) return { kind: "has-sources" as const };
+
     tx.delete(projectStyleInfluences).where(eq(projectStyleInfluences.id, influenceId)).run();
     return { kind: "ok" as const };
   });
 
   if (outcome.kind === "not-found") return { ok: false, error: "Influence not found in this Project." };
+  if (outcome.kind === "has-sources") return { ok: false, error: "Cannot delete an influence that has saved research sources. Withdraw or remove them first." };
   revalidatePath(`/projects/${projectId}/style`);
   return { ok: true };
 }
