@@ -31,6 +31,8 @@ import { refImageUrl } from "@/lib/refImageUrl";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
 import { parseResultWarnings, sequenceResultSourceModeLabel } from "@/types/sequenceResult";
 import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
+import { getSequenceStyleState, type GetSequenceStyleStateResult } from "@/actions/sequenceStyle";
+import SequenceStylePanel from "@/components/projectStyle/SequenceStylePanel";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string }>;
@@ -229,6 +231,21 @@ export default async function SequencePage({ params, searchParams }: Props) {
     sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint
   );
 
+  // STYLE.1.D.UI — read model only; a CORE read failure renders a
+  // panel-local error inside SequenceStylePanel instead of failing this
+  // whole Server Component render (see the ticket's "Existing CORE Is
+  // Authoritative" section). getSequenceStyleState already returns a
+  // structured `{ ok: false }` for business/data faults without throwing —
+  // this try/catch exists only for an unexpected transport/runtime
+  // exception (Codex Round 1 retake, P1), which must not crash the entire
+  // Sequence Detail render.
+  let sequenceStyleResult: GetSequenceStyleStateResult;
+  try {
+    sequenceStyleResult = await getSequenceStyleState(pid, sid);
+  } catch {
+    sequenceStyleResult = { ok: false, error: "The Project Style could not be loaded for this Sequence. Try again." };
+  }
+
   // EDITORIAL.UX.1: same OpenReel bridge as /nle-prototype, built directly
   // here so Advanced Editor access no longer requires passing through that
   // page first — see src/lib/editorial/advancedEditorLink.ts.
@@ -262,7 +279,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
   const resultVideoIsPlayable =
     activeResult?.videoPath != null && ["mp4", "webm", "mov"].includes(resultVideoExt);
 
-  let sequenceResultCaptureDestinations: CaptureDestination[] = [];
+  const sequenceResultCaptureDestinations: CaptureDestination[] = [];
   let sequenceResultSourceShotId: number | null = null;
 
   if (resultVideoIsPlayable && shotList.length > 0) {
@@ -582,6 +599,17 @@ npx -y pnpm@9.0.0 dev`}
           they annotate, which risks breaking the row-adjacent insertion
           UX for no scope benefit in this ticket. */}
       <WorkspaceZoneLabel label="Production" />
+
+      {/* ── Project Style ─────────────────────────────────────────────
+          STYLE.1.D.UI: exposes the merged Sequence override CORE contract
+          (no override -> inherited active Project Style, dynamically;
+          override -> complete Sequence-local replacement). UI-only over
+          existing getSequenceStyleState/customize/update/reset actions —
+          no resolver, schema or Server Action change here. */}
+      <SectionLabel label="Project Style" />
+      <div className="mb-6">
+        <SequenceStylePanel projectId={pid} sequenceId={sid} initialResult={sequenceStyleResult} />
+      </div>
 
       {/* ── Context ───────────────────────────────────────────────── */}
       {hasContext && (
