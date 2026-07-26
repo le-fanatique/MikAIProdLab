@@ -64,12 +64,11 @@ function key(prefix: string, name: string): string {
  * provider-specific DB key -> env var -> legacy DB key. Pure — no DB
  * access — so every caller that already has a loaded settings map
  * (`readAllLLMSettings`'s `readProvider`, `getLLMConfig`,
- * `buildChatConfigFromMap`) can call this directly instead of recomputing
- * the same three lines locally, which is exactly how it previously drifted
- * into three independently-maintained copies (STYLE.1.C.CORE retake round
- * 2). `resolveOpenRouterApiKey` below is a thin async wrapper around this
- * same function for callers (the Research provider's `keyResolver.ts`)
- * that do not already have a map in hand.
+ * `buildChatConfigFromMap`, `getResearchEffectiveSnapshot`'s
+ * `buildConfigForResolvedProvider`) can call this directly instead of
+ * recomputing the same three lines locally, which is exactly how it
+ * previously drifted into three independently-maintained copies
+ * (STYLE.1.C.CORE retake round 2).
  */
 function resolveOpenRouterApiKeyFromMap(map: Map<string, string>): string | null {
   const specificKey = map.get("llm_openrouter_api_key") || null;
@@ -78,10 +77,13 @@ function resolveOpenRouterApiKeyFromMap(map: Map<string, string>): string | null
   return specificKey ?? envKey ?? legacyKey ?? null;
 }
 
-export async function resolveOpenRouterApiKey(): Promise<string | null> {
-  const rows = await db.select().from(appSettings);
-  const map = new Map(rows.map((r) => [r.key, r.value]));
-  return resolveOpenRouterApiKeyFromMap(map);
+const KNOWN_LLM_PROVIDERS: readonly LLMProvider[] = ["ollama", "openrouter", "openai-compatible"];
+
+/** Exported so Server Actions (e.g. `saveResearchProviderSettings`) can
+ * validate a client-forged provider value at the runtime boundary without
+ * duplicating this whitelist locally. */
+export function isKnownLLMProvider(value: unknown): value is LLMProvider {
+  return typeof value === "string" && (KNOWN_LLM_PROVIDERS as readonly string[]).includes(value);
 }
 
 /**
@@ -296,51 +298,51 @@ export async function hasApiKeyForProvider(
 }
 
 // ---------------------------------------------------------------------------
-// Chat LLM provider — separate from production LLM
+// Purpose-provider resolution — shared shape for any feature (Chat,
+// Research, ...) that can optionally use its own LLM provider instead of
+// the main production provider. Each purpose owns its own
+// `useSeparateKey`/`providerKey` pair of `app_settings` rows but shares this
+// exact resolution so no purpose drifts into an independently-maintained
+// copy (STYLE.1.C.SEARCH.FIX1 — extracted from the pre-existing Chat-only
+// logic; Chat's own stored value is intentionally NOT validated here so its
+// behavior is byte-identical to before this extraction).
 // ---------------------------------------------------------------------------
 
-export interface ChatProviderInfo {
+interface PurposeProviderResolution {
   useSeparate: boolean;
-  chatProvider: LLMProvider;
+  purposeProvider: LLMProvider;
   effectiveProvider: LLMProvider;
 }
 
-/**
- * Returns the effective chat provider and whether a separate one is configured.
- */
-export async function getChatProviderInfo(): Promise<ChatProviderInfo> {
-  const rows = await db.select().from(appSettings);
-  const map = new Map(rows.map((r) => [r.key, r.value]));
-
-  const useSeparate = map.get("llm_chat_use_separate_provider") === "true";
-  const productionProvider =
+function getActiveProductionProviderFromMap(map: Map<string, string>): LLMProvider {
+  return (
     (map.get("llm_provider") as LLMProvider) ??
     (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
-    "ollama";
-  const chatProvider =
-    (map.get("llm_chat_provider") as LLMProvider) ?? productionProvider;
+    "ollama"
+  );
+}
 
+function resolvePurposeProviderFromMap(
+  map: Map<string, string>,
+  useSeparateKey: string,
+  providerKey: string
+): PurposeProviderResolution {
+  const useSeparate = map.get(useSeparateKey) === "true";
+  const productionProvider = getActiveProductionProviderFromMap(map);
+  const purposeProvider = (map.get(providerKey) as LLMProvider) ?? productionProvider;
   return {
     useSeparate,
-    chatProvider,
-    effectiveProvider: useSeparate ? chatProvider : productionProvider,
+    purposeProvider,
+    effectiveProvider: useSeparate ? purposeProvider : productionProvider,
   };
 }
 
 /**
- * Builds a chat LLMConfig from the map (sync helper).
- * Model may be "" — callers decide whether to reject that.
+ * Builds an LLMConfig for an already-resolved provider (sync helper, shared
+ * by every purpose). Model may be "" — callers decide whether to reject
+ * that.
  */
-function buildChatConfigFromMap(map: Map<string, string>): LLMConfig {
-  const useSeparate = map.get("llm_chat_use_separate_provider") === "true";
-  const productionProvider =
-    (map.get("llm_provider") as LLMProvider) ??
-    (process.env.LLM_PROVIDER as LLMProvider | undefined) ??
-    "ollama";
-  const provider: LLMProvider = useSeparate
-    ? ((map.get("llm_chat_provider") as LLMProvider) ?? productionProvider)
-    : productionProvider;
-
+function buildConfigForResolvedProvider(map: Map<string, string>, provider: LLMProvider): LLMConfig {
   const prefix = PROVIDER_PREFIXES[provider];
   const def = PROVIDER_DEFAULTS[provider];
 
@@ -364,6 +366,30 @@ function buildChatConfigFromMap(map: Map<string, string>): LLMConfig {
   return { provider, baseUrl, model: model || "", apiKey, timeoutMs, temperature };
 }
 
+// ---------------------------------------------------------------------------
+// Chat LLM provider — separate from production LLM
+// ---------------------------------------------------------------------------
+
+export interface ChatProviderInfo {
+  useSeparate: boolean;
+  chatProvider: LLMProvider;
+  effectiveProvider: LLMProvider;
+}
+
+/**
+ * Returns the effective chat provider and whether a separate one is configured.
+ */
+export async function getChatProviderInfo(): Promise<ChatProviderInfo> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const resolved = resolvePurposeProviderFromMap(map, "llm_chat_use_separate_provider", "llm_chat_provider");
+  return {
+    useSeparate: resolved.useSeparate,
+    chatProvider: resolved.purposeProvider,
+    effectiveProvider: resolved.effectiveProvider,
+  };
+}
+
 /**
  * Returns a full LLMConfig for the effective chat provider, including API key.
  * Unlike getLLMConfig(), model may be "" — callers must check.
@@ -372,7 +398,8 @@ function buildChatConfigFromMap(map: Map<string, string>): LLMConfig {
 export async function getChatLLMConfigForListing(): Promise<LLMConfig> {
   const rows = await db.select().from(appSettings);
   const map = new Map(rows.map((r) => [r.key, r.value]));
-  return buildChatConfigFromMap(map);
+  const resolved = resolvePurposeProviderFromMap(map, "llm_chat_use_separate_provider", "llm_chat_provider");
+  return buildConfigForResolvedProvider(map, resolved.effectiveProvider);
 }
 
 /**
@@ -382,6 +409,87 @@ export async function getChatLLMConfigForListing(): Promise<LLMConfig> {
 export async function getChatLLMConfig(): Promise<LLMConfig | null> {
   const cfg = await getChatLLMConfigForListing();
   return cfg.model.trim() ? cfg : null;
+}
+
+// ---------------------------------------------------------------------------
+// Influence Research LLM provider — separate from production LLM
+// (STYLE.1.C.SEARCH.FIX1)
+// ---------------------------------------------------------------------------
+
+export interface ResearchProviderInfo {
+  useSeparate: boolean;
+  /** The provider saved for Research (only meaningful when `useSeparate` is
+   * true). Fail-closed rule: if the stored value is not one of the known
+   * `LLMProvider` values, this falls back to the active production
+   * provider — the corrupted DB row itself is left untouched, only this
+   * read-side resolution is defensive. */
+  configuredProvider: LLMProvider;
+  /** The provider actually used for the next Research operation. */
+  effectiveProvider: LLMProvider;
+}
+
+function resolveResearchProviderInfoFromMap(map: Map<string, string>): ResearchProviderInfo {
+  const resolved = resolvePurposeProviderFromMap(map, "llm_research_use_separate_provider", "llm_research_provider");
+  const productionProvider = getActiveProductionProviderFromMap(map);
+  const configuredProvider = isKnownLLMProvider(resolved.purposeProvider) ? resolved.purposeProvider : productionProvider;
+  return {
+    useSeparate: resolved.useSeparate,
+    configuredProvider,
+    effectiveProvider: resolved.useSeparate ? configuredProvider : productionProvider,
+  };
+}
+
+/**
+ * Returns the effective Influence Research provider and whether a separate
+ * one is configured. Fails closed to the active production provider on a
+ * corrupted/unknown stored value (see `ResearchProviderInfo.configuredProvider`).
+ *
+ * Standalone display-only read (e.g. the Settings page). Any code path that
+ * goes on to actually CALL the provider must use
+ * `getResearchEffectiveSnapshot()` below instead — never combine this
+ * function's result with a separately-read `LLMConfig`, since a Settings
+ * write between the two reads could silently mix a stale provider with a
+ * fresher model/key (STYLE.1.C.SEARCH.FIX1 retake round 1, P1 finding #1).
+ */
+export async function getResearchProviderInfo(): Promise<ResearchProviderInfo> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  return resolveResearchProviderInfoFromMap(map);
+}
+
+export interface ResearchEffectiveSnapshot {
+  useSeparate: boolean;
+  configuredProvider: LLMProvider;
+  effectiveProvider: LLMProvider;
+  /** Full config (model, baseUrl, apiKey, ...) for `effectiveProvider`, from
+   * the exact SAME `app_settings` read as the provider resolution above. */
+  config: LLMConfig;
+}
+
+/**
+ * Atomically resolves the effective Research provider AND its full config
+ * (model, API key, ...) from a SINGLE `app_settings` read
+ * (STYLE.1.C.SEARCH.FIX1 retake round 1, P1 finding #1 — the previous
+ * `getResearchProviderInfo()` + `getResearchLLMConfigForListing()` pair each
+ * re-read the whole table independently, so a Settings write landing
+ * between the two calls could combine one snapshot's provider with
+ * another's model, or a key resolved from yet a third). Every caller that
+ * needs a coherent provider+model(+key) profile for one Research operation
+ * — including `searchResearch`/`synthesizeResearch`'s callers — must use
+ * this single function, never call `getResearchProviderInfo` and a config
+ * getter separately.
+ */
+export async function getResearchEffectiveSnapshot(): Promise<ResearchEffectiveSnapshot> {
+  const rows = await db.select().from(appSettings);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const info = resolveResearchProviderInfoFromMap(map);
+  const config = buildConfigForResolvedProvider(map, info.effectiveProvider);
+  return {
+    useSeparate: info.useSeparate,
+    configuredProvider: info.configuredProvider,
+    effectiveProvider: info.effectiveProvider,
+    config,
+  };
 }
 
 // ---------------------------------------------------------------------------

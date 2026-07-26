@@ -56,8 +56,6 @@ import { revalidatePath } from "next/cache";
 import {
   RESEARCH_CONTRACT_VERSION,
   RESEARCH_LIMITS,
-  RESEARCH_MODEL,
-  RESEARCH_PROVIDER,
   type ResearchLeaseOperation,
 } from "@/lib/projectStyle/research/contracts";
 import {
@@ -71,7 +69,15 @@ import {
 } from "@/lib/projectStyle/research/validation";
 import { isValidId, isValidRevision } from "@/lib/projectStyle/validation";
 import { isValidNullablePillar, isValidNullableStrength } from "@/lib/projectStyle/validation";
-import { searchResearch, synthesizeResearch, type SynthesisSource } from "@/lib/projectStyle/research/provider";
+import {
+  searchResearch,
+  synthesizeResearch,
+  getResearchRuntimeInfo,
+  getResearchEffectiveProfile,
+  describeResearchProviderError,
+  type SynthesisSource,
+  type ResearchRuntimeInfo,
+} from "@/lib/projectStyle/research/provider";
 import { insertApprovedRuleIntoDraft } from "@/lib/projectStyle/insertDraftRule";
 import { randomBytes } from "node:crypto";
 
@@ -221,6 +227,10 @@ export type ResearchReadModel = {
   claimSources: ProjectStyleResearchClaimSource[];
   candidateRules: ProjectStyleResearchCandidateRule[];
   candidateRuleSources: ProjectStyleResearchCandidateRuleSource[];
+  /** Secret-free effective Research runtime descriptor (STYLE.1.C.SEARCH.FIX1)
+   * — the single server-owned source of truth the UI reads to show the
+   * actual effective provider/model and any blocking configuration error. */
+  runtime: ResearchRuntimeInfo;
 };
 
 export async function getResearchReadModel(
@@ -308,6 +318,8 @@ export async function getResearchReadModel(
           .where(inArray(projectStyleResearchCandidateRuleSources.candidateRuleId, candidateRuleIds))
       : [];
 
+  const runtime = await getResearchRuntimeInfo();
+
   return {
     runs,
     candidates,
@@ -319,6 +331,7 @@ export async function getResearchReadModel(
     claimSources,
     candidateRules,
     candidateRuleSources,
+    runtime,
   };
 }
 
@@ -353,6 +366,22 @@ export async function researchInfluenceAction(input: {
     return { ok: true, runId: idempotent.id, idempotent: true };
   }
 
+  // Independently resolve and enforce the effective Research runtime
+  // contract server-side (never trust client-forged state) — refused
+  // BEFORE any lease acquisition, network access or persistence
+  // (STYLE.1.C.SEARCH.FIX1 §3/§5). `getResearchEffectiveProfile` resolves
+  // provider, model AND key from ONE atomic Settings read (retake round 1,
+  // P1 finding #1) — captured once here so the exact provider/model/key
+  // used for the network call below is also what gets persisted, even if
+  // Settings changes while the request is in flight.
+  const profile = await getResearchEffectiveProfile();
+  if (profile.configurationError) {
+    return { ok: false, error: profile.configurationError };
+  }
+  const effectiveProvider = profile.effectiveProvider;
+  const effectiveModel = profile.model;
+  const effectiveApiKey = profile.apiKey;
+
   // Acquire search lease — scoped to (influenceId, "search") only; a
   // concurrent/active Synthesis lease for the same Influence is untouched.
   const leaseOutcome = acquireLease(influenceId, "search", timestamp);
@@ -377,11 +406,11 @@ export async function researchInfluenceAction(input: {
     .join(" — ");
 
   // Call provider outside transaction
-  const searchResult = await searchResearch(query.trim(), influenceContext);
+  const searchResult = await searchResearch(query.trim(), influenceContext, effectiveModel, effectiveApiKey);
 
   if (!searchResult.ok) {
     releaseOwnedLease(influenceId, "search", leaseToken);
-    return { ok: false, error: `Search failed: ${searchResult.error.kind}` };
+    return { ok: false, error: describeResearchProviderError("search", searchResult.error) };
   }
 
   // Commit Run + Candidates in one transaction, verify the exact owned lease
@@ -406,8 +435,8 @@ export async function researchInfluenceAction(input: {
         runNumber,
         requestKey,
         query: query.trim().slice(0, RESEARCH_LIMITS.maxQueryLength),
-        provider: RESEARCH_PROVIDER,
-        model: RESEARCH_MODEL,
+        provider: effectiveProvider,
+        model: effectiveModel,
         contractVersion: RESEARCH_CONTRACT_VERSION,
         maxResults: RESEARCH_LIMITS.maxCandidatesPerSearch,
         maxToolCalls: 1,
@@ -832,6 +861,20 @@ export async function synthesizeInfluenceResearchAction(input: {
     return { ok: true, synthesisId: idempotent.id, idempotent: true };
   }
 
+  // Independently resolve and enforce the effective Research runtime
+  // contract server-side — refused BEFORE any lease acquisition, network
+  // access or persistence (STYLE.1.C.SEARCH.FIX1 §3/§5). Both Research
+  // operations (Search and Synthesis) resolve through this same
+  // single-read effective provider/model/key profile (retake round 1, P1
+  // finding #1).
+  const profile = await getResearchEffectiveProfile();
+  if (profile.configurationError) {
+    return { ok: false, error: profile.configurationError };
+  }
+  const effectiveProvider = profile.effectiveProvider;
+  const effectiveModel = profile.model;
+  const effectiveApiKey = profile.apiKey;
+
   // Validate and collect sources
   const uniqueSourceIds = [...new Set(sourceIds)];
   if (uniqueSourceIds.length !== sourceIds.length) {
@@ -885,11 +928,11 @@ export async function synthesizeInfluenceResearchAction(input: {
     .filter(Boolean)
     .join(" — ");
 
-  const synthResult = await synthesizeResearch(influenceContext, selectedSources);
+  const synthResult = await synthesizeResearch(influenceContext, selectedSources, effectiveModel, effectiveApiKey);
 
   if (!synthResult.ok) {
     releaseOwnedLease(influenceId, "synthesis", leaseToken);
-    return { ok: false, error: `Synthesis failed: ${synthResult.error.kind}` };
+    return { ok: false, error: describeResearchProviderError("synthesis", synthResult.error) };
   }
 
   const output = synthResult.output;
@@ -947,8 +990,8 @@ export async function synthesizeInfluenceResearchAction(input: {
         influenceId,
         versionNumber,
         requestKey,
-        provider: RESEARCH_PROVIDER,
-        model: RESEARCH_MODEL,
+        provider: effectiveProvider,
+        model: effectiveModel,
         contractVersion: RESEARCH_CONTRACT_VERSION,
         inputSnapshot,
         summary: output.summary,

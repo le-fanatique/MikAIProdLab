@@ -7,10 +7,9 @@
 // ---------------------------------------------------------------------------
 
 import "server-only";
-import { resolveOpenRouterApiKey } from "./keyResolver";
 import {
   RESEARCH_LIMITS,
-  RESEARCH_MODEL,
+  RESEARCH_PROVIDER,
   type NormalizedEvidence,
   type SynthesisOutput,
 } from "./contracts";
@@ -20,6 +19,8 @@ import {
   parseSynthesisResponse,
   validateSynthesisSourceAliases,
 } from "./validation";
+import { getResearchEffectiveSnapshot } from "@/lib/settings";
+import type { LLMProvider } from "@/types/llm";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -37,6 +38,46 @@ export type ResearchProviderError =
   | { kind: "parse"; message: string }
   | { kind: "network"; message: string };
 
+/**
+ * Centralized user-facing mapping for `ResearchProviderError`
+ * (STYLE.1.C.SEARCH.FIX1 retake round 1, P2 finding #3) — the single place
+ * a Server Action should turn a provider error into an English message
+ * shown to the user. Every branch here returns either a fixed, hand-written
+ * copy, or `error.message`/`error.status`, both of which are already
+ * bounded/sanitized strings/numbers generated internally by this module
+ * (never the raw provider response body, headers, prompt or key — see
+ * `callOpenRouter` below, which never surfaces those on any error path).
+ */
+export function describeResearchProviderError(
+  operation: "search" | "synthesis",
+  error: ResearchProviderError
+): string {
+  switch (error.kind) {
+    case "missing-key":
+      return "No OpenRouter API key is configured. Set an API key in Settings > Language Model.";
+    case "timeout":
+      return operation === "search" ? "Search timed out. Try again." : "Synthesis timed out. Try again.";
+    case "rate-limit":
+      return "OpenRouter rate limit reached. Try again in a moment.";
+    case "auth":
+      return "OpenRouter rejected the API key. Check the key in Settings > Language Model.";
+    case "server":
+      return `OpenRouter server error (HTTP ${error.status}). Try again later.`;
+    case "response-too-large":
+      return "The OpenRouter response was too large to process.";
+    case "parse":
+      // The one case the ticket calls out by name: preserve the provider's
+      // own explicit "no valid citations" diagnostic instead of collapsing
+      // it to a generic "Search failed: parse".
+      if (operation === "search" && error.message === "No valid citations found.") {
+        return "Search returned no valid citations. Try another query or choose another OpenRouter model.";
+      }
+      return error.message;
+    case "network":
+      return error.message;
+  }
+}
+
 export type SearchProviderResult =
   | { ok: true; candidates: NormalizedEvidence[] }
   | { ok: false; error: ResearchProviderError };
@@ -46,20 +87,104 @@ export type SynthesisProviderResult =
   | { ok: false; error: ResearchProviderError };
 
 // ---------------------------------------------------------------------------
+// Runtime descriptor — one server-owned source of truth for the effective
+// Research provider/model, shared by the read-model boundary (UI display)
+// and independently re-enforced by every Server Action before lease
+// acquisition, network access or persistence (STYLE.1.C.SEARCH.FIX1).
+//
+// STYLE.1.C.SEARCH.FIX1 retake round 1, P1 finding #1: provider, model AND
+// key must all come from the SAME `app_settings` read. `getResearchEffectiveProfile`
+// is the only function that resolves this triad — it wraps
+// `settings.ts::getResearchEffectiveSnapshot()` (a single DB read) and is
+// the sole entry point any caller must use to obtain a coherent Research
+// profile. `getResearchRuntimeInfo` is a thin secret-free projection of it
+// for the UI/read-model boundary — never contains a key.
+// ---------------------------------------------------------------------------
+
+export type ResearchEffectiveProfile = {
+  useSeparate: boolean;
+  configuredProvider: LLMProvider;
+  effectiveProvider: LLMProvider;
+  model: string;
+  /** Present only on this internal-only profile — never on `ResearchRuntimeInfo`. */
+  apiKey: string | null;
+  webSearchSupported: boolean;
+  configurationError: string | null;
+};
+
+function deriveConfigurationError(webSearchSupported: boolean, model: string, apiKey: string | null): string | null {
+  if (!webSearchSupported) {
+    return "Web Search requires OpenRouter. Select OpenRouter as the active Language Model provider, or enable \"Use a separate provider for Influence Research\" in Settings and choose OpenRouter there.";
+  }
+  if (!model.trim()) {
+    return "No OpenRouter model is configured. Set a model in Settings > Language Model.";
+  }
+  if (!apiKey) {
+    return "No OpenRouter API key is configured. Set an API key in Settings > Language Model.";
+  }
+  return null;
+}
+
+/**
+ * Server Action entry point for a Research operation: resolves provider,
+ * model AND key from ONE atomic Settings read. Callers that go on to call
+ * `searchResearch`/`synthesizeResearch` MUST pass this same object's
+ * `model`/`apiKey` — never re-resolve the key independently — so a
+ * Settings write landing between "check config" and "call provider" can
+ * never combine a stale provider with a fresher model or key.
+ */
+export async function getResearchEffectiveProfile(): Promise<ResearchEffectiveProfile> {
+  const snapshot = await getResearchEffectiveSnapshot();
+  const webSearchSupported = snapshot.effectiveProvider === RESEARCH_PROVIDER;
+  const configurationError = deriveConfigurationError(webSearchSupported, snapshot.config.model, snapshot.config.apiKey);
+
+  return {
+    useSeparate: snapshot.useSeparate,
+    configuredProvider: snapshot.configuredProvider,
+    effectiveProvider: snapshot.effectiveProvider,
+    model: snapshot.config.model,
+    apiKey: snapshot.config.apiKey,
+    webSearchSupported,
+    configurationError,
+  };
+}
+
+export type ResearchRuntimeInfo = Omit<ResearchEffectiveProfile, "apiKey">;
+
+/** Secret-free variant of `getResearchEffectiveProfile` for the UI/read-model
+ * boundary (`getResearchReadModel`) — never exposes `apiKey`. */
+export async function getResearchRuntimeInfo(): Promise<ResearchRuntimeInfo> {
+  const profile = await getResearchEffectiveProfile();
+  return {
+    useSeparate: profile.useSeparate,
+    configuredProvider: profile.configuredProvider,
+    effectiveProvider: profile.effectiveProvider,
+    model: profile.model,
+    webSearchSupported: profile.webSearchSupported,
+    configurationError: profile.configurationError,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Search — Stage 1: web discovery
 // ---------------------------------------------------------------------------
 
 export async function searchResearch(
   query: string,
-  influenceContext: string
+  influenceContext: string,
+  model: string,
+  apiKey: string | null
 ): Promise<SearchProviderResult> {
-  const apiKey = await resolveOpenRouterApiKey();
+  // `apiKey` MUST come from the same `getResearchEffectiveProfile()` call
+  // that produced `model` — never re-resolved here — so the two can never
+  // drift apart from a Settings write in between (STYLE.1.C.SEARCH.FIX1
+  // retake round 1, P1 finding #1).
   if (!apiKey) return { ok: false, error: { kind: "missing-key" } };
 
   const prompt = buildSearchPrompt(query, influenceContext);
 
   const body = {
-    model: RESEARCH_MODEL,
+    model,
     messages: [{ role: "user" as const, content: prompt }],
     tools: [{ type: "openrouter:web_search", parameters: { max_results: 5 } }],
     max_tool_calls: 1,
@@ -101,6 +226,13 @@ export async function searchResearch(
     }
   }
 
+  // A structurally valid parse can still yield zero candidates if every one
+  // individually failed evidence-building (e.g. an oversized title) — this
+  // must fail too, never persist an empty Run (STYLE.1.C.SEARCH.FIX1).
+  if (candidates.length === 0) {
+    return { ok: false, error: { kind: "parse", message: "No valid citations found." } };
+  }
+
   return { ok: true, candidates };
 }
 
@@ -118,9 +250,11 @@ export type SynthesisSource = {
 
 export async function synthesizeResearch(
   influenceContext: string,
-  sources: SynthesisSource[]
+  sources: SynthesisSource[],
+  model: string,
+  apiKey: string | null
 ): Promise<SynthesisProviderResult> {
-  const apiKey = await resolveOpenRouterApiKey();
+  // Same coherent-profile contract as `searchResearch` above.
   if (!apiKey) return { ok: false, error: { kind: "missing-key" } };
 
   if (sources.length < RESEARCH_LIMITS.minSourcesPerSynthesis) {
@@ -133,7 +267,7 @@ export async function synthesizeResearch(
   const { prompt, aliases } = buildSynthesisPrompt(influenceContext, sources);
 
   const body = {
-    model: RESEARCH_MODEL,
+    model,
     messages: [{ role: "user" as const, content: prompt }],
     max_tokens: 4_000,
     temperature: 0.2,

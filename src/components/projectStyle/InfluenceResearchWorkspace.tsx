@@ -56,8 +56,6 @@ import {
   SOURCE_TIERS,
   CONFIDENCE_LEVELS,
   RESEARCH_LIMITS,
-  RESEARCH_PROVIDER,
-  RESEARCH_MODEL,
   type SourceType,
   type SourceTier,
   type ConfidenceLevel,
@@ -592,14 +590,21 @@ function DiscoverTab({
         />
         <div className="flex items-center justify-between gap-2">
           <p className="text-[9px] text-[#4b5158]">
-            Provider: {RESEARCH_PROVIDER} · Model: {RESEARCH_MODEL}
+            Provider: {model.runtime.effectiveProvider}
+            {model.runtime.model ? ` · Model: ${model.runtime.model}` : ""}
           </p>
-          <button type="submit" className={smallButtonClass} disabled={submitting || !query.trim()}>
+          <button
+            type="submit"
+            className={smallButtonClass}
+            disabled={submitting || !query.trim() || !!model.runtime.configurationError}
+            title={model.runtime.configurationError ?? undefined}
+          >
             {submitting ? "Searching…" : "Search web"}
           </button>
         </div>
       </form>
 
+      {model.runtime.configurationError && <ErrorText error={model.runtime.configurationError} />}
       <ErrorText error={error} />
 
       {model.runs.length > 0 && (
@@ -1198,6 +1203,7 @@ function SynthesisTab({
 
   const selectedCount = selectedSourceIds.length;
   const withinBounds = selectedCount >= RESEARCH_LIMITS.minSourcesPerSynthesis && selectedCount <= RESEARCH_LIMITS.maxSourcesPerSynthesis;
+  const configurationError = model.runtime.configurationError;
 
   const handleSynthesize = async () => {
     setSubmitting(true);
@@ -1249,13 +1255,14 @@ function SynthesisTab({
         <button
           type="button"
           className={smallButtonClass}
-          disabled={submitting || !withinBounds}
-          title={!withinBounds ? `Select ${RESEARCH_LIMITS.minSourcesPerSynthesis}–${RESEARCH_LIMITS.maxSourcesPerSynthesis} active sources in the Sources tab.` : undefined}
+          disabled={submitting || !withinBounds || !!configurationError}
+          title={configurationError ?? (!withinBounds ? `Select ${RESEARCH_LIMITS.minSourcesPerSynthesis}–${RESEARCH_LIMITS.maxSourcesPerSynthesis} active sources in the Sources tab.` : undefined)}
           onClick={handleSynthesize}
         >
           {submitting ? "Synthesizing…" : "Synthesize research"}
         </button>
       </div>
+      {configurationError && <ErrorText error={configurationError} />}
       {!withinBounds && (
         <p className="text-[9px] text-[#c9a24b]">
           Select {RESEARCH_LIMITS.minSourcesPerSynthesis}–{RESEARCH_LIMITS.maxSourcesPerSynthesis} active sources in the Sources tab to enable synthesis.

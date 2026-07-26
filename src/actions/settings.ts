@@ -10,7 +10,7 @@ import type { ChatSystemPrompt, LLMProvider } from "@/types/llm";
 import { validateTemplate, DEFAULT_SEQUENCE_TEMPLATE, DEFAULT_SHOT_TEMPLATE } from "@/lib/nomenclature";
 import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
 import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
-import { COMFY_CLOUD_BASE_URL } from "@/lib/settings";
+import { COMFY_CLOUD_BASE_URL, isKnownLLMProvider } from "@/lib/settings";
 import { getCloudObjectInfo } from "@/lib/comfy/comfyCloudClient";
 
 // ---------------------------------------------------------------------------
@@ -496,6 +496,56 @@ export async function saveChatProviderSettings(
     return { ok: true };
   } catch {
     return { ok: false, error: "Failed to save chat provider settings." };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Save Influence Research LLM provider settings to DB (STYLE.1.C.SEARCH.FIX1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persists the toggle + provider as one atomic write
+ * (STYLE.1.C.SEARCH.FIX1 retake round 1, P1 finding #2). Both inputs are
+ * validated at the runtime boundary — a Server Action is reachable with an
+ * arbitrary/forged payload regardless of this function's declared TS
+ * parameter types — before either row is touched, and both rows are
+ * written inside a single synchronous `db.transaction`, so a mid-write
+ * failure (e.g. the second upsert throwing) can never leave the toggle
+ * durably flipped while the provider selection silently stays stale.
+ */
+export async function saveResearchProviderSettings(
+  useSeparate: boolean,
+  researchProvider: LLMProvider
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof useSeparate !== "boolean") {
+    return { ok: false, error: "Invalid \"use a separate provider\" value." };
+  }
+  if (!isKnownLLMProvider(researchProvider)) {
+    return { ok: false, error: "Invalid Influence Research provider." };
+  }
+
+  try {
+    const now = new Date().toISOString();
+    const useSeparateValue = useSeparate ? "true" : "false";
+    db.transaction((tx) => {
+      tx.insert(appSettings)
+        .values({ key: "llm_research_use_separate_provider", value: useSeparateValue, updatedAt: now })
+        .onConflictDoUpdate({
+          target: appSettings.key,
+          set: { value: useSeparateValue, updatedAt: now },
+        })
+        .run();
+      tx.insert(appSettings)
+        .values({ key: "llm_research_provider", value: researchProvider, updatedAt: now })
+        .onConflictDoUpdate({
+          target: appSettings.key,
+          set: { value: researchProvider, updatedAt: now },
+        })
+        .run();
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to save Influence Research provider settings." };
   }
 }
 

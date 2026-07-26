@@ -6,12 +6,13 @@ import OllamaSettingsForm from "@/components/OllamaSettingsForm";
 import ComfyUISettingsForm from "@/components/ComfyUISettingsForm";
 import ChatSystemPromptManager from "@/components/ChatSystemPromptManager";
 import ChatProviderSettingsForm from "@/components/ChatProviderSettingsForm";
+import ResearchProviderSettingsForm from "@/components/ResearchProviderSettingsForm";
 import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
 import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
 import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
 import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
 import ThemeModeToggle from "@/components/ThemeModeToggle";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getResearchProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -53,9 +54,10 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { defaultsSaved } = await searchParams;
   const allSettings = await getAllLLMSettings();
   const activeProvider = allSettings.activeProvider;
-  const [comfySettings, chatProviderInfo] = await Promise.all([
+  const [comfySettings, chatProviderInfo, researchProviderInfo] = await Promise.all([
     getComfySettings(),
     getChatProviderInfo(),
+    getResearchProviderInfo(),
   ]);
 
   const nomenclatureSettings = await getNomenclatureSettings();
@@ -144,6 +146,19 @@ export default async function SettingsPage({ searchParams }: Props) {
           }}
           initialModels={initialModels}
           initialModelsError={initialModelsError}
+        />
+      </Card>
+
+      <Card title="Influence Research LLM Provider" className="mb-6">
+        <ResearchProviderSettingsForm
+          initialUseSeparate={researchProviderInfo.useSeparate}
+          initialResearchProvider={researchProviderInfo.configuredProvider}
+          activeProvider={activeProvider}
+          providers={{
+            ollama: allSettings.ollama,
+            openrouter: allSettings.openrouter,
+            "openai-compatible": allSettings["openai-compatible"],
+          }}
         />
       </Card>
 

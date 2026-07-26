@@ -86,8 +86,18 @@ export const RESEARCH_LIMITS = {
   maxRuleFieldLength: 300,
 } as const;
 
+/**
+ * The only provider whose Web Search Server Tool this domain can call
+ * (STYLE.1.C.SEARCH.FIX1). Not a fallback model — the actual effective
+ * provider/model/key are resolved atomically per-request from a single
+ * Settings read (see
+ * `src/lib/projectStyle/research/provider.ts::getResearchEffectiveProfile`,
+ * which wraps `src/lib/settings.ts::getResearchEffectiveSnapshot`) and
+ * captured before every network call. A Research operation whose effective
+ * provider is not this value is refused server-side before any lease,
+ * network access or persistence.
+ */
 export const RESEARCH_PROVIDER = "openrouter" as const;
-export const RESEARCH_MODEL = "openai/gpt-4o-mini" as const;
 export const RESEARCH_CONTRACT_VERSION = 1 as const;
 
 // --- Normalized evidence fields shared by Candidate and Source ---

@@ -207,9 +207,17 @@ export type ParsedSearchResult =
   | { ok: false; error: string };
 
 /**
- * Parses url_citation annotations from an OpenRouter search response.
- * Only annotations with valid URL, non-empty title and non-empty content
- * are kept. At most 5 unique candidates. Deduplication by normalized URL.
+ * Parses url_citation annotations from an OpenRouter search response using
+ * the canonical NESTED contract (STYLE.1.C.SEARCH.FIX1 — the OpenRouter Web
+ * Search Server Tool returns `{ type: "url_citation", url_citation: { url,
+ * title, content } }`, never flat `annotation.url`/`title`/`content`; the
+ * previous flat-field parser silently dropped every real citation).
+ * Only annotations with a valid URL, non-empty title and non-empty content
+ * are kept. At most `maxCandidatesPerSearch` unique candidates, deduplicated
+ * by normalized URL. Malformed annotations are ignored individually — but if
+ * NO valid unique citation survives (including an empty/missing input array),
+ * this returns an explicit failure rather than `ok: true` with `[]`, so a
+ * caller can never mistake "nothing found" for a successful empty result.
  */
 export function parseSearchAnnotations(
   annotations: unknown
@@ -229,9 +237,13 @@ export function parseSearchAnnotations(
 
     if (obj.type !== "url_citation") continue;
 
-    const url = typeof obj.url === "string" ? obj.url : null;
-    const title = typeof obj.title === "string" ? obj.title : null;
-    const content = typeof obj.content === "string" ? obj.content : null;
+    const citation = obj.url_citation;
+    if (!citation || typeof citation !== "object") continue;
+    const c = citation as Record<string, unknown>;
+
+    const url = typeof c.url === "string" ? c.url : null;
+    const title = typeof c.title === "string" ? c.title : null;
+    const content = typeof c.content === "string" ? c.content : null;
 
     if (!url || !title || !content) continue;
     if (title.trim().length === 0 || content.trim().length === 0) continue;
@@ -244,6 +256,10 @@ export function parseSearchAnnotations(
     seen.add(key);
 
     candidates.push({ url: norm.normalized, title: title.trim(), content: content.trim() });
+  }
+
+  if (candidates.length === 0) {
+    return { ok: false, error: "No valid citations found." };
   }
 
   return { ok: true, candidates };
