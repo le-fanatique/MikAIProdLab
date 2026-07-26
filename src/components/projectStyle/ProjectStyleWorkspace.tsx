@@ -33,6 +33,7 @@ import {
   reorderRuleAction,
   openDraftFromActiveVersionAction,
   publishStyleAction,
+  getWorkingDraft,
   type WorkingDraftView,
   type ActiveVersionView,
 } from "@/actions/projectStyle";
@@ -905,6 +906,60 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
     );
   }, []);
 
+  // STYLE.1.C.UI — a Candidate Rule was just approved into the Working
+  // Draft by the Research workspace. Re-read `getWorkingDraft` (server
+  // truth) and replace ONLY the rules/revision it reconciles, exactly per
+  // the ticket's reconciliation contract: never a page reload/navigation,
+  // and any unsaved Direction Brief/pillar/section edit sitting in this
+  // component's own state is untouched.
+  //
+  // Deliberately NOT wrapped in `useCallback`: the CORE approval that
+  // precedes every call to this function is already durable (the Candidate
+  // Rule and Style Rule rows are committed before this function ever runs),
+  // so memoizing this prop buys no correctness here — and wrapping it in
+  // `useCallback` is exactly what triggered the new
+  // `react-hooks/preserve-manual-memoization` diagnostic in the previous
+  // round (Codex review round 1, finding P2). The caller
+  // (`CandidateRuleCard`) awaits and inspects the returned result — it never
+  // assumes success — so an unmemoized reference is safe to pass down.
+  const handleResearchRuleApproved = async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+    try {
+      const draft = await getWorkingDraft(projectId);
+      if (!draft) {
+        return {
+          ok: false,
+          error:
+            "The Candidate Rule was approved, but the Working Draft could not be reloaded. Reopen Project Style to see the latest Style Rules.",
+        };
+      }
+      setRevision(draft.draft.revision);
+      setHasDraft(true);
+      setRules(
+        sortByOrderIndex(
+          draft.rules.map((r) => ({
+            id: r.id,
+            instruction: r.instruction,
+            pillar: r.pillar as StylePillar | null,
+            section: r.section,
+            category: r.category,
+            strength: r.strength as StyleRuleStrength | null,
+            applicability: r.applicability,
+            provenanceNotes: r.provenanceNotes,
+            status: r.status as StyleRuleStatus,
+            orderIndex: r.orderIndex,
+          }))
+        )
+      );
+      return { ok: true };
+    } catch {
+      return {
+        ok: false,
+        error:
+          "The Candidate Rule was approved, but refreshing the Working Draft failed unexpectedly. Reopen Project Style to see the latest Style Rules.",
+      };
+    }
+  };
+
   const handleReferenceDeleted = useCallback((referenceId: number) => {
     setReferences((prev) => prev.filter((v) => v.reference.id !== referenceId));
     // Cascade: strip deleted reference id from any Influence card that links it.
@@ -987,9 +1042,12 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         projectId={projectId}
         influences={influences}
         references={references}
+        hasWorkingDraft={hasDraft}
+        workingDraftRevision={revision}
         onInfluenceCreated={handleInfluenceCreated}
         onInfluenceUpdated={handleInfluenceUpdated}
         onInfluenceDeleted={handleInfluenceDeleted}
+        onResearchRuleApproved={handleResearchRuleApproved}
       />
 
       <ReferenceBoardSection

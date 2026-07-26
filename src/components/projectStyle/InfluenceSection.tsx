@@ -28,6 +28,7 @@ import {
   type InfluenceStatus,
   type InfluenceDomainWeight,
 } from "@/lib/projectStyle/validationB";
+import InfluenceResearchWorkspace from "@/components/projectStyle/InfluenceResearchWorkspace";
 
 // ── Shared style tokens ──────────────────────────────────────────────────
 
@@ -681,6 +682,8 @@ function InfluenceCard({
   onCompleted,
   onDeleted,
   onCancelEdit,
+  onOpenResearch,
+  isResearchOpen,
 }: {
   view: ProjectStyleInfluenceView;
   projectId: number;
@@ -696,6 +699,8 @@ function InfluenceCard({
   onCompleted: (v: ProjectStyleInfluenceView) => void;
   onDeleted: () => void;
   onCancelEdit: () => void;
+  onOpenResearch: () => void;
+  isResearchOpen: boolean;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -730,6 +735,14 @@ function InfluenceCard({
           </div>
         </div>
         <div className="flex gap-1 shrink-0">
+          <button
+            type="button"
+            className={smallButtonClass + (isResearchOpen ? " border-[#5b93d6] text-[#5b93d6]" : "")}
+            aria-pressed={isResearchOpen}
+            onClick={onOpenResearch}
+          >
+            {isResearchOpen ? "Research (open)" : "Research"}
+          </button>
           <button type="button" className={smallButtonClass} onClick={onEdit}>Edit</button>
         </div>
       </div>
@@ -892,16 +905,27 @@ export default function InfluenceSection({
   projectId,
   influences,
   references,
+  hasWorkingDraft,
+  workingDraftRevision,
   onInfluenceCreated,
   onInfluenceUpdated,
   onInfluenceDeleted,
+  onResearchRuleApproved,
 }: {
   projectId: number;
   influences: ProjectStyleInfluenceView[];
   references: ProjectStyleReferenceView[];
+  /** Passed straight through to the Research workspace so an approval can be gated/validated against the exact current Working Draft. */
+  hasWorkingDraft: boolean;
+  workingDraftRevision: number | null;
   onInfluenceCreated?: (view: ProjectStyleInfluenceView) => void;
   onInfluenceUpdated?: (view: ProjectStyleInfluenceView) => void;
   onInfluenceDeleted?: (influenceId: number) => void;
+  /** A Candidate Rule was approved into the Working Draft — parent must re-read `getWorkingDraft` and reconcile its rules/revision, and report whether that reconciliation itself succeeded (the CORE approval is already durable either way). */
+  onResearchRuleApproved: (result: {
+    draftRuleId: number;
+    draftRevision: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   // UI-only state
   const [search, setSearch] = useState("");
@@ -912,6 +936,8 @@ export default function InfluenceSection({
   const [editingId, setEditingId] = useState<number | null>(null);
   // Error message to inject into the edit panel after partial creation
   const [editingError, setEditingError] = useState<string | null>(null);
+  // Only one Influence Research workspace may be open at a time.
+  const [openResearchId, setOpenResearchId] = useState<number | null>(null);
 
   const allDomains = useMemo(() => {
     const set = new Set<string>();
@@ -973,12 +999,21 @@ export default function InfluenceSection({
       setEditingId(null);
       setEditingError(null);
     }
+    if (openResearchId === influenceId) {
+      setOpenResearchId(null);
+    }
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditingError(null);
   };
+
+  const handleOpenResearch = (influenceId: number) => {
+    setOpenResearchId((prev) => (prev === influenceId ? null : influenceId));
+  };
+
+  const researchInfluence = openResearchId !== null ? influences.find((v) => v.influence.id === openResearchId) ?? null : null;
 
   return (
     <section className="flex flex-col gap-3 p-4">
@@ -1006,8 +1041,13 @@ export default function InfluenceSection({
           ? influences.find((v) => v.influence.id === editingId) ?? null
           : null;
         const editingInFiltered = editingCard !== null && filtered.some((v) => v.influence.id === editingId);
+        // The Influence under active Research must stay visible even if the
+        // current filters would hide it — same technique as editingCard.
+        const researchInFiltered = researchInfluence !== null && filtered.some((v) => v.influence.id === researchInfluence.influence.id);
+        const researchCardNeedsAppend =
+          researchInfluence !== null && !researchInFiltered && researchInfluence.influence.id !== editingCard?.influence.id;
 
-        if (filtered.length === 0 && !editingCard) {
+        if (filtered.length === 0 && !editingCard && !researchInfluence) {
           return influences.length === 0 ? (
             <EmptyState title="No influences yet" description="Add a creative influence to get started." />
           ) : (
@@ -1030,6 +1070,8 @@ export default function InfluenceSection({
                 onCompleted={handleCompleted}
                 onDeleted={() => handleDeleted(v.influence.id)}
                 onCancelEdit={handleCancelEdit}
+                onOpenResearch={() => handleOpenResearch(v.influence.id)}
+                isResearchOpen={openResearchId === v.influence.id}
               />
             ))}
             {/* If editing card is not in filtered set, render it at the end */}
@@ -1046,11 +1088,42 @@ export default function InfluenceSection({
                 onCompleted={handleCompleted}
                 onDeleted={() => handleDeleted(editingCard.influence.id)}
                 onCancelEdit={handleCancelEdit}
+                onOpenResearch={() => handleOpenResearch(editingCard.influence.id)}
+                isResearchOpen={openResearchId === editingCard.influence.id}
+              />
+            )}
+            {/* If the Influence under active Research is not in the filtered set (and isn't already the appended editing card), render it too. */}
+            {researchCardNeedsAppend && researchInfluence && (
+              <InfluenceCard
+                key={`research-${researchInfluence.influence.id}`}
+                view={researchInfluence}
+                projectId={projectId}
+                references={references}
+                isEditing={false}
+                onEdit={() => { setEditingId(researchInfluence.influence.id); setEditingError(null); }}
+                onProgress={handleProgress}
+                onCompleted={handleCompleted}
+                onDeleted={() => handleDeleted(researchInfluence.influence.id)}
+                onCancelEdit={handleCancelEdit}
+                onOpenResearch={() => handleOpenResearch(researchInfluence.influence.id)}
+                isResearchOpen={true}
               />
             )}
           </div>
         );
       })()}
+
+      {researchInfluence && (
+        <InfluenceResearchWorkspace
+          key={researchInfluence.influence.id}
+          projectId={projectId}
+          influence={researchInfluence.influence}
+          hasWorkingDraft={hasWorkingDraft}
+          workingDraftRevision={workingDraftRevision}
+          onClose={() => setOpenResearchId(null)}
+          onRuleApproved={onResearchRuleApproved}
+        />
+      )}
 
       <CreatePanel
         projectId={projectId}
