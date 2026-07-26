@@ -1778,3 +1778,60 @@ export const projectStyleResearchCandidateRuleSources = sqliteTable(
 
 export type ProjectStyleResearchCandidateRuleSource = typeof projectStyleResearchCandidateRuleSources.$inferSelect;
 export type NewProjectStyleResearchCandidateRuleSource = typeof projectStyleResearchCandidateRuleSources.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Sequence Style Override (STYLE.1.D.CORE).
+//
+// One additive table: at most one override row per Sequence (DB-unique on
+// sequenceId). Its presence/absence is the entire contract:
+//   no row   -> Sequence resolves the Project's currently active Style
+//               version dynamically, every time it is read;
+//   row present -> Sequence resolves this row's own frozen contentSnapshot/
+//               compiledText instead, forever, until Reset deletes the row.
+// There is no partial merge and no Shot-level override — every Shot in a
+// Sequence resolves exactly this same result (see
+// src/lib/projectStyle/resolveSequenceStyle.ts).
+//
+// sourceProjectStyleVersionId is provenance only ("customized from v1") — it
+// is never re-read to recompute this row's content after creation, and a
+// later publish/activate on the Project never touches this row.
+// ---------------------------------------------------------------------------
+
+export const sequenceStyleOverrides = sqliteTable(
+  "sequence_style_overrides",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    sequenceId: int("sequence_id")
+      .notNull()
+      .references(() => sequences.id, { onDelete: "cascade" }),
+    sourceProjectStyleVersionId: int("source_project_style_version_id")
+      .notNull()
+      .references(() => projectStyleVersions.id),
+    // JSON: StyleSnapshot — copied byte-exactly from the source version's
+    // contentSnapshot at creation time, then only ever replaced whole by an
+    // explicit update, never merged field-by-field.
+    contentSnapshot: text("content_snapshot").notNull(),
+    // Exact output of compileStyleSnapshot(contentSnapshot) for this row's
+    // own content — recomputed server-side on every update, never trusted
+    // from the client.
+    compiledText: text("compiled_text").notNull(),
+    // Optimistic-concurrency counter — every mutating action re-checks the
+    // caller's `expectedRevision` against this column inside its
+    // transaction and bumps it by 1 on success; a mismatch is refused
+    // outright, never silently overwritten or merged.
+    revision: int("revision").notNull().default(1),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    unique("sequence_style_overrides_sequence_id_unique").on(table.sequenceId),
+    index("sequence_style_overrides_source_version_idx").on(table.sourceProjectStyleVersionId),
+  ]
+);
+
+export type SequenceStyleOverride = typeof sequenceStyleOverrides.$inferSelect;
+export type NewSequenceStyleOverride = typeof sequenceStyleOverrides.$inferInsert;
