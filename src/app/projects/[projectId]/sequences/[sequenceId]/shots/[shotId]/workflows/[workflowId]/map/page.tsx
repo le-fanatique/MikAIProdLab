@@ -515,8 +515,9 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
         })
       : null;
 
-  // STYLE.1.E.SURFACES.1 (retake) — see ShotGenerationPanel.tsx's identical comment.
-  const styleTextInjectable = built?.ok ? built.patch.patches.some((p) => p.kind === "text") : false;
+  // STYLE.1.E.SURFACES.2 retake Round 1 — three-state injectability, see
+  // ShotGenerationPanel.tsx's identical comment.
+  const styleTextInjectability = built === null ? "pending" : built.ok ? (built.patch.patches.some((p) => p.kind === "text") ? "injected" : "not-compatible") : "pending";
 
   const mappings = built?.ok ? built.mappings : [];
   // SHOT.VIDEO.LIBRARY.1, Lot C
@@ -863,7 +864,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
         {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
         <Card>
-          <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectable={styleTextInjectable} />
+          <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
         </Card>
 
         {/* ── Preview ───────────────────────────────────────── */}

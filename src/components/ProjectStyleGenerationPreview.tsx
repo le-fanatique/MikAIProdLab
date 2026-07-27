@@ -28,23 +28,32 @@ function resolutionLabelFor(mode: GenerationStyleProvenanceMode): string {
 
 type GenerationStyleProvenanceMode = "project-version" | "inherited-project-version" | "sequence-override";
 
+/**
+ * STYLE.1.E.SURFACES.2 retake Round 1 — three distinct states, never
+ * collapsed into a boolean:
+ *   - "injected"       — a successful canonical payload build
+ *     (`buildGenerationPayload`) found a real patchable text/prompt/string/
+ *     value field on a text-kind node; the compiled segment/counts below
+ *     describe exactly what will be queued;
+ *   - "not-compatible" — a successful canonical payload build ran and
+ *     produced ZERO text-kind patches; this is the only case allowed to show
+ *     the "no compatible text input" message (Codex Round 1, P1);
+ *   - "pending"         — the canonical payload build has not run yet
+ *     (missing casting reference selection, unresolved Dynamic Batch/board
+ *     target, unparseable workflow, or any other build failure unrelated to
+ *     text compatibility). An unevaluated payload must never be presented as
+ *     a confirmed incompatibility.
+ */
+export type StyleTextInjectability = "injected" | "not-compatible" | "pending";
+
 type Props = {
-  /** "Project Style" for Asset, "Resolved Sequence Style" for Shot. */
+  /** "Project Style" for Asset, "Resolved Sequence Style" for Shot/Sequence. */
   sourceLabel: string;
   prepared: PreparedGenerationStyleSource;
-  /**
-   * STYLE.1.E.SURFACES.1 (retake) — whether the canonical payload
-   * (`buildGenerationPayload`, computed by the caller with this exact Style
-   * already composed in) actually found a patchable text/prompt/string/value
-   * field on a real text-kind node. A workflow with no text input at all, or
-   * whose only declared text input has no compatible field, must never be
-   * shown as if the compiled segment and composed counts describe what will
-   * be queued — they would describe a prompt nothing will ever read.
-   */
-  textInjectable: boolean;
+  textInjectability: StyleTextInjectability;
 };
 
-export default function ProjectStyleGenerationPreview({ sourceLabel, prepared, textInjectable }: Props) {
+export default function ProjectStyleGenerationPreview({ sourceLabel, prepared, textInjectability }: Props) {
   const heading = (
     <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">{sourceLabel}</p>
   );
@@ -72,7 +81,12 @@ export default function ProjectStyleGenerationPreview({ sourceLabel, prepared, t
     );
   }
 
-  if (!textInjectable) {
+  if (textInjectability !== "injected") {
+    const message =
+      textInjectability === "pending"
+        ? "Complete the required generation inputs to preview Project Style injection."
+        : "This workflow has no compatible text input; Project Style will not be injected into this generation.";
+    const messageColorClass = textInjectability === "pending" ? "text-[#6e767d]" : "text-[#b89a5a]";
     return (
       <div className="border-t border-[#232629] pt-4 flex flex-col gap-2">
         {heading}
@@ -90,9 +104,7 @@ export default function ProjectStyleGenerationPreview({ sourceLabel, prepared, t
         <pre className="whitespace-pre-wrap rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-xs text-[#a4abb2] font-mono leading-relaxed">
           {compiledSegment}
         </pre>
-        <p className="text-xs text-[#b89a5a]">
-          This workflow has no compatible text input; Project Style will not be injected into this generation.
-        </p>
+        <p className={`text-xs ${messageColorClass}`}>{message}</p>
       </div>
     );
   }

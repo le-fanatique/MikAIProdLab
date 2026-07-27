@@ -489,11 +489,12 @@ export default async function ShotGenerationPanel({
         })
       : null;
 
-  // STYLE.1.E.SURFACES.1 (retake) — whether the canonical payload actually
-  // found a patchable text/prompt/string/value field on a real text-kind
-  // node; never merely "an effective Style existed". See
-  // ProjectStyleGenerationPreview's own doc comment.
-  const styleTextInjectable = built?.ok ? built.patch.patches.some((p) => p.kind === "text") : false;
+  // STYLE.1.E.SURFACES.2 retake Round 1 — three-state injectability: never
+  // merely "an effective Style existed", and never a false "not compatible"
+  // claim for an unevaluated payload (here, only when the workflow JSON
+  // itself failed to parse). See ProjectStyleGenerationPreview's own doc
+  // comment.
+  const styleTextInjectability = built === null ? "pending" : built.ok ? (built.patch.patches.some((p) => p.kind === "text") ? "injected" : "not-compatible") : "pending";
 
   const mappings = built?.ok ? built.mappings : [];
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
@@ -902,7 +903,7 @@ export default async function ShotGenerationPanel({
         )}
 
         {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
-        <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectable={styleTextInjectable} />
+        <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
 
         {/* Preview — shows the final expanded+patched JSON */}
         {payloadPreview !== null && (

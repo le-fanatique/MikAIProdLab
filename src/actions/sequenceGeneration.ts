@@ -63,6 +63,8 @@ import {
 } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { findTextInputKey } from "@/lib/comfy/patchWorkflowPayload";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
 
 // ---------------------------------------------------------------------------
 // extractQueuedTextValues — SEQGEN.STORYBOARD.3 (retake 3)
@@ -562,12 +564,33 @@ export async function runSequenceGeneration(input: {
     packageText: context.packageText,
   });
 
+  // STYLE.1.E.SURFACES.2 — the fixed "sequence-storyboard" consumer, never
+  // derived from any client-supplied field. Resolves the complete Sequence
+  // override when one exists, otherwise inherits the active published
+  // Project Style (resolveGenerationStyle, CORE.1, unchanged). Composed
+  // exactly once into the suggested prompt and into every explicit text
+  // override, via the exact shared helper the Asset/Shot surfaces reuse.
+  const preparedStyle = await prepareGenerationStyleSource(
+    "sequence-storyboard",
+    { kind: "sequence", projectId, sequenceId },
+    promptResult.text
+  );
+  if (!preparedStyle.ok) {
+    return { ok: false, error: preparedStyle.error };
+  }
+  const effectiveSuggestedText = preparedStyle.composedSuggestedPrompt.prompt;
+  const effectiveTextOverrideByNodeId = input.textOverrideByNodeId
+    ? Object.fromEntries(
+        Object.entries(input.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)])
+      )
+    : input.textOverrideByNodeId;
+
   const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,
     inputs: parsed.inputs,
-    suggestedText: promptResult.text,
+    suggestedText: effectiveSuggestedText,
     availableImages: context.availableImages,
-    textOverrideByNodeId: input.textOverrideByNodeId,
+    textOverrideByNodeId: effectiveTextOverrideByNodeId,
     selectedImageByNodeId: input.selectedImageByNodeId,
     scalarOverrideByNodeId: input.scalarOverrideByNodeId,
     batchSelectedImages: resolvedBatchImages,
@@ -583,6 +606,19 @@ export async function runSequenceGeneration(input: {
       ok: false,
       error: "No compatible payload could be generated from this workflow and Sequence.",
     };
+  }
+
+  // STYLE.1.E.SURFACES.2 — "actually injected" is derived strictly from the
+  // canonical payload result (a real `kind === "text"` patch), never merely
+  // from "an effective Style existed" — same guard as Asset/Shot. An
+  // explicitly edited Advanced Payload that removed/altered the composed
+  // Style text is refused before any job row is created.
+  const textPatches = built.patch.patches.filter((p) => p.kind === "text");
+  const styleActuallyInjected = preparedStyle.hasEffectiveStyle && textPatches.length > 0;
+
+  if (overrideUsed && preparedStyle.hasEffectiveStyle && textPatches.length > 0) {
+    const mismatch = findEditedStyleTextMismatch(textPatches, finalPatchedJson);
+    if (mismatch) return { ok: false, error: mismatch };
   }
 
   // COMFY.PROVIDER.1 — Cloud preflight before any job row is created: same
@@ -691,6 +727,9 @@ export async function runSequenceGeneration(input: {
         assetType: m.assetType,
         roleLabel: m.roleLabel,
       })),
+      // STYLE.1.E.SURFACES.2 — recorded only when a non-empty Style was
+      // actually injected into at least one queued text input.
+      ...(styleActuallyInjected && preparedStyle.provenanceCandidate ? { styleProvenance: preparedStyle.provenanceCandidate } : {}),
     };
     await db
       .update(generationJobs)

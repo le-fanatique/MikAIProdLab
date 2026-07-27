@@ -52,6 +52,8 @@ import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -499,6 +501,19 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
 
   const basePath = `/projects/${pid}/sequences/${sid}/storyboard/workflows/${wid}/generate`;
 
+  // STYLE.1.E.SURFACES.2 — the fixed "sequence-storyboard" consumer.
+  // Preview-only; the server action re-resolves independently at submit
+  // time (the same shared helper, so preview/action can never diverge).
+  const preparedStyle = await prepareGenerationStyleSource(
+    "sequence-storyboard",
+    { kind: "sequence", projectId: pid, sequenceId: sid },
+    promptResult.text
+  );
+  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : promptResult.text;
+  const styledTextOverrideByNodeId = preparedStyle.ok
+    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : textOverrideByNodeId;
+
   // SEQGEN.STORYBOARD.3 (retake) — generation is blocked entirely without
   // at least one explicit Storyboard Assets selection ("bloquer clairement
   // la generation sans reference"), not just displayed as empty.
@@ -507,14 +522,24 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
       ? buildGenerationPayload({
           workflowJson: workflow.workflowJson,
           inputs: parsed.inputs,
-          suggestedText: promptResult.text,
+          suggestedText: styledSuggestedText,
           availableImages,
-          textOverrideByNodeId,
+          textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
+
+  // STYLE.1.E.SURFACES.2 retake Round 1 (Codex P1) — three-state
+  // injectability, never a false "not compatible" claim for an unevaluated
+  // payload. `built` is `null` both when the workflow JSON failed to parse
+  // AND when Sequence Storyboard deliberately skips buildGenerationPayload()
+  // until at least one casting reference is explicitly selected — both are
+  // "pending", never "not-compatible". Only a successful build
+  // (`built.ok`) that produced zero text-kind patches is a confirmed
+  // incompatibility.
+  const styleTextInjectability = built === null ? "pending" : built.ok ? (built.patch.patches.some((p) => p.kind === "text") ? "injected" : "not-compatible") : "pending";
 
   const mappings = built?.ok ? built.mappings : [];
   const displayMappings = built?.ok ? built.displayMappings : mappings;
@@ -760,6 +785,11 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
           </Card>
         )}
 
+        {/* STYLE.1.E.SURFACES.2 — inspectable Style source, before the payload preview. */}
+        <Card>
+          <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
+        </Card>
+
         {/* ── Preview ───────────────────────────────────────── */}
         {payloadPreview !== null && (
           <>
@@ -779,6 +809,14 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                 {generationError && (
                   <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
                     <p className="text-xs text-[#cf7b6b] leading-relaxed">{generationError}</p>
+                  </div>
+                )}
+
+                {!preparedStyle.ok && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                    <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                      Generation is disabled: Sequence Style could not be resolved.
+                    </p>
                   </div>
                 )}
 
@@ -805,7 +843,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                       </p>
                     </div>
                   )}
-                {!cloudPreflightBlocksGeneration && (
+                {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
                 <PartnerNodeConfirmForm
                   action={runSequenceGenerationFromForm}
                   partnerNodeConfirmMessage={partnerNodeConfirmMessage}

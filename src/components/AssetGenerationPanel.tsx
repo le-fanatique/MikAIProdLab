@@ -185,8 +185,12 @@ export default async function AssetGenerationPanel({
         })
       : null;
 
-  // STYLE.1.E.SURFACES.1 (retake) — see ShotGenerationPanel.tsx's identical comment.
-  const styleTextInjectable = built?.ok ? built.patch.patches.some((p) => p.kind === "text") : false;
+  // STYLE.1.E.SURFACES.2 retake Round 1 — three-state injectability (see
+  // ProjectStyleGenerationPreview.tsx's own doc comment): "pending" whenever
+  // the canonical payload was not successfully built (here, only when the
+  // workflow JSON itself failed to parse), never a false claim of
+  // incompatibility for an unevaluated payload.
+  const styleTextInjectability = built === null ? "pending" : built.ok ? (built.patch.patches.some((p) => p.kind === "text") ? "injected" : "not-compatible") : "pending";
 
   const mappings = built?.ok ? built.mappings : [];
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
@@ -442,7 +446,7 @@ export default async function AssetGenerationPanel({
         )}
 
         {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
-        <ProjectStyleGenerationPreview sourceLabel="Project Style" prepared={preparedStyle} textInjectable={styleTextInjectable} />
+        <ProjectStyleGenerationPreview sourceLabel="Project Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
 
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">

@@ -70,6 +70,8 @@ import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { findTextInputKey } from "@/lib/comfy/patchWorkflowPayload";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
 
 const BOARD_IMAGE_ID = "board";
 
@@ -568,12 +570,30 @@ export async function runSequenceVideoGeneration(input: {
     packageText: context.packageText,
   });
 
+  // STYLE.1.E.SURFACES.2 — the fixed "sequence-video" consumer, never
+  // derived from any client-supplied field. Same resolution/composition
+  // contract as the Sequence Storyboard path (see its identical comment).
+  const preparedStyle = await prepareGenerationStyleSource(
+    "sequence-video",
+    { kind: "sequence", projectId, sequenceId },
+    promptResult.text
+  );
+  if (!preparedStyle.ok) {
+    return { ok: false, error: preparedStyle.error };
+  }
+  const effectiveSuggestedText = preparedStyle.composedSuggestedPrompt.prompt;
+  const effectiveTextOverrideByNodeId = input.textOverrideByNodeId
+    ? Object.fromEntries(
+        Object.entries(input.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)])
+      )
+    : input.textOverrideByNodeId;
+
   const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,
     inputs: parsed.inputs,
-    suggestedText: promptResult.text,
+    suggestedText: effectiveSuggestedText,
     availableImages: context.availableImages,
-    textOverrideByNodeId: input.textOverrideByNodeId,
+    textOverrideByNodeId: effectiveTextOverrideByNodeId,
     selectedImageByNodeId,
     scalarOverrideByNodeId: input.scalarOverrideByNodeId,
     batchSelectedImages: resolvedBatchImages,
@@ -608,6 +628,18 @@ export async function runSequenceVideoGeneration(input: {
   const provenanceCheck = validateImageProvenanceUnchanged(built.patch.patchedJson, finalPatchedJson, imageRelevantNodeIds);
   if (!provenanceCheck.ok) {
     return { ok: false, error: provenanceCheck.error };
+  }
+
+  // STYLE.1.E.SURFACES.2 — "actually injected" derived strictly from the
+  // canonical payload result, same guard as every other consumer. This runs
+  // in addition to (never instead of) the image-provenance guard above —
+  // both checks occur before any job row or provider call.
+  const textPatches = built.patch.patches.filter((p) => p.kind === "text");
+  const styleActuallyInjected = preparedStyle.hasEffectiveStyle && textPatches.length > 0;
+
+  if (overrideUsed && preparedStyle.hasEffectiveStyle && textPatches.length > 0) {
+    const mismatch = findEditedStyleTextMismatch(textPatches, finalPatchedJson);
+    if (mismatch) return { ok: false, error: mismatch };
   }
 
   // COMFY.PROVIDER.1 — Cloud preflight before any job row is created: same
@@ -707,6 +739,9 @@ export async function runSequenceVideoGeneration(input: {
       // never an assumption carried over from before the override.
       sequenceVideoSourceStoryboardImageId: sourceStoryboardImageId,
       sequenceVideoImageMappings: promptResult.imageMappings,
+      // STYLE.1.E.SURFACES.2 — recorded only when a non-empty Style was
+      // actually injected into at least one queued text input.
+      ...(styleActuallyInjected && preparedStyle.provenanceCandidate ? { styleProvenance: preparedStyle.provenanceCandidate } : {}),
     };
     await db
       .update(generationJobs)

@@ -29,6 +29,8 @@ import { buildSequenceVideoPrompt } from "@/lib/prompts/buildSequenceVideoPrompt
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -201,6 +203,18 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
 
   const basePath = `/projects/${pid}/sequences/${sid}/storyboard/video/workflows/${wid}/generate`;
 
+  // STYLE.1.E.SURFACES.2 — the fixed "sequence-video" consumer. Preview-only;
+  // the server action re-resolves independently at submit time.
+  const preparedStyle = await prepareGenerationStyleSource(
+    "sequence-video",
+    { kind: "sequence", projectId: pid, sequenceId: sid },
+    promptResult.text
+  );
+  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : promptResult.text;
+  const styledTextOverrideByNodeId = preparedStyle.ok
+    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : textOverrideByNodeId;
+
   const selectedImageByNodeId: Record<string, string> = {};
   if (compatibility.kind === "mono") {
     selectedImageByNodeId[compatibility.nodeId] = "board";
@@ -217,14 +231,24 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
       ? buildGenerationPayload({
           workflowJson: workflow.workflowJson,
           inputs: parsed.inputs,
-          suggestedText: promptResult.text,
+          suggestedText: styledSuggestedText,
           availableImages: context.availableImages,
-          textOverrideByNodeId,
+          textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
+
+  // STYLE.1.E.SURFACES.2 retake Round 1 (Codex P1) — three-state
+  // injectability. `built` is `null` both when the workflow JSON failed to
+  // parse AND when Sequence Video deliberately skips
+  // buildGenerationPayload() while the mandatory board target is
+  // unresolved for an ambiguous multi-image workflow (`mappingBlocked`) —
+  // both are "pending", never "not-compatible". Only a successful build
+  // (`built.ok`) that produced zero text-kind patches is a confirmed
+  // incompatibility.
+  const styleTextInjectability = built === null ? "pending" : built.ok ? (built.patch.patches.some((p) => p.kind === "text") ? "injected" : "not-compatible") : "pending";
 
   const mappings = built?.ok ? built.mappings : [];
   const displayMappings = built?.ok ? built.displayMappings : mappings;
@@ -466,6 +490,11 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
           </Card>
         )}
 
+        {/* STYLE.1.E.SURFACES.2 — inspectable Style source, before the payload preview. */}
+        <Card>
+          <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
+        </Card>
+
         {payloadPreview !== null && (
           <>
             <SectionLabel label="Preview" />
@@ -483,6 +512,14 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
                 {generationError && (
                   <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
                     <p className="text-xs text-[#cf7b6b] leading-relaxed">{generationError}</p>
+                  </div>
+                )}
+
+                {!preparedStyle.ok && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                    <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                      Generation is disabled: Sequence Style could not be resolved.
+                    </p>
                   </div>
                 )}
 
@@ -509,7 +546,7 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
                       </p>
                     </div>
                   )}
-                {!cloudPreflightBlocksGeneration && (
+                {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
                 <PartnerNodeConfirmForm
                   action={runSequenceVideoGenerationFromForm}
                   partnerNodeConfirmMessage={partnerNodeConfirmMessage}
