@@ -6,7 +6,16 @@
 // workflow is edited or deleted later. Text/JSON only, never a binary file:
 // only paths, names and metadata, plus the final queued workflow JSON
 // itself (a small graph definition, not media).
+//
+// STYLE.1.E.CORE.1 — additive, backward-compatible: `styleProvenance` below
+// extends this existing canonical provenance contract instead of creating a
+// second one. It is entirely optional; legacy rows (and any row queued
+// before Style integration) parse exactly as before via
+// `parseGenerationSnapshot`. This ticket does not populate it from any real
+// generation action — that rollout belongs to STYLE.1.E.SURFACES.1.
 // ---------------------------------------------------------------------------
+
+import type { GenerationStyleProvenance } from "@/lib/projectStyle/generationStyleSource";
 
 export type GenerationSnapshot = {
   workflowId: number;
@@ -107,6 +116,16 @@ export type GenerationSnapshot = {
     /** CAMLAB.POLISH.1 retake round 2 — whether input 1 was the PlayCanvas capture or an explicit local PNG upload replacing it. Never the file content, a local path, or a secret. */
     snapshotSource: "captured-snapshot" | "uploaded-override";
   };
+  /**
+   * STYLE.1.E.CORE.1 — the exact Project Style provenance used to compile
+   * this job's prompt, present only when an effective, non-empty Style
+   * existed for this consumer at queue time (never a draft id, secret,
+   * binary or mutable client state — see
+   * src/lib/projectStyle/generationStyleSource.ts). Absent for every
+   * legacy job queued before Style integration, and for any job where no
+   * effective Style existed or its compiled segment was empty.
+   */
+  styleProvenance?: GenerationStyleProvenance;
 };
 
 export function serializeGenerationSnapshot(snapshot: GenerationSnapshot): string {

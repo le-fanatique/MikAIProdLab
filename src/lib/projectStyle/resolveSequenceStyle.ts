@@ -257,3 +257,55 @@ export async function resolveShotStyle(projectId: number, sequenceId: number, sh
     return { ok: true, result: core.resolved };
   });
 }
+
+// ---------------------------------------------------------------------------
+// STYLE.1.E.CORE.1 — canonical active Project Style resolver, for the
+// `asset` generation consumer (Asset generation resolves the active
+// published Project Style directly, never through a Sequence). This is
+// NOT a second inheritance resolver: it reuses the exact same
+// `readActiveProjectVersionSync` pointer/corruption-guard logic already
+// defined above, inside its own single-transaction read, and is the only
+// additive export this ticket adds to this file.
+// ---------------------------------------------------------------------------
+
+export type ResolvedProjectStyle =
+  | { mode: "none"; projectId: number }
+  | {
+      mode: "active";
+      projectId: number;
+      versionId: number;
+      versionNumber: number;
+      snapshot: StyleSnapshot;
+      compiledText: string;
+    };
+
+export type ResolveActiveProjectStyleResult = { ok: true; result: ResolvedProjectStyle } | { ok: false; error: string };
+
+/** The canonical resolver for the `asset` generation consumer: the Project's currently active published Style version, or `mode: "none"` when no version is active. Never involves a Sequence, an override, or any inheritance branching — reuses the same pointer read and corruption guard as `resolveSequenceStyle` above. */
+export async function resolveActiveProjectStyle(projectId: number): Promise<ResolveActiveProjectStyleResult> {
+  if (!isValidId(projectId)) return { ok: false, error: "Invalid project id." };
+
+  return db.transaction((tx) => {
+    const projectRows = tx.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).all() as unknown as { id: number }[];
+    if (!projectRows[0]) return { ok: false, error: "Project not found." };
+
+    const activeVersionRead = readActiveProjectVersionSync(tx, projectId);
+    if (!activeVersionRead.ok) return { ok: false, error: activeVersionRead.error };
+    if (!activeVersionRead.version) return { ok: true, result: { mode: "none", projectId } };
+
+    const verified = parseAndVerify(activeVersionRead.version.contentSnapshot, activeVersionRead.version.compiledText);
+    if (!verified.ok) return { ok: false, error: verified.error };
+
+    return {
+      ok: true,
+      result: {
+        mode: "active",
+        projectId,
+        versionId: activeVersionRead.version.id,
+        versionNumber: activeVersionRead.version.versionNumber,
+        snapshot: verified.snapshot,
+        compiledText: activeVersionRead.version.compiledText,
+      },
+    };
+  });
+}
