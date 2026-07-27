@@ -39,7 +39,9 @@ import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
-import { runWorkflowGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
+import { runWorkflowGenerationFromForm, runShotStoryboardGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -429,6 +431,20 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   // SHOT.VIDEO.LIBRARY.1, Lot C — see ShotGenerationPanel.tsx's identical comment.
   const availableVideos = await loadRuntimeVideoOptionsForShot(shid);
 
+  // STYLE.1.E.SURFACES.1 — same trusted consumer selection as ShotGenerationPanel
+  // and the server action's runShotGenerationCore. Preview-only; the action
+  // re-resolves independently at submit time.
+  const styleConsumer = isStoryboardContext ? ("shot-storyboard" as const) : workflow.kind === "video" ? ("shot-video" as const) : ("shot-image" as const);
+  const preparedStyle = await prepareGenerationStyleSource(
+    styleConsumer,
+    { kind: "shot", projectId: pid, sequenceId: sid, shotId: shid },
+    compiledShotPrompt.text
+  );
+  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : compiledShotPrompt.text;
+  const styledTextOverrideByNodeId = preparedStyle.ok
+    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : textOverrideByNodeId;
+
   // SEQGEN.STORYBOARD.2 (retake 3) — storyboard=1/storyboardRefs must survive
   // the Image Inputs "Update Preview" GET form and the Generate redirect's
   // returnTo, not just this page's initial render. Reused below both as
@@ -488,16 +504,19 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       ? buildGenerationPayload({
           workflowJson: workflow.workflowJson,
           inputs: parsed.inputs,
-          suggestedText: compiledShotPrompt.text,
+          suggestedText: styledSuggestedText,
           availableImages,
           availableVideos,
-          textOverrideByNodeId,
+          textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           selectedVideoByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
+
+  // STYLE.1.E.SURFACES.1 (retake) — see ShotGenerationPanel.tsx's identical comment.
+  const styleTextInjectable = built?.ok ? built.patch.patches.some((p) => p.kind === "text") : false;
 
   const mappings = built?.ok ? built.mappings : [];
   // SHOT.VIDEO.LIBRARY.1, Lot C
@@ -842,6 +861,11 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           </Card>
         )}
 
+        {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
+        <Card>
+          <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectable={styleTextInjectable} />
+        </Card>
+
         {/* ── Preview ───────────────────────────────────────── */}
         {payloadPreview !== null && (
           <>
@@ -889,9 +913,19 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                       </p>
                     </div>
                   )}
-                {!cloudPreflightBlocksGeneration && (
+                {/* STYLE.1.E.SURFACES.1 — a resolver/corruption error disables
+                    Generate entirely; the error itself is already visible
+                    above via ProjectStyleGenerationPreview. */}
+                {!preparedStyle.ok && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                    <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                      Generation is disabled: Project Style could not be resolved.
+                    </p>
+                  </div>
+                )}
+                {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
                 <PartnerNodeConfirmForm
-                  action={runWorkflowGenerationFromForm}
+                  action={isStoryboardContext ? runShotStoryboardGenerationFromForm : runWorkflowGenerationFromForm}
                   partnerNodeConfirmMessage={partnerNodeConfirmMessage}
                   className="flex flex-col gap-4"
                 >

@@ -27,6 +27,8 @@ import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 import type { FillSource } from "@/lib/textInputKind";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
@@ -177,6 +179,14 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
 
   const parsed = parseComfyWorkflow(workflow.workflowJson);
 
+  // STYLE.1.E.SURFACES.1 — Asset consumer is always hard-coded "asset".
+  // Preview-only; the server action re-resolves independently at submit time.
+  const preparedStyle = await prepareGenerationStyleSource("asset", { kind: "project", projectId: pid }, assetPromptText);
+  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : assetPromptText;
+  const styledTextOverrideByNodeId = preparedStyle.ok
+    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : textOverrideByNodeId;
+
   const basePath = `/projects/${pid}/assets/${aid}/workflows/${wid}/generate`;
 
   // --- Dynamic Batch UI info (GEN.SEEDANCE.1) — this page previously never
@@ -220,14 +230,17 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
       ? buildGenerationPayload({
           workflowJson: workflow.workflowJson,
           inputs: parsed.inputs,
-          suggestedText: assetPromptText,
+          suggestedText: styledSuggestedText,
           availableImages,
-          textOverrideByNodeId,
+          textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
+
+  // STYLE.1.E.SURFACES.1 (retake) — see ShotGenerationPanel.tsx's identical comment.
+  const styleTextInjectable = built?.ok ? built.patch.patches.some((p) => p.kind === "text") : false;
 
   const mappings = built?.ok ? built.mappings : [];
   const displayMappings = built?.ok ? built.displayMappings : mappings;
@@ -429,6 +442,11 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           </Card>
         )}
 
+        {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
+        <Card>
+          <ProjectStyleGenerationPreview sourceLabel="Project Style" prepared={preparedStyle} textInjectable={styleTextInjectable} />
+        </Card>
+
         {/* ── Preview ───────────────────────────────────────── */}
         {payloadPreview !== null && (
           <>
@@ -476,7 +494,14 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
                       </p>
                     </div>
                   )}
-                {!cloudPreflightBlocksGeneration && (
+                {!preparedStyle.ok && (
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                    <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                      Generation is disabled: Project Style could not be resolved.
+                    </p>
+                  </div>
+                )}
+                {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
                 <PartnerNodeConfirmForm
                   action={runAssetGenerationFromForm}
                   partnerNodeConfirmMessage={partnerNodeConfirmMessage}

@@ -5,525 +5,61 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import {
-  generationJobs,
-  projects,
-  sequences,
-  shots,
-  comfyWorkflows,
-  assets,
-  shotAssets,
-  promptSegments,
-  shotReferenceImages,
-  assetReferenceImages,
-} from "@/db/schema";
-import { eq, asc, inArray, sql } from "drizzle-orm";
+import { generationJobs, projects, comfyWorkflows, assets, shotReferenceImages, assetReferenceImages } from "@/db/schema";
+import { eq, asc, sql } from "drizzle-orm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
-import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
-import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
-import {
-  buildRuntimeImageOptions,
-  getRuntimeImageLabel,
-  type RuntimeImageOption,
-} from "@/lib/comfy/mapWorkflowInputs";
+import { getRuntimeImageLabel, type RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
 import { queueCloudPrompt } from "@/lib/comfy/comfyCloudClient";
-import { runCloudPreflight } from "@/lib/comfy/cloudPreflight";
 import { getComfySettings } from "@/lib/settings";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
-import {
-  serializeGenerationSnapshot,
-  type GenerationSnapshot,
-} from "@/lib/comfy/generationSnapshot";
+import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { ensureVideoOutputSavedToLibrary } from "@/lib/shotVideoLibrary/ensureSaved";
 import { approveShotVideoPath } from "@/lib/shotVideoLibrary/approve";
-import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import {
+  checkCloudPreflightGate,
+  findEditedStyleTextMismatch,
+  markJobFailed,
+  summarizeComfyNodeErrors,
+  type RunWorkflowGenerationResult,
+} from "@/lib/comfy/generationActionHelpers";
+import { runShotGenerationCore, type ShotGenerationArgs } from "@/lib/comfy/runShotGeneration";
+
+export type { RunWorkflowGenerationResult } from "@/lib/comfy/generationActionHelpers";
 
 // ---------------------------------------------------------------------------
-// Types
+// runWorkflowGeneration — Camera Lab's unstyled, exact-existing-behavior
+// entry point (see cameraLabGeneration.ts, the only real caller). "none" is
+// a fixed literal here, never a caller-supplied value — no Style is ever
+// resolved or injected for this path.
 // ---------------------------------------------------------------------------
 
-export type RunWorkflowGenerationResult =
-  | { ok: true; jobId: number }
-  | {
-      ok: false;
-      error: string;
-      /** COMFY.PROVIDER.1 — set only when the block is specifically "this Comfy Cloud workflow calls paid Partner Node(s) and needs explicit confirmation", so the caller can offer a confirm-and-resubmit flow instead of a dead-end error. */
-      requiresPartnerNodeConfirmation?: boolean;
-      apiNodeClasses?: string[];
-    };
-
-/**
- * COMFY.PROVIDER.1 — runs the Cloud preflight (missing classes hard-block;
- * Partner Node classes require explicit confirmation) against a prepared
- * workflow payload. Returns null when queueing may proceed (local, or Cloud
- * with nothing blocking); otherwise the exact result to return to the
- * caller. Shared by every job-creation call site so Cloud safety can never
- * be bypassed by one of them forgetting the check.
- */
-async function checkCloudPreflightGate(
-  workflow: Record<string, unknown>,
-  cloudApiKey: string,
-  confirmPartnerNodeCost: boolean | undefined
-): Promise<RunWorkflowGenerationResult | null> {
-  let preflight;
-  try {
-    preflight = await runCloudPreflight(workflow, cloudApiKey);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error.";
-    return {
-      ok: false,
-      error: `Could not verify this workflow against Comfy Cloud before queueing: ${message}`,
-    };
-  }
-
-  if (preflight.missingClasses.length > 0) {
-    return {
-      ok: false,
-      error: `This workflow uses node type(s) not available on Comfy Cloud: ${preflight.missingClasses.join(", ")}. It cannot be queued on Comfy Cloud.`,
-    };
-  }
-
-  if (preflight.apiNodeClasses.length > 0 && !confirmPartnerNodeCost) {
-    return {
-      ok: false,
-      error: `This workflow calls paid Comfy Cloud Partner Node(s): ${preflight.apiNodeClasses.join(", ")}. Confirm the cost to continue.`,
-      requiresPartnerNodeConfirmation: true,
-      apiNodeClasses: preflight.apiNodeClasses,
-    };
-  }
-
-  return null;
+export async function runWorkflowGeneration(args: ShotGenerationArgs): Promise<RunWorkflowGenerationResult> {
+  return runShotGenerationCore(args, "none");
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// runWorkflowGenerationFromForm / runShotStoryboardGenerationFromForm —
+// form-compatible wrappers with redirect.
+//
+// STYLE.1.E.SURFACES.1 (retake) — both exported functions take ONLY
+// `FormData`, exactly like every other Server Action in this file; neither
+// accepts a Style mode/consumer parameter of any kind, so there is no
+// exported "policy knob" to forge. The private `submitShotGeneration` below
+// (not exported, so never itself a Server Action reference) is the only
+// place that picks a literal `styleIntent` — "auto" or "shot-storyboard" —
+// and it is chosen entirely by which of the two exported functions was
+// called, never by anything read from `formData`. The actual policy-taking
+// implementation, `runShotGenerationCore`, lives in a plain (non-"use
+// server") module — see its own header for why that matters.
 // ---------------------------------------------------------------------------
 
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function summarizeComfyNodeErrors(nodeErrors: unknown): string | null {
-  if (nodeErrors === null || nodeErrors === undefined) return null;
-
-  if (typeof nodeErrors === "object" && !Array.isArray(nodeErrors)) {
-    const entries = Object.entries(nodeErrors as Record<string, unknown>);
-    if (entries.length === 0) return null;
-
-    const parts: string[] = [];
-    for (const [nodeId, details] of entries.slice(0, 3)) {
-      if (typeof details === "object" && details !== null && !Array.isArray(details)) {
-        const d = details as Record<string, unknown>;
-        const classType = typeof d["class_type"] === "string" ? d["class_type"] : null;
-        const errors = Array.isArray(d["errors"]) ? d["errors"] : null;
-        const message = typeof d["message"] === "string" ? d["message"] : null;
-
-        if (errors && errors.length > 0) {
-          const firstErr = errors[0] as Record<string, unknown>;
-          const errMsg =
-            typeof firstErr?.["message"] === "string"
-              ? firstErr["message"]
-              : typeof firstErr?.["details"] === "string"
-              ? firstErr["details"]
-              : null;
-          const label = classType ? `${nodeId} (${classType})` : nodeId;
-          parts.push(errMsg ? `${label}: ${errMsg}` : label);
-        } else if (message) {
-          parts.push(classType ? `${nodeId} (${classType}): ${message}` : `${nodeId}: ${message}`);
-        } else {
-          parts.push(`${nodeId}: ${safeStringify(details).slice(0, 120)}`);
-        }
-      } else {
-        parts.push(`${nodeId}: ${safeStringify(details).slice(0, 120)}`);
-      }
-    }
-
-    const extra = entries.length > 3 ? ` (+${entries.length - 3} more)` : "";
-    return `ComfyUI node warnings: ${parts.join("; ")}${extra}`.slice(0, 1000);
-  }
-
-  if (Array.isArray(nodeErrors)) {
-    if (nodeErrors.length === 0) return null;
-    return `ComfyUI node warnings: ${safeStringify(nodeErrors).slice(0, 1000)}`;
-  }
-
-  return `ComfyUI node warnings: ${String(nodeErrors).slice(0, 1000)}`;
-}
-
-async function markJobFailed(
-  jobId: number,
-  message: string
-): Promise<void> {
-  const now = new Date().toISOString();
-  await db
-    .update(generationJobs)
-    .set({
-      status: "failed",
-      errorMessage: message.slice(0, 1000),
-      updatedAt: now,
-      completedAt: now,
-    })
-    .where(eq(generationJobs.id, jobId));
-}
-
-// ---------------------------------------------------------------------------
-// runWorkflowGeneration
-// ---------------------------------------------------------------------------
-
-export async function runWorkflowGeneration(args: {
-  projectId: number;
-  sequenceId: number;
-  shotId: number;
-  workflowId: number;
-  selectedImageByNodeId?: Record<string, string>;
-  /** SHOT.VIDEO.LIBRARY.1, Lot C */
-  selectedVideoByNodeId?: Record<string, string>;
-  scalarOverrideByNodeId?: Record<string, string>;
-  textOverrideByNodeId?: Record<string, string>;
-  /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
-  patchedJsonOverride?: Record<string, unknown>;
-  batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
-  /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
-  confirmPartnerNodeCost?: boolean;
-  /** CAMLAB.POLISH.1 — set only by the Camera Lab's Gaussian-to-image caller; recorded as-is on the job's payloadSnapshot, never inferred here. */
-  cameraLabProvenance?: GenerationSnapshot["cameraLabProvenance"];
-}): Promise<RunWorkflowGenerationResult> {
-  const { projectId, sequenceId, shotId, workflowId } = args;
-
-  const comfySettings = await getComfySettings();
-  if (comfySettings.provider === "cloud" && !comfySettings.hasCloudApiKey) {
-    return { ok: false, error: "Comfy Cloud is selected but no Comfy Cloud API key is configured." };
-  }
-
-  // --- 1. Validate numeric IDs ---
-  if (
-    !Number.isInteger(projectId) ||
-    !Number.isInteger(sequenceId) ||
-    !Number.isInteger(shotId) ||
-    !Number.isInteger(workflowId) ||
-    projectId <= 0 ||
-    sequenceId <= 0 ||
-    shotId <= 0 ||
-    workflowId <= 0
-  ) {
-    return { ok: false, error: "Invalid IDs provided." };
-  }
-
-  // --- 2. Fetch and validate hierarchy ---
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, projectId));
-  if (!project) return { ok: false, error: "Project not found." };
-
-  const [sequence] = await db
-    .select()
-    .from(sequences)
-    .where(eq(sequences.id, sequenceId));
-  if (!sequence || sequence.projectId !== projectId)
-    return { ok: false, error: "Sequence not found or does not belong to this project." };
-
-  const [shot] = await db
-    .select()
-    .from(shots)
-    .where(eq(shots.id, shotId));
-  if (!shot || shot.sequenceId !== sequenceId)
-    return { ok: false, error: "Shot not found or does not belong to this sequence." };
-
-  const [workflow] = await db
-    .select()
-    .from(comfyWorkflows)
-    .where(eq(comfyWorkflows.id, workflowId));
-  if (!workflow) return { ok: false, error: "Workflow not found." };
-
-  // --- 3. Parse workflow JSON ---
-  const parsed = parseComfyWorkflow(workflow.workflowJson);
-  if (parsed === null)
-    return { ok: false, error: "Workflow JSON could not be parsed. Check the workflow file." };
-
-  // --- 4. Fetch shot context (mirrors map page logic) ---
-  const assignedRows = await db
-    .select({
-      assetId: assets.id,
-      assetName: assets.name,
-      assetType: assets.type,
-      assetDescription: assets.description,
-    })
-    .from(shotAssets)
-    .innerJoin(assets, eq(shotAssets.assetId, assets.id))
-    .where(eq(shotAssets.shotId, shotId))
-    .orderBy(asc(assets.name));
-
-  const assignedAssetIds = assignedRows.map((r) => r.assetId);
-
-  const segmentList = await db
-    .select()
-    .from(promptSegments)
-    .where(eq(promptSegments.shotId, shotId))
-    .orderBy(asc(promptSegments.orderIndex));
-
-  const shotRefImages = await db
-    .select({
-      id: shotReferenceImages.id,
-      imagePath: shotReferenceImages.imagePath,
-      label: shotReferenceImages.label,
-      imageRole: shotReferenceImages.imageRole,
-      sourceFilename: shotReferenceImages.sourceFilename,
-    })
-    .from(shotReferenceImages)
-    .where(eq(shotReferenceImages.shotId, shotId))
-    .orderBy(asc(shotReferenceImages.orderIndex), asc(shotReferenceImages.id));
-
-  const castAssetRefImages =
-    assignedAssetIds.length > 0
-      ? await db
-          .select({
-            id: assetReferenceImages.id,
-            assetId: assetReferenceImages.assetId,
-            imagePath: assetReferenceImages.imagePath,
-            label: assetReferenceImages.label,
-            imageRole: assetReferenceImages.imageRole,
-            sourceFilename: assetReferenceImages.sourceFilename,
-            variantState: assetReferenceImages.variantState,
-            approvedForGeneration: assetReferenceImages.approvedForGeneration,
-          })
-          .from(assetReferenceImages)
-          .where(inArray(assetReferenceImages.assetId, assignedAssetIds))
-          .orderBy(
-            asc(assetReferenceImages.orderIndex),
-            asc(assetReferenceImages.id)
-          )
-      : [];
-
-  // --- 5. Recompute prompt + canonical payload (mirrors map page / panels — GEN.SEEDANCE.1) ---
-  const compiledPrompt = compilePromptSegments(segmentList);
-  const hasRealPromptSegments = segmentList.length > 0;
-  const compiledShotPrompt = compileShotPrompt({
-    kind: workflow.kind as ShotPromptCompileKind,
-    shotPrompt: shot.shotPrompt,
-    compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
-    hasPromptSegments: hasRealPromptSegments,
-    hasMissingTiming: compiledPrompt.hasMissingTiming,
-  });
-
-  const availableImages = buildRuntimeImageOptions(
-    shotRefImages,
-    castAssetRefImages,
-    assignedRows.map((r) => ({
-      assetId: r.assetId,
-      assetName: r.assetName,
-      assetType: r.assetType,
-    }))
-  );
-
-  // Collect batch images: read from args.batchImagesByNodeId (only one
-  // Dynamic Batch node is supported in V1), resolve placeholder ids to
-  // actual imagePaths using availableImages, preserving selection order.
-  const batchEntry = args.batchImagesByNodeId
-    ? Object.entries(args.batchImagesByNodeId)[0]
-    : undefined;
-
-  const resolvedBatchImages: DynamicBatchExpansionImage[] = [];
-  if (batchEntry) {
-    for (const placeholder of batchEntry[1]) {
-      const found = availableImages.find((img) => img.id === placeholder.id);
-      if (!found) {
-        return {
-          ok: false,
-          error: `Selected batch image "${placeholder.id}" not found in available images.`,
-        };
-      }
-      resolvedBatchImages.push({ id: found.id, imagePath: found.imagePath });
-    }
-  }
-
-  // SHOT.VIDEO.LIBRARY.1, Lot C
-  const availableVideos = await loadRuntimeVideoOptionsForShot(shotId);
-
-  const built = buildGenerationPayload({
-    workflowJson: workflow.workflowJson,
-    inputs: parsed.inputs,
-    suggestedText: compiledShotPrompt.text,
-    availableImages,
-    availableVideos,
-    textOverrideByNodeId: args.textOverrideByNodeId,
-    selectedImageByNodeId: args.selectedImageByNodeId,
-    selectedVideoByNodeId: args.selectedVideoByNodeId,
-    scalarOverrideByNodeId: args.scalarOverrideByNodeId,
-    batchSelectedImages: resolvedBatchImages,
-  });
-
-  if (!built.ok) {
-    return { ok: false, error: built.error };
-  }
-
-  // REVISE (round 1, finding 5) — a video input can be MAPPED (preview
-  // works, `Video Sources`/`Video Inputs` shows a real selector) but
-  // ComfyUI generation must still be explicitly refused here: unlike
-  // `/upload/image`, no confirmed ComfyUI endpoint exists to upload a local
-  // video file for a `LoadVideo`-class node (`prepareComfyPayloadForQueue`
-  // deliberately does not attempt one — see its own doc comment). Refusing
-  // BEFORE any `generation_jobs` row is created means Generate never
-  // silently queues a payload ComfyUI cannot actually run.
-  if (built.displayMappings.some((m) => m.mappingKind === "video")) {
-    return {
-      ok: false,
-      error:
-        "This workflow requires a video input, but MikAI has no confirmed way to upload a video to ComfyUI yet. Generation is blocked for this workflow until that transport is confirmed.",
-    };
-  }
-
-  const overrideUsed = args.patchedJsonOverride !== undefined;
-  const finalPatchedJson: Record<string, unknown> = args.patchedJsonOverride ?? built.patch.patchedJson;
-
-  if (Object.keys(finalPatchedJson).length === 0) {
-    return {
-      ok: false,
-      error: "No compatible payload could be generated from this workflow and shot.",
-    };
-  }
-
-  // --- 5b. Comfy Cloud preflight (COMFY.PROVIDER.1) — before any job row is
-  //         created, never a silent paid submission. No-op for local. ---
-  if (comfySettings.provider === "cloud") {
-    const gate = await checkCloudPreflightGate(
-      finalPatchedJson,
-      comfySettings.cloudApiKey,
-      args.confirmPartnerNodeCost
-    );
-    if (gate) return gate;
-  }
-
-  // --- 6. Create generation_jobs row (pending) ---
-  if (!isSingleGenerationTarget({ shotId, assetId: null, sequenceId: null })) {
-    return { ok: false, error: "Invalid generation job target." };
-  }
-
-  const clientId = `mikai-${shotId}-${workflowId}-${Date.now()}`;
-  const now = new Date().toISOString();
-
-  const [inserted] = await db
-    .insert(generationJobs)
-    .values({
-      shotId,
-      workflowId,
-      status: "pending",
-      clientId,
-      runtimeProvider: comfySettings.provider,
-      startedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({ id: generationJobs.id });
-
-  const jobId = inserted.id;
-
-  // --- 7. Prepare payload — upload local images to ComfyUI. Its output
-  //        (prepared.workflow) is the *sole* input to queueComfyPrompt
-  //        below — no second, divergent recomputation happens after this. ---
-  try {
-    await db
-      .update(generationJobs)
-      .set({ status: "uploading", updatedAt: new Date().toISOString() })
-      .where(eq(generationJobs.id, jobId));
-
-    const prepared = await prepareComfyPayloadForQueue(
-      finalPatchedJson,
-      comfySettings.provider === "cloud"
-        ? { provider: "cloud", cloudApiKey: comfySettings.cloudApiKey }
-        : { provider: "local" }
-    );
-
-    // --- 7a. Snapshot (GEN.SEEDANCE.1) — created before queueing, from the
-    //        exact payload about to be sent, so it stays accurate even if
-    //        the queue call itself fails or the library workflow changes later. ---
-    const snapshot: GenerationSnapshot = {
-      workflowId,
-      contextType: "shot",
-      contextId: shotId,
-      createdAt: new Date().toISOString(),
-      selections: {
-        selectedImageByNodeId: args.selectedImageByNodeId ?? {},
-        scalarOverrideByNodeId: args.scalarOverrideByNodeId ?? {},
-        textOverrideByNodeId: args.textOverrideByNodeId ?? {},
-        batchSelectedImageIds: resolvedBatchImages.map((img) => img.id),
-      },
-      dynamicBatch: {
-        active: built.expansion.templateChainNodeIds.length > 0,
-        batchNodeId: built.expansion.batchNodeId || null,
-        templateChainNodeIds: built.expansion.templateChainNodeIds,
-        expandedNodeIds: built.expansion.expandedNodeIds,
-        batchInputKeys: built.expansion.batchInputKeys,
-        selectedImageCount: built.expansion.preview.selectedImageCount,
-        clonedNodeCount: built.expansion.preview.clonedNodeCount,
-      },
-      promptText: compiledShotPrompt.text,
-      overrideUsed,
-      // REVISE (GEN.SEEDANCE.1) — prepared.warnings (e.g. "local images were
-      // uploaded to ComfyUI and LoadImage inputs rewritten") were previously
-      // dropped; the snapshot must reflect every warning produced across the
-      // whole pipeline, not just the pre-upload patch step.
-      warnings: [...new Set([...built.patch.warnings, ...prepared.warnings])],
-      uploadedImages: prepared.uploadedImages,
-      queuedWorkflow: prepared.workflow,
-      ...(args.cameraLabProvenance ? { cameraLabProvenance: args.cameraLabProvenance } : {}),
-    };
-    await db
-      .update(generationJobs)
-      .set({ payloadSnapshot: serializeGenerationSnapshot(snapshot), updatedAt: new Date().toISOString() })
-      .where(eq(generationJobs.id, jobId));
-
-    // --- 8. Queue prompt ---
-    await maybeUnloadOllamaBeforeComfy();
-    const queued =
-      comfySettings.provider === "cloud"
-        ? await queueCloudPrompt({
-            workflow: prepared.workflow,
-            cloudApiKey: comfySettings.cloudApiKey,
-            partnerNodeApiKey: comfySettings.apiKey,
-          })
-        : await queueComfyPrompt({
-            workflow: prepared.workflow,
-            clientId,
-          });
-
-    // --- 9. Update job → queued ---
-    const nodeErrorSummary = summarizeComfyNodeErrors(queued.node_errors);
-    await db
-      .update(generationJobs)
-      .set({
-        status: "queued",
-        promptId: queued.prompt_id,
-        errorMessage: nodeErrorSummary,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(generationJobs.id, jobId));
-
-    return { ok: true, jobId };
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error during generation.";
-    await markJobFailed(jobId, message);
-    return { ok: false, error: message };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// runWorkflowGenerationFromForm — form-compatible wrapper with redirect
-// ---------------------------------------------------------------------------
-
-export async function runWorkflowGenerationFromForm(
-  formData: FormData
-): Promise<void> {
+async function submitShotGeneration(formData: FormData, styleIntent: "auto" | "shot-storyboard"): Promise<void> {
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
   const shotId = parseInt(formData.get("shotId") as string, 10);
@@ -586,10 +122,10 @@ export async function runWorkflowGenerationFromForm(
     const raw = value.trim();
     if (!raw) continue;
     // Format: "id1,id2,id3" — store as placeholder; resolution happens server-side
-    // in runWorkflowGeneration where availableImages is known.
+    // in runShotGenerationCore where availableImages is known.
     batchImagesByNodeId[nodeId] = raw.split(",").map((id) => ({
       id: id.trim(),
-      imagePath: "", // placeholder — resolved in runWorkflowGeneration
+      imagePath: "", // placeholder — resolved in runShotGenerationCore
     }));
   }
 
@@ -598,7 +134,7 @@ export async function runWorkflowGenerationFromForm(
   // treated as an explicit override when patchedJsonOverrideActive is also
   // present (only rendered once the user has actually edited the JSON —
   // see EditablePatchedJsonPanel). Otherwise the freshly computed canonical
-  // payload from runWorkflowGeneration is used, never a stale/unedited echo.
+  // payload is used, never a stale/unedited echo.
   const overrideActive = (formData.get("patchedJsonOverrideActive") as string | null) === "1";
   const rawPatchedJsonOverride = overrideActive
     ? (formData.get("patchedJsonOverride") as string | null)?.trim() || null
@@ -622,19 +158,22 @@ export async function runWorkflowGenerationFromForm(
   // ShotGenerationPanel.tsx) — never a default-on field.
   const confirmPartnerNodeCost = (formData.get("confirmPartnerNodeCost") as string | null) === "1";
 
-  const result = await runWorkflowGeneration({
-    projectId,
-    sequenceId,
-    shotId,
-    workflowId,
-    selectedImageByNodeId,
-    selectedVideoByNodeId,
-    scalarOverrideByNodeId,
-    textOverrideByNodeId,
-    patchedJsonOverride,
-    batchImagesByNodeId,
-    confirmPartnerNodeCost,
-  });
+  const result = await runShotGenerationCore(
+    {
+      projectId,
+      sequenceId,
+      shotId,
+      workflowId,
+      selectedImageByNodeId,
+      selectedVideoByNodeId,
+      scalarOverrideByNodeId,
+      textOverrideByNodeId,
+      patchedJsonOverride,
+      batchImagesByNodeId,
+      confirmPartnerNodeCost,
+    },
+    styleIntent
+  );
 
   if (result.ok) {
     const sep = base.includes("?") ? "&" : "?";
@@ -645,6 +184,15 @@ export async function runWorkflowGenerationFromForm(
       `${base}${sep}generationError=${encodeURIComponent(result.error)}`
     );
   }
+}
+
+export async function runWorkflowGenerationFromForm(formData: FormData): Promise<void> {
+  return submitShotGeneration(formData, "auto");
+}
+
+/** STYLE.1.E.SURFACES.1 — the dedicated, hard-coded Shot Storyboard form action; consumer is never derived from a forwarded field, and runShotGenerationCore itself refuses any workflow whose current persisted kind is not "image". */
+export async function runShotStoryboardGenerationFromForm(formData: FormData): Promise<void> {
+  return submitShotGeneration(formData, "shot-storyboard");
 }
 
 // ---------------------------------------------------------------------------
@@ -760,6 +308,17 @@ export async function runAssetGeneration(input: {
     notes: asset.notes,
   });
 
+  // --- STYLE.1.E.SURFACES.1 — Asset consumer is always hard-coded "asset";
+  // no Camera Lab or unstyled path exists for Asset generation. ---
+  const preparedStyle = await prepareGenerationStyleSource("asset", { kind: "project", projectId }, assetPromptText);
+  if (!preparedStyle.ok) {
+    return { ok: false, error: preparedStyle.error };
+  }
+  const effectiveSuggestedText = preparedStyle.composedSuggestedPrompt.prompt;
+  const effectiveTextOverrideByNodeId = input.textOverrideByNodeId
+    ? Object.fromEntries(Object.entries(input.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : input.textOverrideByNodeId;
+
   // --- 9. Canonical payload (GEN.SEEDANCE.1 — expand -> filter -> patch, same
   //        function as the shot path, the panels and /map). ---
   const assetBatchEntry = input.batchImagesByNodeId
@@ -783,9 +342,9 @@ export async function runAssetGeneration(input: {
   const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,
     inputs: parsed.inputs,
-    suggestedText: assetPromptText,
+    suggestedText: effectiveSuggestedText,
     availableImages,
-    textOverrideByNodeId: input.textOverrideByNodeId,
+    textOverrideByNodeId: effectiveTextOverrideByNodeId,
     selectedImageByNodeId: input.selectedImageByNodeId,
     scalarOverrideByNodeId: input.scalarOverrideByNodeId,
     batchSelectedImages: assetResolvedBatchImages,
@@ -805,7 +364,25 @@ export async function runAssetGeneration(input: {
     };
   }
 
-  // --- 9b. Comfy Cloud preflight (COMFY.PROVIDER.1) — see runWorkflowGeneration. ---
+  // --- STYLE.1.E.SURFACES.1 (retake) — "actually injected" is derived
+  // strictly from the canonical payload result (a real `kind === "text"`
+  // patch — buildGenerationPayload found a patchable field on a real
+  // text-kind node), never merely from "an effective Style existed". See
+  // the identical guard/rationale in runShotGeneration.ts. ---
+  const assetTextPatches = built.patch.patches.filter((p) => p.kind === "text");
+  const assetStyleActuallyInjected = preparedStyle.hasEffectiveStyle && assetTextPatches.length > 0;
+
+  if (overrideUsed && preparedStyle.hasEffectiveStyle && assetTextPatches.length > 0) {
+    const mismatch = findEditedStyleTextMismatch(assetTextPatches, finalPatchedJson);
+    if (mismatch) return { ok: false, error: mismatch };
+  }
+
+  // Never claim a styled prompt was queued when it never touched a real
+  // input — the snapshot must describe exactly the unstyled base prompt
+  // that was actually used to build `finalPatchedJson` in that case.
+  const assetPromptTextForSnapshot = assetStyleActuallyInjected ? effectiveSuggestedText : assetPromptText;
+
+  // --- 9b. Comfy Cloud preflight (COMFY.PROVIDER.1) — see runShotGenerationCore. ---
   if (comfySettings.provider === "cloud") {
     const gate = await checkCloudPreflightGate(
       finalPatchedJson,
@@ -876,7 +453,7 @@ export async function runAssetGeneration(input: {
         selectedImageCount: built.expansion.preview.selectedImageCount,
         clonedNodeCount: built.expansion.preview.clonedNodeCount,
       },
-      promptText: assetPromptText,
+      promptText: assetPromptTextForSnapshot,
       overrideUsed,
       // REVISE (GEN.SEEDANCE.1) — prepared.warnings (e.g. "local images were
       // uploaded to ComfyUI and LoadImage inputs rewritten") were previously
@@ -885,6 +462,8 @@ export async function runAssetGeneration(input: {
       warnings: [...new Set([...built.patch.warnings, ...prepared.warnings])],
       uploadedImages: prepared.uploadedImages,
       queuedWorkflow: prepared.workflow,
+      // STYLE.1.E.SURFACES.1 — see the identical guard in runShotGeneration.ts.
+      ...(assetStyleActuallyInjected && preparedStyle.provenanceCandidate ? { styleProvenance: preparedStyle.provenanceCandidate } : {}),
     };
     await db
       .update(generationJobs)

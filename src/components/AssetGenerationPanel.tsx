@@ -21,6 +21,8 @@ import {
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
+import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { type FillSource } from "@/lib/textInputKind";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
@@ -111,6 +113,14 @@ export default async function AssetGenerationPanel({
     .filter((v): v is string => Boolean(v))
     .join("\n\n");
 
+  // STYLE.1.E.SURFACES.1 — Asset consumer is always hard-coded "asset".
+  // Preview-only; the server action re-resolves independently at submit time.
+  const preparedStyle = await prepareGenerationStyleSource("asset", { kind: "project", projectId: pid }, assetPromptText);
+  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : assetPromptText;
+  const styledTextOverrideByNodeId = preparedStyle.ok
+    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : textOverrideByNodeId;
+
   const descTrimmed = asset.description?.trim() ?? "";
   const notesTrimmed = asset.notes?.trim() ?? "";
   const fillSources: FillSource[] = [
@@ -166,14 +176,17 @@ export default async function AssetGenerationPanel({
       ? buildGenerationPayload({
           workflowJson: workflow.workflowJson,
           inputs: parsed.inputs,
-          suggestedText: assetPromptText,
+          suggestedText: styledSuggestedText,
           availableImages,
-          textOverrideByNodeId,
+          textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           scalarOverrideByNodeId: scalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
+
+  // STYLE.1.E.SURFACES.1 (retake) — see ShotGenerationPanel.tsx's identical comment.
+  const styleTextInjectable = built?.ok ? built.patch.patches.some((p) => p.kind === "text") : false;
 
   const mappings = built?.ok ? built.mappings : [];
   const imageMappings = mappings.filter((m) => m.mappingKind === "image");
@@ -428,6 +441,9 @@ export default async function AssetGenerationPanel({
           </>
         )}
 
+        {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
+        <ProjectStyleGenerationPreview sourceLabel="Project Style" prepared={preparedStyle} textInjectable={styleTextInjectable} />
+
         {payloadPreview !== null && (
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
@@ -467,7 +483,17 @@ export default async function AssetGenerationPanel({
                   </p>
                 </div>
               )}
-            {!cloudPreflightBlocksGeneration && (
+            {/* STYLE.1.E.SURFACES.1 — a resolver/corruption error disables
+                Generate entirely; already visible above via
+                ProjectStyleGenerationPreview. */}
+            {!preparedStyle.ok && (
+              <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3">
+                <p className="text-xs text-[#cf7b6b] leading-relaxed">
+                  Generation is disabled: Project Style could not be resolved.
+                </p>
+              </div>
+            )}
+            {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
             <PartnerNodeConfirmForm
               action={runAssetGenerationFromForm}
               partnerNodeConfirmMessage={partnerNodeConfirmMessage}
