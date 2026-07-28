@@ -5,6 +5,7 @@ import { buildAssetBibleFromContextPrompt } from "@/lib/prompts/asset-bible-from
 import { resolveAssetBibleContext } from "@/lib/prompts/assetBibleContext";
 import { parseAssetBibleDraft } from "@/lib/prompts/assetBibleDraft";
 import { getLLMConfig } from "@/lib/settings";
+import { resolveAssetStyleContext } from "@/lib/projectStyle/assetAlignment/resolveAssetStyleContext";
 import type { GeneratedAssetBibleDraft } from "@/types/llm";
 
 export async function generateAssetBibleDraft(
@@ -22,7 +23,18 @@ export async function generateAssetBibleDraft(
       return { ok: false, error: "LLM is not configured. Go to Settings to set up Ollama." };
     }
 
-    const llmPrompt = buildAssetBibleFromContextPrompt({ asset: context.asset });
+    const styleResolved = await resolveAssetStyleContext(projectId);
+    if (!styleResolved.ok) return { ok: false, error: styleResolved.error };
+    const style =
+      styleResolved.context.mode === "active"
+        ? {
+            worldSegment: styleResolved.context.segments.worldSegment,
+            visualSegment: styleResolved.context.segments.visualSegment,
+            rulesSegment: styleResolved.context.segments.rulesSegment,
+          }
+        : { worldSegment: "", visualSegment: "", rulesSegment: "" };
+
+    const llmPrompt = buildAssetBibleFromContextPrompt({ asset: context.asset, style });
 
     const raw = await callLLMJson(llmPrompt, config);
     const draft = parseAssetBibleDraft(raw);

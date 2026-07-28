@@ -1835,3 +1835,54 @@ export const sequenceStyleOverrides = sqliteTable(
 
 export type SequenceStyleOverride = typeof sequenceStyleOverrides.$inferSelect;
 export type NewSequenceStyleOverride = typeof sequenceStyleOverrides.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// asset_style_alignments — STYLE.1.F.CORE
+//
+// The durable, informational-only marker for the latest explicit Asset ->
+// Project Style review ("Align with Project Style"). One row per Asset
+// (unique on assetId), upserted by the apply action every time a proposal
+// is explicitly applied — never by generation, which performs zero writes.
+//
+// Deliberately does NOT store the temporary LLM proposal, the raw LLM
+// response, the prompt, or any provider payload/secret — only enough to
+// answer "was this exact Asset content reviewed against this exact
+// (immutable) Style version, and is that still true now": the Style
+// version identity and a deterministic fingerprint of the Asset's five
+// editable fields as they stood right after the review (see
+// src/lib/projectStyle/assetAlignment/fingerprint.ts). The read model
+// (src/actions/assetAlignment.ts) compares this fingerprint and version
+// against the Asset's live content and the Project's live active version to
+// derive "aligned" / "style-changed" / "asset-changed" — this table never
+// re-derives or caches that comparison itself.
+// ---------------------------------------------------------------------------
+
+export const assetStyleAlignments = sqliteTable(
+  "asset_style_alignments",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    assetId: int("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    projectStyleVersionId: int("project_style_version_id")
+      .notNull()
+      .references(() => projectStyleVersions.id, { onDelete: "cascade" }),
+    // Deterministic fingerprint (sha256 hex) of the Asset's five editable
+    // fields exactly as they stood immediately after this review was
+    // applied — never re-read/re-hashed from a later DB state.
+    assetContentFingerprint: text("asset_content_fingerprint").notNull(),
+    reviewedAt: text("reviewed_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    unique("asset_style_alignments_asset_id_unique").on(table.assetId),
+    index("asset_style_alignments_version_idx").on(table.projectStyleVersionId),
+  ]
+);
+
+export type AssetStyleAlignment = typeof assetStyleAlignments.$inferSelect;
+export type NewAssetStyleAlignment = typeof assetStyleAlignments.$inferInsert;

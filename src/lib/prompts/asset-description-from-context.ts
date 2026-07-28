@@ -32,6 +32,14 @@ export type AssetDescriptionFromContextInput = {
     imageRole: string | null;
     sourceFilename?: string | null;
   }>;
+  /**
+   * STYLE.1.F.CORE — active Project Style, World & Design Language plus
+   * Asset-applicable approved rules only (never Visual Treatment, see
+   * buildAssetBibleFromContextPrompt). Omit entirely, or pass both segments
+   * as "", when there is no active Style: the prompt below must then be
+   * byte-for-byte identical to its pre-Style output.
+   */
+  style?: { worldSegment: string; rulesSegment: string };
 };
 
 const JSON_CONSTRAINT = `Always respond with a valid JSON object matching exactly this schema:
@@ -101,6 +109,21 @@ export function buildAssetDescriptionFromContextPrompt(
     }
   }
 
+  // STYLE.1.F.CORE — appended only when at least one segment is non-empty,
+  // so a no-Style call produces the exact same `lines` array as before this
+  // ticket (byte-for-byte compatibility requirement).
+  const worldSegment = input.style?.worldSegment ?? "";
+  const rulesSegment = input.style?.rulesSegment ?? "";
+  const styleParts = [worldSegment, rulesSegment].filter((part) => part.length > 0);
+  if (styleParts.length > 0) {
+    lines.push(`\nProject Style:\n${styleParts.join("\n\n")}`);
+  }
+
+  const styleRule =
+    styleParts.length > 0
+      ? "\n- A Project Style is provided below. Respect its World & Design Language and any listed rules; never contradict them."
+      : "";
+
   return {
     system: `You are a production asset supervisor for a film or animation project.
 Your task is to write or enrich the description and notes for a specific asset.
@@ -111,7 +134,7 @@ Rules:
 - notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
 - If the asset already has a description or notes, improve and complete them — do not discard useful existing content.
 - If context is limited, produce a cautious but useful draft based on the asset type and project tone.
-- Do not mention missing information unless it is useful as a design note.
+- Do not mention missing information unless it is useful as a design note.${styleRule}
 ${JSON_CONSTRAINT}`,
     user: `${lines.join("\n")}\n\nWrite or enrich the description and notes for "${input.asset.name}".`,
   };

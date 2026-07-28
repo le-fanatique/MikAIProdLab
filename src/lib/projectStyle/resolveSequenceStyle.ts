@@ -53,8 +53,8 @@ import { parseStyleSnapshotFromJson } from "./validateStyleSnapshot";
 import { isValidId } from "./validation";
 import type { StyleSnapshot } from "./styleSnapshot";
 
-/** The exact transaction-callback parameter type `db.transaction` accepts — lets every sync read helper below share the one active transaction instead of opening its own. */
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** The exact transaction-callback parameter type `db.transaction` accepts — lets every sync read helper below share the one active transaction instead of opening its own. Exported (STYLE.1.F.CORE) so the Asset alignment apply transaction (src/actions/assetAlignment.ts) can share this exact type instead of redeclaring it. */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type ResolvedSequenceStyle =
   | {
@@ -103,8 +103,8 @@ function parseAndVerify(contentSnapshot: string, storedCompiledText: string): { 
   return { ok: true, snapshot: parsed.snapshot };
 }
 
-/** Reads the Project's active pointer and, if one is set, its target version — confined to this Project. Returns `version: null` only for the legitimate "no pointer row" / "no active version set" case. A pointer that resolves to a version missing entirely, or belonging to a different Project, is refused explicitly (`ok: false`) — never silently treated as "no active version". */
-function readActiveProjectVersionSync(
+/** Reads the Project's active pointer and, if one is set, its target version — confined to this Project. Returns `version: null` only for the legitimate "no pointer row" / "no active version set" case. A pointer that resolves to a version missing entirely, or belonging to a different Project, is refused explicitly (`ok: false`) — never silently treated as "no active version". Exported (STYLE.1.F.CORE) so the Asset alignment apply transaction can re-verify the active version stayed the same INSIDE its own single transaction — `resolveActiveProjectStyle` cannot be called there directly since better-sqlite3 does not support nested transactions. */
+export function readActiveProjectVersionSync(
   tx: Tx,
   projectId: number
 ): { ok: true; version: (ActiveProjectVersionRef & { contentSnapshot: string; compiledText: string }) | null } | { ok: false; error: string } {

@@ -21,6 +21,14 @@ export type AssetBibleFromContextInput = {
     usageRules: string | null;
     forbiddenVariations: string | null;
   };
+  /**
+   * STYLE.1.F.CORE — active Project Style: World & Design Language plus
+   * Asset-applicable approved rules (same as Enhance Description), plus
+   * Visual Treatment. Omit entirely, or pass all segments as "", when there
+   * is no active Style: the prompt below must then be byte-for-byte
+   * identical to its pre-Style output.
+   */
+  style?: { worldSegment: string; visualSegment: string; rulesSegment: string };
 };
 
 const JSON_CONSTRAINT = `Always respond with a valid JSON object matching exactly this schema:
@@ -63,6 +71,22 @@ export function buildAssetBibleFromContextPrompt(input: AssetBibleFromContextInp
     }
   }
 
+  // STYLE.1.F.CORE — appended only when at least one segment is non-empty,
+  // so a no-Style call produces the exact same `lines` array as before this
+  // ticket (byte-for-byte compatibility requirement).
+  const worldSegment = input.style?.worldSegment ?? "";
+  const visualSegment = input.style?.visualSegment ?? "";
+  const rulesSegment = input.style?.rulesSegment ?? "";
+  const styleParts = [worldSegment, visualSegment, rulesSegment].filter((part) => part.length > 0);
+  if (styleParts.length > 0) {
+    lines.push(`\nProject Style:\n${styleParts.join("\n\n")}`);
+  }
+
+  const styleRule =
+    styleParts.length > 0
+      ? "\n- A Project Style is provided below. Respect its World & Design Language, Visual Treatment and any listed rules; never contradict them."
+      : "";
+
   return {
     system: `You are a production asset supervisor for a film or animation project.
 Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
@@ -73,7 +97,7 @@ Rules:
 - visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
 - usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
 - forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
-- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.${styleRule}
 ${JSON_CONSTRAINT}`,
     user: `${lines.join("\n")}\n\nWrite or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "${input.asset.name}".`,
   };

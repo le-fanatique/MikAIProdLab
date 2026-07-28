@@ -14,7 +14,18 @@ import { eq, and, asc } from "drizzle-orm";
 import { callLLMJson } from "@/lib/llm";
 import { buildAssetDescriptionFromContextPrompt } from "@/lib/prompts/asset-description-from-context";
 import { getLLMConfig } from "@/lib/settings";
+import { resolveAssetStyleContext } from "@/lib/projectStyle/assetAlignment/resolveAssetStyleContext";
 import type { GeneratedAssetDescriptionDraft, LLMConfig } from "@/types/llm";
+
+/** World & Design Language + Asset-applicable approved rules only — resolved once per action invocation (including once per batch, never once per item) so a Style activation mid-batch cannot mix versions within one call. */
+type DescriptionStyleSegments = { worldSegment: string; rulesSegment: string };
+
+async function resolveDescriptionStyleSegments(projectId: number): Promise<DescriptionStyleSegments> {
+  const resolved = await resolveAssetStyleContext(projectId);
+  if (!resolved.ok) throw new Error(resolved.error);
+  if (resolved.context.mode === "none") return { worldSegment: "", rulesSegment: "" };
+  return { worldSegment: resolved.context.segments.worldSegment, rulesSegment: resolved.context.segments.rulesSegment };
+}
 
 const BATCH_LIMIT = 10;
 
@@ -52,7 +63,8 @@ type ProjectContext = {
 async function generateForAsset(
   project: ProjectContext,
   assetId: number,
-  config: LLMConfig
+  config: LLMConfig,
+  style: DescriptionStyleSegments
 ): Promise<GeneratedAssetDescriptionDraft> {
   const [asset] = await db.select().from(assets).where(eq(assets.id, assetId));
   if (!asset || asset.projectId !== project.id) {
@@ -114,6 +126,7 @@ async function generateForAsset(
     sequenceContexts: seqRows,
     shotContexts: shotRows,
     refImageMeta: refRows,
+    style,
   });
 
   const raw = await callLLMJson(llmPrompt, config);
@@ -144,10 +157,13 @@ export async function generateAssetDescriptionDraft(
     const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
     if (!project) return { ok: false, error: "Project not found." };
 
+    const style = await resolveDescriptionStyleSegments(projectId);
+
     const draft = await generateForAsset(
       { id: project.id, name: project.name, pitch: project.pitch ?? null, story: project.story ?? null, outline: project.outline ?? null },
       assetId,
-      config
+      config,
+      style
     );
 
     return { ok: true, draft };
@@ -229,6 +245,10 @@ export async function generateBatchAssetDescriptionDrafts(
       outline: project.outline ?? null,
     };
 
+    // Resolved once for the whole batch — a Style activation mid-run must
+    // never mix versions between Assets in the same batch call.
+    const style = await resolveDescriptionStyleSegments(projectId);
+
     const results: BatchAssetDraftResult[] = [];
     const errors: BatchAssetDraftError[] = [];
 
@@ -245,7 +265,7 @@ export async function generateBatchAssetDescriptionDrafts(
           continue;
         }
 
-        const draft = await generateForAsset(projectCtx, assetId, config);
+        const draft = await generateForAsset(projectCtx, assetId, config, style);
 
         results.push({
           assetId,
