@@ -20,6 +20,8 @@ import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel from "@/components/AssetDescriptionEnhancePanel";
 import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
+import AssetAlignmentPanel from "@/components/AssetAlignmentPanel";
+import { getAssetAlignmentStatusAction, type GetAssetAlignmentStatusResult } from "@/actions/assetAlignment";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
@@ -132,6 +134,20 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
   const [asset] = await db.select().from(assets).where(eq(assets.id, aid));
   if (!asset || asset.projectId !== pid) notFound();
+
+  // STYLE.1.F.UI — status load must never take Asset Detail down. A thrown
+  // exception here is caught and shown as a local panel error instead of
+  // failing the whole page render. The CORE action itself already returns
+  // sanitized structured errors for every known failure — this catch only
+  // exists for a genuinely unexpected exception, whose raw message could
+  // carry internal detail, so it is mapped to one fixed message instead of
+  // being surfaced directly (Codex Round 1 P2).
+  let alignmentStatus: GetAssetAlignmentStatusResult;
+  try {
+    alignmentStatus = await getAssetAlignmentStatusAction(pid, aid);
+  } catch {
+    alignmentStatus = { ok: false, error: "Unable to load Style alignment status. Try again." };
+  }
 
   const sequenceAppearances = await db
     .select({
@@ -295,6 +311,12 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           error), reusing the existing query-param signals already computed
           above — no new state introduced. */}
       <SectionLabel label="AI Assist" />
+      <Collapsible label="Align with Project Style">
+        <Card title="Align with Project Style">
+          <AssetAlignmentPanel projectId={pid} assetId={aid} initialStatus={alignmentStatus} />
+        </Card>
+      </Collapsible>
+
       <Collapsible
         label="Enhance Description"
         defaultOpen={descriptionUpdated || notesUpdated || Boolean(assetDescriptionError)}
