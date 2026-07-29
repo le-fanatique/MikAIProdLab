@@ -18,6 +18,7 @@ import {
   projectStyleReferenceImages,
   projectStyleReferenceDomains,
   projectStyleReferenceConsumers,
+  lookTestReferences,
   projectStyleInfluenceReferences,
   type ProjectStyleReferenceImage,
 } from "@/db/schema";
@@ -301,6 +302,18 @@ export async function deleteProjectStyleReferenceAction(
   // Phase 1 — Validate ownership (no writes yet).
   const [existing] = await db.select().from(projectStyleReferenceImages).where(eq(projectStyleReferenceImages.id, referenceId));
   if (!existing || existing.projectId !== projectId) return { ok: false, error: "Reference not found in this Project." };
+
+  // STYLE.1.G.CORE.1 retake — block deletion if any Look Test still
+  // references this image.  The FK is now NO ACTION so the DB itself
+  // would reject it, but an explicit application-level guard gives a
+  // clearer error message before touching any file.
+  const [lookDep] = await db
+    .select({ id: lookTestReferences.id })
+    .from(lookTestReferences)
+    .where(eq(lookTestReferences.referenceImageId, referenceId));
+  if (lookDep) {
+    return { ok: false, error: "This reference is used by a Look Test and cannot be deleted. Delete the Look Test first." };
+  }
 
   const publicRoot = path.join(process.cwd(), "public");
   const pathIsConfined = isConfinedReferenceImagePath(existing.imagePath);

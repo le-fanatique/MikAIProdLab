@@ -19,7 +19,8 @@ import type { GenerationStyleProvenance } from "@/lib/projectStyle/generationSty
 
 export type GenerationSnapshot = {
   workflowId: number;
-  contextType: "shot" | "asset" | "sequence";
+  /** STYLE.1.G.CORE.1 — "look-test" identifies a Look Development job; `contextId` is then the `look_tests.id`, never a Shot/Asset/Sequence id. */
+  contextType: "shot" | "asset" | "sequence" | "look-test";
   contextId: number;
   createdAt: string;
   selections: {

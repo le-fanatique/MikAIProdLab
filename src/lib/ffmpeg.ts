@@ -127,3 +127,44 @@ export async function runFfprobeJson(inputPath: string): Promise<unknown> {
 
   return JSON.parse(stdout);
 }
+
+const FFMPEG_DECODE_TIMEOUT_MS = 20_000;
+
+/**
+ * STYLE.1.G.CORE.1 Round 3 (Finding 3) — FFprobe alone is not proof a file
+ * decodes: a real PNG truncated to 50% still returns a valid codec/
+ * dimensions from FFprobe (which only reads container/stream headers) while
+ * a full decode fails. This runs an actual FFmpeg decode of every frame
+ * (`-f null -`, no output written) — the only way to catch a
+ * truncated/corrupt-but-header-valid file before it is durably published.
+ *
+ * Round 4 (Finding 5) — reserved for STILL IMAGES only (a single frame
+ * decodes in well under the timeout regardless of resolution). Videos use
+ * FFprobe stream/kind/dimension validation instead (see
+ * publishLookResult.ts) — decoding every frame of an arbitrarily long/high-
+ * resolution video against one fixed wall-clock timeout could reject a
+ * valid output for a reason that has nothing to do with corruption.
+ *
+ * The thrown error is always a fixed, sanitized message — raw FFmpeg
+ * stderr and the absolute temp file path are logged server-side only,
+ * never returned to a caller that might surface them to a client.
+ */
+export async function runFfmpegDecodeCheck(inputPath: string): Promise<void> {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) {
+    throw new Error("FFmpeg binary is not available for this platform/architecture.");
+  }
+
+  try {
+    await execFileAsync(
+      ffmpegPath,
+      ["-v", "error", "-i", inputPath, "-f", "null", "-"],
+      { timeout: FFMPEG_DECODE_TIMEOUT_MS, windowsHide: true, maxBuffer: 10 * 1024 * 1024 }
+    );
+  } catch (e) {
+    const err = e as { code?: number; stderr?: string; message?: string };
+    const detail = err.stderr?.trim() || err.message || String(e);
+    console.error(`runFfmpegDecodeCheck("${inputPath}") failed: ${detail}`);
+    throw new Error("FFmpeg decode failed — the file is corrupt, truncated, or unreadable.");
+  }
+}
