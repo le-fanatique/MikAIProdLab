@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import type { ProjectStyleReferenceView } from "@/actions/projectStyleReferences";
 import Collapsible from "@/components/Collapsible";
 import {
@@ -978,6 +979,16 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
   return (
     <div className="flex flex-col gap-4">
       {error && <p className="text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{error}</p>}
+
+      {/* STYLE.1.G.UI.1 — visible entry into the Look Development Bench. */}
+      <div className="flex justify-end">
+        <Link
+          href={`/projects/${projectId}/style/look-development`}
+          className="rounded border border-[#2c3035] px-3 py-1.5 text-sm text-[#5b93d6] hover:border-[#3a4046] hover:text-[#8fbbe8] transition-colors"
+        >
+          Open Look Development →
+        </Link>
+      </div>
 
       <div className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
