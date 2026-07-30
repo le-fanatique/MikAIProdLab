@@ -46,6 +46,8 @@ import ImageSourcePicker from "@/components/ImageSourcePicker";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import { refImageUrl } from "@/lib/refImageUrl";
 import LookDevelopmentRecentTests from "@/components/projectStyle/lookDevelopment/LookDevelopmentRecentTests";
+import LookDevelopmentComparisonGrid from "@/components/projectStyle/lookDevelopment/LookDevelopmentComparisonGrid";
+import type { LookResultStatus } from "@/lib/lookDevelopment/contracts";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -774,6 +776,111 @@ export default function LookDevelopmentBench({
 
   const workflowNameById = useMemo(() => new Map(initialWorkflows.map((w) => [w.id, w.name])), [initialWorkflows]);
 
+  // ── Review workspace: comparison selection + notes/status/target/delete
+  //    reconciliation. `tests` (declared above) remains the ONE source of
+  //    truth for every row's job/result summary; these handlers only patch
+  //    the matching row after a CORE mutation succeeds elsewhere (Recent
+  //    Tests, Comparison grid) — never a second, divergent copy of the data.
+  const [comparisonIds, setComparisonIds] = useState<number[]>([]);
+  const [comparisonRefreshToken, setComparisonRefreshToken] = useState(0);
+
+  const handleToggleComparison = useCallback((lookTestId: number) => {
+    setComparisonIds((prev) => {
+      if (prev.includes(lookTestId)) return prev.filter((id) => id !== lookTestId);
+      if (prev.length >= 4) return prev;
+      return [...prev, lookTestId];
+    });
+  }, []);
+
+  const handleClearComparison = useCallback(() => setComparisonIds([]), []);
+
+  const bumpComparisonRefresh = useCallback(() => setComparisonRefreshToken((v) => v + 1), []);
+
+  // A Look Target change reconciles EVERY row: the newly-targeted result
+  // becomes look-target, and any other row that previously held look-target
+  // reverts to candidate — mirroring `markLookResultAsTargetAction`'s own
+  // project-scoped uniqueness guarantee, applied locally without a reload.
+  const handleStatusChanged = useCallback((resultId: number, status: LookResultStatus) => {
+    setTests((prev) =>
+      prev.map((t) => {
+        if (!t.result) return t;
+        if (t.result.id === resultId) return { ...t, result: { ...t.result, status } };
+        if (status === "look-target" && t.result.status === "look-target") return { ...t, result: { ...t.result, status: "candidate" } };
+        return t;
+      })
+    );
+    bumpComparisonRefresh();
+  }, [bumpComparisonRefresh]);
+
+  const handleNotesSaved = useCallback((_resultId: number, _notes: string | null) => {
+    void _resultId;
+    void _notes;
+    // Notes are not part of the list-row summary (LookTestListItem never
+    // carries them) — only the opened detail and the comparison grid read
+    // them, both via getLookTestAction. Bump the comparison refresh token so
+    // any compared entry re-fetches the latest notes.
+    bumpComparisonRefresh();
+  }, [bumpComparisonRefresh]);
+
+  const handleResultDeleted = useCallback(
+    (resultId: number) => {
+      setTests((prev) => prev.map((t) => (t.result?.id === resultId ? { ...t, result: null } : t)));
+      setComparisonIds((prev) => {
+        const deletedTest = tests.find((t) => t.result?.id === resultId);
+        return deletedTest ? prev.filter((id) => id !== deletedTest.id) : prev;
+      });
+      bumpComparisonRefresh();
+    },
+    [tests, bumpComparisonRefresh]
+  );
+
+  // Returns whether the list refresh itself succeeded — the caller (Recent
+  // Tests) uses this to decide whether the duplicated id can be dropped from
+  // its own "pending sync" tracking, or must keep offering `Retry sync`.
+  // Never re-invokes `duplicateLookTestAction` — only a read.
+  const handleDuplicated = useCallback(async (): Promise<boolean> => {
+    const refreshed = await refreshTests();
+    if (!refreshed.ok) {
+      setRefreshWarning(`Look Test duplicated, but Recent Look Tests could not be refreshed: ${refreshed.error}`);
+      return false;
+    }
+    setRefreshWarning(null);
+    return true;
+  }, [refreshTests]);
+
+  const handleRerunQueued = useCallback(
+    async (lookTestId: number, jobId: number) => {
+      setTests((prev) => prev.map((t) => (t.id === lookTestId ? { ...t, job: { id: jobId, status: "queued" } } : t)));
+      const refreshed = await refreshTests();
+      if (!refreshed.ok) setRefreshWarning(`Look Test run queued, but Recent Look Tests could not be refreshed: ${refreshed.error}`);
+      else setRefreshWarning(null);
+    },
+    [refreshTests]
+  );
+
+  // A rerun's publish is authoritative on its own (publishLookResultAction
+  // returns the exact resultId/filePath) — patching `tests` here never
+  // depends on a second network round trip succeeding. The list refresh
+  // below is best-effort only, to pick up anything else that may have
+  // changed; its failure never invalidates the already-known publish.
+  const handleRerunPublished = useCallback(
+    async (lookTestId: number, resultId: number, filePath: string, _generationJobId: number) => {
+      void _generationJobId; // only needed by the opened-detail reconciliation in LookDevelopmentRecentTests; the list row summary never carries it.
+      setTests((prev) => prev.map((t) => (t.id === lookTestId ? { ...t, result: { id: resultId, status: "candidate", filePath } } : t)));
+      bumpComparisonRefresh();
+      const refreshed = await refreshTests();
+      if (!refreshed.ok) setRefreshWarning(`Look Result saved, but Recent Look Tests could not be fully refreshed: ${refreshed.error}`);
+      else setRefreshWarning(null);
+    },
+    [refreshTests, bumpComparisonRefresh]
+  );
+
+  const handleRetryListSync = useCallback(async () => {
+    const refreshed = await refreshTests();
+    if (refreshed.ok) setRefreshWarning(null);
+    else setRefreshWarning(`Recent Look Tests could not be refreshed: ${refreshed.error}`);
+  }, [refreshTests]);
+
   // Codex retake round 2 (P2, "Recent Look Tests remains stale as the active
   // job progresses") — `GenerationJobStatusPanel` polls independently and
   // only calls `router.refresh()` on a TERMINAL status, which re-fetches
@@ -1134,7 +1241,14 @@ export default function LookDevelopmentBench({
           </button>
         )}
 
-        {refreshWarning && <p className="text-xs text-[#c9a24b]">{refreshWarning}</p>}
+        {refreshWarning && (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-[#c9a24b]">{refreshWarning}</p>
+            <button type="button" className={buttonClass} onClick={handleRetryListSync}>
+              Retry sync
+            </button>
+          </div>
+        )}
 
         {activeJobId !== null && (
           <div className="flex flex-col gap-3 border-t border-[#232629] pt-3">
@@ -1163,10 +1277,41 @@ export default function LookDevelopmentBench({
         )}
       </section>
 
+      {/* ── Comparison ──────────────────────────────────────────────── */}
+      {comparisonIds.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <SectionHeading>Comparison</SectionHeading>
+          <LookDevelopmentComparisonGrid
+            lookTestIds={comparisonIds}
+            onOpen={handleOpenTest}
+            workflowNameById={workflowNameById}
+            refreshToken={comparisonRefreshToken}
+            onClear={handleClearComparison}
+            onRemove={handleToggleComparison}
+          />
+        </section>
+      )}
+
       {/* ── Recent Look Tests ───────────────────────────────────────── */}
       <section className="flex flex-col gap-4">
         <SectionHeading>Recent Look Tests</SectionHeading>
-        <LookDevelopmentRecentTests tests={tests} onOpen={handleOpenTest} workflowNameById={workflowNameById} />
+        <LookDevelopmentRecentTests
+          projectId={projectId}
+          tests={tests}
+          onOpen={handleOpenTest}
+          workflowNameById={workflowNameById}
+          workflows={initialWorkflows}
+          allReferences={initialReferences}
+          styleOptions={styleOptions}
+          comparisonIds={comparisonIds}
+          onToggleComparison={handleToggleComparison}
+          onNotesSaved={handleNotesSaved}
+          onStatusChanged={handleStatusChanged}
+          onDeleted={handleResultDeleted}
+          onDuplicated={handleDuplicated}
+          onQueued={handleRerunQueued}
+          onPublished={handleRerunPublished}
+        />
       </section>
     </div>
   );
