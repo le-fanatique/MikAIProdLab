@@ -330,6 +330,13 @@
       "when": 1785322509813,
       "tag": "0046_fix_look_test_references_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1785490421848,
+      "tag": "0047_free_sugar_man",
+      "breakpoints": true
     }
   ]
 }

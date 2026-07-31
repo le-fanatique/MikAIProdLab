@@ -20,6 +20,7 @@ import {
   projectStyleReferenceConsumers,
   lookTestReferences,
   projectStyleInfluenceReferences,
+  projectStyleReferenceAnalysisRunReferences,
   type ProjectStyleReferenceImage,
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
@@ -321,6 +322,22 @@ export async function deleteProjectStyleReferenceAction(
     return { ok: false, error: "This reference is used by a Look Test and cannot be deleted. Delete the Look Test first." };
   }
 
+  // STYLE.1.B.ANALYSIS.CORE — a Reference used by any (historical or live)
+  // multimodal analysis Run is frozen provenance and can never be deleted
+  // out from under it; the FK is NO ACTION (see
+  // project_style_reference_analysis_run_references), this application-level
+  // guard only gives a clearer message before any file work starts. Analysis
+  // rows are never snapshotted/restored here — deletion stays refused as
+  // long as they exist (the ticket's own explicit rule), never "quarantine
+  // and restore" like the file below.
+  const [analysisDep] = await db
+    .select({ id: projectStyleReferenceAnalysisRunReferences.id })
+    .from(projectStyleReferenceAnalysisRunReferences)
+    .where(eq(projectStyleReferenceAnalysisRunReferences.referenceId, referenceId));
+  if (analysisDep) {
+    return { ok: false, error: "This reference was used by a Style analysis run and cannot be deleted. Delete the analysis run first." };
+  }
+
   const publicRoot = path.join(process.cwd(), "public");
   const pathIsConfined = isConfinedReferenceImagePath(existing.imagePath);
   const absolute = path.resolve(publicRoot, existing.imagePath);
@@ -360,6 +377,20 @@ export async function deleteProjectStyleReferenceAction(
         .where(eq(projectStyleReferenceImages.id, referenceId))
         .all() as unknown as ProjectStyleReferenceImage[];
       if (!row[0]) throw new Error("Reference disappeared before delete.");
+
+      // Recheck immediately before DELETE — a concurrent analysis run could
+      // have started (and acquired this reference) after Phase 1's
+      // precheck above but before this transaction started. The FK itself
+      // (NO ACTION) is the final backstop if this recheck somehow raced
+      // past too.
+      const [analysisDepInTx] = tx
+        .select({ id: projectStyleReferenceAnalysisRunReferences.id })
+        .from(projectStyleReferenceAnalysisRunReferences)
+        .where(eq(projectStyleReferenceAnalysisRunReferences.referenceId, referenceId))
+        .all() as { id: number }[];
+      if (analysisDepInTx) {
+        throw new Error("This reference was used by a Style analysis run and cannot be deleted. Delete the analysis run first.");
+      }
 
       const domains = tx
         .select()
