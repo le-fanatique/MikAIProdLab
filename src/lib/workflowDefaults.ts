@@ -10,6 +10,8 @@ export type WorkflowDefaults = {
   gaussianPlyId: number | null;
   /** CAMLAB.POLISH.1 — Column 3 (Gaussian-to-image) default workflow. */
   gaussianToImageId: number | null;
+  /** STYLE.1.POLISH.1 — Look Development Bench default workflow (image or video kind; its real `kind` determines the Bench's initial mode). */
+  lookDevelopmentId: number | null;
 };
 
 const DEFAULT_KEYS = [
@@ -18,6 +20,7 @@ const DEFAULT_KEYS = [
   "default_workflow_shot_video",
   "default_workflow_gaussian_ply",
   "default_workflow_gaussian_to_image",
+  "default_workflow_look_development",
 ] as const;
 
 export function parseWorkflowDefaultId(value: string | undefined | null): number | null {
@@ -38,5 +41,6 @@ export async function getWorkflowDefaults(): Promise<WorkflowDefaults> {
     shotVideoId: parseWorkflowDefaultId(map.get("default_workflow_shot_video")),
     gaussianPlyId: parseWorkflowDefaultId(map.get("default_workflow_gaussian_ply")),
     gaussianToImageId: parseWorkflowDefaultId(map.get("default_workflow_gaussian_to_image")),
+    lookDevelopmentId: parseWorkflowDefaultId(map.get("default_workflow_look_development")),
   };
 }

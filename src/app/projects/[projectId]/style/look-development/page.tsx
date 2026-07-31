@@ -8,6 +8,7 @@ import { getWorkingDraft, getVersionHistory, type WorkingDraftView, type ActiveV
 import { listProjectStyleReferences, type ProjectStyleReferenceView } from "@/actions/projectStyleReferences";
 import { listLookTestsAction, type LookTestListItem } from "@/actions/lookDevelopment";
 import LookDevelopmentBench from "@/components/projectStyle/lookDevelopment/LookDevelopmentBench";
+import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -45,7 +46,7 @@ export default async function LookDevelopmentPage({ params }: Props) {
 
   const loadErrors: LookDevelopmentLoadErrors = {};
 
-  const [draftOutcome, versionsOutcome, referencesOutcome, workflowsOutcome, testsOutcome] = await Promise.allSettled([
+  const [draftOutcome, versionsOutcome, referencesOutcome, workflowsOutcome, testsOutcome, workflowDefaultsOutcome] = await Promise.allSettled([
     getWorkingDraft(pid),
     getVersionHistory(pid),
     listProjectStyleReferences(pid),
@@ -53,6 +54,9 @@ export default async function LookDevelopmentPage({ params }: Props) {
       .select({ id: comfyWorkflows.id, name: comfyWorkflows.name, kind: comfyWorkflows.kind, workflowJson: comfyWorkflows.workflowJson })
       .from(comfyWorkflows),
     listLookTestsAction(pid),
+    // STYLE.1.POLISH.1 — independent read, same as every other section above;
+    // its own failure never blocks the rest of the page (falls back to null).
+    getWorkflowDefaults(),
   ]);
 
   let draftView: WorkingDraftView | null = null;
@@ -90,6 +94,11 @@ export default async function LookDevelopmentPage({ params }: Props) {
     loadErrors.tests = "Failed to load Recent Look Tests.";
   }
 
+  // STYLE.1.POLISH.1 — absent/failed read is not a page-level error; the
+  // Bench itself falls back to the historical image-first default.
+  const defaultLookDevelopmentWorkflowId =
+    workflowDefaultsOutcome.status === "fulfilled" ? workflowDefaultsOutcome.value.lookDevelopmentId : null;
+
   return (
     <div>
       <Breadcrumb
@@ -110,6 +119,7 @@ export default async function LookDevelopmentPage({ params }: Props) {
         initialWorkflows={workflows}
         initialTests={tests}
         initialLoadErrors={loadErrors}
+        initialDefaultLookDevelopmentWorkflowId={defaultLookDevelopmentWorkflowId}
       />
     </div>
   );

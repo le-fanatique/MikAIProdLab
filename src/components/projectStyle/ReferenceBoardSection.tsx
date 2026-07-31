@@ -8,7 +8,7 @@
 // in ProjectStyleWorkspace.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import EmptyState from "@/components/EmptyState";
 import {
   uploadProjectStyleReferenceAction,
@@ -20,6 +20,36 @@ import {
   REFERENCE_CONSUMERS,
   type ReferenceConsumer,
 } from "@/lib/projectStyle/validationB";
+import FieldTooltip from "@/components/FieldTooltip";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
+import { refImageUrl } from "@/lib/refImageUrl";
+
+// ── Shared field help — single dictionary reused by Create and Edit ────────
+// STYLE.1.POLISH.1 — centralized so both forms can never drift into two
+// divergent copies of the same explanation.
+
+const REFERENCE_FIELD_HELP = {
+  imageFile:
+    "The image itself — PNG, JPEG, or WebP. Example: a concept painting or a photo reference you want the Style to draw from.",
+  label:
+    "A short human-readable name shown on the card instead of the raw filename. Example: \"Rain-soaked alley, key lighting\".",
+  sourceUrl:
+    "Where this image came from, for provenance only — it is never fetched or displayed as the image itself. Example: https://artstation.com/artwork/example.",
+  whatInterestsMe:
+    "What you specifically want the Style to take from this image. Example: \"The cool rim light and the wet-asphalt reflections.\"",
+  whatToAvoid:
+    "What to ignore in this image even though it's otherwise useful. Example: \"Ignore the character design, focus on the environment only.\"",
+  provenanceNotes:
+    "Free-form notes about where/how this reference was found or licensed. Example: \"Downloaded from the studio's internal mood board, cleared for reference use.\"",
+  domains:
+    "Which analysis domains this reference informs (lighting, palette, composition, ...). Example: \"lighting\", \"color-palette\".",
+  consumers:
+    "Which parts of the pipeline may use this reference. Example: select \"image\" and \"shot\" if it should inform keyframe and shot generation.",
+  approvedForAnalysis:
+    "Marks this image as cleared for Style analysis. Example: check this once you've confirmed the image itself (not just its metadata) is safe to analyze.",
+  approvedForGeneration:
+    "Marks this image as cleared to be used as an input during generation. Example: check this once you've confirmed the image can be shown to the generation runtime.",
+} as const;
 
 // ── Shared style tokens ──────────────────────────────────────────────────
 
@@ -141,6 +171,7 @@ function UploadPanel({
 }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [label, setLabel] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [provenanceNotes, setProvenanceNotes] = useState("");
@@ -149,6 +180,8 @@ function UploadPanel({
   const [domains, setDomains] = useState<string[]>([]);
   const [domainInput, setDomainInput] = useState("");
   const [consumers, setConsumers] = useState<ReferenceConsumer[]>([]);
+  const [approvedForAnalysis, setApprovedForAnalysis] = useState(false);
+  const [approvedForGeneration, setApprovedForGeneration] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,6 +203,7 @@ function UploadPanel({
 
   const reset = () => {
     setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setLabel("");
     setSourceUrl("");
     setProvenanceNotes("");
@@ -178,6 +212,8 @@ function UploadPanel({
     setDomains([]);
     setDomainInput("");
     setConsumers([]);
+    setApprovedForAnalysis(false);
+    setApprovedForGeneration(false);
     setError(null);
   };
 
@@ -197,6 +233,8 @@ function UploadPanel({
         whatToAvoid: whatToAvoid.trim() || null,
         domains,
         consumers,
+        approvedForAnalysis,
+        approvedForGeneration,
       });
       if (result.ok) {
         onUploaded(result.view);
@@ -223,37 +261,58 @@ function UploadPanel({
   return (
     <form onSubmit={handleSubmit} className="rounded border border-dashed border-[#2c3035] p-3 flex flex-col gap-2">
       {error && <p className="text-xs text-[#cf7b6b]" role="alert">{error}</p>}
-      <label className="text-[10px] text-[#6e767d]">
-        Image file
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">
+          Image file <FieldTooltip text={REFERENCE_FIELD_HELP.imageFile} />
+        </span>
         <input
+          ref={fileInputRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block mt-1 text-xs text-[#6e767d]"
+          className="sr-only"
+          id="ref-upload-file-input"
+          tabIndex={-1}
         />
-      </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={smallButtonClass}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose image
+          </button>
+          <span className="text-xs text-[#a4abb2] truncate">{file ? file.name : "No file chosen"}</span>
+        </div>
+        {!file && (
+          <p className="text-[10px] text-[#6e767d]">
+            No image selected. Choose a PNG, JPEG, or WebP file to enable Upload.
+          </p>
+        )}
+      </div>
       <label className="text-[10px] text-[#6e767d]">
-        Label
+        <span className="inline-flex items-center gap-1">Label <FieldTooltip text={REFERENCE_FIELD_HELP.label} /></span>
         <input value={label} onChange={(e) => setLabel(e.target.value)} className={smallInputClass + " mt-0.5"} placeholder="Optional label" />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        Source URL
+        <span className="inline-flex items-center gap-1">Source URL <FieldTooltip text={REFERENCE_FIELD_HELP.sourceUrl} /></span>
         <input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} className={smallInputClass + " mt-0.5"} placeholder="https://…" />
+        <span className="block mt-0.5 text-[9px] text-[#4b5158]">Optional — provenance only, does not enable Upload by itself.</span>
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        What interests me
+        <span className="inline-flex items-center gap-1">What interests me <FieldTooltip text={REFERENCE_FIELD_HELP.whatInterestsMe} /></span>
         <textarea value={whatInterestsMe} onChange={(e) => setWhatInterestsMe(e.target.value)} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        What to avoid
+        <span className="inline-flex items-center gap-1">What to avoid <FieldTooltip text={REFERENCE_FIELD_HELP.whatToAvoid} /></span>
         <textarea value={whatToAvoid} onChange={(e) => setWhatToAvoid(e.target.value)} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        Provenance notes
+        <span className="inline-flex items-center gap-1">Provenance notes <FieldTooltip text={REFERENCE_FIELD_HELP.provenanceNotes} /></span>
         <textarea value={provenanceNotes} onChange={(e) => setProvenanceNotes(e.target.value)} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <fieldset className="flex flex-col gap-1 border-0 p-0 m-0">
-        <legend className="text-[10px] text-[#6e767d]">Domains</legend>
+        <legend className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">Domains <FieldTooltip text={REFERENCE_FIELD_HELP.domains} /></legend>
         <div className="flex flex-wrap gap-1">
           {domains.map((d, i) => (
             <span key={i} className="inline-flex items-center gap-1 rounded border border-[#2c3035] px-1.5 py-0.5 text-[10px] text-[#a4abb2]">
@@ -274,7 +333,7 @@ function UploadPanel({
         </div>
       </fieldset>
       <fieldset className="flex flex-col gap-1 border-0 p-0 m-0">
-        <legend className="text-[10px] text-[#6e767d]">Consumers</legend>
+        <legend className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">Consumers <FieldTooltip text={REFERENCE_FIELD_HELP.consumers} /></legend>
         <div className="flex flex-wrap gap-2">
           {REFERENCE_CONSUMERS.map((c) => (
             <label key={c} className="flex items-center gap-1 text-[10px] text-[#a4abb2]">
@@ -284,6 +343,16 @@ function UploadPanel({
           ))}
         </div>
       </fieldset>
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 text-[10px] text-[#a4abb2]">
+          <input type="checkbox" checked={approvedForAnalysis} onChange={(e) => setApprovedForAnalysis(e.target.checked)} />
+          Approved for Style analysis <FieldTooltip text={REFERENCE_FIELD_HELP.approvedForAnalysis} />
+        </label>
+        <label className="flex items-center gap-2 text-[10px] text-[#a4abb2]">
+          <input type="checkbox" checked={approvedForGeneration} onChange={(e) => setApprovedForGeneration(e.target.checked)} />
+          Approved for generation use <FieldTooltip text={REFERENCE_FIELD_HELP.approvedForGeneration} />
+        </label>
+      </div>
       <div className="flex gap-2">
         <button type="submit" className={smallButtonClass} disabled={submitting || !file}>
           {submitting ? "Uploading…" : "Upload"}
@@ -394,27 +463,27 @@ function EditPanel({
     <form onSubmit={handleSave} className="rounded border border-[#243449] bg-[#101a26] p-3 flex flex-col gap-2">
       {error && <p className="text-xs text-[#cf7b6b]" role="alert">{error}</p>}
       <label className="text-[10px] text-[#6e767d]">
-        Label
+        <span className="inline-flex items-center gap-1">Label <FieldTooltip text={REFERENCE_FIELD_HELP.label} /></span>
         <input value={label} onChange={(e) => setLabel(e.target.value)} className={smallInputClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        Source URL
+        <span className="inline-flex items-center gap-1">Source URL <FieldTooltip text={REFERENCE_FIELD_HELP.sourceUrl} /></span>
         <input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} className={smallInputClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        What interests me
+        <span className="inline-flex items-center gap-1">What interests me <FieldTooltip text={REFERENCE_FIELD_HELP.whatInterestsMe} /></span>
         <textarea value={whatInterestsMe} onChange={(e) => setWhatInterestsMe(e.target.value)} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        What to avoid
+        <span className="inline-flex items-center gap-1">What to avoid <FieldTooltip text={REFERENCE_FIELD_HELP.whatToAvoid} /></span>
         <textarea value={whatToAvoid} onChange={(e) => setWhatToAvoid(e.target.value)} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        Provenance notes
+        <span className="inline-flex items-center gap-1">Provenance notes <FieldTooltip text={REFERENCE_FIELD_HELP.provenanceNotes} /></span>
         <textarea value={provenanceNotes} onChange={(e) => setProvenanceNotes(e.target.value)} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <fieldset className="flex flex-col gap-1 border-0 p-0 m-0">
-        <legend className="text-[10px] text-[#6e767d]">Domains</legend>
+        <legend className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">Domains <FieldTooltip text={REFERENCE_FIELD_HELP.domains} /></legend>
         <div className="flex flex-wrap gap-1">
           {domains.map((d, i) => (
             <span key={i} className="inline-flex items-center gap-1 rounded border border-[#2c3035] px-1.5 py-0.5 text-[10px] text-[#a4abb2]">
@@ -435,7 +504,7 @@ function EditPanel({
         </div>
       </fieldset>
       <fieldset className="flex flex-col gap-1 border-0 p-0 m-0">
-        <legend className="text-[10px] text-[#6e767d]">Consumers</legend>
+        <legend className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">Consumers <FieldTooltip text={REFERENCE_FIELD_HELP.consumers} /></legend>
         <div className="flex flex-wrap gap-2">
           {REFERENCE_CONSUMERS.map((c) => (
             <label key={c} className="flex items-center gap-1 text-[10px] text-[#a4abb2]">
@@ -448,11 +517,11 @@ function EditPanel({
       <div className="flex flex-col gap-1">
         <label className="flex items-center gap-2 text-[10px] text-[#a4abb2]">
           <input type="checkbox" checked={approvedForAnalysis} onChange={(e) => setApprovedForAnalysis(e.target.checked)} />
-          Approved for Style analysis
+          Approved for Style analysis <FieldTooltip text={REFERENCE_FIELD_HELP.approvedForAnalysis} />
         </label>
         <label className="flex items-center gap-2 text-[10px] text-[#a4abb2]">
           <input type="checkbox" checked={approvedForGeneration} onChange={(e) => setApprovedForGeneration(e.target.checked)} />
-          Approved for generation use
+          Approved for generation use <FieldTooltip text={REFERENCE_FIELD_HELP.approvedForGeneration} />
         </label>
       </div>
       <div className="flex gap-2">
@@ -515,15 +584,17 @@ function ReferenceCard({
 
   return (
     <div className="rounded border border-[#2c3035] bg-[#141618] p-2 flex flex-col gap-1.5">
-      {/* Thumbnail */}
-      <div className="relative w-full aspect-[4/3] rounded overflow-hidden bg-[#0d0e10]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`/${r.imagePath}`}
-          alt={displayLabel}
-          className="w-full h-full object-cover"
-        />
-      </div>
+      {/* Thumbnail — full image, no crop, hover popup via the shared ImageSourcePicker pattern */}
+      <ThumbnailHoverPreview src={refImageUrl(r.imagePath)} alt={displayLabel} previewSize={640}>
+        <div className="relative w-full aspect-[4/3] rounded overflow-hidden bg-[#0d0e10]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={refImageUrl(r.imagePath)}
+            alt={displayLabel}
+            className="w-full h-full object-contain"
+          />
+        </div>
+      </ThumbnailHoverPreview>
       {/* Label */}
       <p className="text-xs font-medium text-[#a4abb2] truncate" title={displayLabel}>
         {displayLabel}

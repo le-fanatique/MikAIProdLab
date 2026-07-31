@@ -1049,6 +1049,14 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         onReorder={handleReorderRule}
       />
 
+      <ReferenceBoardSection
+        projectId={projectId}
+        references={references}
+        onReferenceAdded={handleReferenceAdded}
+        onReferenceUpdated={handleReferenceUpdated}
+        onReferenceDeleted={handleReferenceDeleted}
+      />
+
       <InfluenceSection
         projectId={projectId}
         influences={influences}
@@ -1059,14 +1067,6 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         onInfluenceUpdated={handleInfluenceUpdated}
         onInfluenceDeleted={handleInfluenceDeleted}
         onResearchRuleApproved={handleResearchRuleApproved}
-      />
-
-      <ReferenceBoardSection
-        projectId={projectId}
-        references={references}
-        onReferenceAdded={handleReferenceAdded}
-        onReferenceUpdated={handleReferenceUpdated}
-        onReferenceDeleted={handleReferenceDeleted}
       />
 
       {!isReadOnlyActiveView && (
@@ -1121,8 +1121,9 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         </div>
 
         {versions.history.length > 0 && (
-          <div className="flex flex-col gap-1.5 border-t border-[#232629] pt-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">History ({versions.history.length})</p>
+          <div className="border-t border-[#232629] pt-3">
+            <Collapsible label={`History (${versions.history.length})`} defaultOpen={false}>
+            <div className="flex flex-col gap-1.5">
             {versions.history.map((v) => (
               <div
                 key={v.id}
@@ -1150,6 +1151,8 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
                 </Collapsible>
               </div>
             ))}
+            </div>
+            </Collapsible>
           </div>
         )}
       </div>

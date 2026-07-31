@@ -346,6 +346,38 @@ export default async function SettingsPage({ searchParams }: Props) {
               ))}
             </select>
           </div>
+          {/* STYLE.1.POLISH.1 — Default Look Development Workflow. Lists both
+              image and video workflows (via optgroups, kind visible in the
+              label) since the Bench's initial mode is derived from the
+              chosen workflow's real kind. */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-[#6e767d]">Default Look Development Workflow</label>
+            <select
+              name="lookDevelopmentWorkflowId"
+              defaultValue={String(defaults.lookDevelopmentId ?? "")}
+              className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+            >
+              <option value="">-- None --</option>
+              {imageWorkflows.length > 0 && (
+                <optgroup label="Image">
+                  {imageWorkflows.map((wf) => (
+                    <option key={wf.id} value={String(wf.id)}>
+                      {wf.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {videoWorkflows.length > 0 && (
+                <optgroup label="Video">
+                  {videoWorkflows.map((wf) => (
+                    <option key={wf.id} value={String(wf.id)}>
+                      {wf.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
           <div>
             <button
               type="submit"

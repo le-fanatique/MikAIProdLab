@@ -41,8 +41,14 @@ import type { ResolvedLookReference } from "@/lib/lookDevelopment/resolveLookRef
 import { parseComfyWorkflow, type WorkflowInput } from "@/lib/comfy/parseWorkflow";
 import { buildGenerationPayload, detectDynamicBatchUiInfo } from "@/lib/comfy/buildGenerationPayload";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
-import { NEUTRAL_BENCHMARK_SUBJECT, NEUTRAL_BENCHMARK_ACTION, deriveFromStoryText } from "@/lib/lookDevelopment/lookDevelopmentPresets";
+import {
+  NEUTRAL_BENCHMARK_SUBJECT,
+  NEUTRAL_BENCHMARK_ACTION,
+  deriveFromStoryText,
+  randomizeNeutralSubjectAndAction,
+} from "@/lib/lookDevelopment/lookDevelopmentPresets";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
+import Collapsible from "@/components/Collapsible";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import { refImageUrl } from "@/lib/refImageUrl";
 import LookDevelopmentRecentTests from "@/components/projectStyle/lookDevelopment/LookDevelopmentRecentTests";
@@ -72,6 +78,8 @@ type Props = {
   initialWorkflows: WorkflowRow[];
   initialTests: LookTestListItem[];
   initialLoadErrors: LoadErrors;
+  /** STYLE.1.POLISH.1 — `default_workflow_look_development` (Settings > Generation Defaults). Null/absent/invalid falls back to the historical image-first default. */
+  initialDefaultLookDevelopmentWorkflowId: number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -292,6 +300,7 @@ export default function LookDevelopmentBench({
   initialWorkflows,
   initialTests,
   initialLoadErrors,
+  initialDefaultLookDevelopmentWorkflowId,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<LookTestListItem[]>(initialTests);
@@ -306,6 +315,11 @@ export default function LookDevelopmentBench({
   // without a second, divergent "has the user typed anything" heuristic.
   const [lastAppliedText, setLastAppliedText] = useState<{ subject: string; action: string }>({ subject: "", action: "" });
   const [pendingSourceSwitch, setPendingSourceSwitch] = useState<LookTestSource | null>(null);
+  // ── Neutral Benchmark Random (Lot D2) — declared here (ahead of
+  // `applyPreset`) so it can clear a stale Random confirmation whenever a
+  // source switch is applied. See the Codex retake round 1 (P1) comments
+  // below for why the two pending decisions must stay mutually exclusive.
+  const [pendingRandomize, setPendingRandomize] = useState(false);
 
   const isDirty = subject !== lastAppliedText.subject || action !== lastAppliedText.action;
 
@@ -326,6 +340,13 @@ export default function LookDevelopmentBench({
       setAction(nextAction);
       setLastAppliedText({ subject: nextSubject, action: nextAction });
       setPendingSourceSwitch(null);
+      // Codex retake round 1 (P1) — applying a source switch (Overwrite or a
+      // no-opt-in direct switch) supersedes any stale Random decision left
+      // over from a PREVIOUS source: without this, a leftover
+      // `pendingRandomize` confirmation could still be sitting on screen
+      // after `source` has already moved on, and its Overwrite button would
+      // then install neutral content under the wrong (now-current) source.
+      setPendingRandomize(false);
     },
     [project]
   );
@@ -334,6 +355,12 @@ export default function LookDevelopmentBench({
     (next: LookTestSource) => {
       if (next === source) return;
       if (isDirty) {
+        // Codex retake round 1 (P1) — the two pending overwrite decisions
+        // (source switch vs. randomize) are mutually exclusive: staging a
+        // new source-switch decision immediately invalidates/clears any
+        // pending Random decision, so at most one confirmation banner is
+        // ever visible and a stale one can never be actioned later.
+        setPendingRandomize(false);
         setPendingSourceSwitch(next);
         return;
       }
@@ -342,8 +369,48 @@ export default function LookDevelopmentBench({
     [source, isDirty, applyPreset]
   );
 
+  const applyRandomized = useCallback(() => {
+    // Codex retake round 1 (P1) — defense-in-depth: even if a stale
+    // `pendingRandomize` confirmation were ever actioned after `source`
+    // moved away from "neutral-benchmark" (e.g. a future code path that
+    // forgets to clear it), this guard refuses to apply neutral content
+    // under a different preset. It only clears the stale flag instead.
+    if (source !== "neutral-benchmark") {
+      setPendingRandomize(false);
+      return;
+    }
+    const { subject: nextSubject, action: nextAction } = randomizeNeutralSubjectAndAction();
+    setSubject(nextSubject);
+    setAction(nextAction);
+    setLastAppliedText({ subject: nextSubject, action: nextAction });
+    setPendingRandomize(false);
+  }, [source]);
+
+  const handleRandomizeClick = useCallback(() => {
+    if (isDirty) {
+      // Codex retake round 1 (P1) — symmetric to handleSourceSelect: staging
+      // a Random decision invalidates/clears any pending source-switch
+      // decision, keeping the two confirmations mutually exclusive.
+      setPendingSourceSwitch(null);
+      setPendingRandomize(true);
+      return;
+    }
+    applyRandomized();
+  }, [isDirty, applyRandomized]);
+
   // ── Mode + Style source ──────────────────────────────────────────────
-  const [mode, setMode] = useState<LookMode>("image");
+  // STYLE.1.POLISH.1 — the Default Look Development Workflow (Settings), if
+  // it still resolves to a real workflow, sets the INITIAL mode/workflowId
+  // from that workflow's real kind. Absent/deleted/invalid falls back to the
+  // historical behavior: mode "image" + the first image workflow.
+  const defaultWorkflowRow = useMemo(
+    () =>
+      initialDefaultLookDevelopmentWorkflowId !== null
+        ? initialWorkflows.find((w) => w.id === initialDefaultLookDevelopmentWorkflowId) ?? null
+        : null,
+    [initialWorkflows, initialDefaultLookDevelopmentWorkflowId]
+  );
+  const [mode, setMode] = useState<LookMode>(() => defaultWorkflowRow?.kind ?? "image");
 
   const styleOptions = useMemo(() => buildStyleSourceOptions(initialDraft, initialVersions), [initialDraft, initialVersions]);
   const [styleSourceKey, setStyleSourceKey] = useState<string | null>(() => defaultStyleSourceKey(initialDraft, initialVersions));
@@ -351,7 +418,7 @@ export default function LookDevelopmentBench({
 
   // ── Workflow ──────────────────────────────────────────────────────────
   const compatibleWorkflows = useMemo(() => initialWorkflows.filter((w) => w.kind === mode), [initialWorkflows, mode]);
-  const [workflowId, setWorkflowId] = useState<number | null>(() => compatibleWorkflows[0]?.id ?? null);
+  const [workflowId, setWorkflowId] = useState<number | null>(() => defaultWorkflowRow?.id ?? compatibleWorkflows[0]?.id ?? null);
 
   // ── Reference Board mapping state (declared here, ahead of the workflow
   // handlers below, so they can reset it without a temporal-dead-zone /
@@ -783,6 +850,9 @@ export default function LookDevelopmentBench({
   //    Tests, Comparison grid) — never a second, divergent copy of the data.
   const [comparisonIds, setComparisonIds] = useState<number[]>([]);
   const [comparisonRefreshToken, setComparisonRefreshToken] = useState(0);
+  // STYLE.1.POLISH.1 (C4) — closed by default; only controls CSS visibility,
+  // LookDevelopmentRecentTests itself always stays mounted (see render below).
+  const [recentTestsOpen, setRecentTestsOpen] = useState(false);
 
   const handleToggleComparison = useCallback((lookTestId: number) => {
     setComparisonIds((prev) => {
@@ -917,9 +987,12 @@ export default function LookDevelopmentBench({
       <section className="flex flex-col gap-4">
         <SectionHeading>Test setup</SectionHeading>
 
+        {/* STYLE.1.POLISH.1 (C3) — closed by default; state lives in this
+            component (subject/action/source/pendingSourceSwitch/pendingRandomize),
+            never in Collapsible, so it survives close/reopen unchanged. */}
+        <Collapsible label="Test content" defaultOpen={false}>
         <div className="flex flex-col gap-2">
-          <span className={sectionTitleClass}>Test content</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap items-center">
             {(["from-story", "neutral-benchmark", "custom"] as LookTestSource[]).map((s) => (
               <button
                 key={s}
@@ -930,6 +1003,11 @@ export default function LookDevelopmentBench({
                 {s === "from-story" ? "From Story" : s === "neutral-benchmark" ? "Neutral Benchmark" : "Custom"}
               </button>
             ))}
+            {source === "neutral-benchmark" && (
+              <button type="button" className={segButtonBase + " " + segButtonInactive} onClick={handleRandomizeClick}>
+                Randomize subject and action
+              </button>
+            )}
           </div>
           {pendingSourceSwitch && (
             <div className="rounded border border-[#4a3a1f] bg-[#1f1a10] px-3 py-2 flex items-center justify-between gap-3">
@@ -939,6 +1017,19 @@ export default function LookDevelopmentBench({
                   Overwrite
                 </button>
                 <button type="button" className={smallInputClass + " w-auto"} onClick={() => setPendingSourceSwitch(null)}>
+                  Keep my text
+                </button>
+              </div>
+            </div>
+          )}
+          {pendingRandomize && (
+            <div className="rounded border border-[#4a3a1f] bg-[#1f1a10] px-3 py-2 flex items-center justify-between gap-3">
+              <span className="text-xs text-[#c9a24b]">Randomizing will overwrite your edited Subject/Action text. Continue?</span>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" className={smallInputClass + " w-auto"} onClick={applyRandomized}>
+                  Overwrite
+                </button>
+                <button type="button" className={smallInputClass + " w-auto"} onClick={() => setPendingRandomize(false)}>
                   Keep my text
                 </button>
               </div>
@@ -954,6 +1045,7 @@ export default function LookDevelopmentBench({
             <textarea value={action} onChange={(e) => setAction(e.target.value)} rows={2} className={fieldClass} placeholder="What the subject is doing." maxLength={1000} />
           </div>
         </div>
+        </Collapsible>
 
         <div className="flex flex-col gap-2">
           <span className={sectionTitleClass}>Mode</span>
@@ -1152,17 +1244,14 @@ export default function LookDevelopmentBench({
       <section className="flex flex-col gap-4">
         <SectionHeading>Prompt &amp; Style preview</SectionHeading>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1">
-            <span className={sectionTitleClass}>Test content</span>
-            <p className="text-xs text-[#a4abb2] whitespace-pre-wrap">{compiledPrompt?.testSegment || "(empty)"}</p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className={sectionTitleClass}>Selected Style</span>
-            <pre className="text-[10px] text-[#a4abb2] whitespace-pre-wrap font-mono bg-[#0d0e10] border border-[#2c3035] rounded p-2 max-h-40 overflow-auto">
-              {selectedStyleOption?.compiledText || "(none)"}
-            </pre>
-          </div>
+        {/* STYLE.1.POLISH.1 (C3) — the separate "Test content" preview here
+            was redundant with "Compiled Look prompt" below; removed rather
+            than maintaining a second representation. Selected Style stays. */}
+        <div className="flex flex-col gap-1">
+          <span className={sectionTitleClass}>Selected Style</span>
+          <pre className="text-[10px] text-[#a4abb2] whitespace-pre-wrap font-mono bg-[#0d0e10] border border-[#2c3035] rounded p-2 max-h-40 overflow-auto">
+            {selectedStyleOption?.compiledText || "(none)"}
+          </pre>
         </div>
 
         <div className="flex flex-col gap-1">
@@ -1293,25 +1382,40 @@ export default function LookDevelopmentBench({
       )}
 
       {/* ── Recent Look Tests ───────────────────────────────────────── */}
+      {/* STYLE.1.POLISH.1 (C4) — closed by default, but `LookDevelopmentRecentTests`
+          stays MOUNTED at all times (hidden via CSS only): it owns the
+          multi-rerun registry, pollers, publication state and Close/reopen
+          resumption. `Collapsible` (which unmounts its children) is never
+          used here — that would destroy all of it on every close. */}
       <section className="flex flex-col gap-4">
-        <SectionHeading>Recent Look Tests</SectionHeading>
-        <LookDevelopmentRecentTests
-          projectId={projectId}
-          tests={tests}
-          onOpen={handleOpenTest}
-          workflowNameById={workflowNameById}
-          workflows={initialWorkflows}
-          allReferences={initialReferences}
-          styleOptions={styleOptions}
-          comparisonIds={comparisonIds}
-          onToggleComparison={handleToggleComparison}
-          onNotesSaved={handleNotesSaved}
-          onStatusChanged={handleStatusChanged}
-          onDeleted={handleResultDeleted}
-          onDuplicated={handleDuplicated}
-          onQueued={handleRerunQueued}
-          onPublished={handleRerunPublished}
-        />
+        <button
+          type="button"
+          onClick={() => setRecentTestsOpen((v) => !v)}
+          aria-expanded={recentTestsOpen}
+          className="flex items-center gap-1.5 text-sm font-semibold text-[#e7e9ec] border-b border-[#232629] pb-2 w-full text-left"
+        >
+          <span className={`transition-transform ${recentTestsOpen ? "rotate-90" : ""}`}>›</span>
+          Recent Look Tests
+        </button>
+        <div className={recentTestsOpen ? undefined : "hidden"}>
+          <LookDevelopmentRecentTests
+            projectId={projectId}
+            tests={tests}
+            onOpen={handleOpenTest}
+            workflowNameById={workflowNameById}
+            workflows={initialWorkflows}
+            allReferences={initialReferences}
+            styleOptions={styleOptions}
+            comparisonIds={comparisonIds}
+            onToggleComparison={handleToggleComparison}
+            onNotesSaved={handleNotesSaved}
+            onStatusChanged={handleStatusChanged}
+            onDeleted={handleResultDeleted}
+            onDuplicated={handleDuplicated}
+            onQueued={handleRerunQueued}
+            onPublished={handleRerunPublished}
+          />
+        </div>
       </section>
     </div>
   );

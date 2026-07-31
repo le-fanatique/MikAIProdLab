@@ -29,6 +29,38 @@ import {
   type InfluenceDomainWeight,
 } from "@/lib/projectStyle/validationB";
 import InfluenceResearchWorkspace from "@/components/projectStyle/InfluenceResearchWorkspace";
+import FieldTooltip from "@/components/FieldTooltip";
+
+// ── Shared field help — single dictionary reused by Create and Edit ────────
+// STYLE.1.POLISH.1 — centralized so both forms can never drift into two
+// divergent copies of the same explanation.
+
+const INFLUENCE_FIELD_HELP = {
+  subjectType:
+    "What kind of subject this influence is. Example: choose \"Studio\" for a production house, \"Work\" for a single film or game.",
+  subjectName:
+    "The name of the person, studio, work, or movement. Example: \"Katsuhiro Otomo\".",
+  disambiguation:
+    "Extra words to tell this subject apart from a same-named one. Example: \"the animator, not the architect\".",
+  roleOrDiscipline:
+    "The subject's role or field of work. Example: \"Director / character designer\".",
+  periodOrWorks:
+    "The relevant era or specific works to focus on. Example: \"1988-1995, Akira and Steamboy\".",
+  whatInterestsMe:
+    "What you specifically want the Style to take from this influence. Example: \"The industrial detailing and motion blur in action scenes.\"",
+  whatToAvoid:
+    "What to ignore about this influence even though it's otherwise useful. Example: \"Ignore the color grading, focus on line work only.\"",
+  researchNotes:
+    "Free-form research notes gathered about this influence. Example: \"Interview quote: 'I wanted metal to feel alive.'\"",
+  domains:
+    "Which analysis domains this influence informs (lighting, palette, composition, ...). Example: \"composition\", \"line-weight\".",
+  domainWeight:
+    "How strongly this influence should count for that domain. Example: \"primary\" for a defining reference, \"accent\" for a minor touch.",
+  linkedReferences:
+    "Reference Board images that support this influence. Example: link the concept art you uploaded that best represents this subject's style.",
+  status:
+    "Whether this influence is still a draft or has been approved for use. Example: switch to \"approved\" once you're confident it belongs in the Style.",
+} as const;
 
 // ── Shared style tokens ──────────────────────────────────────────────────
 
@@ -114,7 +146,10 @@ function DomainEditor({
 
   return (
     <fieldset className="flex flex-col gap-1 border-0 p-0 m-0">
-      <legend className="text-[10px] text-[#6e767d]">Domains</legend>
+      <legend className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">
+        Domains <FieldTooltip text={INFLUENCE_FIELD_HELP.domains} />
+        <span className="ml-2 inline-flex items-center gap-1">Weight <FieldTooltip text={INFLUENCE_FIELD_HELP.domainWeight} /></span>
+      </legend>
       {domains.map((d, i) => (
         <div key={i} className="flex items-center gap-1">
           <span className="text-xs text-[#a4abb2] flex-1">{d.domain}</span>
@@ -180,7 +215,9 @@ function ReferencePicker({
 
   return (
     <fieldset className="flex flex-col gap-1 border-0 p-0 m-0">
-      <legend className="text-[10px] text-[#6e767d]">Supporting references</legend>
+      <legend className="text-[10px] text-[#6e767d] inline-flex items-center gap-1">
+        Supporting references <FieldTooltip text={INFLUENCE_FIELD_HELP.linkedReferences} />
+      </legend>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto">
         {references.map((v) => {
           const r = v.reference;
@@ -273,7 +310,7 @@ function InfluenceForm({
       {error && <p className="text-xs text-[#cf7b6b]" role="alert">{error}</p>}
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[10px] text-[#6e767d]">
-          Subject type
+          <span className="inline-flex items-center gap-1">Subject type <FieldTooltip text={INFLUENCE_FIELD_HELP.subjectType} /></span>
           <select
             value={form.subjectType}
             onChange={(e) => onChange({ ...form, subjectType: e.target.value as InfluenceSubjectType })}
@@ -285,7 +322,7 @@ function InfluenceForm({
           </select>
         </label>
         <label className="text-[10px] text-[#6e767d]">
-          Subject name *
+          <span className="inline-flex items-center gap-1">Subject name * <FieldTooltip text={INFLUENCE_FIELD_HELP.subjectName} /></span>
           <input
             value={form.subjectName}
             onChange={(e) => onChange({ ...form, subjectName: e.target.value })}
@@ -294,7 +331,7 @@ function InfluenceForm({
           />
         </label>
         <label className="text-[10px] text-[#6e767d]">
-          Disambiguation
+          <span className="inline-flex items-center gap-1">Disambiguation <FieldTooltip text={INFLUENCE_FIELD_HELP.disambiguation} /></span>
           <input
             value={form.disambiguation}
             onChange={(e) => onChange({ ...form, disambiguation: e.target.value })}
@@ -303,7 +340,7 @@ function InfluenceForm({
           />
         </label>
         <label className="text-[10px] text-[#6e767d]">
-          Role / discipline
+          <span className="inline-flex items-center gap-1">Role / discipline <FieldTooltip text={INFLUENCE_FIELD_HELP.roleOrDiscipline} /></span>
           <input
             value={form.roleOrDiscipline}
             onChange={(e) => onChange({ ...form, roleOrDiscipline: e.target.value })}
@@ -312,7 +349,7 @@ function InfluenceForm({
           />
         </label>
         <label className="text-[10px] text-[#6e767d] col-span-2">
-          Period / works
+          <span className="inline-flex items-center gap-1">Period / works <FieldTooltip text={INFLUENCE_FIELD_HELP.periodOrWorks} /></span>
           <input
             value={form.periodOrWorks}
             onChange={(e) => onChange({ ...form, periodOrWorks: e.target.value })}
@@ -322,15 +359,15 @@ function InfluenceForm({
         </label>
       </div>
       <label className="text-[10px] text-[#6e767d]">
-        What interests me
+        <span className="inline-flex items-center gap-1">What interests me <FieldTooltip text={INFLUENCE_FIELD_HELP.whatInterestsMe} /></span>
         <textarea value={form.whatInterestsMe} onChange={(e) => onChange({ ...form, whatInterestsMe: e.target.value })} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        What to avoid
+        <span className="inline-flex items-center gap-1">What to avoid <FieldTooltip text={INFLUENCE_FIELD_HELP.whatToAvoid} /></span>
         <textarea value={form.whatToAvoid} onChange={(e) => onChange({ ...form, whatToAvoid: e.target.value })} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <label className="text-[10px] text-[#6e767d]">
-        Research notes
+        <span className="inline-flex items-center gap-1">Research notes <FieldTooltip text={INFLUENCE_FIELD_HELP.researchNotes} /></span>
         <textarea value={form.researchNotes} onChange={(e) => onChange({ ...form, researchNotes: e.target.value })} rows={2} className={fieldClass + " mt-0.5"} />
       </label>
       <DomainEditor
@@ -347,7 +384,9 @@ function InfluenceForm({
       />
       {showStatus && (
         <div className="flex items-center gap-2">
-          <label className="text-[10px] text-[#6e767d]" htmlFor={`${instanceId}-status`}>Status</label>
+          <label className="text-[10px] text-[#6e767d] inline-flex items-center gap-1" htmlFor={`${instanceId}-status`}>
+            Status <FieldTooltip text={INFLUENCE_FIELD_HELP.status} />
+          </label>
           <select
             id={`${instanceId}-status`}
             value={status}

@@ -562,6 +562,9 @@ export async function saveWorkflowDefaults(formData: FormData): Promise<void> {
   // never inferred from a workflow's name, id, or SHARP node class.
   const gaussianPlyId = formData.get("gaussianPlyWorkflowId")?.toString().trim() ?? "";
   const gaussianToImageId = formData.get("gaussianToImageWorkflowId")?.toString().trim() ?? "";
+  // STYLE.1.POLISH.1 — same absent/invalid "no default" behavior as every
+  // other default above; never inferred from a workflow's name or id.
+  const lookDevelopmentId = formData.get("lookDevelopmentWorkflowId")?.toString().trim() ?? "";
 
   const now = new Date().toISOString();
   const upsert = (key: string, value: string) =>
@@ -575,6 +578,7 @@ export async function saveWorkflowDefaults(formData: FormData): Promise<void> {
   await upsert("default_workflow_shot_video", shotVideoId);
   await upsert("default_workflow_gaussian_ply", gaussianPlyId);
   await upsert("default_workflow_gaussian_to_image", gaussianToImageId);
+  await upsert("default_workflow_look_development", lookDevelopmentId);
 
   redirect("/settings?defaultsSaved=1");
 }

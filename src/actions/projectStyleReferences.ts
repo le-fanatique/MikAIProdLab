@@ -109,6 +109,10 @@ export type CreateReferenceInput = {
   whatToAvoid: string | null;
   domains: unknown;
   consumers: unknown;
+  /** STYLE.1.POLISH.1 — choosable at creation; validated as a runtime boolean and written in the same insert as the reference row. */
+  approvedForAnalysis: boolean;
+  /** STYLE.1.POLISH.1 — same contract as `approvedForAnalysis`. */
+  approvedForGeneration: boolean;
 };
 
 export type CreateReferenceResult =
@@ -124,6 +128,8 @@ export async function uploadProjectStyleReferenceAction(input: CreateReferenceIn
   if (!isValidOptionalLongText(input.provenanceNotes)) return { ok: false, error: "Invalid provenance notes." };
   if (!isValidOptionalLongText(input.whatInterestsMe)) return { ok: false, error: "Invalid 'What interests me' value." };
   if (!isValidOptionalLongText(input.whatToAvoid)) return { ok: false, error: "Invalid 'What to avoid' value." };
+  if (typeof input.approvedForAnalysis !== "boolean") return { ok: false, error: "Invalid approval flag." };
+  if (typeof input.approvedForGeneration !== "boolean") return { ok: false, error: "Invalid approval flag." };
 
   const domains = validateDomainList(input.domains);
   if (!domains) return { ok: false, error: "Invalid or duplicate analysis domains." };
@@ -152,8 +158,8 @@ export async function uploadProjectStyleReferenceAction(input: CreateReferenceIn
           provenanceNotes: normalizeOptionalText(input.provenanceNotes),
           whatInterestsMe: normalizeOptionalText(input.whatInterestsMe),
           whatToAvoid: normalizeOptionalText(input.whatToAvoid),
-          approvedForAnalysis: false,
-          approvedForGeneration: false,
+          approvedForAnalysis: input.approvedForAnalysis,
+          approvedForGeneration: input.approvedForGeneration,
           createdAt: now,
           updatedAt: now,
         })
