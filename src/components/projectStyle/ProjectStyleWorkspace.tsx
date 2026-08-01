@@ -48,6 +48,7 @@ import type {
 import type { ProjectStyleInfluenceView } from "@/actions/projectStyleInfluences";
 import ReferenceBoardSection from "@/components/projectStyle/ReferenceBoardSection";
 import InfluenceSection from "@/components/projectStyle/InfluenceSection";
+import ReferenceAnalysisWorkspace from "@/components/projectStyle/referenceAnalysis/ReferenceAnalysisWorkspace";
 
 type SectionRow = { id: number; pillar: StylePillar; heading: string; content: string; orderIndex: number };
 type RuleRow = {
@@ -1055,6 +1056,13 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         onReferenceAdded={handleReferenceAdded}
         onReferenceUpdated={handleReferenceUpdated}
         onReferenceDeleted={handleReferenceDeleted}
+      />
+
+      <ReferenceAnalysisWorkspace
+        projectId={projectId}
+        references={references}
+        draftRevision={revision}
+        onDraftRulesReconciled={handleResearchRuleApproved}
       />
 
       <InfluenceSection
