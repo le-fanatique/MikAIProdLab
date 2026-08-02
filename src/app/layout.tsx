@@ -275,7 +275,7 @@ export default async function RootLayout({
           </main>
 
           {/* Right context panel */}
-          <RightPanel tree={tree} />
+          <RightPanel />
         </div>
       </body>
     </html>

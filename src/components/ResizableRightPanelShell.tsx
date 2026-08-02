@@ -9,6 +9,11 @@ const WIDTH_STORAGE_KEY = "mikai.rightPanelWidth";
 const COLLAPSED_STORAGE_KEY = "mikai.rightPanelCollapsed";
 const PANEL_ID = "right-context-panel";
 
+// Left nav (Sidebar.tsx) is a fixed `w-56` (224px) that never shrinks —
+// reserving that width keeps the resizable panel from pushing the 3-column
+// row wider than the viewport on compact screens (UX.SETTINGS.CHAT.1).
+const LEFT_NAV_RESERVED_WIDTH = 224;
+
 function clampWidth(value: number): number {
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(value)));
 }
@@ -36,13 +41,15 @@ type Props = {
 };
 
 /**
- * Shell for the whole Right Context Panel column (RightPanel content +
- * SidebarLLMChat, stacked together — see RightPanel.tsx). Collapsed by
- * default (UX.POLISH.4): the aside stays mounted at all times (children,
- * including SidebarLLMChat's own conversation/model/draft state, are never
- * unmounted) but toggles the native `hidden` attribute, which drops it out
- * of layout entirely — the column reserves zero width while collapsed. A
- * floating button reopens it; a Close button inside reopens... closes it.
+ * Shell for the Right Context Panel column, exclusively the LLM Chat
+ * (SidebarLLMChat — see RightPanel.tsx). Collapsed by default (UX.POLISH.4):
+ * the aside stays mounted at all times (SidebarLLMChat's own conversation/
+ * model/draft state is never unmounted) but toggles the native `hidden`
+ * attribute, which drops it out of layout entirely — the column reserves
+ * zero width while collapsed. A floating button reopens it; a Close button
+ * inside closes it. The aside is bounded to the viewport height available
+ * under TopBar/ContextStrip; only the Chat's own conversation area scrolls
+ * internally.
  */
 export default function ResizableRightPanelShell({ children }: Props) {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
@@ -149,8 +156,8 @@ export default function ResizableRightPanelShell({ children }: Props) {
         id={PANEL_ID}
         hidden={collapsed}
         aria-hidden={collapsed}
-        className="relative shrink-0 border-l border-[#232629] bg-[#141618] overflow-y-auto py-4"
-        style={{ width }}
+        className="relative shrink-0 border-l border-[#232629] bg-[#141618] h-full flex flex-col overflow-hidden"
+        style={{ width: `min(${width}px, calc(100vw - ${LEFT_NAV_RESERVED_WIDTH}px))` }}
       >
         {/* Drag handle on left edge */}
         <div
@@ -165,7 +172,7 @@ export default function ResizableRightPanelShell({ children }: Props) {
         />
 
         {/* Close control */}
-        <div className="flex justify-end px-3 mb-2">
+        <div className="flex justify-end px-3 pt-4 pb-2 shrink-0">
           <button
             type="button"
             onClick={() => setCollapsed(true)}
@@ -179,7 +186,11 @@ export default function ResizableRightPanelShell({ children }: Props) {
           </button>
         </div>
 
-        {children}
+        {/* Chat fills the remaining viewport-bounded height; only its own
+            conversation area scrolls internally (SidebarLLMChat.tsx). */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {children}
+        </div>
       </aside>
     </>
   );

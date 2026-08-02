@@ -388,10 +388,6 @@ function renderMarkdown(text: string): React.ReactNode[] {
 // Component
 // ---------------------------------------------------------------------------
 
-const DEFAULT_HEIGHT = 320;
-const MIN_HEIGHT = 220;
-const MAX_HEIGHT = 640;
-
 const PROVIDER_DISPLAY: Record<LLMProvider, string> = {
   ollama: "Ollama",
   openrouter: "OpenRouter",
@@ -428,7 +424,6 @@ export default function SidebarLLMChat() {
   // Per-image save state, keyed by `${messageId}-${imageIndex}`
   const [refSaveStates, setRefSaveStates] = useState<Record<string, RefSaveState>>({});
 
-  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [models, setModels] = useState<string[]>([]);
@@ -478,23 +473,6 @@ export default function SidebarLLMChat() {
   const [imageGenAttachments, setImageGenAttachments] = useState<AttachedImage[]>([]);
   const [imageGenAttachError, setImageGenAttachError] = useState<string | null>(null);
   const imageGenAttachInputRef = useRef<HTMLInputElement>(null);
-
-  // Resizable height
-  const [chatHeight, setChatHeight] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("mikai.sidebarChatHeight");
-      if (saved) {
-        const n = parseInt(saved, 10);
-        if (!isNaN(n) && n >= MIN_HEIGHT && n <= MAX_HEIGHT) return n;
-      }
-    }
-    return DEFAULT_HEIGHT;
-  });
-  const dragRef = useRef<{ startY: number; startH: number; dragging: boolean }>({
-    startY: 0,
-    startH: DEFAULT_HEIGHT,
-    dragging: false,
-  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -603,36 +581,6 @@ export default function SidebarLLMChat() {
       prev && info?.backgrounds?.includes(prev) ? prev : ""
     );
   }, [selectedImageModel, imageModels]);
-
-  // Drag resize handlers
-  const onDragStart = useCallback((e: React.MouseEvent) => {
-    dragRef.current = { startY: e.clientY, startH: chatHeight, dragging: true };
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-  }, [chatHeight]);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current.dragging) return;
-      const delta = dragRef.current.startY - e.clientY;
-      const newH = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, dragRef.current.startH + delta));
-      setChatHeight(newH);
-    };
-    const onUp = () => {
-      if (dragRef.current.dragging) {
-        dragRef.current.dragging = false;
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        localStorage.setItem("mikai.sidebarChatHeight", String(chatHeight));
-      }
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [chatHeight]);
 
   // Text file selection handler
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1040,92 +988,56 @@ export default function SidebarLLMChat() {
 
   const canSend = !isLoading && !!selectedModel && (!!input.trim() || !!attachedFile || !!attachedImage);
 
-  // When assistant images are visible, let the component grow to full height instead
-  // of locking content inside the fixed-height scrollable message list.
+  // Whether any assistant message carries generated images — used only to
+  // adjust a display hint below the input, never to size the component:
+  // the layout is always viewport-bounded (UX.SETTINGS.CHAT.1), only the
+  // message list itself scrolls internally.
   const hasVisibleAssistantImages = messages.some(
     (msg) => msg.role === "assistant" && msg.images && msg.images.length > 0
   );
 
   return (
-    <div className="border-t border-[#232629] px-4 pt-4 mt-4">
-      {!isOpen ? (
-        // ── Closed state ──────────────────────────────────────────────
-        <button
-          onClick={() => setIsOpen(true)}
-          aria-expanded={false}
-          className="w-full text-left px-3 py-2 rounded hover:bg-[#1a1d20] transition-colors"
-        >
-          <div className="text-[11px] font-medium text-[#a4abb2]">LLM Chat</div>
-          <div className="text-[10px] text-[#6e767d]">
-            {effectiveProvider
-              ? `via ${PROVIDER_DISPLAY[effectiveProvider] ?? effectiveProvider}`
-              : "Ask the LLM"}
-          </div>
-        </button>
-      ) : (
-        // ── Open state ────────────────────────────────────────────────
-        <div
-          className="flex flex-col"
-          style={hasVisibleAssistantImages ? { minHeight: chatHeight } : { height: chatHeight }}
-        >
-          {/* Drag handle */}
-          <div
-            onMouseDown={onDragStart}
-            className="flex items-center justify-center h-[6px] -mt-1 mb-1 cursor-row-resize group"
-            title="Drag to resize chat"
+    <div className="h-full flex flex-col min-h-0 px-4 pb-4">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-2 shrink-0">
+        <span className="text-[11px] font-semibold text-[#e0e4e8]">LLM Chat</span>
+        {effectiveProvider && (
+          <span className="text-[9px] text-[#4b5158] border border-[#232629] rounded px-1 py-0.5">
+            {useSeparateProvider ? "Chat: " : ""}
+            {PROVIDER_DISPLAY[effectiveProvider] ?? effectiveProvider}
+          </span>
+        )}
+      </div>
+
+      {/* Mode tabs */}
+      <div className="flex mb-1 border border-[#232629] rounded overflow-hidden shrink-0">
+        {(["chat", "image"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => { setMode(m); setError(null); }}
+            className={`flex-1 py-0.5 text-[9px] tracking-wider transition-colors ${
+              mode === m
+                ? "bg-[#232629] text-[#e0e4e8]"
+                : "text-[#4b5158] hover:text-[#6e767d]"
+            }`}
           >
-            <div className="w-8 h-[3px] rounded-full bg-[#2a2d31] group-hover:bg-[#4b5158] transition-colors" />
-          </div>
-
-          {/* Header */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-[#e0e4e8]">LLM Chat</span>
-              {effectiveProvider && (
-                <span className="text-[9px] text-[#4b5158] border border-[#232629] rounded px-1 py-0.5">
-                  {useSeparateProvider ? "Chat: " : ""}
-                  {PROVIDER_DISPLAY[effectiveProvider] ?? effectiveProvider}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-[#4b5158] hover:text-[#a4abb2] text-sm leading-none"
-              aria-label="Close chat"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Mode tabs */}
-          <div className="flex mb-1 border border-[#232629] rounded overflow-hidden">
-            {(["chat", "image"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => { setMode(m); setError(null); }}
-                className={`flex-1 py-0.5 text-[9px] tracking-wider transition-colors ${
-                  mode === m
-                    ? "bg-[#232629] text-[#e0e4e8]"
-                    : "text-[#4b5158] hover:text-[#6e767d]"
-                }`}
-              >
-                {m === "chat" ? "Chat" : "Generate Image"}
-              </button>
-            ))}
-          </div>
-          <p className="text-[9px] text-[#4b5158] mb-2 leading-snug">
-            {mode === "chat"
-              ? "Ask questions, attach files, or analyze images."
-              : "Generate images with the selected chat provider."}
-          </p>
+            {m === "chat" ? "Chat" : "Generate Image"}
+          </button>
+        ))}
+      </div>
+      <p className="text-[9px] text-[#4b5158] mb-2 leading-snug shrink-0">
+        {mode === "chat"
+          ? "Ask questions, attach files, or analyze images."
+          : "Generate images with the selected chat provider."}
+      </p>
 
           {/* Model selector — text chat model, or image-mode fallback for non-OpenRouter */}
           {(mode === "chat" || effectiveProvider !== "openrouter") && (
             modelError ? (
-              <div className="text-[10px] text-[#e0556a] mb-1.5">{modelError}</div>
+              <div className="text-[10px] text-[#e0556a] mb-1.5 shrink-0">{modelError}</div>
             ) : (
-              <div className="flex flex-col gap-0.5 mb-1.5">
+              <div className="flex flex-col gap-0.5 mb-1.5 shrink-0">
                 <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
                   Model
                 </label>
@@ -1141,7 +1053,7 @@ export default function SidebarLLMChat() {
 
           {/* Image Model selector — image mode, OpenRouter only (discovery-driven) */}
           {mode === "image" && effectiveProvider === "openrouter" && (
-            <div className="flex flex-col gap-0.5 mb-1.5">
+            <div className="flex flex-col gap-0.5 mb-1.5 shrink-0">
               <label className="text-[9px] text-[#4b5158] uppercase tracking-wider">
                 Image Model
               </label>
@@ -1164,7 +1076,7 @@ export default function SidebarLLMChat() {
 
           {/* Image mode hint — non-OpenRouter providers have no discovery */}
           {mode === "image" && effectiveProvider === "openai-compatible" && (
-            <p className="text-[9px] text-[#4b5158] mb-1.5">
+            <p className="text-[9px] text-[#4b5158] mb-1.5 shrink-0">
               Image model discovery requires OpenRouter. Select a model that supports image generation at this provider.
             </p>
           )}
@@ -1173,9 +1085,9 @@ export default function SidebarLLMChat() {
           {mode === "chat" && (
             <>
               {promptsError ? (
-                <div className="text-[9px] text-[#4b5158] mb-1.5">{promptsError}</div>
+                <div className="text-[9px] text-[#4b5158] mb-1.5 shrink-0">{promptsError}</div>
               ) : (
-                <div className="flex items-center gap-1.5 mb-1.5">
+                <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
                   <label className="text-[9px] text-[#4b5158] uppercase tracking-wider shrink-0">
                     System Prompt
                   </label>
@@ -1195,10 +1107,12 @@ export default function SidebarLLMChat() {
           )}
 
           {/* Settings / messages separator */}
-          <div className="border-b border-[#1a1d20] mb-2" />
+          <div className="border-b border-[#1a1d20] mb-2 shrink-0" />
 
-          {/* Messages */}
-          <div className={hasVisibleAssistantImages ? "mb-2 space-y-1.5 min-h-[40px]" : "flex-1 overflow-y-auto mb-2 space-y-1.5 min-h-[40px]"}>
+          {/* Messages — the only internally-scrolling region; header, mode
+              tabs, model/system-prompt selectors and the input area below
+              stay fixed and reachable regardless of conversation length. */}
+          <div className="flex-1 min-h-0 overflow-y-auto mb-2 space-y-1.5">
             {messages.length === 0 && !error && (
               <div className="text-[10px] text-[#4b5158] italic">
                 {mode === "chat"
@@ -1308,7 +1222,9 @@ export default function SidebarLLMChat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* ── Mode-specific input area ───────────────────────────── */}
+          {/* ── Mode-specific input area (always reachable, never scrolled
+              out of view — see Messages above) ─────────────────────── */}
+          <div className="shrink-0">
           {mode === "chat" ? (
             <>
               {/* Text file attachment badge */}
@@ -1688,8 +1604,7 @@ export default function SidebarLLMChat() {
               </div>
             </>
           )}
-        </div>
-      )}
+          </div>
     </div>
   );
 }
