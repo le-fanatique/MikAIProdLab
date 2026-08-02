@@ -1,6 +1,6 @@
 # MikAI User Feedback Log
 
-Last updated: 2026-07-23
+Last updated: 2026-07-30
 
 ## Purpose
 
@@ -38,7 +38,7 @@ conversation needs these notes, this file is the shared source of truth.
 - `DECLINED`: intentionally not pursued, with the reason recorded.
 - `DUPLICATE`: covered by another feedback ID, which must be referenced.
 
-## Category Index And Consolidation Map
+## Category Index And Consolidation Map (superseded 2026-07-30)
 
 The entries below remain in their capture/history order so their original
 context and development history are preserved. This index provides a
@@ -138,11 +138,184 @@ entry keeps `FB-20260722-004`; the later Sequence Generation Package
 presentation entry is uniquely named `FB-20260722-006`. Its content and
 history are unchanged.
 
+## Category Review — 2026-07-30
+
+This is the current category map. The older index above is retained only for
+history; this review adds the later Project Style, Camera Lab, Gaussian Camera,
+and workflow-input entries and separates primary product domains from the
+cross-cutting UI/display view.
+
+### Primary product categories
+
+- **UI, layout, navigation and display:** `FB-20260715-001` through
+  `FB-20260715-009`, `FB-20260715-011`, `FB-20260715-012`,
+  `FB-20260715-016`, `FB-20260716-019`, `FB-20260716-032`,
+  `FB-20260716-034`, `FB-20260716-037`, `FB-20260716-040`,
+  `FB-20260717-044`, `FB-20260717-048`, `FB-20260718-002`,
+  `FB-20260718-005`, `FB-20260722-001`, `FB-20260722-002`,
+  `FB-20260722-003`, `FB-20260722-004`, `FB-20260722-005`,
+  `FB-20260722-006`, `FB-20260723-002`, `FB-20260724-001`.
+- **Project Style and creative direction:** `FB-20260715-010`,
+  `FB-20260715-013`, `FB-20260716-033`, `FB-20260716-035`,
+  `FB-20260716-036`, `FB-20260716-038`, `FB-20260716-039`,
+  `FB-20260723-001`, `FB-20260726-001`.
+- **Assets, references and image preparation:** `FB-20260715-008`,
+  `FB-20260716-021`, `FB-20260716-022` through `FB-20260716-031`,
+  `FB-20260717-042`, `FB-20260718-001`, `FB-20260718-002`,
+  `FB-20260718-008`.
+- **Storyboard and Sequence generation:** `FB-20260715-011`,
+  `FB-20260715-012`, `FB-20260715-015` through `FB-20260715-020`,
+  `FB-20260717-043`, `FB-20260717-044`, `FB-20260718-001`,
+  `FB-20260718-002`.
+- **Sequence video, split and review:** `FB-20260717-046`,
+  `FB-20260717-047`, `FB-20260718-003`, `FB-20260718-004`,
+  `FB-20260718-007`, `FB-20260719-001`, `FB-20260719-002`.
+- **Shot video library and OpenReel:** `FB-20260716-021`,
+  `FB-20260717-042`, `FB-20260718-005`, `FB-20260718-008`,
+  `FB-20260722-002`.
+- **Camera, workflows and generation inputs:** `FB-20260715-014`,
+  `FB-20260716-017`, `FB-20260716-018`, `FB-20260716-020`,
+  `FB-20260716-041`, `FB-20260717-045`, `FB-20260717-048`,
+  `FB-20260721-001`, `FB-20260722-001`, `FB-20260722-004`,
+  `FB-20260722-005`, `FB-20260722-003`, `FB-20260724-001`.
+
+### UI and display — detailed list requested
+
+#### Navigation and workspace layout
+
+- `FB-20260715-001` — Settings anchors replaced by real tabs.
+- `FB-20260715-003` — Expanded chat column fits the browser viewport.
+- `FB-20260715-004` — Right column keeps only LLM Chat.
+- `FB-20260715-011` — Storyboard generation action is explicit.
+- `FB-20260715-012` — Storyboard Asset reference lists expanded by default.
+- `FB-20260715-016` — Avoid the Storyboard Assets render/navigation error.
+- `FB-20260716-019` — Clear stale generation errors when changing Sequence.
+- `FB-20260717-044` — Make `Generate Sequence Video` prominent.
+- `FB-20260717-046` — Unify Split review and refine cuts locally.
+- `FB-20260722-001` — Guided three-stage Camera Lab workspace.
+- `FB-20260722-002` — Compact Shot video workspace instead of two large
+  players.
+- `FB-20260722-003` — Workflow Tools with custom interfaces.
+- `FB-20260722-006` — Collapse `Sequence Generation Package` and reduce
+  non-actionable warnings.
+
+#### Theme, labels, fields and visual hierarchy
+
+- `FB-20260715-002` — LLM Chat logo uses `Text Primary`.
+- `FB-20260715-005` — LLM Chat title uses `Text Primary`.
+- `FB-20260715-006` — Custom Appearance exposes typography controls.
+- `FB-20260715-007` — Correct `New Project` button contrast.
+- `FB-20260715-032` — Unify Edit-page field colors with `API Key`.
+- `FB-20260716-034` — Match `Apply to Story` with `Save Changes`.
+- `FB-20260716-037` — Unify all LLM `Apply` button colors.
+- `FB-20260723-002` — Correct the Camera Lab `Additional Prompt` label.
+
+#### Thumbnails, previews and media display
+
+- `FB-20260715-008` — Thumbnail backgrounds on Project and Sequence rows.
+- `FB-20260715-009` — Video name overlay in the frame player.
+- `FB-20260716-040` — Image zoom popup on hover.
+- `FB-20260718-002` — Choose a Storyboard thumbnail from Shot references.
+- `FB-20260718-005` — Open OpenReel from a Shot with selected videos.
+- `FB-20260722-004` — Correct Gaussian Camera viewer controls.
+- `FB-20260722-005` — Expose real Gaussian-to-image workflow inputs.
+
+#### Forms, settings and workflow controls
+
+- `FB-20260715-013` — Central `System Prompts` category in Settings.
+- `FB-20260715-014` — ComfyUI port presets in Render Settings.
+- `FB-20260716-033` — Translatable Edit Project fields.
+- `FB-20260716-041` — Prefill workflow `Duration` from the Shot.
+- `FB-20260717-045` — Project ratio and FPS settings.
+- `FB-20260717-048` — Visual Qwen Multiangle Camera controls.
+- `FB-20260721-001` — Preserve custom presets after server restart.
+- `FB-20260724-001` — Do not show phantom `promptText` inputs.
+
+### Category review notes
+
+- The UI/display category is cross-cutting: several entries also belong to
+  Storyboard, Camera, Shot Video, or Workflow categories. The primary domain
+  remains in the first list; this section is the implementation-facing UX
+  view.
+- `FB-20260716-034` and `FB-20260716-037` remain separate observations but
+  should share one button-variant implementation ticket.
+- `FB-20260715-002` and `FB-20260715-005` remain separate test surfaces but
+  can share one LLM Chat theme ticket.
+- `FB-20260717-043` and `FB-20260717-044` should be one Sequence Video
+  generation epic with capability and CTA subtasks.
+- `FB-20260722-001`, `FB-20260722-004`, `FB-20260722-005`,
+  `FB-20260717-048`, and `FB-20260723-002` form the Camera Lab UI/input
+  cluster, while preserving separate acceptance criteria.
+- `FB-20260722-002`, `FB-20260718-005`, and `FB-20260718-008` form the Shot
+  Video/OpenReel UX cluster.
+
 ## Active Feedback
+
+### FB-20260726-001 - Influence Research completes with no sources
+
+- Status: `RESOLVED`
+- Date observed: 2026-07-26
+- Area: Project Style / Creative Influences / Research / Settings
+- Context: The user opened Research for the Roger Deakins Creative Influence,
+  searched the web for `his lighting approach`, and received completed Runs
+  with no Candidate or Source to review.
+- Original observation:
+
+  > j avais mis ca en influence:
+  > Roger Deakins / Person / his lighting approach
+  > et j ai fait "search web"
+  > le run a fonctionne mais il ne me sort aucune sources. est ce normal?
+  >
+  > je voudrais que le LLM utilisable pour la recherche soit le meme que celui
+  > selectionne dans Language Model dans les settings. et comme LLM Chat /
+  > Chat LLM Provider, ajouter une case a cocher pour decoreller le provider
+  > du discover influence, de l'utilisation du reste de l'app pour les LLM.
+
+- Expected outcome: A successful Discover call yields reviewable cited
+  Candidates. A response with no valid citations is an explicit failure and
+  creates no empty Run. Influence Research inherits the active Language Model
+  provider/model by default, with an optional separate provider chosen in
+  Settings without duplicating API keys or model configuration.
+- Impact: Research currently appears successful while producing no usable
+  evidence, and it silently uses a hard-coded model instead of the user's LLM
+  configuration.
+- Related ticket: `STYLE.1.C.SEARCH.FIX1`
+- Resolution: Implemented in `STYLE.1.C.SEARCH.FIX1` and shipped at `9a0d96b`.
+  MikAI now parses nested OpenRouter `url_citation` fields, refuses results
+  without valid citations without creating an empty Run, and inherits the
+  active Language Model provider/model unless a separate Research provider is
+  enabled in Settings.
+- Resolved or validated on: 2026-07-26.
+
+#### Follow-up notes
+
+- 2026-07-26: Web Discover remains OpenRouter-only in this retake. If the
+  effective Research provider is not OpenRouter, the UI and server must refuse
+  clearly rather than silently falling back. No arbitrary page re-fetch is
+  added.
+- 2026-07-26: Existing zero-candidate historical Runs remain immutable and are
+  not deleted by the fix.
+- 2026-07-26: Commit `9a0d96b` pushed to `origin/main`; awaiting a real
+  successful Discover search and Settings validation from the user.
+- 2026-07-26: User confirmed the corrected Influence Research flow works.
+- 2026-07-26: Implementation completed by Claude Code under
+  `STYLE.1.C.SEARCH.FIX1`: `parseSearchAnnotations` now reads the canonical
+  nested `url_citation` contract and returns an explicit failure when zero
+  valid citations survive; `researchInfluenceAction` and
+  `synthesizeInfluenceResearchAction` resolve and capture the effective
+  Research provider/model before every network call and never persist a Run
+  or Synthesis when the effective provider is unsupported or the response
+  yields no valid citations; Influence Research now inherits the active
+  Language Model provider/model by default, with an
+  `Influence Research LLM Provider` Settings card (mirroring `Chat LLM
+  Provider`) to opt into a separate provider. Roger Deakins' existing
+  zero-candidate Runs were verified untouched. Status remains `IN PROGRESS`
+  pending Codex review and user validation in the running app.
 
 ### FB-20260723-001 - Define the Project Style V1 workspace
 
-- Status: `IN PROGRESS`
+- Status: `RESOLVED`
+- Validated on: 2026-08-02 (user confirmation: `c est ok`)
 - Date observed: 2026-07-23
 - Area: Project Style / Assets / Sequences / Shots / Storyboard / Generation
 - Context: Defining the Project Style MVP after completing Story, extracting
@@ -181,7 +354,9 @@ history are unchanged.
   research, references/influences, Sequence inheritance, prompt integration,
   Asset alignment and Look Development tickets.
 - Resolved or validated on: Product design validated 2026-07-23;
-  implementation not started.
+  implementation complete and pushed through `72f9d89`; transversal
+  acceptance (`STYLE.1.ACCEPTANCE.1`) `ACCEPTED` and epic `STYLE.1`
+  formally closed with user confirmation on 2026-08-02 (`c est ok`).
 
 #### Follow-up notes
 
@@ -201,6 +376,14 @@ history are unchanged.
   Style override in the MVP and always resolve their Sequence Style.
 - 2026-07-23: No semantic clash detector or style-conflict warning is part of
   the MVP.
+- 2026-07-26: `STYLE.1.C.UI` implemented by Claude — the visible Research
+  review workflow (`InfluenceResearchWorkspace.tsx`) consuming the
+  `STYLE.1.C.CORE` contracts: Discover (search, review/save/dismiss
+  candidates), Sources (select/notes/withdraw), Synthesis & Rules
+  (synthesize, review claims, edit/reject/approve Candidate Rules into the
+  Working Draft). Approval reconciles the Working Draft's rules/revision
+  without a page reload, preserving any unsaved Direction Brief/pillar
+  edit. Pending Codex review.
 - 2026-07-23: The original eleven-step user story is preserved in
   `docs/PROJECT_STYLE_ORIGINAL_USER_STORY.md`. Accepted decisions are
   separated into `docs/PROJECT_STYLE_MVP_DECISIONS.md`, while
@@ -277,6 +460,407 @@ history are unchanged.
   each proving byte-identical input preservation. Full detail in
   `.agents/claude_report.md` (retake 2 section). Awaiting fresh Codex
   verdict.
+- 2026-07-24: `STYLE.1.B.CORE` implemented by Claude — Project Style
+  Reference Board images and Creative Influence dossiers, backend only.
+  Additive migration (`drizzle/0041_left_natasha_romanoff.sql`) adds six
+  tables: `project_style_reference_images` (Project-scoped, separate from
+  Asset/Shot reference tables), `project_style_reference_domains` and
+  `project_style_reference_consumers` (relational facts, DB-unique per
+  reference, never a JSON blob), `project_style_influences`,
+  `project_style_influence_domains` (weighted primary/supporting/accent),
+  and `project_style_influence_references` (many-to-many link, DB-unique
+  per pair, app-layer-checked to always share one Project — SQLite cannot
+  express that cross-table equality as a plain FK). Upload is a dedicated
+  path (`src/lib/projectStyle/uploadReferenceImage.ts`) that never trusts
+  the declared filename/MIME: real magic-byte detection (PNG/JPEG/WebP
+  only, no GIF/SVG), the bundled FFmpeg both decodes the file for real and
+  reports its real dimensions, exclusive temp write then atomic rename
+  publish. Delete follows the established quarantine/transaction/restore
+  discipline (`src/actions/shotReferenceImages.ts`'s own pattern). Real
+  proofs on a disposable DB copy plus real PNG/JPEG/WebP/GIF files produced
+  by the bundled FFmpeg (78/78 passed, cleaned up after): every enum/id/
+  URL/domain validator; case-insensitive duplicate-domain rejection;
+  cross-Project refusal on update/delete/link; Influence-Reference link
+  refused when the two belong to different Projects; GIF, a `.png`-named
+  SVG, a truncated PNG, and an 11 MB file all refused with zero file
+  published; a forced DB failure after a real publish left zero orphaned
+  file; a forced mid-transaction delete failure restored the quarantined
+  file to its exact original path; nominal delete removed the row, its
+  cascaded domain/consumer rows, and the file together; `deleteProject`
+  (`src/actions/projects.ts`) now collects Project Style reference paths
+  before the cascaded DB delete and removes the files afterward, logging
+  any leftover path rather than claiming a silent success — proven end to
+  end (file and every Project Style row gone after deleting a real test
+  Project). Pre-existing 26 tables' row counts and `PRAGMA
+  foreign_key_check` unchanged after migration. No UI in this ticket
+  (`STYLE.1.B.UI` follows); no Web research, synthesis or candidate rules
+  (`STYLE.1.C.CORE`). Full detail in `.agents/claude_report.md`. Awaiting
+  Codex review.
+- 2026-07-24: Codex review returned `REVISE` on `STYLE.1.B.CORE` (4 P1
+  findings, 1 P2). The relational model and migration were accepted as-is;
+  the revision was limited to error/deletion paths that did not yet honor
+  the ticket's honest-cleanup contract. Claude applied a targeted retake,
+  no schema change: an upload DB failure's cleanup outcome is now checked
+  explicitly (`deleted`/`already_absent`/`failed`) instead of assumed, so a
+  real unlink failure is reported as a genuinely orphaned file rather than
+  a false "cleaned up" message; a reference delete's final-cleanup failure
+  now restores the row, its domains, consumers and influence links (not
+  only the file), with an exact per-side "X/Y restored" report when
+  recovery is incomplete; `deleteProject` now refuses an unconfined stored
+  path outright, quarantines every eligible file before the Project row is
+  deleted (restoring everything already quarantined if either the
+  quarantine step or the DB delete itself fails), and throws a real error
+  instead of redirecting to a false success if a quarantined file cannot be
+  permanently removed after commit; `linkInfluenceReferenceAction` now uses
+  a targeted `onConflictDoNothing` instead of a blanket try/catch, so a
+  genuine database failure propagates instead of being presented as an
+  "already linked" success; the upload temp file is now written with the
+  exclusive `wx` flag, the real materialized buffer size is re-checked
+  (not just the caller-declared size), every temp-cleanup failure is
+  reported with its exact path, and `sourceFilename` is normalized as
+  untrusted input before being persisted. Re-validated: 69/69 assertions on
+  a disposable DB copy, including fault injection via intercepted
+  `node:fs`/`node:fs/promises` calls to force each of the four P1 failure
+  paths precisely (a technique the first pass could not use, since Windows
+  file-locking tricks proved unreliable) — every one restores or reports
+  honestly rather than claiming success. `npx tsc --noEmit`, `npm run
+  build`, `npx drizzle-kit generate` (no drift) and `git diff --check` all
+  clean. Full detail in `.agents/claude_report.md` (retake section).
+  Awaiting fresh Codex verdict.
+- 2026-07-24: Codex returned a second `REVISE` on `STYLE.1.B.CORE` (2 P1
+  remaining). Three corrections from retake 1 were accepted; two blocking
+  paths remained: (1) the Reference delete used out-of-transaction
+  snapshots that could restore a stale or partial state, and (2)
+  `deleteProject` swallowed pre-commit restore failures while claiming
+  nothing changed. Claude applied retake 2, no schema change: (1)
+  `deleteProjectStyleReferenceAction` rewritten in 4 phases — snapshot and
+  DELETE now happen in ONE synchronous `better-sqlite3` transaction
+  (impossible concurrent mutation between snapshot reads and cascade
+  delete); post-commit compensation only restores DB rows AFTER confirming
+  the file was restored to its original path (never recreates rows pointing
+  at a `.trash-*` file); DB restoration uses a single transaction with
+  `onConflictDoNothing` on every table (all-or-nothing rollback). (2)
+  `deleteProject` now collects per-file restore results with exact original
+  and quarantine paths and OS error; never says "nothing was changed" if a
+  restore is incomplete. Re-validated: 43/43 assertions (transactional
+  snapshot correctness, onConflictDoNothing safety, all-or-nothing rollback
+  via SQL trigger injection, DB-delete-blocked diagnostics with per-file
+  restore counts, quarantine failure handling, unconfined path refusal,
+  plus nominal delete/deleteProject regression). `npx tsc --noEmit` clean,
+  `npm run build` succeeded, `npx drizzle-kit generate` (no drift), `git
+  diff --check` clean. Full detail in `.agents/claude_report.md` (retake 2
+  section). Awaiting fresh Codex verdict.
+- 2026-07-24: Codex returned a third `REVISE` on `STYLE.1.B.CORE` (1 P1
+  remaining). Snapshot transactional and `deleteProject` diagnostics
+  accepted; one local issue: `onConflictDoNothing` in the compensation
+  transaction could silently skip a conflicting row, attach snapshot
+  relations to a different concurrent line, and report false full
+  restoration. Claude applied retake 3, no schema change: removed all
+  `onConflictDoNothing` from the compensation transaction — any conflict
+  (concurrent insert reusing the same id) now fails the INSERT and rolls
+  back the entire restoration transaction, preserving the existing
+  "database restoration failed ... rolled back" diagnostic. Three targeted
+  proofs validated: (1) conflict on Reference id — concurrent row intact,
+  no snapshot relations attached, full rollback (8 assertions); (2)
+  conflict on a relation id mid-restoration — no snapshot row survives
+  (6 assertions); (3) nominal full restoration still works (6 assertions).
+  `npx tsc --noEmit` clean, `npm run build` succeeded, `npx drizzle-kit
+  generate` (no drift). Full detail in `.agents/claude_report.md` (retake 3
+  section). Awaiting fresh Codex verdict.
+- 2026-07-27: `STYLE.1.E.CORE.1` implemented by Claude — the canonical,
+  deterministic and inspectable generation Style source, split ahead of
+  surface integration (`STYLE.1.E.SURFACES.1`). New
+  `src/lib/projectStyle/generationStyleSource.ts` defines the six-consumer
+  contract (`asset`, `shot-image`, `shot-video`, `shot-storyboard`,
+  `sequence-storyboard`, `sequence-video`), a deterministic
+  `consumer:`/`media:`/`all` applicability grammar that keeps existing
+  free-text values such as "Night interiors" applicable to all (never
+  semantically interpreted, never silently excluded), a sparse
+  consumer-filtered generation segment beginning with a literal
+  `PROJECT STYLE` header (distinct from and never mutating the immutable
+  `compileStyleSnapshot()` authoring text), a byte-identical no-Style
+  composition helper, and exact character/UTF-8 byte accounting (never
+  called tokens). `resolveActiveProjectStyle` was added to
+  `resolveSequenceStyle.ts` as the canonical Asset-consumer resolver,
+  reusing the existing pointer-read and corruption-guard logic rather than
+  duplicating it; Shot/Storyboard/Sequence consumers resolve through the
+  existing `resolveSequenceStyle`/`resolveShotStyle` unchanged.
+  `GenerationSnapshot` gained one optional, backward-compatible
+  `styleProvenance` field. No generation action, payload, queue, ComfyUI
+  call or user-facing UI was touched — that rollout is
+  `STYLE.1.E.SURFACES.1`. 117/117 pure assertions and 21/21 disposable-DB
+  assertions passed (inheritance, override freeze, cross-Project refusal,
+  corrupted snapshot/compiled-text refusal, consumer-filtered provenance).
+  Full detail in `.agents/claude_report.md`. Awaiting Codex verdict.
+- 2026-07-27: `STYLE.1.E.SURFACES.1` implemented by Claude — the canonical
+  Style source is now integrated into Asset generation, normal Shot
+  image/video generation and Shot Storyboard generation only (Sequence
+  Storyboard/Video remain `STYLE.1.E.SURFACES.2`). A shared server-only
+  preparation helper (`src/lib/projectStyle/generationStylePreparation.ts`)
+  resolves and composes once for both preview and action parity. The trusted
+  consumer is always server-derived: hard-coded `asset` for Assets,
+  `workflow.kind` for normal Shot generation, and a dedicated hard-coded
+  `shot-storyboard` wrapper/action for Storyboard — never a client-supplied
+  value. Camera Lab keeps its exact existing `runWorkflowGeneration` entry
+  point, unstyled, byte-identical. All four preview surfaces (embedded
+  Asset/Shot panels, both dedicated generate pages) render the compiled
+  `PROJECT STYLE` segment, resolution/version identity and exact
+  character/UTF-8 byte counts before the payload preview, and disable
+  Generate on a resolver error. An edited Advanced Payload JSON that removes
+  the composed Style-bearing text is refused before job creation. Retry
+  preserves a prior Storyboard consumer from the job's own snapshot; a
+  legacy job without Style provenance falls back to the normal image/video
+  consumer. Full detail and proofs in `.agents/claude_report.md`. Awaiting
+  Codex verdict.
+- 2026-07-27: `STYLE.1.E.SURFACES.2` implemented by Claude — completes the
+  `STYLE.1.E` rollout by integrating the canonical Style into Sequence
+  Storyboard contact-sheet and Sequence Video generation, with the fixed
+  consumers `sequence-storyboard`/`sequence-video` always server-derived
+  from `{ kind: "sequence", projectId, sequenceId }`, never a client-supplied
+  value. Both `runSequenceGeneration` and `runSequenceVideoGeneration` reuse
+  `prepareGenerationStyleSource`, `buildGenerationPayload` and
+  `findEditedStyleTextMismatch` exactly as accepted in `CORE.1`/
+  `SURFACES.1` — no second resolver, composer or payload patcher. Both
+  dedicated generate pages render `ProjectStyleGenerationPreview` (source
+  label "Resolved Sequence Style") before the Payload Preview, resolved
+  server-side with the same shared helper the action re-resolves at submit,
+  and disable Generate on a resolver error. Sequence Video keeps its
+  existing board image-provenance guard (`validateImageProvenanceUnchanged`)
+  unmodified, now checked alongside the Style-text Advanced Payload guard,
+  both before any job row or provider call. 46/46 real action/DB/payload
+  assertions passed on a disposable SQLite DB with a mocked ComfyUI upload/
+  queue boundary (no real ComfyUI, no paid call): exact provenance for
+  inherited and Sequence-override resolution on each consumer, byte-identical
+  no-Style behavior, no-claimed-injection when a workflow has no patchable
+  text input, fresh re-resolution between preview and submit, resolver
+  corruption refusing generation with zero job rows, consumer/kind coherence
+  refusing an image workflow for Sequence Video and a video workflow for
+  Sequence Storyboard, Advanced Payload accepting an unrelated edit while
+  refusing a Style-text removal, and the pre-existing image-provenance guard
+  still refusing a rewired board. A temporary `next start` server against the
+  same disposable DB confirmed every UI state (`Inherited from Project`,
+  `Sequence Override`, exact character/UTF-8 counts, "No effective Style",
+  "no compatible text input", and the resolver-error disabled state) on both
+  pages. Full detail and proofs in `.agents/claude_report.md`. Awaiting Codex
+  verdict.
+- 2026-07-27: User validation completed for `STYLE.1.E.SURFACES.2` after
+  commit `5e92d71`: the Sequence Storyboard and Sequence Video Style
+  integration works as expected. The wider `FB-20260723-001` epic remains
+  `IN PROGRESS` until the remaining Project Style roadmap tickets are closed.
+- 2026-07-27: Implementation completed by Claude Code under `STYLE.1.F.CORE`:
+  `Enhance Description` (single and batch) and `Enhance Asset Bible` now
+  resolve the active published Project Style through the canonical
+  `resolveActiveProjectStyle` and inject a pillar-separated, Asset-filtered
+  Style segment into their existing prompts, with proven byte-for-byte
+  compatibility when no Style is active. The complete backend contract for
+  an explicit `Align with Project Style` proposal/apply flow is implemented:
+  a pure deterministic context builder (Project Story + Asset fields +
+  Style), a strict two-outcome JSON parser with an anti-suffix-only boundary
+  (rejects a response that only appends decorative rendering vocabulary with
+  no field-level design decision — proven against the original space-postman
+  fixture), a zero-write generate action that refuses before any LLM call
+  when there is no active Style, an atomic single-transaction apply action
+  (ownership, active-version re-check, Asset-fingerprint staleness check,
+  field update, alignment-marker upsert — all-or-nothing), and a read-only
+  status model (`no-active-style` / `not-reviewed` / `aligned` /
+  `style-changed` / `asset-changed`). One additive migration
+  (`asset_style_alignments`) was generated via `drizzle-kit`; it stores only
+  the reviewed Style version and a post-review Asset content fingerprint,
+  never the temporary proposal. No Asset Detail UI was touched — that is
+  `STYLE.1.F.UI`. Full detail and proofs (18 disposable-DB checks, 30 pure
+  checks, all provider calls mocked/no-cost) in `.agents/claude_report.md`.
+  Awaiting Codex verdict.
+- 2026-07-27: `STYLE.1.F.CORE` closed at commit `1fe873e` after two Codex
+  retake rounds (post-LLM-call revalidation, bounded canonical baseline
+  with no truncation, a strict Apply input parser, explicit marker-
+  corruption handling, and a raw-vs-normalized fingerprint fix). Migration
+  `0044_whole_nocturne.sql` applied to the real development DB with backup;
+  pre-existing table counts and the 33 pre-existing FK violations
+  unchanged.
+- 2026-07-28: Implementation completed by Claude Code under `STYLE.1.F.UI`:
+  Asset Detail now exposes `Align with Project Style` as a new collapsed-by-
+  default "AI Assist" panel (`src/components/AssetAlignmentPanel.tsx`),
+  placed before `Enhance Description`/`Enhance Asset Bible`, consuming the
+  frozen `STYLE.1.F.CORE` actions exactly as written — no change to any
+  CORE prompt, parser, transaction, schema or migration. The panel renders
+  every read-model state honestly (`no-active-style` with a link to
+  Project Style, `not-reviewed`, `aligned`, `style-changed`, `asset-changed`,
+  and a sanitized local error that never fails the page), drives an
+  explicit generate -> edit five fields (Description, Notes, Visual
+  Identity, Usage/Performance Rules, Forbidden Variations) side-by-side
+  against their generated baseline -> apply-or-discard workflow, and
+  derives the effective apply outcome (`changes-proposed` vs
+  `already-aligned`) client-side from the same trimmed-canonical semantics
+  CORE itself uses, so a fully-reverted edit is confirmed rather than
+  rejected as a fake mutation. A committed Apply triggers a full same-page
+  navigation (mirrors the existing `AssetBibleEnhancePanel` convention) so
+  the Details form and the alignment status both refresh from one source of
+  truth. Proven: all 5 statuses plus a corrupted-marker read error over a
+  real temporary `next start` server against a disposable DB (HTTP 200 in
+  every case, correct status payload delivered for each); the exact
+  user-visible status/CTA text via real `react-dom/server` rendering of the
+  actual component (6 cases); the effective-outcome/no-fake-mutation
+  derivation via a small additive pure helper
+  (`compareFields.ts`, 5 cases). No real LLM credits spent. Interactive
+  click-driven flows (generate/apply/discard/regenerate confirmation,
+  keyboard traversal, Default/Custom theme, compact viewport) were **not**
+  verified in a real browser — no browser automation tooling was available
+  in this environment and none was installed, per the ticket's own
+  documented-honestly fallback; an expanded manual testing checklist is
+  provided in `.agents/claude_report.md` for the user to run. Awaiting
+  Codex verdict.
+- 2026-07-30: Implementation completed by Claude Code under `STYLE.1.G.UI.1`
+  (following the merged `STYLE.1.G.CORE.1` Look Development backend): a new
+  Look Development Bench at `/projects/[projectId]/style/look-development`
+  (`src/components/projectStyle/lookDevelopment/LookDevelopmentBench.tsx`,
+  `LookDevelopmentRecentTests.tsx`), reachable from a new "Open Look
+  Development" entry in the Project Style workspace. It lets a user choose an
+  explicit Style source (Working Draft or a Published version), prepare an
+  Image or Video Look Test with From Story/Neutral Benchmark/Custom test
+  content, map up to 12 Reference Board images onto ordinary or Dynamic
+  Batch workflow inputs, inspect the exact compiled Look prompt (via the real
+  `compileLookPrompt`) and mapping diagnostics before submitting, launch the
+  job through `createLookTestAction` with a Partner Node confirm/cancel gate
+  and a synchronous anti-double-submit lock, follow it via the existing
+  `GenerationJobStatusPanel`, and publish the durable result through
+  `publishLookResultAction`. Recent Look Tests is read-only in this ticket
+  (comparison, notes, status, duplication and Look Target selection are
+  `STYLE.1.G.UI.2`). No CORE action, schema, or generation runtime file was
+  modified. Full audit, proof results and an English manual validation
+  checklist are in `.agents/claude_report.md`. Awaiting Codex verdict.
+- 2026-07-30: Implementation completed by Claude Code under `STYLE.1.G.UI.2`:
+  the Look Development Bench's Recent Look Tests became a full review
+  workspace over the existing CORE contract — editable notes, Candidate/
+  Reject/Mark-as-Look-Target (with project-wide uniqueness reconciled
+  locally), Delete Result, a 2-to-4 durable-result comparison grid with
+  `Clear comparison`, and a Duplicate-for-rerun -> configure -> Partner Node
+  gate -> run cycle reusing the exact `duplicateLookTestAction` /
+  `runExistingLookTestAction` contract and UI.1's frozen-fingerprint Partner
+  Node gate. One new pure, client-safe helper
+  (`restoreLookTestSnapshotSelections.ts`) restores a duplicate's prior
+  mapping from its source's own generation snapshot only when
+  contextType/contextId/workflowId match exactly and every referenced
+  reference id still belongs to the duplicate — otherwise it refuses and the
+  user must configure explicitly. No CORE action, schema, or generation
+  runtime file was modified. Full audit, proof results (21 pure + 17 DB
+  assertions) and an English manual validation checklist are in
+  `.agents/claude_report.md`. Awaiting Codex verdict.
+- 2026-07-30: Codex Round 1 review returned `REVISE` (5xP1, 1xP2). Claude
+  Code retake corrected all six findings: the duplicate-rerun cycle now
+  actually reaches `publishLookResultAction` after a `done` job instead of
+  stopping at polling; notes/status/Look Target mutations reconcile the
+  opened detail from a real read and only claim `committed, pending sync`
+  after a KNOWN CORE success (never after a plain transport exception), with
+  a `Retry sync` that only re-reads; Duplicate now has a synchronous
+  double-submit guard and never loses its created id if the list refresh
+  fails; `restoreLookTestSnapshotSelections` is fully defensive against
+  legacy/corrupt snapshots (reproducing Codex's exact crash case) and
+  validates every restored node id against the CURRENT workflow's inputs; a
+  duplicate's Style selector now starts on its own frozen Style identity
+  instead of defaulting to the first option; the Comparison grid now shows
+  the exact queued `promptText` instead of the raw Style block. 12 new pure
+  + 18 new DB assertions, all passing; full detail in
+  `.agents/claude_report.md`. Awaiting Codex re-review.
+- 2026-07-30: Codex Round 2 review returned `REVISE` (3xP1, 1xP2). Claude
+  Code retake corrected all four remaining findings: the rerun's poll/
+  publish UI no longer unmounts the instant a job is queued (a new
+  `activeRerunId` lifecycle flag keeps one controlled view mounted through
+  queued -> running -> done -> published, then hands off to the normal
+  reviewed-result view only after a KNOWN publish success, never showing
+  "No durable result saved" right after publishing); Candidate/Reject/Look
+  Target/notes now patch the opened detail immediately on a known CORE
+  success (status label, pressed state and `pending sync` no longer
+  contradict each other when a confirming re-read fails); duplicating a
+  Working Draft-sourced test now matches the EXACT frozen revision (not just
+  "Working Draft" in general), blocking Run with an explicit diagnostic if
+  the draft has since moved on; and the snapshot-restoration helper now
+  requires all four canonical selection fields (rejecting the exact
+  `selections: {}` case Codex reproduced) while both the opened detail and
+  the Comparison grid now validate `promptText` is a real string before
+  rendering it. 24 new pure + 15 new DB assertions, all passing; full detail
+  in `.agents/claude_report.md`. Awaiting Codex re-review.
+- 2026-07-30: Codex Round 3 review returned `REVISE` (1xP1). Claude Code
+  retake lifted the rerun's known job id (`activeRerunJobId`) up to
+  `LookDevelopmentRecentTests`, alongside the existing `activeRerunId`: the
+  pre-run editor now receives it as a `resumeJobId` prop and seeds its local
+  state from it, so closing a rerun-in-progress row and reopening it (or
+  opening a different row first) resumes directly on the poll/publish view
+  instead of losing the job and re-showing the configuration form. `Close`
+  no longer clears this tracking — only a known publish success does.
+  Verified with a temporarily-installed (`npm install --no-save`, fully
+  removed after, `package.json`/`package-lock.json` byte-identical
+  before/after) real React DOM harness exercising actual mount/unmount/
+  remount cycles, plus a full re-run of the Round 2 regression proofs. Full
+  detail in `.agents/claude_report.md`. Awaiting Codex re-review.
+- 2026-07-30: Codex Round 4 review returned `REVISE` (1xP1). Claude Code
+  retake replaced the Round 3 single global `activeRerunId`/
+  `activeRerunJobId` pair in `LookDevelopmentRecentTests` with a controlled
+  `lookTestId -> jobId` registry (`activeReruns`): queuing a second rerun no
+  longer overwrites/loses a first, still-active one — each Look Test's
+  entry is added/removed independently, and a publish only removes the
+  exact `lookTestId`/`jobId` pair just published. Still only one
+  `LookDevelopmentPrerunEditor`/poller is ever mounted at a time (whichever
+  row is open). Verified with a temporarily-installed (fully removed after,
+  package files byte-identical) real React DOM harness proving two
+  concurrent reruns (A and B) each resume their own job independently and
+  publishing one never affects the other, plus a full re-run of the Round
+  2/3 regression proofs. Full detail in `.agents/claude_report.md`. Awaiting
+  Codex re-review.
+- 2026-08-02: `STYLE.1.ACCEPTANCE.1` transversal acceptance gate executed by
+  Claude Code in an isolated environment (HEAD `72f9d89`). Full A-G matrix,
+  schema/migration audit, provenance/version/ownership DB checks and a
+  dead-code audit are recorded in
+  `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`. Technical evidence is
+  complete; status is `TO VALIDATE` pending manual user confirmation and a
+  final Codex verdict. This epic-level entry stays `IN PROGRESS` until that
+  confirmation lands.
+- 2026-08-02: Codex Round 1 review of `STYLE.1.ACCEPTANCE.1` returned
+  `REVISE` — several acceptance scenarios were documented as `PASS` without
+  being executed, migration preservation and cross-Project refusals were
+  inspected rather than proven, and `PROJECT_STATE.md` still contained
+  stale `STYLE.1.D.UI`/pre-epic state. Claude Code retake (new isolated
+  environment, no shared `node_modules`) completed all missing scenarios
+  with real evidence: Reference deletion guards (nominal delete + blocked
+  delete on a Run-cited reference), `Reset to Project Style`, all 6
+  generation consumers with DB-verified `styleProvenance.consumer`
+  discrimination, Asset Alignment stale/edit-preservation and
+  no-double-Apply reconciliation, Look Development duplicate/rerun,
+  close/reopen resuming the exact in-progress job, and authorized result
+  deletion (DB + media), a real DB-level migration-preservation proof
+  (pre-`0040` fixture rows preserved byte-identical through `0040`-`0047`),
+  live cross-Project refusal proofs for Sequence Style/generation/Asset
+  Alignment plus code-verified guards for Look Development/Influence
+  Research/Reference Analysis, and a compact-viewport + real keyboard
+  activation + zero-hydration-error browser pass. `PROJECT_STATE.md` was
+  reconciled and the `server-only` finding reclassified as defensive
+  hardening. Full detail in `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`
+  and `.agents/claude_report.md`. Status remains `TO VALIDATE` pending
+  Codex re-review and manual user confirmation.
+- 2026-08-02: Codex Round 2 review returned `REVISE` on 3 bounded points:
+  Look Development/Influence Research/Reference Analysis cross-Project
+  refusals were still code-inspection only, a residual
+  `F:\AI\tmp-style1-acceptance` directory (with a leftover `.next`) was not
+  deleted, and the audit mis-stated the Asset job's stored consumer as
+  `"shot-image"` instead of `"asset"`. Claude Code retake (no browser, no
+  full build, no worktree) proved all 3 remaining cross-Project refusals by
+  calling the real Server Actions directly against a minimal disposable
+  SQLite DB (structured refusal + byte-identical zero mutation for each),
+  deleted and confirmed-absent the residual directory, and re-verified the
+  Asset job's real `consumer` value via an actual `runAssetGeneration` call
+  on the same disposable DB — confirmed `"asset"`, correcting a
+  documentation error (not a product defect). No application file was
+  modified. Full detail in `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md` and
+  `.agents/claude_report.md`. Status remains `TO VALIDATE` pending Codex
+  re-review and manual user confirmation.
+- 2026-08-02: User confirmed final acceptance (`c est ok`). Codex closed the
+  review with `STYLE.1.ACCEPTANCE.1` accepted. Claude Code closure pass
+  deleted the remaining temporary residue (`F:\AI\tmp-style1-retake2`,
+  confirmed `Test-Path` `False`), marked `docs/audits/
+  PROJECT_STYLE_V1_ACCEPTANCE.md` as `ACCEPTED` with final sign-off,
+  updated `docs/PROJECT_STATE.md` and `docs/ROADMAP.md` to reflect the
+  closed epic and promoted `SEQGEN.VIDEO.CUT.CORE.1` as the next active
+  ticket. **This entry is now `RESOLVED` — the `STYLE.1` epic (A through G)
+  is formally closed.**
 
 ### FB-20260722-004 - Correct Gaussian depth and wheel precision
 
@@ -1206,6 +1790,16 @@ history are unchanged.
   define deterministic compaction rules, a visible size counter, and clear
   overflow diagnostics. This observation alone does not authorize changes to
   the generation runtime, job runner, polling, schema, or dependencies.
+- 2026-07-27: `STYLE.1.E.CORE.1` implemented by Claude — added
+  `accountPromptSize()` (`src/lib/projectStyle/generationStyleSource.ts`), a
+  pure helper returning exact character and UTF-8 byte counts (never
+  "tokens", no tokenizer fabricated) for the base prompt, the resolved
+  Style segment and the final composed prompt. This is size-accounting
+  infrastructure only: no Seedance compaction, no 32,000-limit enforcement,
+  no truncation, and no change to the generation runtime or payload
+  patcher. Deterministic compaction against this limit remains open for a
+  future ticket once Style is actually wired into a generation surface
+  (`STYLE.1.E.SURFACES.1`). Status stays `OPEN`.
 
 ### FB-20260715-013 - Central System Prompts category in Settings
 
@@ -2642,6 +3236,127 @@ history are unchanged.
 
 - 2026-07-23: The user's quoted target omits the second `i` in `Additional`;
   the canonical English UI spelling is `Additional Prompt`.
+
+### FB-20260724-001 - Do not inject phantom promptText workflow inputs
+
+- Status: `OPEN`
+- Date observed: 2026-07-24
+- Area: Workflows / ComfyUI mapping / Generate Content
+- Context: Inspecting the JSON payload sent to ComfyUI and the inputs exposed
+  in the `Generate Content` panel.
+- Original observation:
+
+  > j ai une erreur dans les workflow envoyé a comfyui. le json inject toujour
+  > un promptText dans le json, meme lorsque 'il n y a pas de prompt text avec
+  > (Input) dans le nom du node, pour le flager comme une input a afficher dans
+  > le generate content panel
+
+- Expected outcome: `promptText` is injected and exposed as a Generate Content
+  input only when the actual workflow contains a matching prompt-text `(Input)`
+  node. Workflows without that node must not receive a synthetic `promptText`
+  property or phantom UI field.
+- Impact: The current behavior changes workflow JSON unexpectedly and presents
+  controls that do not exist in the selected workflow, which can lead to
+  invalid payloads or misleading generation settings.
+- Related ticket: None; related feedback: `FB-20260722-005`
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-07-24: Detection must be derived from the real parsed workflow
+  structure, not from a generic default or from the presence of another input
+  type. The mapping, injected keys, and displayed controls must remain aligned
+  for workflows with and without a prompt-text `(Input)` node.
+- 2026-07-24: Ticket preparation should prove the absence case with the exact
+  payload sent to ComfyUI and confirm that existing workflow values remain
+  untouched when no matching prompt input exists. No schema, migration,
+  dependency, or unrelated generation-runtime change is authorized by this
+  observation alone.
+
+### FB-20260731-001 - Project Style and Look Development polish retakes
+
+- Status: `RESOLVED`
+- Date observed: 2026-07-30 to 2026-07-31
+- Area: Project Style / Reference Board / Creative Influences / Look Development
+- Context: User validation after completing the Reference Board, Creative
+  Influences and Look Development MVP surfaces.
+- Original observations:
+
+  > le bouton image file n est pas assez visible
+
+  > les image sont au format carré, il faudrait qu elle fit par l'edge le plus
+  > long, et ajouter notre feature de popup quand je met le curseur sur l'image
+
+  > met la parti referenceBoard au dessus de la parti Creative board
+
+  > met un popup helper à coté des titres de chaques field de reference board
+  > et creative influences,qui dit à quoi sert chaque field, et ajoute un
+  > exemple
+
+  > mettre le check Approved for Style analysis et Approved for generation
+  > use, dès la creation de la reference board
+
+  > dans look dev bench, le from story est trom long [...] 20 mots maximum
+
+  > en mode Neutral Benchmark, j aimerai bien un bouton random
+
+  > ajouter dans les settings, la possiblilité de renseigner le workflow par
+  > defaut pour le look dev bench
+
+  > collapse la partie Test Content [...] "recent look tests" [...] "history"
+
+- Expected outcome: Reference and Influence metadata are self-explanatory;
+  Reference images remain fully visible and inspectable; approvals are chosen
+  during creation; Look Development opens with concise content, an optional
+  neutral randomizer and a configured default workflow; secondary sections
+  stay available without dominating the workspace.
+- Impact: Current controls are easy to miss, some images are cropped, fields
+  require prior product knowledge, From Story overwhelms the benchmark, and
+  repeated setup/history sections make the workspace unnecessarily long.
+- Related ticket: `STYLE.1.POLISH.1`
+- Resolution: Project Style polish shipped at `82b04d0`; Reference Board
+  analysis shipped at `72f9d89` and was validated by the user on 2026-08-02.
+- Resolved or validated on: 2026-08-02
+
+#### Follow-up notes
+
+- 2026-07-31: Reference Board multimodal analysis is deliberately excluded
+  from this polish ticket. It remains a mandatory MVP closure gate under
+  `STYLE.1.B.ANALYSIS.CORE` and `STYLE.1.B.ANALYSIS.UI`.
+- 2026-07-31: The Look Development default is one workflow. Its persisted
+  workflow kind determines the initial Image/Video mode; absent or stale
+  settings retain the historical image-first fallback.
+- 2026-07-31: From Story summarization must be deterministic and local. This
+  UI preset must never trigger a hidden or paid LLM request.
+- 2026-07-31: `STYLE.1.B.ANALYSIS.CORE` (backend/schema for Reference Board
+  multimodal analysis) is implemented — see `.agents/claude_report.md`. This
+  is backend-only: no UI exists yet, so the "Approved for Style analysis"
+  badge remains not visibly actionable until `STYLE.1.B.ANALYSIS.UI` ships.
+  Do not consider this observation resolved on the CORE ticket alone.
+- 2026-08-01: Retake 12 (Cline / GLM-5.2) restored exact `next@16.2.9` and
+  mounted the real React components in jsdom (15/42 proofs pass). The
+  harnais could not intercept Server Action calls inside tsx-compiled `.tsx`
+  files — tsx resolves `@/` imports internally before ESM `load` hooks can
+  rewrite them. No product bug was found. Status remains `TO VALIDATE`.
+- 2026-08-02: Retake 14 (Cline / GPT-5.6 Luna Pro) replaced the unstable
+  `next dev` proof with a real Playwright pass against `next start`. Reference
+  selection, explicit provider confirmation, one completed analysis Run,
+  history inspection and Candidate Rule approval into the Working Draft were
+  proven without losing an unsaved Direction Brief. The exact post-commit
+  read-failure injection is deferred to
+  `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1`; status remains `TO VALIDATE`
+  pending the user's manual pass.
+- 2026-08-02: User confirmed the shipped Reference Analysis workflow works in
+  the application. `FB-20260731-001` is now `RESOLVED`; the separate
+  post-commit pending-sync hardening remains tracked under
+  `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1`.
+- 2026-07-31: `STYLE.1.B.ANALYSIS.UI` (Reference Board Analysis Review
+  Workspace) is implemented by Cline / Mimo v2.5 Pro. The UI now allows
+  selecting references, confirming provider/model, launching multimodal
+  analysis, reviewing observations, and approving candidate rules into the
+  Working Draft. Visible usage remains reserved for manual user validation;
+  do not mark RESOLVED until the user has tested the workflow end-to-end.
 
 ## Entry Template
 

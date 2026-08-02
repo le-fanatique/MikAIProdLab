@@ -1,7 +1,9 @@
 # MikAI ProdLab - Roadmap globale consolidee
 
-Version consolidee le 14 juillet 2026, mise a jour apres reconciliation avec
-le handoff Seedance accepte.
+Version consolidee le 2 aout 2026, apres livraison fonctionnelle et cloture
+d'acceptance de `STYLE.1` (`STYLE.1.ACCEPTANCE.1` `ACCEPTED`), puis
+reconciliation du backlog Sequence Video, OpenReel, Prompt Packages et
+`STYLE.2`.
 
 MikAI doit rester un outil de direction creative et de production pour film
 d'animation, de la narration au montage et au film final, et non une simple
@@ -14,6 +16,101 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 -> Direction artistique -> Prompts adaptes aux modeles
 -> Generations -> Montage -> Film final
 ```
+
+## Priorites autoritatives apres cloture de STYLE.1 - 2 aout 2026
+
+L'epic `STYLE.1` (A a G) est `RESOLVED` : ses fonctions sont livrees, leurs
+parcours visibles ont ete valides, et le gate transversal
+`STYLE.1.ACCEPTANCE.1` est `ACCEPTED` (preuves techniques completes sur deux
+retakes bornes, confirmation manuelle utilisateur recue le 2026-08-02). Le
+prochain ordre de developpement recommande est:
+
+1. `SEQGEN.VIDEO.CUT.CORE.1` - contrat frame-exact, FFmpeg, nouvelle version
+   durable, provenance parent/cut et source immuable;
+2. `SEQGEN.VIDEO.CUT.UI.1` - player In/Out en frames, preview du troncon retire,
+   controle du resultat puis publication explicite;
+3. `OPENREEL.ROUNDTRIP.1` - vraie validation MikAI -> OpenReel -> MikAI avec
+   snapshots anti-stale, timings et refus des mutations partielles;
+4. `PROMPT.PACKAGE.MVP.1` - registry legere de packages par workflow et modele,
+   avec references compatibles et provenance du prompt compile;
+5. `STYLE.2.LOOK.CORRECTIONS.CORE.1` - propositions de correction du Working
+   Draft depuis les Look Tests, sans mutation automatique ni modification des
+   versions publiees;
+6. `STYLE.2.LOOK.CORRECTIONS.UI.1` - comparaison, edition et application
+   explicite des propositions de correction;
+7. `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` - injection post-commit/read
+   failure, etat `pending sync` et preuve que Retry ne rejoue aucune mutation;
+8. `FILM.EXPORT.1` - export final controle;
+9. `FILM.AUDIO.1` - pistes audio, musique et mix de preview;
+10. `EDITORIAL.BACKPROP.1` - application volontaire de decisions editoriales
+    aux Shots narratifs;
+11. `DIRECTOR.ASSIST.1` - assistance narrative, couverture, continuite et
+    coherence du monde;
+12. `LLMCHAT.CONTEXT.1` - contexte optionnel Project/Sequence/Shot;
+13. `LLMCHAT.TOOLS.1` - actions MikAI controlees depuis le chat.
+
+`STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` est une dette de resilience bornee,
+pas un blocage fonctionnel. Les deux tickets `SEQGEN.VIDEO.CUT.*` forment le
+prochain chantier produit recommande immediat.
+
+## Registre complet STYLE.1 - livraison fonctionnelle complete
+
+Prerequis externe a l'epic:
+
+- `STYLE.RESEARCH.SPIKE.1` - choix OpenRouter Web Search et politique sans
+  re-fetch arbitraire.
+
+Tickets livres:
+
+1. `STYLE.1.A` - fondation durable, Working Draft, versions immuables,
+   compilation sparse et workspace (`6c89bfb`);
+2. `STYLE.1.B.CORE` - persistance Reference Board et Creative Influences
+   (`bd36159`);
+3. `STYLE.1.B.UI` - surfaces Reference Board et Creative Influences
+   (`7851c31`);
+4. `STYLE.1.C.ARCHITECTURE.1` - architecture read-only du Research;
+5. `STYLE.1.C.CORE` - Research source, synthese, claims et Candidate Rules
+   (`744fce3`);
+6. `STYLE.1.C.UI` - workflow Discover/Sources/Synthesis/approval (`d120e03`);
+7. `STYLE.1.C.SEARCH.FIX1` - citations OpenRouter et provider Research herite
+   ou decorelle (`9a0d96b`);
+8. `STYLE.1.D.CORE` - heritage Project Style et override Sequence canonique
+   (`5842b52`);
+9. `STYLE.1.D.UI` - panneau Sequence Style (`0365978`);
+10. `STYLE.1.E.CORE.1` - source Style canonique pour les generations
+   (`dda1674`);
+11. `STYLE.1.E.SURFACES.1` - injection Asset et Shot image/video/storyboard
+    (`6288d39`);
+12. `STYLE.1.E.SURFACES.2` - injection Sequence Storyboard et Sequence Video
+    (`5e92d71`);
+13. `STYLE.1.F.CORE` - contrat d'alignement des Assets (`1fe873e`);
+14. `STYLE.1.F.UI` - preview/edit/apply de l'alignement Asset (`e748266`);
+15. `STYLE.1.G.CORE.1` - donnees, generation et lifecycle Look Development
+    (`d4c768c`);
+16. `STYLE.1.G.UI.1` - Look Development generation bench (`d1c383c`);
+17. `STYLE.1.G.UI.2` - review, comparaison, notes, target et rerun
+    (`a1bf1c3`);
+18. `STYLE.1.POLISH.1` - ergonomie Reference Board et Look Development
+    (`82b04d0`);
+19. `STYLE.1.B.ANALYSIS.CORE` - analyse multimodale, provenance,
+    Observations et Candidate Rules (`4ccff59`);
+20. `STYLE.1.B.ANALYSIS.UI` - selection, confirmation, review et approbation
+    vers le Working Draft (`72f9d89`).
+
+Gate de cloture, termine:
+
+21. `STYLE.1.ACCEPTANCE.1` - `ACCEPTED` le 2026-08-02 : validation
+    utilisateur transversale de A a G, controle des parcours Project,
+    Sequence, Asset et generation, verification de la provenance, des
+    versions, des overrides et des refus cross-Project, reconciliation de
+    `docs/PROJECT_STATE.md`, `docs/ROADMAP.md` et `docs/USER_FEEDBACK.md`,
+    audit final du code mort, des migrations et de leur applicabilite.
+    N'a ajoute aucun comportement produit. Detail complet dans
+    `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`. **L'epic `STYLE.1` est
+    formellement clos.**
+
+`STYLE.1.G.CORRECTIONS.1` n'appartient plus au MVP: il a ete remplace par les
+deux tickets `STYLE.2.LOOK.CORRECTIONS.*` ci-dessus.
 
 ## Etat actuel
 
@@ -36,12 +133,63 @@ Tickets recemment termines:
   textures decoratives optionnelles.
 - `PLAYER.AUDIO.1` - audio dans `VideoFrameReviewPlayer`.
 
-Ticket actif:
+Developpement courant:
 
-- `UX.AUDIT.1` - audit ergonomique et structurel read-only de l'application,
-  avant tout nouveau redesign produit. Le brief valide est conserve dans
-  `docs/audits/MIKAI_UX_AUDIT_BRIEF.md` et le point de rollback GitHub est
-  `pre-ux-audit-20260714`.
+- L'epic `STYLE.1` est `RESOLVED` : ses fonctions sont livrees (dernier
+  gate applicatif pousse a `72f9d89`) et `STYLE.1.ACCEPTANCE.1` est
+  `ACCEPTED` (2026-08-02). Les evolutions correctives du Style et le
+  hardening pending-sync appartiennent desormais a `STYLE.2`.
+- Le prochain chantier recommande est `SEQGEN.VIDEO.CUT.CORE.1`, suivi de
+  `SEQGEN.VIDEO.CUT.UI.1`.
+- `CAMLAB.POLISH.2` est termine et valide (`41d7004`) : mapping nominal des
+  deux images Gaussian-to-image et inputs textuels/scalaires additionnels.
+
+- `CAMLAB.POLISH.1`, `CAMLAB.VIEWER.CONTROLS.1` et `CAMLAB.POLISH.2` sont
+  termines, pousses et valides par l'utilisateur : Camera Lab est un workspace
+  guide a trois colonnes avec generation PLY, viewer/capture, controles de
+  profondeur/zoom et Gaussian-to-image a mapping nominal strict.
+- `SEQGEN.1` est termine : package Seedance read-only, deterministe et
+  inspectable pour les Shots ordonnes d'une Sequence.
+- `SEQGEN.STORYBOARD.2` et `SEQGEN.STORYBOARD.2-FIX` sont termines : workspace
+  Storyboard dedie, generation d'images storyboard par Shot, casting unique,
+  selection de references, drafts persistants et CTA de generation explicite.
+- `SEQGEN.STORYBOARD.3`, ses retakes Dynamic Input et
+  `SEQGEN.STORYBOARD.EXTRACT.1` a `FIX6` sont termines.
+- `SEQGEN.VIDEO.1` est termine et pousse (`89c28d1`) : les Sequence Video
+  Drafts durables sont disponibles depuis Storyboard.
+- `SEQGEN.SPLIT.1`, `SEQGEN.SPLIT.WORKSPACE.1` et le correctif EOF sont
+  termines : detection FFmpeg, review/correction unifiee et validation
+  persistante du mapping segments -> Shots.
+- `SEQGEN.PUSH.1` est termine et pousse (`31441d3`) : un Split Plan valide
+  produit des clips physiques durables comme candidats video sur les Shots,
+  avec review et approbation explicites, sans remplacement automatique.
+- `SEQGEN.PUSH.2`, `SEQGEN.PUSH.2-FIX1`, `SEQGEN.SPLIT.MINFRAMES.1` et
+  `SHOT.VIDEO.LIBRARY.1` sont termines : durees optionnelles, first frames,
+  thumbnails Storyboard, segments courts frame-native et bibliotheque video
+  Shot reutilisable sont disponibles.
+- `DEV.LAUNCHER.CLEANSTART.1` est termine et pousse (`8a2ebd9`) : les anciens
+  serveurs MikAI/OpenReel reconnus sont arretes proprement avant dev/prod.
+- `SEQGEN.KEYFRAMES.1` est retire : l'extraction manuelle de frames est deja
+  couverte par `Capture Frame` dans le player Shot.
+- `SEQGEN.SPLIT.CLEANUP.1` et ses retakes FIX2/FIX3/FIX4 sont termines et
+  pousses (`57f24f6`). `CAMLAB.SPIKE.1`, `CAMLAB.PLY.1` puis
+  `CAMLAB.VIEWER.1` puis `CAMLAB.SHOTREF.1` sont termines et pousses
+  (`c9d2982`) : le PLY Gaussian est
+  recupere de facon confinee, valide, stocke comme artefact de job et servi
+  avec Range; Camera Lab offre maintenant un viewer PlayCanvas et une capture
+  PNG locale a la resolution exacte de la reference explicitement choisie,
+  puis sa confirmation atomique comme reference Shot au role `camera`.
+  `SEQGEN.STORYBOARD.1` et `STORY.WORKSPACE.MERGE.1` sont termines.
+  `EDITORIAL.SHORTCUT.1` est termine : raccourci Editorial persistant dans la
+  navigation Project, Sequence et Shot.
+  `EDITORIAL.NAV.1` est termine : navigation entre sequences dans Editorial
+  et acces plus clair vers OpenReel.
+  `UX.3.PRODUCTION.WORKSPACE.1` et `UX.WORKSPACES.AUDIT.1` sont termines.
+  `UX.3.PROMPT.WORKSPACE.1` reste mis en attente pour arbitrage produit.
+  `UX.2.LLMCHAT.DISCLOSURE.1` est termine : chat replie par defaut
+  dans la colonne ouverte, et bouton flottant conserve avec la couleur Top bar.
+  `UX.2.RIGHTPANEL.DISCLOSURE.1`, `UX.2.SETTINGS.NAV.1` et les quick wins
+  `UX.1` sont termines.
 
 Dernier ticket produit termine:
 
@@ -65,7 +213,7 @@ roadmap creative generale. `SEED.MVP.0` correspond a l'audit/handoff initial.
 10. `GEN.SEEDANCE.3` - termine ; aucun workflow First/Last Frame reel n'etait
     disponible, donc aucun profil actif n'a ete invente
 
-Regle de priorite : ne pas intercaler `REFROLE.1`, `PROMPTPKG.1` ou `PROMPT.2`
+Regle de priorite : ne pas intercaler `REFROLE.1`, `PROMPT.PACKAGE.MVP.1` ou `PROMPT.2`
 entre ces tickets Seedance sans nouvel arbitrage produit explicite.
 
 ## Axe Editorial et OpenReel
@@ -108,12 +256,28 @@ Cet axe vient apres le bloc Film Result/OpenReel.
 2. `PROMPTUX.1` - edition claire du prompt, distinction prompt utilisateur /
    prompt compile, sources visibles, Fill/Replace/Append/LLM Assist et panneau
    Generate conserve ouvert.
-3. `STYLE.1` - Project Style Bible, avec audits et implementation V1 puis
-   references visuelles et injection dans les prompts.
+3. `STYLE.1` - epic Project Style V1 defini dans
+   `docs/PROJECT_STYLE_MVP_SPEC.md`: World & Design Language, Visual
+   Treatment, Creative Influences avec recherche sourcee, Reference Board,
+   Style sparse et versionne, override Sequence, alignement Assets, injection
+   dans les prompts et Look Development image/video.
+   Le decoupage d'execution et l'allocation des modeles sont fixes dans
+   `docs/PROJECT_STYLE_EXECUTION_PLAN.md`. Tous les tickets fonctionnels
+   `STYLE.1`, y compris `STYLE.1.B.ANALYSIS.CORE` et
+   `STYLE.1.B.ANALYSIS.UI`, sont termines et le flux visible a ete valide par
+   l'utilisateur. La cloture transversale `STYLE.1.ACCEPTANCE.1` est
+   `ACCEPTED` (2026-08-02) : l'epic est formellement clos.
+   Les propositions de correction du Style depuis les resultats Look
+   Development sont reportees a `STYLE.2.LOOK.CORRECTIONS.CORE.1` puis
+   `STYLE.2.LOOK.CORRECTIONS.UI.1`.
+   Le hardening navigateur de la reprise apres commit connu mais relecture
+   echouee est reporte a `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1`. Ce ticket
+   devra injecter la panne post-commit, prouver `pending sync` et confirmer que
+   `Retry sync` ne rejoue jamais la mutation.
 4. `REFROLE.1` - roles precis pour images et videos: First Frame, Last Frame,
    Character, Environment, Style, Camera, Motion, Rhythm, Continuity Anchor,
    Keyframe et Storyboard Frame.
-5. `PROMPTPKG.1` - bibliotheque de packages par workflow et modele:
+5. `PROMPT.PACKAGE.MVP.1` - bibliotheque de packages par workflow et modele:
    Seedance, GPT Image, animation, camera et continuite.
 6. `PROMPT.2` - rework du compiler selon la tache: image, character design,
    environment, keyframe, image-to-video, first/last frame, reference-to-video,
@@ -129,16 +293,63 @@ Dynamic Batch et panneaux Asset/Shot.
 
 Backlog:
 
-- `SEQGEN.1` / `SEQGEN.SPLIT.1` / `SEQGEN.PUSH.1` - workflow futur
-  Seedance au niveau Sequence: compiler les prompts des shots, optionnellement
-  generer un storyboard, produire une video sequence bout-a-bout, detecter les
+- `SEQGEN.STORYBOARD.3` / `SEQGEN.STORYBOARD.2` / `SEQGEN.1` /
+  `SEQGEN.SPLIT.1` / `SEQGEN.PUSH.1` -
+  workflow Seedance au niveau Sequence: preparer et approuver les images
+  storyboard, produire une planche Sequence, compiler les prompts des shots,
+  produire une video sequence
+  bout-a-bout, detecter les
   splits attendus, reviewer le mapping, puis pousser les clips comme candidats
   video vers les shots existants. Voir
   `docs/SEQUENCE_LEVEL_SEEDANCE_DRAFT.md`.
+- `SEQGEN.STORYBOARD.EXTRACT.1` - detecter une planche Sequence, previsualiser
+  et corriger ses regions, puis creer des drafts storyboard Shot avec
+  provenance durable et thumbnails associes.
+- `SEQGEN.STORYBOARD.EXTRACT.1-FIX5` - presets de crop de contenu pour
+  retirer headers/captions des planches, avec application globale previsualisee
+  et reglages persistants dans `paramsJson`.
+- `SEQGEN.STORYBOARD.EXTRACT.1-FIX6` - diagnostics avances Otsu/Canny/Grid,
+  parametres bruts documentes, upload/suppression controlee des Sequence
+  Storyboard Drafts, et cropboxes avec ratios/verrouillage/multiplicateur.
+- `SEQGEN.VIDEO.1` - depuis le workspace Storyboard, choisir explicitement une
+  planche Sequence, executer un workflow video Seedance avec le package et les
+  references compatibles, puis sauvegarder une video brute versionnee au
+  niveau Sequence. Cette video est la source durable de `SEQGEN.SPLIT.1` et ne
+  modifie encore aucun Shot ni Sequence Result.
 - `WFBUILD.1.B` - stabilisation finale du Dynamic Batch si necessaire;
 - `GEN.VRAM.1` - option de purge Ollama avant ComfyUI;
 - `LLM.VRAM.1` - option de purge ComfyUI avant Ollama;
 - `ASSET.1.E` - dernier polish de generation d'Assets et references.
+
+## Axe Gaussian Camera / SHARP
+
+Priorite acceptee le 20 juillet 2026 : depuis un Shot, choisir une image,
+produire un Gaussian Splat `.ply` avec ComfyUI, cadrer la scene dans un viewer
+MikAI, puis enregistrer un snapshot confirme comme reference `camera`.
+
+Ordre obligatoire :
+
+1. `CAMLAB.SPIKE.1` - termine : contrat ComfyUI reel, recuperation confinee
+   du PLY et comparaison viewer avec un vrai fichier;
+2. `CAMLAB.PLY.1` - termine : artefacts PLY securises dans le bridge,
+   polling, cache de jobs et route HTTP Range (`679b5c2`);
+3. `CAMLAB.VIEWER.1` - termine : viewer PlayCanvas, camera et capture hors
+   ecran exacte (`81592f2`);
+4. `CAMLAB.SHOTREF.1` - termine : confirmation puis ajout atomique du snapshot dans
+   `shot_reference_images` avec le role `camera` (`c9d2982`).
+5. `CAMLAB.POLISH.1` - termine et pousse (`973169d`) : workspace guide image
+   -> PLY -> viewer/snapshot -> Gaussian-to-image ;
+6. `CAMLAB.VIEWER.CONTROLS.1` - termine et pousse (`13c3cc9`) : correction de
+   profondeur Z non destructive, Reset camera adapte aux bounds transformes,
+   molette normalisee et sensibilite Fine/Normal/Fast avec `Alt + Wheel` ;
+7. `CAMLAB.POLISH.2` - termine, pousse et valide (`41d7004`) : mapping strict
+   des deux images Gaussian-to-image et exposition des autres nodes `(Input)`.
+
+Un historique reel expose deja `ply_file`/`filename` depuis
+`GeomPackPreviewGaussian`, et `/view` sert ce PLY avec support Range. Cette
+preuve doit etre reproduite et documentee avant de figer le contrat runtime.
+La livraison produit avec les poids SHARP officiels reste soumise a la
+clarification de leur licence; cela ne bloque pas le spike technique local.
 
 ## Axe Story, Outline, Sequences, Shots et Assets
 
@@ -200,6 +411,8 @@ Regles permanentes:
 - aucun commit sans `APPROVED` et `safeToCommit: true`;
 - parcours utilisateur fourni pour chaque feature visuelle;
 - pas d'extended thinking inutile pour les simples taches de commit/push.
+- apres approbation, commit et push sont toujours demandes ensemble dans le
+  meme prompt Claude, sauf demande utilisateur explicite de commit local.
 
 ## Vue condensee
 
@@ -211,10 +424,30 @@ prochaines taches doivent donc eviter de refaire ces fondations.
 
 Ordre recommande a valider avant le prochain ticket:
 
-1. `PROMPT.PACKAGE.MVP.1` - remplacer le scope trop large de `PROMPTPKG.1`
-   par une registry legere de packages par workflow;
-2. `OPENREEL.ROUNDTRIP.1` - valider le vrai aller-retour MikAI/OpenReel;
-3. `OUTPUTS.POLISH.1` ou `GEN.RUNTIME.1` selon les problemes reels observes.
+1. `SEQGEN.STORYBOARD.3` - generation et sauvegarde d'une planche storyboard
+   au niveau Sequence;
+2. `SEQGEN.STORYBOARD.EXTRACT.1` - extraction OpenCV des vignettes de la
+   planche Sequence et assignation confirmee aux Shots;
+3. `SEQGEN.VIDEO.1` - generation et stockage durable d'une video Sequence
+   brute depuis une planche Storyboard explicite;
+4. `SEQGEN.SPLIT.1` - termine : detection et review des splits Sequence;
+5. `SEQGEN.PUSH.1` - termine : decoupe et push explicite des clips candidats
+   vers les Shots existants;
+6. `SEQGEN.PUSH.2` - push optionnel des durees, extraction automatique de la
+   first frame et thumbnail Storyboard explicite, modifiable depuis le Shot;
+7. `SEQGEN.SPLIT.CLEANUP.1` - termine : supprimer en bloc les anciennes runs inutilisees
+   sans casser la provenance des candidats deja pousses, et proposer une
+   `Manual Detection` initialisant un plan d'un seul segment pour decoupe
+   manuelle frame-exacte dans le player;
+8. `CAMLAB.SPIKE.1` - gate technique PLY et comparaison des viewers sur le
+   workflow ComfyUI reel;
+9. `CAMLAB.PLY.1`, `CAMLAB.VIEWER.1`, `CAMLAB.SHOTREF.1` - MVP Gaussian Camera
+   gate par gate;
+10. `SEQGEN.VIDEO.CUT.CORE.1` puis `SEQGEN.VIDEO.CUT.UI.1` - retirer une plage
+   frame-exacte d'un Sequence Video Draft et produire une nouvelle version
+   durable apres preview utilisateur;
+11. `PROMPT.PACKAGE.MVP.1` - registry legere de packages par workflow;
+12. `OPENREEL.ROUNDTRIP.1` - valider le vrai aller-retour MikAI/OpenReel.
 
 Decisions de backlog:
 
@@ -231,14 +464,42 @@ Decisions de backlog:
 
 ### Maintenant
 
-1. Implementer `THEME.TOPBAR.MASK.1`.
-2. Ne pas poursuivre First/Last Frame tant qu'un workflow reel et audite
-   n'est pas disponible.
+1. `SEQGEN.VIDEO.CUT.CORE.1` - decoupe/concat frame-exacte, version durable et
+   provenance, sans ecraser la source;
+2. `SEQGEN.VIDEO.CUT.UI.1` - editeur In/Out en frames, preview et publication
+   utilisateur;
+3. `OPENREEL.ROUNDTRIP.1`;
+4. `PROMPT.PACKAGE.MVP.1`.
+
+Termine et pousse:
+
+- `STYLE.1.ACCEPTANCE.1` - `ACCEPTED` le 2026-08-02, epic `STYLE.1` (A a G)
+  formellement clos. Detail dans
+  `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`.
+- `STYLE.1.A` - fondation durable, versions, compilation sparse, navigation
+  et premier workspace Project Style (`6c89bfb`).
+- `STYLE.1.B.CORE`, `STYLE.1.B.UI`, `STYLE.1.C.CORE` et `STYLE.1.C.UI` -
+  Reference Board, Creative Influences et workflow Research source/approval
+  (`bd36159`, `7851c31`, `744fce3`, `d120e03`).
+- `STYLE.1.D.CORE` - override Sequence complet et resolver canonique
+  Sequence/Shot (`5842b52`).
+- `CAMLAB.SPIKE.1` - gate technique read-only, GO PLY et viewer PlayCanvas.
+- `CAMLAB.PLY.1` - contrat d'artefact PLY securise, cache atomique, polling
+  concurrent et HTTP Range (`679b5c2`).
+- `CAMLAB.VIEWER.1` - viewer PlayCanvas Shot-scoped, controles camera et
+  capture PNG locale hors ecran a la resolution source exacte (`81592f2`).
+- `CAMLAB.SHOTREF.1` - confirmation explicite et sauvegarde atomique d'une
+  capture Gaussian Camera comme reference Shot `camera` (`c9d2982`).
+- `CAMLAB.POLISH.1`, `CAMLAB.VIEWER.CONTROLS.1` et `CAMLAB.POLISH.2` -
+  workspace guide, controles ergonomiques du viewer et mapping Gaussian-to-
+  image strict (`973169d`, `13c3cc9`, `41d7004`).
+- `SEQGEN.SPLIT.CLEANUP.1` - Manual Detection, Clear unused past runs et
+  retakes de navigation native vers le player (`57f24f6`).
 
 ### Ensuite - Creative / Prompts (apres le bloc Seedance)
 
 5. `REFROLE.1`
-6. `PROMPTPKG.1`
+6. `PROMPT.PACKAGE.MVP.1`
 7. `PROMPT.2`
 
 ### Ensuite - Generation

@@ -1,17 +1,84 @@
 # MikAI Project State
 
-Last updated: 2026-07-14
+Last updated: 2026-08-02
 
 ## Repository Heads
 
-- MikAI: `c37e603 — Add audio controls to VideoFrameReviewPlayer`
-- OpenReel sidecar: `e1c36d1 — fix: make MikAI Bridge panel collapsible`
+- MikAI: `72f9d89 - feat(style): add Reference Board analysis UI`
+- OpenReel sidecar: `4078de7 - Shot video library bridge support`
+
+## STYLE.1.ACCEPTANCE.1 — ACCEPTED, epic STYLE.1 RESOLVED
+
+`STYLE.1.ACCEPTANCE.1` (transversal acceptance gate for the `STYLE.1`
+epic, A through G) is `ACCEPTED`: technical evidence complete, two bounded
+Codex retakes closed (`REVISE` -> `REVISE` -> accepted), and manual user
+confirmation received on 2026-08-02 (`c est ok`). Full matrix, DB/migration
+audit, dead-code audit, cross-Project refusal proofs and sign-off are
+recorded in `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`. The `STYLE.1`
+epic (A through G) is `RESOLVED` — see `docs/ROADMAP.md` for the delivered
+ticket registry and the next active ticket.
 
 Verification on 2026-07-13:
 
 - MikAI committed HEAD is `c37e603`; its working tree has persistent
   `AGENTS.md` workflow change plus unrelated `.agents/skills/` and `.vscode/`.
 - OpenReel sidecar remains at committed HEAD `e1c36d1`.
+
+Current supervised work:
+
+- `CAMLAB.POLISH.2` est termine et valide par l'utilisateur (`41d7004`) : la
+  colonne Gaussian-to-image mappe le snapshot vers
+  `Load Image Gaussian (Input)`, la source vers `Load Image (Input)`,
+  independamment de l'ordre JSON, et expose ses autres nodes `(Input)`.
+
+- `CAMLAB.POLISH.1`, `CAMLAB.VIEWER.CONTROLS.1` et `CAMLAB.POLISH.2` sont
+  termines, pousses et valides par l'utilisateur. Camera Lab guide maintenant
+  la generation PLY, le cadrage/capture avec profondeur et zoom ajustes, puis
+  la generation Gaussian-to-image avec mapping nominal strict.
+- L'epic `STYLE.1` (A a G) est `RESOLVED` : Working Draft et versions
+  immuables, Reference Board et Creative Influences, Influence Research et
+  Reference Analysis, heritage/override Sequence, injection dans les six
+  consumers de generation, Asset Alignment et Look Development sont tous en
+  place et pousses (dernier ticket applicatif livre :
+  `feat(style): add Reference Board analysis UI`, HEAD `72f9d89`). Le gate
+  transversal `STYLE.1.ACCEPTANCE.1` est `ACCEPTED` (voir section
+  ci-dessus) — confirme manuellement par l'utilisateur le 2026-08-02. Le
+  registre complet des tickets livres est dans `docs/ROADMAP.md`.
+- `SEQGEN.VIDEO.CUT.1` reste le prochain candidat hors epic Project Style :
+  retirer une plage frame-exacte d'un Sequence Video Draft, concatener les
+  parties conservees et publier une nouvelle version sans ecraser la source.
+- `SEQGEN.VIDEO.1`, `SEQGEN.SPLIT.1`, the unified Split Workspace, the EOF
+  compatibility fix, `SEQGEN.PUSH.1`, `SEQGEN.PUSH.2`, the first-frame PNG
+  fix, short frame-native segments and `SHOT.VIDEO.LIBRARY.1` are complete
+  and pushed.
+- Validated Split Plans now create durable Shot video candidates. Candidate
+  review, explicit approval, result invalidation and safe deletion are live.
+- `SEQGEN.KEYFRAMES.1` was removed because Shot-level `Capture Frame` already
+  covers manual frame extraction.
+- `SEQGEN.SPLIT.CLEANUP.1` and its native player-anchor retakes are complete.
+- `CAMLAB.SPIKE.1`, `CAMLAB.PLY.1`, `CAMLAB.VIEWER.1` and `CAMLAB.SHOTREF.1`
+  are complete and pushed at MikAI HEAD `c9d2982`. A validated Gaussian PLY is
+  a secure job/cache artifact with Range serving; the Shot Camera Lab provides
+  a PlayCanvas viewer, exact local offscreen PNG capture, and explicit atomic
+  confirmation as a durable Shot Reference Image with role `camera`.
+- The supplied
+  `Gaussian.json` and real ComfyUI history prove a `SharpPredict`
+  image-to-PLY workflow whose `GeomPackPreviewGaussian` output exposes a PLY
+  downloadable through `/view` with Range support.
+
+Project Style reference documents:
+
+- `STYLE.1` (A through G) is functionally delivered — see the current
+  supervised work note above and `docs/ROADMAP.md` for the full delivered
+  ticket registry. The original user journey, accepted MVP/deferred
+  decisions, detailed specification and development-supervisor handoff are
+  preserved in `docs/PROJECT_STYLE_ORIGINAL_USER_STORY.md`,
+  `docs/PROJECT_STYLE_MVP_DECISIONS.md`,
+  `docs/PROJECT_STYLE_MVP_SPEC.md` and
+  `docs/PROJECT_STYLE_SUPERVISOR_HANDOFF.md`.
+- Next work in this area is bounded `STYLE.2` follow-ups (Look Development
+  corrections, Reference Analysis UI hardening) tracked in
+  `docs/ROADMAP.md`, gated behind `STYLE.1.ACCEPTANCE.1` closure.
 
 ## Product Shape
 
@@ -101,9 +168,10 @@ The `/nle-prototype` route is secondary/debug.
 
 ## Current Seedance State
 
-- Latest committed MikAI HEAD for this session: `46f46ef`.
-- The previous repository-head lines above are historical handoff metadata;
-  this checkpoint is the authoritative current state.
+- Historical note: `31441d3` was the latest committed MikAI HEAD as of the
+  Seedance handoff session below. It predates the `STYLE.1` epic and is no
+  longer the current head — see `Repository Heads` at the top of this
+  document (`72f9d89`) for the actual current state.
 - The Seedance MVP block is complete through `GEN.SEEDANCE.3`.
 - `GEN.SEEDANCE.3` found no real First/Last Frame workflow in the current
   library, so no active profile was invented.
@@ -126,8 +194,38 @@ The `/nle-prototype` route is secondary/debug.
 - Recent completed polish includes `THEME.MIKROS.1` through `.5` (Custom
   palette, fonts and logo) and `PLAYER.AUDIO.1` (audio controls in the
   frame-aware player).
-- Active implementation ticket: `UX.AUDIT.1`, a read-only ergonomics and
-  information-architecture audit before the next major product redesign.
+- `EDITORIAL.NAV.1`, `SEQGEN.1`, the Sequence Storyboard generation/extraction
+  chain and `SEQGEN.VIDEO.1` are complete. The dedicated Storyboard workspace
+  now owns contact-sheet generation, panel extraction, durable Sequence Video
+  drafts and their provenance. Split detection/review and `SEQGEN.PUSH.1` are
+  complete: an explicitly validated plan now creates durable, reviewable Shot
+  video candidates without automatic approval.
+
+## Storyboard Direction
+
+The Storyboard is not only a gallery of media that already exists. It is the
+first visual production workspace for a Sequence, even when no Shot has an
+image yet. It must provide a Sequence selector like Editorial, a persistent
+Project navigation shortcut, a visual Shot grid, and a compact unique list of
+the Assets cast anywhere in the Sequence.
+
+The workspace will let the user select Asset reference images per Asset,
+open the Asset Detail page, compile the Sequence package with explicit
+options to ignore prompt segments and unapproved references, generate draft
+storyboard images, and approve useful compositions before the later
+Sequence-level Seedance video workflow.
+
+The intended chain is:
+
+```text
+Story -> Storyboard images per Shot -> approved visual structure
+-> Sequence-level Seedance video -> Split -> Push candidates to Shots
+```
+
+The accepted `SEQGEN.STORYBOARD.3` extension adds a first sequence-level
+storyboard contact sheet before sequence video generation. It uses selected
+casting references and the full inspectable Sequence Generation Package, and
+stores explicit versioned drafts at Sequence level without mutating Shots.
 
 ## Last Validated Baseline
 
