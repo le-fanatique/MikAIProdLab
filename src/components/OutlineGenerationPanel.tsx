@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateOutlineDraft, applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
 import type { LLMPreviewState, GenerateOutlineResult } from "@/types/llm";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 type Props = {
   projectId: number;
@@ -155,7 +156,7 @@ export default function OutlineGenerationPanel({
             <button
               type="button"
               onClick={handleApply}
-              className="rounded bg-[#e7e9ec] text-[#141618] px-4 py-1.5 text-sm font-medium hover:bg-white transition-colors"
+              className={`px-4 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`}
             >
               Apply Outline
             </button>

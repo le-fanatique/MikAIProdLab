@@ -77,6 +77,18 @@ type Props = {
 // Column 3: same controls and ergonomic conventions (textarea/number/
 // boolean/select), each column keeping its own separate override state.
 // ---------------------------------------------------------------------------
+/**
+ * FB-20260723-002 — presentation-only correction of the known workflow-node
+ * typo "Additional Prompy". Overrides are keyed by nodeId, never by label
+ * text (see textOverrideByNodeId/scalarOverrideByNodeId below), so this only
+ * changes what is rendered — the stored workflow JSON, node id, and override
+ * mapping contract stay untouched. Every other label passes through
+ * byte-identical.
+ */
+function displayInputLabel(label: string): string {
+  return label === "Additional Prompy" ? "Additional Prompt" : label;
+}
+
 function NonImageInputsFieldset({
   nonImageInputs,
   textOverrideByNodeId,
@@ -106,7 +118,7 @@ function NonImageInputsFieldset({
           return (
             <div key={nodeId} className="flex flex-col gap-1">
               <label className="text-[10px] text-[#6e767d]" title={badge}>
-                {input.label} <span className="text-[#4b5158]">({badge})</span>
+                {displayInputLabel(input.label)} <span className="text-[#4b5158]">({badge})</span>
               </label>
               <textarea
                 value={value}
@@ -123,7 +135,7 @@ function NonImageInputsFieldset({
         return (
           <div key={nodeId} className="flex flex-col gap-1">
             <label className="text-[10px] text-[#6e767d]" title={badge}>
-              {input.label} <span className="text-[#4b5158]">({badge})</span>
+              {displayInputLabel(input.label)} <span className="text-[#4b5158]">({badge})</span>
             </label>
             {input.kind === "boolean" ? (
               <select

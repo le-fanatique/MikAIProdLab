@@ -22,13 +22,13 @@ export default function FormField({
   step,
 }: Props) {
   const inputClass =
-    "w-full rounded bg-neutral-800 border border-neutral-700 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors";
+    "w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:outline-none focus:border-[#3a4046] transition-colors";
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+      <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="text-[#cf7b6b] ml-1">*</span>}
       </label>
       {type === "textarea" ? (
         <textarea

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { updateShotPrompt } from "@/actions/shots";
 import type { ComposedShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 type Props = {
   composed: ComposedShotPrompt;
@@ -107,7 +108,7 @@ export default function PromptComposerPanel({
               <input type="hidden" name="shotPrompt" value={text} />
               <button
                 type="submit"
-                className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                className={`px-3 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`}
               >
                 Apply to Shot Prompt
               </button>

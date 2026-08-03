@@ -11,6 +11,7 @@ import {
   updateAssetDescriptionFieldInline,
   applyBatchAssetDescriptionDraftsInline,
 } from "@/actions/assets";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 export type BatchAssetItem = {
   id: number;
@@ -173,15 +174,11 @@ export default function BatchAssetDescriptionEnhancePanel({
       ? "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
       : "rounded border border-[#2c3035] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed";
 
-  const applyBtnClass = (disabled: boolean) =>
-    disabled
-      ? "rounded border border-[#1e2124] text-[#4b5158] px-2.5 py-1 text-xs cursor-not-allowed"
-      : "rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors";
-
-  const batchBtnClass = (disabled: boolean) =>
-    disabled
-      ? "rounded border border-[#1e2124] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed"
-      : "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors";
+  // FB-20260716-037 — driven by the button's own `disabled` attribute via
+  // LLM_APPLY_ACTION_CLASS's disabled: variants, so one string now covers
+  // both states instead of a per-call ternary.
+  const applyBtnClass = `px-2.5 py-1 text-xs font-medium ${LLM_APPLY_ACTION_CLASS}`;
+  const batchBtnClass = `px-3 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`;
 
   const hasApplicableResults =
     state.status === "success" &&
@@ -379,7 +376,7 @@ export default function BatchAssetDescriptionEnhancePanel({
                               type="button"
                               disabled={isApplying || descApplied}
                               onClick={() => handleApplyOne(result.assetId, "description", "replace", result.draft.descriptionDraft)}
-                              className={applyBtnClass(isApplying || descApplied)}
+                              className={applyBtnClass}
                             >
                               Replace Description
                             </button>
@@ -387,7 +384,7 @@ export default function BatchAssetDescriptionEnhancePanel({
                               type="button"
                               disabled={isApplying || descApplied}
                               onClick={() => handleApplyOne(result.assetId, "description", "append", result.draft.descriptionDraft)}
-                              className={applyBtnClass(isApplying || descApplied)}
+                              className={applyBtnClass}
                             >
                               Append to Description
                             </button>
@@ -420,7 +417,7 @@ export default function BatchAssetDescriptionEnhancePanel({
                               type="button"
                               disabled={isApplying || notesApplied}
                               onClick={() => handleApplyOne(result.assetId, "notes", "replace", result.draft.notesDraft)}
-                              className={applyBtnClass(isApplying || notesApplied)}
+                              className={applyBtnClass}
                             >
                               Replace Notes
                             </button>
@@ -428,7 +425,7 @@ export default function BatchAssetDescriptionEnhancePanel({
                               type="button"
                               disabled={isApplying || notesApplied}
                               onClick={() => handleApplyOne(result.assetId, "notes", "append", result.draft.notesDraft)}
-                              className={applyBtnClass(isApplying || notesApplied)}
+                              className={applyBtnClass}
                             >
                               Append to Notes
                             </button>
@@ -460,7 +457,7 @@ export default function BatchAssetDescriptionEnhancePanel({
                   type="button"
                   disabled={isApplying}
                   onClick={() => handleApplyAll("replace")}
-                  className={batchBtnClass(isApplying)}
+                  className={batchBtnClass}
                 >
                   Replace All
                 </button>
@@ -468,7 +465,7 @@ export default function BatchAssetDescriptionEnhancePanel({
                   type="button"
                   disabled={isApplying}
                   onClick={() => handleApplyAll("append")}
-                  className={batchBtnClass(isApplying)}
+                  className={batchBtnClass}
                 >
                   Append All
                 </button>

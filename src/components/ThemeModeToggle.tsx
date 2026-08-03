@@ -11,16 +11,27 @@ import {
   MIKROS_LOGO_ACCEPTED_MIME,
   MIKROS_LOGO_MAX_BYTES,
   MIKROS_LOGO_MAX_DIMENSION_PX,
+  MIKROS_DISPLAY_FONT_SIZE_MIN_PX,
+  MIKROS_DISPLAY_FONT_SIZE_MAX_PX,
+  MIKROS_BODY_FONT_SIZE_MIN_PX,
+  MIKROS_BODY_FONT_SIZE_MAX_PX,
+  MIKROS_FONT_WEIGHTS,
+  MIKROS_FONT_STYLES,
+  MIKROS_DEFAULT_TYPOGRAPHY_DETAILS,
   THEME_MODE_STORAGE_KEY,
   THEME_CLASS,
   CUSTOM_MODE_PREFIX,
   type MikrosPalette,
   type MikrosTokenKey,
   type CustomTheme,
+  type MikrosTypographyDetails,
+  type MikrosFontWeight,
+  type MikrosFontStyle,
   customModeId,
   customModeValue,
   applyPaletteToElement,
   applyFontsToElement,
+  applyTypographyDetailsToElement,
   applyLogoToElement,
   applyTopBarTextureToElement,
   applyPreviewTextureToElement,
@@ -34,6 +45,7 @@ import {
   isValidFontFamilyName,
   isValidLogoDataUrl,
   sniffImageMimeFromBytes,
+  clampFontSizePx,
 } from "@/lib/mikrosTheme";
 import { parseMikrosThemeImportJson, type MikrosThemeImportResult } from "@/lib/mikrosThemeImport";
 
@@ -52,6 +64,7 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
       el.classList.add(THEME_CLASS);
       applyPaletteToElement(el, theme.tokens);
       applyFontsToElement(el, theme.displayFont, theme.bodyFont);
+      applyTypographyDetailsToElement(el, theme.typography);
       applyLogoToElement(el, theme.logo);
       applyTopBarTextureToElement(el, theme.topBarTexture);
       applyPreviewTextureToElement(el, theme.previewTexture);
@@ -98,6 +111,12 @@ export default function ThemeModeToggle() {
   const [bodyFontIsOther, setBodyFontIsOther] = useState(false);
   const [otherFontText, setOtherFontText] = useState<Record<FontRole, string>>({ display: "", body: "" });
   const [fontErrors, setFontErrors] = useState<Partial<Record<FontRole, string>>>({});
+
+  // Bounded typography details (FB-20260715-006) — same draft/commit pattern
+  // as the fonts above. Always a fully valid, in-bounds value (clamped on
+  // every change), so Save/preview can trust it unconditionally like
+  // draftPalette.
+  const [draftTypography, setDraftTypography] = useState<MikrosTypographyDetails>(MIKROS_DEFAULT_TYPOGRAPHY_DETAILS);
 
   // Custom logo (THEME.MIKROS.5) — null means "no logo, fall back to the M
   // mark". Unlike hex/font drafts, there is no separate raw/committed split:
@@ -204,6 +223,7 @@ export default function ThemeModeToggle() {
       setBodyFontIsOther(false);
       setOtherFontText({ display: "", body: "" });
       setFontErrors({});
+      setDraftTypography(MIKROS_DEFAULT_TYPOGRAPHY_DETAILS);
       setDraftLogo(null);
       setLogoError(null);
       setDraftTopBarTexture(null);
@@ -282,6 +302,27 @@ export default function ThemeModeToggle() {
       setDraftBodyFont(value);
       applyFontsToElement(document.documentElement, draftDisplayFont, value);
     }
+  }
+
+  /** Commits a bounded typography change (size clamped in-range, weight/style from their closed option sets) to the live draft + DOM. */
+  function commitTypographyChange(field: keyof MikrosTypographyDetails, value: number | MikrosFontWeight | MikrosFontStyle) {
+    const next = { ...draftTypography, [field]: value };
+    setDraftTypography(next);
+    applyTypographyDetailsToElement(document.documentElement, next);
+  }
+
+  function handleDisplaySizeChange(raw: string) {
+    commitTypographyChange(
+      "displayFontSizePx",
+      clampFontSizePx(raw, MIKROS_DISPLAY_FONT_SIZE_MIN_PX, MIKROS_DISPLAY_FONT_SIZE_MAX_PX, draftTypography.displayFontSizePx)
+    );
+  }
+
+  function handleBodySizeChange(raw: string) {
+    commitTypographyChange(
+      "bodyFontSizePx",
+      clampFontSizePx(raw, MIKROS_BODY_FONT_SIZE_MIN_PX, MIKROS_BODY_FONT_SIZE_MAX_PX, draftTypography.bodyFontSizePx)
+    );
   }
 
   /** Curated <select> — picking a real choice always commits immediately; picking "Other" just reveals the free-text field without changing the live font yet. */
@@ -512,6 +553,7 @@ export default function ThemeModeToggle() {
     setBodyFontIsOther(false);
     setOtherFontText({ display: "", body: "" });
     setFontErrors({});
+    setDraftTypography(MIKROS_DEFAULT_TYPOGRAPHY_DETAILS);
     setDraftLogo(null);
     setLogoError(null);
     setDraftTopBarTexture(null);
@@ -555,6 +597,7 @@ export default function ThemeModeToggle() {
       tokens: draftPalette,
       displayFont: draftDisplayFont,
       bodyFont: draftBodyFont,
+      typography: draftTypography,
       logo: draftLogo,
       topBarTexture: draftTopBarTexture,
       previewTexture: draftPreviewTexture,
@@ -620,6 +663,7 @@ export default function ThemeModeToggle() {
       body: isCuratedBody ? "" : theme.bodyFont,
     });
     setFontErrors({});
+    setDraftTypography(theme.typography);
     setDraftLogo(theme.logo);
     setLogoError(null);
     setDraftTopBarTexture(theme.topBarTexture);
@@ -965,6 +1009,102 @@ export default function ThemeModeToggle() {
               A font not installed on this device falls back to the system default automatically.
               ↺ Reset Custom palette also restores the official fonts.
             </p>
+
+            {/* Bounded size/weight/style controls (FB-20260715-006) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-display-size" className="text-[10px] text-[#6e767d]">
+                  Display size ({MIKROS_DISPLAY_FONT_SIZE_MIN_PX}–{MIKROS_DISPLAY_FONT_SIZE_MAX_PX}px)
+                </label>
+                <input
+                  id="mikros-display-size"
+                  type="number"
+                  min={MIKROS_DISPLAY_FONT_SIZE_MIN_PX}
+                  max={MIKROS_DISPLAY_FONT_SIZE_MAX_PX}
+                  step={1}
+                  value={draftTypography.displayFontSizePx}
+                  onChange={(e) => handleDisplaySizeChange(e.target.value)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-body-size" className="text-[10px] text-[#6e767d]">
+                  Body/UI size ({MIKROS_BODY_FONT_SIZE_MIN_PX}–{MIKROS_BODY_FONT_SIZE_MAX_PX}px)
+                </label>
+                <input
+                  id="mikros-body-size"
+                  type="number"
+                  min={MIKROS_BODY_FONT_SIZE_MIN_PX}
+                  max={MIKROS_BODY_FONT_SIZE_MAX_PX}
+                  step={1}
+                  value={draftTypography.bodyFontSizePx}
+                  onChange={(e) => handleBodySizeChange(e.target.value)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-display-weight" className="text-[10px] text-[#6e767d]">
+                  Display weight
+                </label>
+                <select
+                  id="mikros-display-weight"
+                  value={draftTypography.displayFontWeight}
+                  onChange={(e) => commitTypographyChange("displayFontWeight", Number(e.target.value) as MikrosFontWeight)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                >
+                  {MIKROS_FONT_WEIGHTS.map((w) => (
+                    <option key={w} value={w}>{w}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-body-weight" className="text-[10px] text-[#6e767d]">
+                  Body/UI weight
+                </label>
+                <select
+                  id="mikros-body-weight"
+                  value={draftTypography.bodyFontWeight}
+                  onChange={(e) => commitTypographyChange("bodyFontWeight", Number(e.target.value) as MikrosFontWeight)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                >
+                  {MIKROS_FONT_WEIGHTS.map((w) => (
+                    <option key={w} value={w}>{w}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-display-style" className="text-[10px] text-[#6e767d]">
+                  Display style
+                </label>
+                <select
+                  id="mikros-display-style"
+                  value={draftTypography.displayFontStyle}
+                  onChange={(e) => commitTypographyChange("displayFontStyle", e.target.value as MikrosFontStyle)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                >
+                  {MIKROS_FONT_STYLES.map((s) => (
+                    <option key={s} value={s}>{s === "normal" ? "Normal" : "Italic"}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="mikros-body-style" className="text-[10px] text-[#6e767d]">
+                  Body/UI style
+                </label>
+                <select
+                  id="mikros-body-style"
+                  value={draftTypography.bodyFontStyle}
+                  onChange={(e) => commitTypographyChange("bodyFontStyle", e.target.value as MikrosFontStyle)}
+                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
+                >
+                  {MIKROS_FONT_STYLES.map((s) => (
+                    <option key={s} value={s}>{s === "normal" ? "Normal" : "Italic"}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">

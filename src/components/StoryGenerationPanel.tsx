@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateStory, applyGeneratedStory } from "@/actions/llm/story";
 import type { LLMPreviewState, GenerateStoryResult } from "@/types/llm";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 type Props = {
   projectId: number;
@@ -142,7 +143,7 @@ export default function StoryGenerationPanel({
             <button
               type="button"
               onClick={handleApply}
-              className="rounded bg-[#e7e9ec] text-[#141618] px-4 py-2 text-sm font-medium hover:bg-white transition-colors"
+              className={`px-4 py-2 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`}
             >
               Apply to Story
             </button>

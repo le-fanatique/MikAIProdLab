@@ -314,7 +314,7 @@ export default function OllamaSettingsForm({
           className={
             isBusy
               ? "rounded bg-[#1a1d20] text-[#4b5158] px-4 py-2 text-sm cursor-not-allowed"
-              : "rounded border border-[#2c3035] bg-[#2c3035] text-[#e7e9ec] px-4 py-2 text-sm font-medium hover:bg-[#3a4046] hover:border-[#3a4046] transition-colors"
+              : "rounded border border-[#2c3035] bg-[#2c3035] text-[#e7e9ec] px-4 py-2 text-sm font-medium hover:bg-[#3a4046] hover:border-[#3a4046] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b93d6] transition-colors"
           }
         >
           {saveStatus.status === "saving" ? "Saving..." : "Save Changes"}

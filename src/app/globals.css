@@ -262,13 +262,56 @@ html.theme-mikros.theme-mikros-preview-texture .mikai-appearance-preview {
    timecodes and code exactly as in Default.
    ============================================================ */
 
+/* Bounded typography details (FB-20260715-006) — size/weight/style for the
+   two roles above, each with its own documented CSS default so an official
+   Mikros/Custom preset (no inline override — see clearPaletteOverrides) or a
+   legacy theme saved before this ticket renders with the exact spec default
+   (Display 24px/400/normal, Body/UI 16px/400/normal) without ThemeModeToggle
+   or the anti-flash script needing to write anything at all. */
 html.theme-mikros body {
   font-family: var(--mikros-font-sans);
+  font-size: var(--mikros-font-sans-size, 16px);
+  font-weight: var(--mikros-font-sans-weight, 400);
+  font-style: var(--mikros-font-sans-style, normal);
+}
+
+/* FB-20260715-006 retake — the size/weight/style above are inherited
+   properties: a `.font-mono` element with no explicit text-size/font-
+   weight/italic utility of its own has nothing else setting them, so it
+   would otherwise inherit the Body/UI role's custom values from `body`.
+   This rule sets them directly on `.font-mono`, beating both the inherited
+   value from `body` AND Tailwind's own preflight (`code, kbd, samp, pre {
+   font-size: 1em; ... }`, also in `@layer base`) via normal specificity —
+   fixing the bare-`.font-mono` leak (a `:where()`-zeroed version was tried
+   first and lost that same-layer tie against preflight, since a bare
+   `code` element selector still out-specifies zero). Placing this rule in
+   `@layer base` — Tailwind's lowest-priority layer, strictly below its own
+   `@layer utilities` where `text-[Npx]`, `font-semibold`, `italic`, etc.
+   live — means ANY element carrying one of those utilities keeps winning
+   *unconditionally*: cascade layers resolve cross-layer conflicts by layer
+   order alone, before specificity is ever considered, so this rule's own
+   specificity can never let it beat a real utility class. That exactly
+   preserves every existing explicit monospace size (e.g. the many
+   `text-[10px] font-mono` badges throughout the app) instead of a blanket
+   high-specificity override of `text-`, `font-`, or `italic` utility
+   classes. A plain `@layer utilities { ... }` block here was tried first
+   but Tailwind v4's build silently drops hand-written rules placed in
+   that named layer — `@layer base` does not have this problem. Font-
+   family is untouched here — `.font-mono` already overrides it directly
+   on itself, independent of layering, so no leak exists there. */
+@layer base {
+  html.theme-mikros .font-mono {
+    font-size: 1rem;
+    font-weight: 400;
+    font-style: normal;
+  }
 }
 
 html.theme-mikros h1 {
   font-family: var(--mikros-font-display);
-  font-weight: 400;
+  font-weight: var(--mikros-font-display-weight, 400);
+  font-style: var(--mikros-font-display-style, normal);
+  font-size: var(--mikros-font-display-size, 24px);
   letter-spacing: 0.01em;
 }
 

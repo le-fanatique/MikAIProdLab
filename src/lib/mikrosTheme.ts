@@ -68,6 +68,101 @@ export const THEME_CLASS = "theme-mikros";
 export const MIKROS_DEFAULT_DISPLAY_FONT = "Londrina Solid";
 export const MIKROS_DEFAULT_BODY_FONT = "Poppins";
 
+/**
+ * Bounded typography details (FB-20260715-006) — size/weight/style for the
+ * two existing typography roles (Display -> h1, Body/UI -> body). Additive
+ * to the family-only contract above: every value here is independently
+ * clamped/validated so a missing, malformed, legacy, or out-of-range stored
+ * value always resolves to a safe, in-bounds value — never a rejected theme.
+ */
+export const MIKROS_DISPLAY_FONT_SIZE_DEFAULT_PX = 24;
+export const MIKROS_DISPLAY_FONT_SIZE_MIN_PX = 18;
+export const MIKROS_DISPLAY_FONT_SIZE_MAX_PX = 48;
+export const MIKROS_BODY_FONT_SIZE_DEFAULT_PX = 16;
+export const MIKROS_BODY_FONT_SIZE_MIN_PX = 12;
+export const MIKROS_BODY_FONT_SIZE_MAX_PX = 20;
+
+export const MIKROS_FONT_WEIGHTS = [400, 500, 600, 700] as const;
+export type MikrosFontWeight = (typeof MIKROS_FONT_WEIGHTS)[number];
+export const MIKROS_DEFAULT_FONT_WEIGHT: MikrosFontWeight = 400;
+
+export const MIKROS_FONT_STYLES = ["normal", "italic"] as const;
+export type MikrosFontStyle = (typeof MIKROS_FONT_STYLES)[number];
+export const MIKROS_DEFAULT_FONT_STYLE: MikrosFontStyle = "normal";
+
+export type MikrosTypographyDetails = {
+  displayFontSizePx: number;
+  displayFontWeight: MikrosFontWeight;
+  displayFontStyle: MikrosFontStyle;
+  bodyFontSizePx: number;
+  bodyFontWeight: MikrosFontWeight;
+  bodyFontStyle: MikrosFontStyle;
+};
+
+export const MIKROS_DEFAULT_TYPOGRAPHY_DETAILS: MikrosTypographyDetails = {
+  displayFontSizePx: MIKROS_DISPLAY_FONT_SIZE_DEFAULT_PX,
+  displayFontWeight: MIKROS_DEFAULT_FONT_WEIGHT,
+  displayFontStyle: MIKROS_DEFAULT_FONT_STYLE,
+  bodyFontSizePx: MIKROS_BODY_FONT_SIZE_DEFAULT_PX,
+  bodyFontWeight: MIKROS_DEFAULT_FONT_WEIGHT,
+  bodyFontStyle: MIKROS_DEFAULT_FONT_STYLE,
+};
+
+/** Rounds and clamps to [min, max]; any non-finite input (missing, NaN, wrong type) falls back to `fallback` rather than propagating an invalid size. */
+export function clampFontSizePx(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+export function isValidFontWeight(value: unknown): value is MikrosFontWeight {
+  return typeof value === "number" && (MIKROS_FONT_WEIGHTS as readonly number[]).includes(value);
+}
+
+export function isValidFontStyle(value: unknown): value is MikrosFontStyle {
+  return value === "normal" || value === "italic";
+}
+
+/**
+ * Rejects (falls back to the documented default) rather than clamps for
+ * weight/style, since those are closed option sets, not a numeric range —
+ * clamps only the two size fields. Never throws; always returns a fully
+ * valid, in-bounds MikrosTypographyDetails, so a legacy theme missing every
+ * field, or a corrupted one with wrong types, loads identically to a
+ * brand-new theme that never touched typography details.
+ */
+export function clampTypographyDetails(input: Partial<Record<keyof MikrosTypographyDetails, unknown>> | undefined | null): MikrosTypographyDetails {
+  const src = input ?? {};
+  return {
+    displayFontSizePx: clampFontSizePx(
+      src.displayFontSizePx,
+      MIKROS_DISPLAY_FONT_SIZE_MIN_PX,
+      MIKROS_DISPLAY_FONT_SIZE_MAX_PX,
+      MIKROS_DISPLAY_FONT_SIZE_DEFAULT_PX
+    ),
+    displayFontWeight: isValidFontWeight(src.displayFontWeight) ? src.displayFontWeight : MIKROS_DEFAULT_FONT_WEIGHT,
+    displayFontStyle: isValidFontStyle(src.displayFontStyle) ? src.displayFontStyle : MIKROS_DEFAULT_FONT_STYLE,
+    bodyFontSizePx: clampFontSizePx(
+      src.bodyFontSizePx,
+      MIKROS_BODY_FONT_SIZE_MIN_PX,
+      MIKROS_BODY_FONT_SIZE_MAX_PX,
+      MIKROS_BODY_FONT_SIZE_DEFAULT_PX
+    ),
+    bodyFontWeight: isValidFontWeight(src.bodyFontWeight) ? src.bodyFontWeight : MIKROS_DEFAULT_FONT_WEIGHT,
+    bodyFontStyle: isValidFontStyle(src.bodyFontStyle) ? src.bodyFontStyle : MIKROS_DEFAULT_FONT_STYLE,
+  };
+}
+
+/** Sets the six typography-detail custom properties — same mechanism as applyFontsToElement, always writing a fully-clamped value so CSS never needs to guess. */
+export function applyTypographyDetailsToElement(el: HTMLElement, details: MikrosTypographyDetails): void {
+  el.style.setProperty("--mikros-font-display-size", `${details.displayFontSizePx}px`);
+  el.style.setProperty("--mikros-font-display-weight", String(details.displayFontWeight));
+  el.style.setProperty("--mikros-font-display-style", details.displayFontStyle);
+  el.style.setProperty("--mikros-font-sans-size", `${details.bodyFontSizePx}px`);
+  el.style.setProperty("--mikros-font-sans-weight", String(details.bodyFontWeight));
+  el.style.setProperty("--mikros-font-sans-style", details.bodyFontStyle);
+}
+
 export const MIKROS_FONT_CHOICES = [
   "Londrina Solid",
   "Poppins",
@@ -262,6 +357,8 @@ export type CustomTheme = {
   tokens: MikrosPalette;
   displayFont: string;
   bodyFont: string;
+  /** Bounded typography details (FB-20260715-006) — additive to displayFont/bodyFont above. Always present on a loaded theme (see loadCustomThemes: missing/invalid falls back to MIKROS_DEFAULT_TYPOGRAPHY_DETAILS). */
+  typography: MikrosTypographyDetails;
   /** null = no custom logo, falls back to the "M" mark. */
   logo: string | null;
   /** null = no custom Top bar texture — the bar renders with no background image. */
@@ -368,6 +465,11 @@ export function clearPaletteOverrides(el: HTMLElement): void {
     // stylesheet defaults for typography too, same "remove inline override"
     // mechanism as every color above.
     "--mikros-font-display", "--mikros-font-sans",
+    // FB-20260715-006 — reset also drops any size/weight/style overrides;
+    // the CSS var(--x, default) fallback in globals.css then applies the
+    // exact documented defaults (24px/16px, 400, normal).
+    "--mikros-font-display-size", "--mikros-font-display-weight", "--mikros-font-display-style",
+    "--mikros-font-sans-size", "--mikros-font-sans-weight", "--mikros-font-sans-style",
     // THEME.MIKROS.5 — reset also drops any custom logo back to the "M" mark.
     "--mikros-logo-url",
     // THEME.CUSTOM.IMPORT.1 retake — reset also drops both decorative
@@ -438,12 +540,23 @@ export function loadCustomThemes(): CustomTheme[] {
       // saved before this ticket already looked.
       const rawTopBarColor = (entry as { topBarColor?: unknown }).topBarColor;
       const topBarColor = isValidHexColor(rawTopBarColor) ? rawTopBarColor : null;
+      // Typography details are additive too (FB-20260715-006): a missing
+      // field (legacy theme), an unknown key, a NaN/out-of-range size, or an
+      // invalid weight/style never rejects the theme — clampTypographyDetails
+      // resolves every field independently to the documented safe default.
+      const rawTypography = (entry as { typography?: unknown }).typography;
+      const typography = clampTypographyDetails(
+        typeof rawTypography === "object" && rawTypography !== null
+          ? (rawTypography as Partial<Record<keyof MikrosTypographyDetails, unknown>>)
+          : undefined
+      );
       result.push({
         id: (entry as { id: string }).id,
         name: (entry as { name: string }).name,
         tokens,
         displayFont,
         bodyFont,
+        typography,
         logo,
         topBarTexture,
         previewTexture,

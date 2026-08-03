@@ -4,6 +4,7 @@ import { useState } from "react";
 import { generateAssetDescriptionDraft } from "@/actions/llm/assetDescription";
 import { updateAssetDescriptionFieldInline, applyBatchAssetDescriptionDraftsInline } from "@/actions/assets";
 import type { GeneratedAssetDescriptionDraft } from "@/types/llm";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 type State =
   | { status: "idle" }
@@ -144,8 +145,10 @@ export default function AssetDescriptionEnhancePanel({
     ? "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
     : "rounded border border-[#2c3035] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed";
 
-  const applyButtonClass = "rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors";
-  const applyButtonDisabledClass = "rounded border border-[#1e2124] text-[#4b5158] px-2.5 py-1.5 text-xs cursor-not-allowed";
+  // FB-20260716-037 retake — driven by the button's own `disabled` attribute
+  // via LLM_APPLY_ACTION_CLASS's disabled: variants, so one string now
+  // covers both states instead of a per-call ternary.
+  const applyButtonClass = `px-2.5 py-1.5 text-xs font-medium ${LLM_APPLY_ACTION_CLASS}`;
 
   return (
     <div className="flex flex-col gap-3">
@@ -240,7 +243,7 @@ export default function AssetDescriptionEnhancePanel({
                 type="button"
                 onClick={() => handleApplyOne("description", "replace", state.draft.descriptionDraft)}
                 disabled={!state.draft.descriptionDraft || isApplying || applied.description === "replaced"}
-                className={(!state.draft.descriptionDraft || isApplying || applied.description === "replaced") ? applyButtonDisabledClass : applyButtonClass}
+                className={applyButtonClass}
               >
                 Replace Description
               </button>
@@ -248,7 +251,7 @@ export default function AssetDescriptionEnhancePanel({
                 type="button"
                 onClick={() => handleApplyOne("description", "append", state.draft.descriptionDraft)}
                 disabled={!state.draft.descriptionDraft || isApplying || applied.description === "appended"}
-                className={(!state.draft.descriptionDraft || isApplying || applied.description === "appended") ? applyButtonDisabledClass : applyButtonClass}
+                className={applyButtonClass}
               >
                 Append to Description
               </button>
@@ -284,7 +287,7 @@ export default function AssetDescriptionEnhancePanel({
                 type="button"
                 onClick={() => handleApplyOne("notes", "replace", state.draft.notesDraft)}
                 disabled={!state.draft.notesDraft || isApplying || applied.notes === "replaced"}
-                className={(!state.draft.notesDraft || isApplying || applied.notes === "replaced") ? applyButtonDisabledClass : applyButtonClass}
+                className={applyButtonClass}
               >
                 Replace Notes
               </button>
@@ -292,7 +295,7 @@ export default function AssetDescriptionEnhancePanel({
                 type="button"
                 onClick={() => handleApplyOne("notes", "append", state.draft.notesDraft)}
                 disabled={!state.draft.notesDraft || isApplying || applied.notes === "appended"}
-                className={(!state.draft.notesDraft || isApplying || applied.notes === "appended") ? applyButtonDisabledClass : applyButtonClass}
+                className={applyButtonClass}
               >
                 Append to Notes
               </button>
@@ -313,7 +316,7 @@ export default function AssetDescriptionEnhancePanel({
                   type="button"
                   onClick={() => handleApplyAll("replace")}
                   disabled={isApplying}
-                  className={isApplying ? applyButtonDisabledClass : applyButtonClass}
+                  className={applyButtonClass}
                 >
                   Replace All
                 </button>
@@ -321,7 +324,7 @@ export default function AssetDescriptionEnhancePanel({
                   type="button"
                   onClick={() => handleApplyAll("append")}
                   disabled={isApplying}
-                  className={isApplying ? applyButtonDisabledClass : applyButtonClass}
+                  className={applyButtonClass}
                 >
                   Append All
                 </button>

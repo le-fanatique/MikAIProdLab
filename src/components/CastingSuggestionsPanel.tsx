@@ -7,6 +7,7 @@ import {
 } from "@/actions/llm/castingSuggestions";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import type { GeneratedCastingSuggestion } from "@/types/llm";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 const CONFIDENCE_CHIP: Record<
   GeneratedCastingSuggestion["confidence"],
@@ -274,11 +275,7 @@ export default function CastingSuggestionsPanel({
               <button
                 type="submit"
                 disabled={isCreating || selected.size === 0}
-                className={
-                  isCreating || selected.size === 0
-                    ? "rounded bg-[#1a1d20] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed"
-                    : "rounded bg-[#232629] text-[#e7e9ec] px-3 py-1.5 text-sm hover:bg-[#2c3035] transition-colors"
-                }
+                className={`px-3 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`}
               >
                 {isCreating
                   ? "Applying suggestions..."

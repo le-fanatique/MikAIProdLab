@@ -5,6 +5,7 @@ import { generateAssetBibleDraft } from "@/actions/llm/assetBible";
 import { updateAssetDetailsInline } from "@/actions/assets";
 import { preserveAssetBibleField } from "@/lib/prompts/assetBibleDraft";
 import type { GeneratedAssetBibleDraft } from "@/types/llm";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 type State =
   | { status: "idle" }
@@ -179,11 +180,7 @@ export default function AssetBibleEnhancePanel({
               type="button"
               onClick={handleApply}
               disabled={isApplying}
-              className={
-                isApplying
-                  ? "rounded border border-[#1e2124] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed"
-                  : "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-              }
+              className={`px-3 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`}
             >
               Apply to Asset Bible
             </button>

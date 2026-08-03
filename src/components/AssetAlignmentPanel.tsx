@@ -42,6 +42,7 @@ import {
 } from "@/actions/assetAlignment";
 import { ASSET_ALIGNMENT_EDITABLE_FIELDS, type AssetAlignmentEditableField, type AssetAlignmentFieldValues, type AssetAlignmentOutcome, type AssetAlignmentProposal } from "@/lib/projectStyle/assetAlignment/contracts";
 import { hasAlignmentFieldChanges } from "@/lib/projectStyle/assetAlignment/compareFields";
+import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
 const FIELD_LABELS: Record<AssetAlignmentEditableField, string> = {
   description: "Description",
@@ -82,6 +83,8 @@ const smallButtonClass =
   "rounded border border-[#2c3035] px-2.5 py-1.5 text-xs text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b93d6] transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 const linkButtonClass =
   "text-xs text-[#6e767d] hover:text-[#a4abb2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b93d6] transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+/** FB-20260716-034/037 — the actual "Apply to Asset" mutation submit only (not shared with the Generate/Review button above, which keeps buttonClass). */
+const applySubmitButtonClass = `px-3 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`;
 const textareaClass =
   "w-full rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-y focus:outline-none focus:border-[#3a4046] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b93d6] transition-colors leading-relaxed";
 const labelClass = "text-[10px] font-medium uppercase tracking-wider text-[#4b5158]";
@@ -444,7 +447,7 @@ export default function AssetAlignmentPanel({ projectId, assetId, initialStatus 
           )}
 
           <div className="flex items-center gap-3 border-t border-[#1e2124] pt-3 flex-wrap">
-            <button type="submit" disabled={locked} className={buttonClass}>
+            <button type="submit" disabled={locked} className={applySubmitButtonClass}>
               {isApplying ? "Applying…" : applySubmitLabel}
             </button>
             <button type="button" onClick={handleDiscardClick} disabled={locked} className={linkButtonClass}>

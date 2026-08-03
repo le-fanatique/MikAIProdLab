@@ -32,7 +32,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 const ROLE_GROUPS = getReferenceImageRoleGroups("asset");
 
 const inputClass =
-  "w-full rounded bg-[#1a1d20] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#4b5158] focus:outline-none focus:border-[#3a4046] transition-colors";
+  "w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:outline-none focus:border-[#3a4046] transition-colors";
 const labelClass = "text-xs font-medium uppercase tracking-wider text-[#6e767d]";
 
 export default async function EditAssetReferenceImagePage({ params, searchParams }: Props) {

@@ -187,7 +187,7 @@ export default function Sidebar({ tree }: Props) {
           {/* New Project */}
           <Link
             href="/projects/new"
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-xs text-[#4b5158] hover:text-[#6e767d] hover:bg-[#1a1d20] transition-colors mt-1"
+            className="flex items-center gap-2 px-2 py-1.5 rounded text-xs text-[#a4abb2] hover:text-[#e7e9ec] hover:bg-[#1a1d20] transition-colors mt-1"
           >
             <span className="text-[#3a4046]">+</span>
             <span>New Project</span>

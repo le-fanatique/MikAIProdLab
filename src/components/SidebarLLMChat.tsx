@@ -1000,7 +1000,7 @@ export default function SidebarLLMChat() {
     <div className="h-full flex flex-col min-h-0 px-4 pb-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-2 shrink-0">
-        <span className="text-[11px] font-semibold text-[#e0e4e8]">LLM Chat</span>
+        <span className="text-[11px] font-semibold text-[#e7e9ec]">LLM Chat</span>
         {effectiveProvider && (
           <span className="text-[9px] text-[#4b5158] border border-[#232629] rounded px-1 py-0.5">
             {useSeparateProvider ? "Chat: " : ""}

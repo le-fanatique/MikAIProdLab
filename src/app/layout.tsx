@@ -184,8 +184,21 @@ export default async function RootLayout({
                   var bl = Math.round(ab * w + bb * (1 - w));
                   return '#' + ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0');
                 }
-                function applyPalette(base, displayFont, bodyFont, logo, topBarTexture, previewTexture, topBarColor) {
+                var FONT_WEIGHTS = [400, 500, 600, 700];
+                function clampSize(v, min, max, fallback) {
+                  var n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+                  if (!isFinite(n)) return fallback;
+                  return Math.max(min, Math.min(max, Math.round(n)));
+                }
+                function validWeight(v) {
+                  return typeof v === 'number' && FONT_WEIGHTS.indexOf(v) !== -1;
+                }
+                function validStyle(v) {
+                  return v === 'normal' || v === 'italic';
+                }
+                function applyPalette(base, displayFont, bodyFont, logo, topBarTexture, previewTexture, topBarColor, typography) {
                   el.classList.add('theme-mikros');
+                  typography = typography || {};
                   var full = {
                     '--mikros-canvas': base.canvas, '--mikros-surface': base.surface,
                     '--mikros-raised': base.raised, '--mikros-border': base.border,
@@ -198,7 +211,13 @@ export default async function RootLayout({
                     '--mikros-text-disabled': mix(base.textSecondary, base.canvas, 0.45),
                     '--background': base.canvas, '--foreground': base.textPrimary,
                     '--mikros-font-display': fontStack(displayFont),
-                    '--mikros-font-sans': fontStack(bodyFont)
+                    '--mikros-font-sans': fontStack(bodyFont),
+                    '--mikros-font-display-size': clampSize(typography.displayFontSizePx, 18, 48, 24) + 'px',
+                    '--mikros-font-display-weight': String(validWeight(typography.displayFontWeight) ? typography.displayFontWeight : 400),
+                    '--mikros-font-display-style': validStyle(typography.displayFontStyle) ? typography.displayFontStyle : 'normal',
+                    '--mikros-font-sans-size': clampSize(typography.bodyFontSizePx, 12, 20, 16) + 'px',
+                    '--mikros-font-sans-weight': String(validWeight(typography.bodyFontWeight) ? typography.bodyFontWeight : 400),
+                    '--mikros-font-sans-style': validStyle(typography.bodyFontStyle) ? typography.bodyFontStyle : 'normal'
                   };
                   for (var k in full) el.style.setProperty(k, full[k]);
                   if (logo) {
@@ -245,7 +264,7 @@ export default async function RootLayout({
                       var logo = validImage(t.logo) ? t.logo : null;
                       var topBarTexture = validImage(t.topBarTexture) ? t.topBarTexture : null;
                       var previewTexture = validImage(t.previewTexture) ? t.previewTexture : null;
-                      applyPalette(t.tokens, displayFont, bodyFont, logo, topBarTexture, previewTexture, t.topBarColor);
+                      applyPalette(t.tokens, displayFont, bodyFont, logo, topBarTexture, previewTexture, t.topBarColor, t.typography);
                     }
                     break;
                   }
