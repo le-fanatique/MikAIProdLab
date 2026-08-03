@@ -12,6 +12,15 @@ import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
 import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
 import { COMFY_CLOUD_BASE_URL, isKnownLLMProvider } from "@/lib/settings";
 import { getCloudObjectInfo } from "@/lib/comfy/comfyCloudClient";
+import {
+  addPreset,
+  deletePreset,
+  renamePreset,
+  parseComfyLocalPresetsDocument,
+  serializeComfyLocalPresetsDocument,
+  COMFY_LOCAL_PRESETS_SETTINGS_KEY,
+  type ComfyLocalPresetsDocument,
+} from "@/lib/comfy/comfyLocalPresets";
 
 // ---------------------------------------------------------------------------
 // Save LLM settings to DB (per-provider)
@@ -185,6 +194,80 @@ export async function saveComfySettings(
     return { ok: true };
   } catch {
     return { ok: false, error: "Failed to save ComfyUI settings. Please try again." };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ComfyUI local endpoint presets (UX.PRODUCTIVITY.POLISH.1 — Lot A)
+// ---------------------------------------------------------------------------
+
+export type ComfyLocalPresetMutationResult =
+  | { ok: true; document: ComfyLocalPresetsDocument }
+  | { ok: false; error: string; conflict?: true; document?: ComfyLocalPresetsDocument };
+
+/**
+ * Single atomic entry point for create/rename/delete of ComfyUI local
+ * endpoint presets. `expectedRevision` implements optimistic concurrency:
+ * read-check-write happens inside one synchronous `db.transaction` so two
+ * concurrent tabs can never silently clobber each other — a stale caller
+ * gets `conflict: true` plus the current server document to reload from,
+ * never a partial write. Never touches the active `comfyui_base_url` /
+ * `comfyui_api_key` rows and never accepts or returns an API key.
+ *
+ * If the stored row exists but fails validation (broken JSON, wrong shape,
+ * an invalid entry, a duplicate id, or an over-cap collection), the
+ * transaction refuses the write outright — the stored value stays
+ * byte-identical rather than being silently "corrected" and persisted.
+ */
+export async function mutateComfyLocalPresets(
+  op: { type: "add"; name: string; baseUrl: string } | { type: "rename"; id: string; name: string; baseUrl: string } | { type: "delete"; id: string },
+  expectedRevision: number
+): Promise<ComfyLocalPresetMutationResult> {
+  try {
+    const now = new Date().toISOString();
+    const result = db.transaction((tx) => {
+      const row = tx
+        .select()
+        .from(appSettings)
+        .where(eq(appSettings.key, COMFY_LOCAL_PRESETS_SETTINGS_KEY))
+        .get();
+      const parsed = parseComfyLocalPresetsDocument(row?.value ?? null);
+
+      if (!parsed.ok) {
+        return {
+          ok: false as const,
+          error: "Stored ComfyUI presets are corrupted and cannot be modified. Contact support before retrying.",
+        };
+      }
+      const current = parsed.document;
+
+      if (current.revision !== expectedRevision) {
+        return { ok: false as const, error: "This preset list changed elsewhere. Reload to see the latest version.", conflict: true as const, document: current };
+      }
+
+      const mutation =
+        op.type === "add"
+          ? addPreset(current.presets, { name: op.name, baseUrl: op.baseUrl }, now)
+          : op.type === "rename"
+            ? renamePreset(current.presets, op.id, { name: op.name, baseUrl: op.baseUrl }, now)
+            : deletePreset(current.presets, op.id);
+
+      if (!mutation.ok) {
+        return { ok: false as const, error: mutation.error };
+      }
+
+      const next: ComfyLocalPresetsDocument = { version: 1, revision: current.revision + 1, presets: mutation.presets };
+      const value = serializeComfyLocalPresetsDocument(next);
+      tx.insert(appSettings)
+        .values({ key: COMFY_LOCAL_PRESETS_SETTINGS_KEY, value, updatedAt: now })
+        .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: now } })
+        .run();
+
+      return { ok: true as const, document: next };
+    });
+    return result;
+  } catch {
+    return { ok: false, error: "Failed to save ComfyUI presets. Please try again." };
   }
 }
 

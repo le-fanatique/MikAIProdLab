@@ -46,9 +46,14 @@ const JSON_CONSTRAINT = `Always respond with a valid JSON object matching exactl
 { "description_draft": "<visual and production description>", "notes_draft": "<narrative role, usage context, design constraints>" }
 No markdown. No explanation. Only the JSON object.`;
 
-export function buildAssetDescriptionFromContextPrompt(
-  input: AssetDescriptionFromContextInput
-): LLMPrompt {
+/**
+ * Shared context-line builder — reused, byte-for-byte, by the combined
+ * Description+Notes prompt (batch flow, unchanged) and the two independent
+ * single-field prompts below (UX.PRODUCTIVITY.POLISH.1 — Lot C). Never
+ * mentions description_draft/notes_draft itself; only the caller's system
+ * message and JSON-schema constraint differ per target field.
+ */
+function buildContextLines(input: AssetDescriptionFromContextInput): string[] {
   const lines: string[] = [];
 
   lines.push(`Project: ${input.project.name}`);
@@ -119,10 +124,23 @@ export function buildAssetDescriptionFromContextPrompt(
     lines.push(`\nProject Style:\n${styleParts.join("\n\n")}`);
   }
 
-  const styleRule =
-    styleParts.length > 0
-      ? "\n- A Project Style is provided below. Respect its World & Design Language and any listed rules; never contradict them."
-      : "";
+  return lines;
+}
+
+function styleRuleFor(input: AssetDescriptionFromContextInput): string {
+  const worldSegment = input.style?.worldSegment ?? "";
+  const rulesSegment = input.style?.rulesSegment ?? "";
+  const hasStyle = [worldSegment, rulesSegment].some((part) => part.length > 0);
+  return hasStyle
+    ? "\n- A Project Style is provided below. Respect its World & Design Language and any listed rules; never contradict them."
+    : "";
+}
+
+export function buildAssetDescriptionFromContextPrompt(
+  input: AssetDescriptionFromContextInput
+): LLMPrompt {
+  const lines = buildContextLines(input);
+  const styleRule = styleRuleFor(input);
 
   return {
     system: `You are a production asset supervisor for a film or animation project.
@@ -137,5 +155,65 @@ Rules:
 - Do not mention missing information unless it is useful as a design note.${styleRule}
 ${JSON_CONSTRAINT}`,
     user: `${lines.join("\n")}\n\nWrite or enrich the description and notes for "${input.asset.name}".`,
+  };
+}
+
+const DESCRIPTION_JSON_CONSTRAINT = `Always respond with a valid JSON object matching exactly this schema:
+{ "description_draft": "<visual and production description>" }
+No markdown. No explanation. Only the JSON object.`;
+
+/**
+ * UX.PRODUCTIVITY.POLISH.1 — Lot C. Independent single-field prompt: asks
+ * the model for Description only, never Notes. Shares the exact same
+ * context lines as the combined prompt above (`buildContextLines`), so the
+ * batch flow (still using `buildAssetDescriptionFromContextPrompt`) is
+ * completely unaffected by this addition.
+ */
+export function buildAssetDescriptionOnlyPrompt(input: AssetDescriptionFromContextInput): LLMPrompt {
+  const lines = buildContextLines(input);
+  const styleRule = styleRuleFor(input);
+
+  return {
+    system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich ONLY the visual/production description for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
+- If the asset already has a description, improve and complete it — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.
+- Do not write narrative role, usage context or design constraints — that belongs to Notes, which is not requested here.${styleRule}
+${DESCRIPTION_JSON_CONSTRAINT}`,
+    user: `${lines.join("\n")}\n\nWrite or enrich only the description for "${input.asset.name}".`,
+  };
+}
+
+const NOTES_JSON_CONSTRAINT = `Always respond with a valid JSON object matching exactly this schema:
+{ "notes_draft": "<narrative role, usage context, design constraints>" }
+No markdown. No explanation. Only the JSON object.`;
+
+/**
+ * UX.PRODUCTIVITY.POLISH.1 — Lot C. Independent single-field prompt: asks
+ * the model for Notes only, never Description. Shares the exact same
+ * context lines as the combined prompt above.
+ */
+export function buildAssetNotesOnlyPrompt(input: AssetDescriptionFromContextInput): LLMPrompt {
+  const lines = buildContextLines(input);
+  const styleRule = styleRuleFor(input);
+
+  return {
+    system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich ONLY the notes for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
+- If the asset already has notes, improve and complete them — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.
+- Do not write a visual/production description — that belongs to Description, which is not requested here.${styleRule}
+${NOTES_JSON_CONSTRAINT}`,
+    user: `${lines.join("\n")}\n\nWrite or enrich only the notes for "${input.asset.name}".`,
   };
 }

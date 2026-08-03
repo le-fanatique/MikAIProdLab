@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   MIKROS_TOKEN_KEYS,
   MIKROS_TOKEN_LABELS,
@@ -46,8 +46,17 @@ import {
   isValidLogoDataUrl,
   sniffImageMimeFromBytes,
   clampFontSizePx,
+  LOCAL_CONFLICT_ID_SUFFIX,
+  isConflictDisplayId,
+  stripConflictDisplaySuffix,
 } from "@/lib/mikrosTheme";
 import { parseMikrosThemeImportJson, type MikrosThemeImportResult } from "@/lib/mikrosThemeImport";
+import type { CustomThemePresetsDocument } from "@/lib/mikrosThemePresets";
+import {
+  mutateCustomThemePresets,
+  getCustomThemePresetsAction,
+  importLegacyCustomThemePresets,
+} from "@/actions/themePresets";
 
 const FONT_OTHER = "__other__";
 type FontRole = "display" | "body";
@@ -81,6 +90,127 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
 }
 
 /**
+ * Structural equality for two CustomTheme objects — used to distinguish "this
+ * legacy candidate was genuinely migrated to the server under its own id"
+ * (server entry for that id is byte-for-byte what we tried to import) from
+ * "a DIFFERENT theme now occupies that id" (a concurrent write from another
+ * tab/session raced the import) — see `reconcileLegacyThemes` below. Field-
+ * by-field on purpose (not JSON.stringify) so key order never matters.
+ */
+export function customThemeEquals(a: CustomTheme, b: CustomTheme): boolean {
+  if (
+    a.id !== b.id ||
+    a.name !== b.name ||
+    a.displayFont !== b.displayFont ||
+    a.bodyFont !== b.bodyFont ||
+    a.logo !== b.logo ||
+    a.topBarTexture !== b.topBarTexture ||
+    a.previewTexture !== b.previewTexture ||
+    a.topBarColor !== b.topBarColor
+  ) {
+    return false;
+  }
+  for (const key of MIKROS_TOKEN_KEYS) {
+    if (a.tokens[key] !== b.tokens[key]) return false;
+  }
+  const ta = a.typography;
+  const tb = b.typography;
+  return (
+    ta.displayFontSizePx === tb.displayFontSizePx &&
+    ta.displayFontWeight === tb.displayFontWeight &&
+    ta.displayFontStyle === tb.displayFontStyle &&
+    ta.bodyFontSizePx === tb.bodyFontSizePx &&
+    ta.bodyFontWeight === tb.bodyFontWeight &&
+    ta.bodyFontStyle === tb.bodyFontStyle
+  );
+}
+
+/**
+ * Reconciles a set of local-only candidate themes (not yet confirmed
+ * durable) against a fresh server document. Never relies on "the id now
+ * exists server-side" alone to mean "migrated" — that is also true when a
+ * DIFFERENT theme concurrently took the same id (the retake round 3 race).
+ * Instead:
+ * - id absent server-side -> still pending (unaffected, safe to keep as-is);
+ * - id present AND content matches -> genuinely migrated, drop (the server
+ *   copy already represents it — never duplicated);
+ * - id present but content differs -> a concurrent write claimed this id;
+ *   the local candidate is a `conflicted` local-only theme, kept fully
+ *   intact (byte-exact) but never merged into the same list as the server
+ *   theme sharing its id (that would create a duplicate React key and an
+ *   ambiguous `custom:<id>` control).
+ */
+export function reconcileLegacyThemes(
+  serverThemes: CustomTheme[],
+  candidates: CustomTheme[]
+): { stillPending: CustomTheme[]; conflicted: CustomTheme[] } {
+  const serverById = new Map(serverThemes.map((t) => [t.id, t]));
+  const stillPending: CustomTheme[] = [];
+  const conflicted: CustomTheme[] = [];
+  for (const candidate of candidates) {
+    const serverMatch = serverById.get(candidate.id);
+    if (!serverMatch) {
+      stillPending.push(candidate);
+    } else if (!customThemeEquals(serverMatch, candidate)) {
+      conflicted.push(candidate);
+    }
+    // else: serverMatch exists and is identical — genuinely migrated, drop.
+  }
+  return { stillPending, conflicted };
+}
+
+/**
+ * Retake round 4 — a `conflicted` theme (see `reconcileLegacyThemes`) must
+ * be selectable as its OWN distinct, unambiguous control: sharing the
+ * server theme's plain id would mean sharing its React key AND its
+ * `custom:<id>` mode value, so the radiogroup could only ever show ONE
+ * control for that id — exactly the "controle ambigu" the round 4 finding
+ * flagged (the server's radio showing checked while the DOM actually
+ * rendered the local theme). Suffixing the id for DISPLAY/cache purposes
+ * gives the local copy its own stable identity, reusing the existing
+ * `custom:<id>` mode machinery (and therefore the anti-flash script)
+ * completely unchanged — no new mode prefix, no anti-flash edit needed.
+ */
+export { LOCAL_CONFLICT_ID_SUFFIX, isConflictDisplayId };
+
+export function toConflictDisplayTheme(theme: CustomTheme): CustomTheme {
+  return { ...theme, id: `${theme.id}${LOCAL_CONFLICT_ID_SUFFIX}` };
+}
+
+/** Reverses `toConflictDisplayTheme` — a no-op for a theme that was never suffixed. */
+export function stripConflictDisplayId(theme: CustomTheme): CustomTheme {
+  return { ...theme, id: stripConflictDisplaySuffix(theme.id) };
+}
+
+/**
+ * Retake round 5 — pure decision of what the active `mode` must become
+ * after a fresh reconciliation, given the id it currently points at (if
+ * any) and the post-reconciliation `conflicted` set. Returns `null` when no
+ * transition is needed (not a custom mode, or the same plain/suffixed
+ * identity still applies). Kept separate from `reconcileAndApplyServerThemes`
+ * (which also needs component state/refs) so the transition logic itself
+ * can be exercised directly, without a DOM/React harness.
+ *
+ * - was suffixed (conflicted display) and no longer conflicted -> migrate to
+ *   the plain id (genuinely migrated/identical, or resolved back to a plain
+ *   pending local copy — both are represented unsuffixed).
+ * - was plain and now conflicted -> migrate to the suffixed local identity,
+ *   so the checked radio matches the local copy the DOM already renders.
+ * - otherwise -> no change (still resolves to the same identity either way).
+ */
+export function resolveModeAfterReconciliation(currentMode: string, conflicted: CustomTheme[]): string | null {
+  const activeId = customModeId(currentMode);
+  if (activeId === null) return null;
+  const wasSuffixed = isConflictDisplayId(activeId);
+  const baseId = stripConflictDisplaySuffix(activeId);
+  const isNowConflicted = conflicted.some((t) => t.id === baseId);
+  if (wasSuffixed) {
+    return isNowConflicted ? null : customModeValue(baseId);
+  }
+  return isNowConflicted ? customModeValue(`${baseId}${LOCAL_CONFLICT_ID_SUFFIX}`) : null;
+}
+
+/**
  * Appearance toggle + editable Mikros palette + custom themes
  * (THEME.MIKROS.1 / THEME.MIKROS.2). Purely client-side — no schema, no
  * server persistence. Mode values: "default", "mikros", or "custom:<id>".
@@ -88,10 +218,68 @@ function applyMode(mode: string, customThemes: CustomTheme[]) {
  * by hand (kept in sync manually, documented there) so first paint never
  * flashes the wrong theme.
  */
-export default function ThemeModeToggle() {
+type Props = {
+  initialCustomThemePresets: CustomThemePresetsDocument;
+  /** True when the stored presets row exists but failed validation — Save/Edit/Delete are disabled and this is shown explicitly rather than silently presenting an empty list. */
+  initialCustomThemePresetsCorrupted: boolean;
+};
+
+export default function ThemeModeToggle({ initialCustomThemePresets, initialCustomThemePresetsCorrupted }: Props) {
   const [mode, setMode] = useState<string>("default");
   const [hasMounted, setHasMounted] = useState(false);
-  const [customThemes, setCustomThemes] = useState<CustomTheme[]>([]);
+  const [customThemes, setCustomThemes] = useState<CustomTheme[]>(initialCustomThemePresets.themes);
+
+  // UX.PRODUCTIVITY.POLISH.1 — Lot B. The server is now the durable source
+  // of truth for saved presets; `themeRevision` drives optimistic
+  // concurrency on every save/edit/delete (see mutateCustomThemePresets).
+  // localStorage remains a per-browser cache for the active-theme choice
+  // and the anti-flash script — never the durable store.
+  const [themeRevision, setThemeRevision] = useState(initialCustomThemePresets.revision);
+  const [presetSyncError, setPresetSyncError] = useState<string | null>(null);
+  const [presetSyncPending, setPresetSyncPending] = useState(false);
+  const [presetsCorrupted, setPresetsCorrupted] = useState(initialCustomThemePresetsCorrupted);
+  // Synchronous guard against a double-activation racing two mutations with
+  // the same revision — `presetSyncPending` (React state) only reflects
+  // reality after the next render, which is too late to stop a second
+  // synchronous click handler invocation from starting a second request.
+  const themeBusyRef = useRef(false);
+  // Retake round 2/3/4 — themes that exist ONLY in this browser's
+  // localStorage cache and have not (yet) been confirmed durable on the
+  // server (`legacyPendingRef`), or whose id collides with a DIFFERENT
+  // theme on the server (`legacyConflictedRef`, retake round 3 — a
+  // concurrent write raced the import/reload). Plain refs, not state:
+  // nothing renders these arrays directly — `customThemes` (which already
+  // includes both, the conflicted ones under a distinct suffixed id, see
+  // `toConflictDisplayTheme`) and `legacyImportNotice` are what the UI
+  // actually reads. Refs also make `reconcileAndApplyServerThemes` always
+  // reconcile against the truly-current set even when called again before
+  // a re-render has committed (e.g. mount's initial call, immediately
+  // followed by the legacy-import `.then()` a moment later) — a state
+  // variable read in the same synchronous tick could still show the old
+  // value.
+  const legacyPendingRef = useRef<CustomTheme[]>([]);
+  const legacyConflictedRef = useRef<CustomTheme[]>([]);
+  // Retake round 5/6 — mirrors `mode` so `reconcileAndApplyServerThemes` can
+  // always read the truly-current active mode, for the same reason as the
+  // two refs above: the legacy-import `.then()` callback closes over
+  // whatever `mode` was at mount time, which is stale the instant the user
+  // changes the active theme while that request is still in flight.
+  //
+  // Retake round 6 — this ref is kept in sync SYNCHRONOUSLY by `commitMode`
+  // (below), the single choke point every mode change now goes through.
+  // The passive `useEffect` on `[mode]` is only a defensive backstop for any
+  // path that somehow sets `mode` without going through `commitMode` — it
+  // must never be the primary synchronization mechanism, since a held
+  // request's response can resolve after `setMode(...)` but before React
+  // has committed the render and run this effect, which was exactly the
+  // round 6 finding (`modeRef` still showing the OLD mode at that instant).
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  // Explains a legacy-import conflict/corruption/skip to the user instead of
+  // silently swallowing it — "tout conflit doit etre explique".
+  const [legacyImportNotice, setLegacyImportNotice] = useState<string | null>(null);
 
   // Live-edited palette — only meaningful while mode === "mikros". Always
   // valid: invalid text-field input is never written here (see
@@ -175,26 +363,6 @@ export default function ThemeModeToggle() {
   // preset. Any mode switch away (handleModeChange) always clears this.
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let savedMode = "default";
-    let themes: CustomTheme[] = [];
-    try {
-      savedMode = localStorage.getItem(THEME_MODE_STORAGE_KEY) ?? "default";
-    } catch {
-      // localStorage unavailable — stays on "default"
-    }
-    themes = loadCustomThemes();
-    // A saved mode pointing at a since-deleted/corrupted custom theme falls back to Default
-    const id = customModeId(savedMode);
-    const resolvedMode =
-      savedMode === "default" || savedMode === "mikros" || (id !== null && themes.some((t) => t.id === id))
-        ? savedMode
-        : "default";
-    setMode(resolvedMode);
-    setCustomThemes(themes);
-    setHasMounted(true);
-  }, []);
-
   function persistMode(next: string) {
     try {
       localStorage.setItem(THEME_MODE_STORAGE_KEY, next);
@@ -203,10 +371,249 @@ export default function ThemeModeToggle() {
     }
   }
 
-  function handleModeChange(next: string) {
+  /**
+   * Retake round 6 — the SINGLE choke point for every active-mode change.
+   * Updates, in this exact order, so no later reader can observe a
+   * half-migrated state:
+   *
+   * 1. `modeRef.current` — synchronously, so any reconciliation running in
+   *    the same tick (or a `.then()` callback settling a moment later, even
+   *    before React has re-rendered) reads the NEW mode, never the old one;
+   * 2. React state (`setMode`) — so the UI (radio checked state) reflects it;
+   * 3. `localStorage` — so a full reload restores the same choice;
+   * 4. the DOM (`applyMode`) — so the painted theme always matches (3).
+   *
+   * Every call site that changes `mode` must go through this function
+   * instead of calling `setMode`/`persistMode`/`applyMode` individually —
+   * the previous approach (each site calling all three separately, plus a
+   * passive `useEffect` on `[mode]` meant to keep `modeRef` in sync) left a
+   * genuine gap: a held request's response can resolve after `setMode(...)`
+   * runs but before React commits the render and runs that effect, so
+   * `modeRef.current` — read by `reconcileAndApplyServerThemes` — could
+   * still show the PREVIOUS mode at that exact instant (see
+   * codex_review.md Round 6 finding).
+   */
+  function commitMode(next: string, themes: CustomTheme[]) {
+    modeRef.current = next;
     setMode(next);
-    applyMode(next, customThemes);
     persistMode(next);
+    applyMode(next, themes);
+  }
+
+  /**
+   * Retake round 4 — single centralized reconciliation point, used by
+   * EVERY event that learns of a fresh server document (mount, legacy
+   * import, Reload presets, Save, Delete). Previously only mount/import/
+   * reload reconciled `legacyPendingThemes`/`legacyConflictedThemes`
+   * against the new server state; a successful Save or Delete replaced
+   * `customThemes`/the cache with the server-only document directly,
+   * silently dropping any local-only legacy theme. Routing every one of
+   * those call sites through this one function makes that impossible: a
+   * local-only theme only ever disappears once `reconcileLegacyThemes`
+   * confirms it (content-identical on the server) or the user explicitly
+   * discards/deletes it.
+   *
+   * Reads the CURRENT pending/conflicted set from the ref mirrors (always
+   * up to date, unlike reading the state variables directly, which could
+   * still reflect a stale render if this is called twice in quick
+   * succession — e.g. mount's own initial call immediately followed by
+   * the legacy-import `.then()`).`extraCandidates` lets a caller fold in
+   * candidates the refs don't know about yet (only mount needs this, for
+   * the initial pass over the raw localStorage cache).
+   *
+   * Retake round 5 — the active MODE must transition atomically with the
+   * list/cache above whenever the identity it points at changes status:
+   * pending -> conflicted (a concurrent write just claimed the active id
+   * while the import was in flight), conflicted -> migrated/identical, or
+   * conflicted -> pending again (the competing server entry was deleted).
+   * Leaving `mode` untouched here — as before this round — could leave it
+   * pointing at a `custom:<id>` that now resolves to a DIFFERENT theme (the
+   * server's), or at a `custom:<id>::localconflict` whose suffixed id no
+   * longer exists anywhere once the conflict resolves: either way the
+   * checked radio and the painted DOM would disagree (see
+   * codex_review.md Round 4 finding). Computed generically from
+   * before/after membership in `conflicted`/`stillPending`, so every caller
+   * (mount, import, save, delete, reload) gets the same guarantee for free.
+   */
+  function reconcileAndApplyServerThemes(
+    serverThemes: CustomTheme[],
+    serverRevision: number,
+    extraCandidates: CustomTheme[] = []
+  ) {
+    const candidates = [...legacyPendingRef.current, ...legacyConflictedRef.current, ...extraCandidates];
+    const { stillPending, conflicted } = reconcileLegacyThemes(serverThemes, candidates);
+    const displayConflicted = conflicted.map(toConflictDisplayTheme);
+    const effectiveThemes = [...serverThemes, ...stillPending, ...displayConflicted];
+    legacyPendingRef.current = stillPending;
+    legacyConflictedRef.current = conflicted;
+
+    const nextMode = resolveModeAfterReconciliation(modeRef.current, conflicted);
+    if (nextMode !== null && nextMode !== modeRef.current) {
+      commitMode(nextMode, effectiveThemes);
+    } else {
+      // No transition needed, but the theme this mode already points at may
+      // have changed content (e.g. edited elsewhere) — repaint from the
+      // latest data regardless.
+      applyMode(modeRef.current, effectiveThemes);
+    }
+
+    setCustomThemes(effectiveThemes);
+    setThemeRevision(serverRevision);
+    // The cache is exactly `effectiveThemes` now — conflicted themes carry
+    // their own suffixed, unique id (see `toConflictDisplayTheme`), so
+    // there is no longer a need to write them separately "on top of" the
+    // rendered list; a plain `loadCustomThemes()` next time will read them
+    // back correctly and `reconcileLegacyThemes` will re-derive the same
+    // stillPending/conflicted split after un-suffixing (see the mount effect).
+    const cacheWriteOk = saveCustomThemes(effectiveThemes);
+
+    if (conflicted.length > 0) {
+      setLegacyImportNotice(
+        `${conflicted.length} local theme(s) share an id with a different theme on the server. Select the "(Local, unsynced)" option to keep using yours, or the plain option to switch to the server's version: ` +
+          conflicted.map((t) => `"${t.name}"`).join(", ")
+      );
+    } else if (candidates.length > 0) {
+      // Everything that was pending/conflicted before this call is now
+      // clear (migrated or no longer contested) — the earlier notice no
+      // longer applies.
+      setLegacyImportNotice(null);
+    }
+
+    return { effectiveThemes, stillPending, conflicted, cacheWriteOk };
+  }
+
+  useEffect(() => {
+    // Mount-time hydration from browser storage/server props: localStorage
+    // cannot be read during render (SSR has no access to it), so this must
+    // run in an effect. It runs exactly once (empty deps) and never
+    // re-triggers itself, so it is not a reactive synchronization loop.
+    let savedMode = "default";
+    try {
+      savedMode = localStorage.getItem(THEME_MODE_STORAGE_KEY) ?? "default";
+    } catch {
+      // localStorage unavailable — stays on "default"
+    }
+    // Legacy per-browser cache read BEFORE it gets overwritten below — this
+    // is the only place that can still see themes that only ever existed in
+    // localStorage (never migrated to the server), INCLUDING any theme a
+    // previous session already found `conflicted` (its cached copy carries
+    // a suffixed id — see `stripConflictDisplayId` — so a full page reload
+    // keeps re-detecting the same conflict from scratch every time, never
+    // silently dropping it just because time passed).
+    const legacyCache = loadCustomThemes().map(stripConflictDisplayId);
+    const serverThemes = initialCustomThemePresets.themes;
+
+    const { effectiveThemes, conflicted } = reconcileAndApplyServerThemes(
+      serverThemes,
+      initialCustomThemePresets.revision,
+      legacyCache
+    );
+
+    // A saved mode pointing at a since-deleted/corrupted custom theme falls
+    // back to Default — `effectiveThemes` already includes the suffixed
+    // conflicted entries (see `reconcileAndApplyServerThemes`), so a saved
+    // `custom:<id>::localconflict` mode resolves here exactly like any
+    // other custom mode, no special-casing needed.
+    const id = customModeId(savedMode);
+    const naiveResolvedMode =
+      savedMode === "default" || savedMode === "mikros" || (id !== null && effectiveThemes.some((t) => t.id === id))
+        ? savedMode
+        : "default";
+    // Retake round 5 — a saved PLAIN `custom:<id>` mode from before this
+    // load can now be ambiguous: `effectiveThemes.some(...)` above matches
+    // it either way, because the SERVER's (different) theme under that same
+    // id is what actually satisfies the check once a conflict is discovered
+    // for the very first time at this exact mount (SSR already reflects the
+    // race's resulting state — this reconcile call's `modeRefBefore` is
+    // still "default", so it never had a chance to run its OWN mode
+    // migration). Routing the naive result through the same transition
+    // rule as every other reconciliation call resolves a plain-but-now-
+    // conflicted saved mode to its suffixed local identity instead, so the
+    // checked radio and the painted DOM agree from the very first render.
+    const resolvedMode = resolveModeAfterReconciliation(naiveResolvedMode, conflicted) ?? naiveResolvedMode;
+    // Retake round 6 — `commitMode` sets `modeRef.current` SYNCHRONOUSLY
+    // (before React state/localStorage/DOM), which matters here specifically
+    // because the legacy import fired a few lines below can — in principle —
+    // resolve before this effect's render commits and the passive `[mode]`
+    // effect runs; reading `modeRef.current` at that point must already see
+    // `resolvedMode`, never the ref's initial "default" value.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time localStorage/server hydration on mount (empty deps, no reactive loop); localStorage cannot be read during render.
+    commitMode(resolvedMode, effectiveThemes);
+    setHasMounted(true);
+
+    // One-time (idempotent) legacy import: any browser-only theme id not
+    // yet present on the server gets migrated. Fire-and-forget — a
+    // transient failure/conflict here is non-fatal: the theme stays fully
+    // functional from `effectiveThemes` above (already displayed/applied),
+    // nothing is lost, and the user can retry via "Reload presets" or by
+    // re-saving. A *successful* run is naturally idempotent since the
+    // migrated ids are now present server-side.
+    const legacyExtrasForImport = legacyPendingRef.current;
+    if (legacyExtrasForImport.length > 0) {
+      importLegacyCustomThemePresets(legacyExtrasForImport, initialCustomThemePresets.revision)
+        .then((res) => {
+          if (!res.ok) {
+            // Retake round 5 — a stale-revision conflict is the real
+            // outcome of a concurrent write racing our own import request
+            // (whichever commits second loses the optimistic-concurrency
+            // check; two writes against the same base revision can never
+            // both "succeed"). Even on this failure path, `res.document`
+            // already carries the FRESH server state — including the
+            // concurrent write that caused the conflict. Previously this
+            // was discarded entirely: the active pending theme kept
+            // pointing at its plain `custom:<id>` mode even though the id
+            // it referenced now belongs to a different server theme,
+            // exactly the ambiguous-control finding. Reconciling against it
+            // here — as soon as this response arrives, no manual "Reload
+            // presets" needed — lets the same pending -> conflicted mode
+            // transition fire automatically for this genuinely-async race,
+            // not only for a conflict pre-existing at mount.
+            if (res.document) {
+              reconcileAndApplyServerThemes(res.document.themes, res.document.revision);
+            }
+            // Conflict/corruption — the current state (already displayed/
+            // applied) is untouched, nothing lost, but the user must be
+            // told why these themes are still local-only rather than the
+            // failure being swallowed.
+            setLegacyImportNotice(
+              res.conflict
+                ? `Could not sync ${legacyExtrasForImport.length} local theme(s) to the server yet (list changed elsewhere). They remain available in this browser — try "Reload presets".`
+                : `Could not sync ${legacyExtrasForImport.length} local theme(s) to the server: ${res.error} They remain available in this browser.`
+            );
+            return;
+          }
+          setPresetsCorrupted(false);
+          reconcileAndApplyServerThemes(res.document.themes, res.document.revision);
+          if (res.skipped.length > 0) {
+            setLegacyImportNotice(
+              (prev) =>
+                `${res.skipped.length} local theme(s) could not be migrated to the server and remain local-only: ` +
+                res.skipped.map((s) => `"${s.name}" (${s.reason})`).join("; ") +
+                (prev ? ` ${prev}` : "")
+            );
+          }
+          // Retake round 5 — if the currently active mode was this pending
+          // theme's plain id and a concurrent write just claimed it (the
+          // race this callback exists to handle), `reconcileAndApplyServerThemes`
+          // above (here, or in the conflict branch further up) already
+          // migrated `mode` to the suffixed local identity and repainted the
+          // DOM from it — the checked radio and the painted DOM never
+          // disagree, even though the initial synchronous `applyMode()` at
+          // mount painted it before the conflict was known.
+        })
+        .catch(() => {
+          // Non-fatal — legacy themes remain available in the cache/UI as
+          // before, but still explained rather than silently swallowed.
+          setLegacyImportNotice(
+            `Could not sync ${legacyExtrasForImport.length} local theme(s) to the server (network error). They remain available in this browser.`
+          );
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleModeChange(next: string) {
+    commitMode(next, customThemes);
     setSaveNameOpen(false);
     setSaveError(null);
     // Switching to any radio option (Default, the official preset, or a
@@ -566,7 +973,8 @@ export default function ThemeModeToggle() {
     clearPaletteOverrides(document.documentElement); // falls back to the exact stylesheet defaults (colors + typography + logo + textures + topbar color)
   }
 
-  function handleSaveAsCustom() {
+  async function handleSaveAsCustom() {
+    if (themeBusyRef.current) return; // synchronous guard — blocks a second click before the first request even starts
     const hasPendingInvalidHex = Object.values(hexErrors).some((e) => e !== undefined);
     const hasPendingInvalidFont = Object.values(fontErrors).some((e) => e !== undefined);
     if (hasPendingInvalidHex || hasPendingInvalidFont) {
@@ -592,7 +1000,8 @@ export default function ThemeModeToggle() {
       return;
     }
 
-    const draftValues = {
+    const themeInput: CustomTheme = {
+      id: editingThemeId ?? generateThemeId(),
       name,
       tokens: draftPalette,
       displayFont: draftDisplayFont,
@@ -604,39 +1013,148 @@ export default function ThemeModeToggle() {
       topBarColor: draftTopBarColor,
     };
 
-    // Updates the existing theme by id (no duplicate created) or appends a
-    // brand new one — the only two cases, selected by editingThemeId.
-    const next = editingThemeId
-      ? customThemes.map((t) => (t.id === editingThemeId ? { ...draftValues, id: t.id } : t))
-      : [...customThemes, { ...draftValues, id: generateThemeId() }];
-    const savedId = editingThemeId ?? next[next.length - 1].id;
+    themeBusyRef.current = true;
+    setPresetSyncPending(true);
+    try {
+      // Server save must succeed first — a failed/conflicting write must
+      // never show a false success or touch the last-known-good cache.
+      const res = await mutateCustomThemePresets(
+        { type: editingThemeId ? "edit" : "add", theme: themeInput },
+        themeRevision
+      );
+      if (!res.ok) {
+        if (res.document) {
+          // Conflict: refresh the known-good server state so a retry (or
+          // "Reload presets") starts from the latest revision, but never
+          // touch the user's still-open draft.
+          setThemeRevision(res.document.revision);
+        }
+        setSaveError(res.error);
+        return;
+      }
 
-    setCustomThemes(next);
-    const nextMode = customModeValue(savedId);
-    setMode(nextMode);
-    applyMode(nextMode, next);
-    persistMode(nextMode);
-    setSaveNameOpen(false);
-    setSaveName("");
-    setEditingThemeId(null);
-    // The theme is applied and kept in memory for this page view either way
-    // (above) — a storage failure (quota full / unavailable) only means it
-    // won't survive a reload, which we surface rather than pretend worked.
-    if (saveCustomThemes(next)) {
-      setSaveError(null);
-    } else {
-      setSaveError("Saved for this session, but browser storage is full — it will not survive a reload.");
+      setPresetsCorrupted(false);
+      // Retake round 4 — a nominal Save must never drop a legacy theme
+      // this browser hasn't confirmed durable yet (or already knows is
+      // `conflicted`) just because a DIFFERENT theme was mutated; route
+      // through the same centralized reconciliation as mount/import/reload.
+      const { effectiveThemes, cacheWriteOk } = reconcileAndApplyServerThemes(res.document.themes, res.document.revision);
+      const nextMode = customModeValue(themeInput.id);
+      commitMode(nextMode, effectiveThemes);
+      setSaveNameOpen(false);
+      setSaveName("");
+      setEditingThemeId(null);
+      setSaveError(cacheWriteOk ? null : "Saved on the server, but the local cache could not be updated.");
+    } catch (err) {
+      // Transport/network rejection — never leaves the UI silently stuck;
+      // the still-open draft (name/palette/fonts/etc.) is untouched.
+      setSaveError(err instanceof Error ? err.message : "Network error while saving this theme. Please try again.");
+    } finally {
+      themeBusyRef.current = false;
+      setPresetSyncPending(false);
     }
   }
 
-  function handleDeleteCustom(id: string) {
+  async function handleDeleteCustom(id: string) {
+    if (themeBusyRef.current) return; // synchronous guard — blocks a second click before the first request even starts
     if (!window.confirm("Delete this custom theme? This cannot be undone.")) return;
-    const next = customThemes.filter((t) => t.id !== id);
-    setCustomThemes(next);
-    if (customModeId(mode) === id) {
+    themeBusyRef.current = true;
+    setPresetSyncPending(true);
+    try {
+      const res = await mutateCustomThemePresets({ type: "delete", id }, themeRevision);
+      if (!res.ok) {
+        if (res.document) setThemeRevision(res.document.revision);
+        setDeleteError(res.error);
+        return;
+      }
+      setPresetsCorrupted(false);
+      // Retake round 4 — same centralized reconciliation as Save: deleting
+      // ONE server theme must never drop an unrelated legacy pending/
+      // conflicted theme from the cache.
+      const { cacheWriteOk, effectiveThemes } = reconcileAndApplyServerThemes(res.document.themes, res.document.revision);
+      // `reconcileAndApplyServerThemes` already migrates the active mode if
+      // it pointed at a theme whose conflict/pending status changed as a
+      // side effect of this delete (retake round 5) — e.g. deleting the
+      // server theme that raced a still-conflicted local copy moves `mode`
+      // back to that copy's own plain (unsuffixed) id, which DOES still
+      // resolve in `effectiveThemes`. The one case reconciliation does NOT
+      // cover is the active id genuinely resolving to nothing afterward
+      // (a plain server theme, never a legacy candidate, that was itself
+      // the one just deleted) — checking against `effectiveThemes` here
+      // (not `=== id`) tells the two cases apart correctly even when the
+      // deleted server theme happened to share its id with a legacy
+      // candidate that reconciliation just repointed `mode` at.
+      const activeId = customModeId(modeRef.current);
+      if (activeId !== null && !effectiveThemes.some((t) => t.id === activeId)) {
+        handleModeChange("mikros");
+      }
+      setDeleteError(cacheWriteOk ? null : "Deleted on the server, but the local cache could not be updated.");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Network error while deleting this theme. Please try again.");
+    } finally {
+      themeBusyRef.current = false;
+      setPresetSyncPending(false);
+    }
+  }
+
+  /**
+   * Explicit user resolution for a `conflicted` local-only theme (retake
+   * round 4): removes it from the cache/state entirely. There is no
+   * server call — it never existed there under this id, that's the whole
+   * point of `conflicted` — so this is a pure local discard, not a
+   * `mutateCustomThemePresets` delete.
+   */
+  function handleDiscardConflictedLocal(displayId: string) {
+    if (!window.confirm("Discard this local-only theme? This cannot be undone.")) return;
+    const originalId = displayId.slice(0, -LOCAL_CONFLICT_ID_SUFFIX.length);
+    const nextConflicted = legacyConflictedRef.current.filter((t) => t.id !== originalId);
+    legacyConflictedRef.current = nextConflicted;
+    const nextCustomThemes = customThemes.filter((t) => t.id !== displayId);
+    setCustomThemes(nextCustomThemes);
+    saveCustomThemes(nextCustomThemes);
+    if (customModeId(mode) === displayId) {
       handleModeChange("mikros");
     }
-    setDeleteError(saveCustomThemes(next) ? null : "Deleted for this session, but browser storage could not be updated.");
+    if (nextConflicted.length === 0 && legacyPendingRef.current.length === 0) {
+      setLegacyImportNotice(null);
+    }
+  }
+
+  /** Non-destructive manual refresh: on failure, the current (last known-good) state and cache are left untouched. */
+  async function handleReloadPresets() {
+    if (themeBusyRef.current) return;
+    themeBusyRef.current = true;
+    setPresetSyncPending(true);
+    setPresetSyncError(null);
+    try {
+      const result = await getCustomThemePresetsAction();
+      if (result.corrupted) {
+        setPresetSyncError(result.error ?? "Stored presets are corrupted on the server. Your current list is unchanged.");
+        setPresetsCorrupted(true);
+        return;
+      }
+      setPresetsCorrupted(false);
+      // Reload must never drop a legacy theme that hasn't been confirmed
+      // durable yet, and must never let a concurrent write silently replace
+      // one just because it now shares an id with a different server theme
+      // (retake round 3) — `reconcileAndApplyServerThemes` re-checks BOTH
+      // the still-pending and the already-known-conflicted local themes
+      // against this fresh read: a conflict can appear (another tab just
+      // took the id) or resolve (the competing theme was since deleted)
+      // between two reloads.
+      // `reconcileAndApplyServerThemes` already reconciles the active mode
+      // itself (retake round 5) and repaints the DOM from whatever mode it
+      // resolves to — a second `applyMode(mode, ...)` here would use the
+      // stale `mode` captured at this handler's invocation and could
+      // silently undo that transition (e.g. repaint the server's homonym
+      // right after the mode was migrated to the local conflicted id).
+      reconcileAndApplyServerThemes(result.document.themes, result.document.revision);
+    } catch {
+      setPresetSyncError("Could not reload presets from the server. Your current list is unchanged.");
+    } finally {
+      themeBusyRef.current = false;
+      setPresetSyncPending(false);
+    }
   }
 
   /**
@@ -677,9 +1195,7 @@ export default function ThemeModeToggle() {
     setSaveError(null);
     setSaveNameOpen(true);
     const nextMode = customModeValue(theme.id);
-    setMode(nextMode);
-    applyMode(nextMode, customThemes);
-    persistMode(nextMode);
+    commitMode(nextMode, customThemes);
   }
 
   const isMikros = mode === "mikros";
@@ -745,46 +1261,86 @@ export default function ThemeModeToggle() {
                 onChange={() => handleModeChange(customModeValue(theme.id))}
                 className="accent-[#9079F2]"
               />
-              {theme.name}
+              {isConflictDisplayId(theme.id) ? `${theme.name} (Local, unsynced)` : theme.name}
             </label>
           ))}
         </div>
         <p className="text-[10px] text-[#4b5158]">
-          Saved on this browser only. Applies immediately, no reload needed.
+          Applies immediately, no reload needed. Which one is active stays local to this browser — presets themselves are saved on the server (see below).
         </p>
       </div>
 
-      {customThemes.length > 0 && (
-        <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
           <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">
             Custom themes
           </span>
-          {deleteError && <p className="text-xs text-[#cf7b6b]">{deleteError}</p>}
+          <button
+            type="button"
+            onClick={handleReloadPresets}
+            disabled={presetSyncPending}
+            className="text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors disabled:opacity-40"
+          >
+            Reload presets
+          </button>
+        </div>
+        <p className="text-[10px] text-[#4b5158]">
+          Saved on the server — available after a restart and from any browser. The active choice above stays local to this browser.
+        </p>
+        {presetsCorrupted && (
+          <p className="text-xs text-[#cf7b6b]">
+            Stored presets could not be read (corrupted data). Saving, editing and deleting are disabled until this
+            is resolved — your currently applied theme is unaffected.
+          </p>
+        )}
+        {legacyImportNotice && <p className="text-xs text-[#cda24f]">{legacyImportNotice}</p>}
+        {presetSyncError && <p className="text-xs text-[#cf7b6b]">{presetSyncError}</p>}
+        {deleteError && <p className="text-xs text-[#cf7b6b]">{deleteError}</p>}
+        {customThemes.length > 0 && (
           <div className="flex flex-col gap-1">
             {customThemes.map((theme) => (
               <div key={theme.id} className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-[#a4abb2]">{theme.name}</span>
+                <span className="text-[#a4abb2]">
+                  {theme.name}
+                  {isConflictDisplayId(theme.id) && (
+                    <span className="ml-1.5 text-[10px] text-[#cda24f]">(local, unsynced)</span>
+                  )}
+                </span>
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleEditTheme(theme)}
-                    className="text-[#4b5158] hover:text-[#a4abb2] transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCustom(theme.id)}
-                    className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
-                  >
-                    Delete
-                  </button>
+                  {isConflictDisplayId(theme.id) ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDiscardConflictedLocal(theme.id)}
+                      className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
+                    >
+                      Discard local copy
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleEditTheme(theme)}
+                        disabled={presetSyncPending}
+                        className="text-[#4b5158] hover:text-[#a4abb2] transition-colors disabled:opacity-40"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustom(theme.id)}
+                        disabled={presetSyncPending || presetsCorrupted}
+                        className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors disabled:opacity-40"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {showEditor && (
         <div className="flex flex-col gap-3 rounded border border-[#2c3035] p-3">
@@ -1240,13 +1796,15 @@ export default function ThemeModeToggle() {
                     type="button"
                     onClick={handleSaveAsCustom}
                     disabled={
+                      presetSyncPending ||
+                      presetsCorrupted ||
                       Object.values(hexErrors).some((e) => e !== undefined) ||
                       Object.values(fontErrors).some((e) => e !== undefined) ||
                       topBarColorError !== undefined
                     }
                     className="rounded border border-[#9079F2]/50 text-[#9079F2] px-3 py-1.5 text-xs hover:border-[#9079F2] hover:bg-[#9079F2]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
-                    {isEditingTheme ? "Update theme" : "Save"}
+                    {presetSyncPending ? "Saving…" : isEditingTheme ? "Update theme" : "Save"}
                   </button>
                   <button
                     type="button"

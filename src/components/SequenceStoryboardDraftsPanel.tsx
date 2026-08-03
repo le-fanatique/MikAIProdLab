@@ -130,9 +130,17 @@ export default function SequenceStoryboardDraftsPanel({
                   href={`/projects/${projectId}/sequences/${sequenceId}/storyboard/video/workflows?sourceStoryboardImageId=${d.id}${
                     storyboardRefs ? `&storyboardRefs=${encodeURIComponent(storyboardRefs)}` : ""
                   }`}
-                  className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                  className="flex items-center justify-center gap-1.5 rounded border border-[#5b93d6] bg-[#5b93d6]/10 px-2 py-1.5 text-[11px] font-medium text-[#8fbbe8] hover:bg-[#5b93d6]/20 hover:text-[#aecdf0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#5b93d6] transition-colors"
                 >
-                  Generate Sequence Video →
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="h-3.5 w-3.5 shrink-0"
+                  >
+                    <path d="M3 5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.382l3.106-1.553A1 1 0 0 1 17.5 6.72v6.56a1 1 0 0 1-1.394.894L13 12.618V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Z" />
+                  </svg>
+                  Generate Sequence Video
                 </Link>
                 <form action={deleteAction} className="mt-0.5">
                   <input type="hidden" name="sequenceId" value={String(sequenceId)} />

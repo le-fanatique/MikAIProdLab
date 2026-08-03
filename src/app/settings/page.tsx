@@ -13,7 +13,7 @@ import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSetti
 import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
 import ThemeModeToggle from "@/components/ThemeModeToggle";
 import SettingsTabs from "@/components/SettingsTabs";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getLLMConfig, getChatProviderInfo, getResearchProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getComfyLocalPresets, getCustomThemePresets, getLLMConfig, getChatProviderInfo, getResearchProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -31,8 +31,10 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { defaultsSaved } = await searchParams;
   const allSettings = await getAllLLMSettings();
   const activeProvider = allSettings.activeProvider;
-  const [comfySettings, chatProviderInfo, researchProviderInfo] = await Promise.all([
+  const [comfySettings, comfyLocalPresetsResult, customThemePresetsResult, chatProviderInfo, researchProviderInfo] = await Promise.all([
     getComfySettings(),
+    getComfyLocalPresets(),
+    getCustomThemePresets(),
     getChatProviderInfo(),
     getResearchProviderInfo(),
   ]);
@@ -86,7 +88,10 @@ export default async function SettingsPage({ searchParams }: Props) {
             content: (
               <Card title="Appearance" className="mb-6">
                 <div className="mikai-appearance-preview rounded border border-[#232629] p-4">
-                  <ThemeModeToggle />
+                  <ThemeModeToggle
+                    initialCustomThemePresets={customThemePresetsResult.document}
+                    initialCustomThemePresetsCorrupted={customThemePresetsResult.corrupted}
+                  />
                 </div>
               </Card>
             ),
@@ -201,6 +206,8 @@ export default async function SettingsPage({ searchParams }: Props) {
                     initialHasApiKey={comfySettings.hasApiKey}
                     initialLocalVramAutoManagement={comfySettings.localVramAutoManagement}
                     cloudBaseUrl={COMFY_CLOUD_BASE_URL}
+                    initialLocalPresets={comfyLocalPresetsResult.document}
+                    initialLocalPresetsCorrupted={comfyLocalPresetsResult.corrupted}
                   />
                 </Card>
 

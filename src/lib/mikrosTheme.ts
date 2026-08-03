@@ -484,6 +484,131 @@ export function clearPaletteOverrides(el: HTMLElement): void {
   el.classList.remove(THEME_LOGO_CLASS, THEME_TOPBAR_TEXTURE_CLASS, THEME_PREVIEW_TEXTURE_CLASS);
 }
 
+/**
+ * Validates/normalizes a single stored custom-theme record. Pure (no I/O) —
+ * shared by `loadCustomThemes` (localStorage) and, since
+ * UX.PRODUCTIVITY.POLISH.1 (Lot B), the server-side custom theme presets
+ * document (`src/lib/mikrosThemePresets.ts`), so both storages accept/reject
+ * the exact same shape. Drops a malformed entry (returns null) instead of
+ * throwing, so one corrupted record never blocks the rest of a collection.
+ */
+/** Generous upper bounds for the raw id/name contract shared by the localStorage cache and the durable server document — the server document layers its own stricter name bound (60 chars) on top via `normalizeCustomThemeName`. */
+export const CUSTOM_THEME_ENTRY_ID_MAX_LENGTH = 64;
+export const CUSTOM_THEME_ENTRY_NAME_MAX_LENGTH = 120;
+
+/**
+ * Stable id format contract (UX.PRODUCTIVITY.POLISH.1 retake round 2):
+ * `generateThemeId()` only ever produces lowercase base36
+ * (`t` + timestamp + random suffix, e.g. "tmruwe63wwhax0p") — this pattern
+ * is deliberately a superset of that output (also allows uppercase/digits/
+ * underscore/hyphen for forward compatibility) while rejecting anything
+ * that isn't a real stable identifier: empty/whitespace-only strings,
+ * control characters, spaces, or any other punctuation. Applied uniformly
+ * to the localStorage cache, the durable server document, and every
+ * add/edit/delete operation so a forged/malformed id is never accepted
+ * anywhere.
+ */
+const CUSTOM_THEME_ID_FORMAT_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function isValidThemeId(value: unknown): value is string {
+  return typeof value === "string" && CUSTOM_THEME_ID_FORMAT_RE.test(value);
+}
+
+/**
+ * Suffix applied to a client-local theme's id when it conflicts with a
+ * same-id theme already present on the server, so both can be rendered as
+ * distinct, unambiguous UI/mode identities (retake round 4). Only the
+ * localStorage cache ever contains a suffixed id — the durable server
+ * document must never accept one.
+ */
+export const LOCAL_CONFLICT_ID_SUFFIX = "::localconflict";
+
+export function isConflictDisplayId(id: string): boolean {
+  return id.endsWith(LOCAL_CONFLICT_ID_SUFFIX);
+}
+
+/** Reverses the suffix applied by the display-id builder — a no-op for an id that was never suffixed. */
+export function stripConflictDisplaySuffix(id: string): string {
+  return isConflictDisplayId(id) ? id.slice(0, -LOCAL_CONFLICT_ID_SUFFIX.length) : id;
+}
+
+function isValidCacheThemeId(value: unknown): value is string {
+  if (isValidThemeId(value)) return true;
+  if (typeof value !== "string" || !isConflictDisplayId(value)) return false;
+  return isValidThemeId(value.slice(0, -LOCAL_CONFLICT_ID_SUFFIX.length));
+}
+
+export function parseCustomThemeEntry(entry: unknown): CustomTheme | null {
+  if (
+    typeof entry !== "object" ||
+    entry === null ||
+    typeof (entry as { id?: unknown }).id !== "string" ||
+    typeof (entry as { name?: unknown }).name !== "string" ||
+    typeof (entry as { tokens?: unknown }).tokens !== "object" ||
+    (entry as { tokens?: unknown }).tokens === null
+  ) {
+    return null;
+  }
+  const rawId = (entry as { id: string }).id;
+  const rawName = (entry as { name: string }).name;
+  if (!isValidCacheThemeId(rawId)) return null;
+  if (rawName.trim().length === 0 || rawName.length > CUSTOM_THEME_ENTRY_NAME_MAX_LENGTH) return null;
+  const tokensRaw = (entry as { tokens: Record<string, unknown> }).tokens;
+  const tokens = {} as MikrosPalette;
+  for (const key of MIKROS_TOKEN_KEYS) {
+    const v = tokensRaw[key];
+    if (!isValidHexColor(v)) return null;
+    tokens[key] = v;
+  }
+  // Fonts are additive (THEME.MIKROS.4): unlike hex tokens, a missing or
+  // invalid font never rejects the whole theme — older custom themes
+  // saved before this ticket simply fall back to the official pairing.
+  const rawDisplayFont = (entry as { displayFont?: unknown }).displayFont;
+  const rawBodyFont = (entry as { bodyFont?: unknown }).bodyFont;
+  const displayFont = isValidFontFamilyName(rawDisplayFont) ? rawDisplayFont.trim() : MIKROS_DEFAULT_DISPLAY_FONT;
+  const bodyFont = isValidFontFamilyName(rawBodyFont) ? rawBodyFont.trim() : MIKROS_DEFAULT_BODY_FONT;
+  // Logo is additive too (THEME.MIKROS.5): a missing/invalid/corrupted
+  // logo never rejects the theme, it just falls back to the "M" mark.
+  const rawLogo = (entry as { logo?: unknown }).logo;
+  const logo = isValidLogoDataUrl(rawLogo) ? rawLogo : null;
+  // Both decorative textures are additive too (THEME.CUSTOM.IMPORT.1
+  // retake): a missing/invalid/corrupted texture never rejects the
+  // theme — older themes saved before this ticket simply fall back to
+  // null (no texture), same as a fresh theme that never had one.
+  const rawTopBarTexture = (entry as { topBarTexture?: unknown }).topBarTexture;
+  const topBarTexture = isValidLogoDataUrl(rawTopBarTexture) ? rawTopBarTexture : null;
+  const rawPreviewTexture = (entry as { previewTexture?: unknown }).previewTexture;
+  const previewTexture = isValidLogoDataUrl(rawPreviewTexture) ? rawPreviewTexture : null;
+  // Top bar color is additive too (THEME.TOPBAR.MASK.1): a missing or
+  // invalid override never rejects the theme — it just falls back to
+  // `tokens.surface` (see resolveTopBarColor), same as every theme
+  // saved before this ticket already looked.
+  const rawTopBarColor = (entry as { topBarColor?: unknown }).topBarColor;
+  const topBarColor = isValidHexColor(rawTopBarColor) ? rawTopBarColor : null;
+  // Typography details are additive too (FB-20260715-006): a missing
+  // field (legacy theme), an unknown key, a NaN/out-of-range size, or an
+  // invalid weight/style never rejects the theme — clampTypographyDetails
+  // resolves every field independently to the documented safe default.
+  const rawTypography = (entry as { typography?: unknown }).typography;
+  const typography = clampTypographyDetails(
+    typeof rawTypography === "object" && rawTypography !== null
+      ? (rawTypography as Partial<Record<keyof MikrosTypographyDetails, unknown>>)
+      : undefined
+  );
+  return {
+    id: (entry as { id: string }).id,
+    name: (entry as { name: string }).name,
+    tokens,
+    displayFont,
+    bodyFont,
+    typography,
+    logo,
+    topBarTexture,
+    previewTexture,
+    topBarColor,
+  };
+}
+
 /** Defensive parse — drops malformed entries instead of throwing, never crashes the caller. */
 export function loadCustomThemes(): CustomTheme[] {
   try {
@@ -493,75 +618,8 @@ export function loadCustomThemes(): CustomTheme[] {
     if (!Array.isArray(parsed)) return [];
     const result: CustomTheme[] = [];
     for (const entry of parsed) {
-      if (
-        typeof entry !== "object" ||
-        entry === null ||
-        typeof (entry as { id?: unknown }).id !== "string" ||
-        typeof (entry as { name?: unknown }).name !== "string" ||
-        typeof (entry as { tokens?: unknown }).tokens !== "object" ||
-        (entry as { tokens?: unknown }).tokens === null
-      ) {
-        continue;
-      }
-      const tokensRaw = (entry as { tokens: Record<string, unknown> }).tokens;
-      const tokens = {} as MikrosPalette;
-      let valid = true;
-      for (const key of MIKROS_TOKEN_KEYS) {
-        const v = tokensRaw[key];
-        if (!isValidHexColor(v)) {
-          valid = false;
-          break;
-        }
-        tokens[key] = v;
-      }
-      if (!valid) continue;
-      // Fonts are additive (THEME.MIKROS.4): unlike hex tokens, a missing or
-      // invalid font never rejects the whole theme — older custom themes
-      // saved before this ticket simply fall back to the official pairing.
-      const rawDisplayFont = (entry as { displayFont?: unknown }).displayFont;
-      const rawBodyFont = (entry as { bodyFont?: unknown }).bodyFont;
-      const displayFont = isValidFontFamilyName(rawDisplayFont) ? rawDisplayFont.trim() : MIKROS_DEFAULT_DISPLAY_FONT;
-      const bodyFont = isValidFontFamilyName(rawBodyFont) ? rawBodyFont.trim() : MIKROS_DEFAULT_BODY_FONT;
-      // Logo is additive too (THEME.MIKROS.5): a missing/invalid/corrupted
-      // logo never rejects the theme, it just falls back to the "M" mark.
-      const rawLogo = (entry as { logo?: unknown }).logo;
-      const logo = isValidLogoDataUrl(rawLogo) ? rawLogo : null;
-      // Both decorative textures are additive too (THEME.CUSTOM.IMPORT.1
-      // retake): a missing/invalid/corrupted texture never rejects the
-      // theme — older themes saved before this ticket simply fall back to
-      // null (no texture), same as a fresh theme that never had one.
-      const rawTopBarTexture = (entry as { topBarTexture?: unknown }).topBarTexture;
-      const topBarTexture = isValidLogoDataUrl(rawTopBarTexture) ? rawTopBarTexture : null;
-      const rawPreviewTexture = (entry as { previewTexture?: unknown }).previewTexture;
-      const previewTexture = isValidLogoDataUrl(rawPreviewTexture) ? rawPreviewTexture : null;
-      // Top bar color is additive too (THEME.TOPBAR.MASK.1): a missing or
-      // invalid override never rejects the theme — it just falls back to
-      // `tokens.surface` (see resolveTopBarColor), same as every theme
-      // saved before this ticket already looked.
-      const rawTopBarColor = (entry as { topBarColor?: unknown }).topBarColor;
-      const topBarColor = isValidHexColor(rawTopBarColor) ? rawTopBarColor : null;
-      // Typography details are additive too (FB-20260715-006): a missing
-      // field (legacy theme), an unknown key, a NaN/out-of-range size, or an
-      // invalid weight/style never rejects the theme — clampTypographyDetails
-      // resolves every field independently to the documented safe default.
-      const rawTypography = (entry as { typography?: unknown }).typography;
-      const typography = clampTypographyDetails(
-        typeof rawTypography === "object" && rawTypography !== null
-          ? (rawTypography as Partial<Record<keyof MikrosTypographyDetails, unknown>>)
-          : undefined
-      );
-      result.push({
-        id: (entry as { id: string }).id,
-        name: (entry as { name: string }).name,
-        tokens,
-        displayFont,
-        bodyFont,
-        typography,
-        logo,
-        topBarTexture,
-        previewTexture,
-        topBarColor,
-      });
+      const theme = parseCustomThemeEntry(entry);
+      if (theme) result.push(theme);
     }
     return result;
   } catch {

@@ -554,6 +554,65 @@ export async function getComfySettings(): Promise<ComfySettings> {
 }
 
 // ---------------------------------------------------------------------------
+// ComfyUI local endpoint presets (UX.PRODUCTIVITY.POLISH.1 — Lot A)
+// ---------------------------------------------------------------------------
+
+import {
+  parseComfyLocalPresetsDocument,
+  emptyComfyLocalPresetsDocument,
+  COMFY_LOCAL_PRESETS_SETTINGS_KEY,
+  type ComfyLocalPresetsDocument,
+} from "@/lib/comfy/comfyLocalPresets";
+
+export interface ComfyLocalPresetsReadResult {
+  document: ComfyLocalPresetsDocument;
+  /** True when the stored row exists but failed validation — the UI must show this explicitly, never pretend the list is simply empty. */
+  corrupted: boolean;
+  error?: string;
+}
+
+/** Read-only: never returns an API key (presets never carry one). */
+export async function getComfyLocalPresets(): Promise<ComfyLocalPresetsReadResult> {
+  const row = await db.query.appSettings.findFirst({
+    where: eq(appSettings.key, COMFY_LOCAL_PRESETS_SETTINGS_KEY),
+  });
+  const parsed = parseComfyLocalPresetsDocument(row?.value ?? null);
+  if (!parsed.ok) {
+    return { document: emptyComfyLocalPresetsDocument(), corrupted: true, error: parsed.error };
+  }
+  return { document: parsed.document, corrupted: false };
+}
+
+// ---------------------------------------------------------------------------
+// Custom Appearance (theme) presets (UX.PRODUCTIVITY.POLISH.1 — Lot B)
+// ---------------------------------------------------------------------------
+
+import {
+  parseCustomThemePresetsDocument,
+  emptyCustomThemePresetsDocument,
+  CUSTOM_THEME_PRESETS_SETTINGS_KEY,
+  type CustomThemePresetsDocument,
+} from "@/lib/mikrosThemePresets";
+
+export interface CustomThemePresetsReadResult {
+  document: CustomThemePresetsDocument;
+  /** True when the stored row exists but failed validation — the UI must show this explicitly, never pretend the list is simply empty. */
+  corrupted: boolean;
+  error?: string;
+}
+
+export async function getCustomThemePresets(): Promise<CustomThemePresetsReadResult> {
+  const row = await db.query.appSettings.findFirst({
+    where: eq(appSettings.key, CUSTOM_THEME_PRESETS_SETTINGS_KEY),
+  });
+  const parsed = parseCustomThemePresetsDocument(row?.value ?? null);
+  if (!parsed.ok) {
+    return { document: emptyCustomThemePresetsDocument(), corrupted: true, error: parsed.error };
+  }
+  return { document: parsed.document, corrupted: false };
+}
+
+// ---------------------------------------------------------------------------
 // OpenReel sidecar URL (OPENREEL.URL.1)
 // ---------------------------------------------------------------------------
 

@@ -17,7 +17,7 @@ import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/actions/assetReferenceImages";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
-import AssetDescriptionEnhancePanel from "@/components/AssetDescriptionEnhancePanel";
+import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/AssetDescriptionEnhancePanel";
 import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 import AssetAlignmentPanel from "@/components/AssetAlignmentPanel";
@@ -317,16 +317,14 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         </Card>
       </Collapsible>
 
-      <Collapsible
-        label="Enhance Description"
-        defaultOpen={descriptionUpdated || notesUpdated || Boolean(assetDescriptionError)}
-      >
+      {/* UX.PRODUCTIVITY.POLISH.1 — Lot C: Enhance Description and Enhance
+          Notes are two fully independent surfaces (own state, own
+          anti-double-submit lock, own preview/Apply) — generating,
+          applying, or discarding one never touches the other. */}
+      <Collapsible label="Enhance Description" defaultOpen={descriptionUpdated || Boolean(assetDescriptionError)}>
         <Card title="Enhance Description">
           {descriptionUpdated && (
             <p className="mb-3 text-xs text-[#6b9e72]">Description updated.</p>
-          )}
-          {notesUpdated && (
-            <p className="mb-3 text-xs text-[#6b9e72]">Notes updated.</p>
           )}
           {assetDescriptionError && (
             <p className="mb-3 text-xs text-[#c97c7c]">Unable to update asset description.</p>
@@ -334,8 +332,21 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           <AssetDescriptionEnhancePanel
             projectId={pid}
             assetId={aid}
-            returnTo={`/projects/${pid}/assets/${aid}`}
             hasExistingDescription={Boolean(asset.description?.trim())}
+            isConfigured={!!llmSettings.model.trim()}
+            hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
+          />
+        </Card>
+      </Collapsible>
+
+      <Collapsible label="Enhance Notes" defaultOpen={notesUpdated}>
+        <Card title="Enhance Notes">
+          {notesUpdated && (
+            <p className="mb-3 text-xs text-[#6b9e72]">Notes updated.</p>
+          )}
+          <AssetNotesEnhancePanel
+            projectId={pid}
+            assetId={aid}
             hasExistingNotes={Boolean(asset.notes?.trim())}
             isConfigured={!!llmSettings.model.trim()}
             hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
