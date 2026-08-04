@@ -268,12 +268,31 @@ export function buildSequenceGenerationPackage(
 }
 
 /**
+ * SEQGEN.STORYBOARD.CASTING.FIX1 — Lot A. `includeWarnings` (default `true`)
+ * preserves the historical byte-identical text (per-Shot `Warnings:` block)
+ * for every existing caller (Sequence Detail, Sequence Video, the Storyboard
+ * workspace's own "Copy compiled text"). Passing `includeWarnings: false` is
+ * a presentation-only switch for the Sequence Storyboard prompt path: the
+ * package's own structured `warnings` (and each Shot's `warnings`) are still
+ * computed and returned exactly as before — only their rendering into this
+ * one text form is skipped. No second compiler, no duplicated logic.
+ */
+export type FormatSequenceGenerationPackageTextOptions = {
+  includeWarnings?: boolean;
+};
+
+/**
  * Deterministic, human-readable text form of the package — each Shot's
  * compiled prompt clearly delimited by a header line, never merged into an
  * ambiguous block. Same `compiledPrompt.text` value used everywhere else
  * this compiler's output is shown (Shot Detail, ShotGenerationPanel).
  */
-export function formatSequenceGenerationPackageText(pkg: SequenceGenerationPackage): string {
+export function formatSequenceGenerationPackageText(
+  pkg: SequenceGenerationPackage,
+  options?: FormatSequenceGenerationPackageTextOptions
+): string {
+  const includeWarnings = options?.includeWarnings ?? true;
+
   const header = [
     `Sequence Generation Package v${pkg.version}`,
     `Project ${pkg.projectId} / Sequence ${pkg.sequenceId}${pkg.sequenceCode ? ` (${pkg.sequenceCode})` : ""}${pkg.sequenceTitle ? ` — ${pkg.sequenceTitle}` : ""}`,
@@ -283,7 +302,8 @@ export function formatSequenceGenerationPackageText(pkg: SequenceGenerationPacka
   const shotBlocks = pkg.shots.map((s, i) => {
     const label = `=== Shot ${i + 1}/${pkg.shotCount} — ${s.shotCode ?? s.title}${s.shotCode ? ` — "${s.title}"` : ""}${s.durationSeconds !== null ? ` (${s.durationSeconds.toFixed(1)}s)` : " (no duration)"} ===`;
     const body = s.compiledPrompt.text || "(no compiled prompt)";
-    const warningsBlock = s.warnings.length > 0 ? `\nWarnings:\n${s.warnings.map((w) => `- ${w}`).join("\n")}` : "";
+    const warningsBlock =
+      includeWarnings && s.warnings.length > 0 ? `\nWarnings:\n${s.warnings.map((w) => `- ${w}`).join("\n")}` : "";
     return `${label}\n${body}${warningsBlock}`;
   });
 

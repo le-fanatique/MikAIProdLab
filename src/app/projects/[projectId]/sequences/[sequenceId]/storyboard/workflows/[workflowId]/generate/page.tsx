@@ -32,9 +32,11 @@ import {
   detectDynamicBatchUiInfo,
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
+import { pruneDynamicBatchIds } from "@/lib/comfy/pruneDynamicBatchSelection";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
+import StoryboardAssetsPanel, { type StoryboardCastAsset } from "@/components/StoryboardAssetsPanel";
 import { runSequenceGenerationFromForm } from "@/actions/sequenceGeneration";
 import { saveSequenceStoryboardDraftFromJob } from "@/actions/sequenceStoryboard";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
@@ -66,6 +68,17 @@ function SectionLabel({ label }: { label: string }) {
 }
 
 export const dynamic = "force-dynamic";
+
+// Lot D (SEQGEN.STORYBOARD.CASTING.FIX1) — params tied to a previous
+// generation attempt/draft save, dropped whenever the inline Casting
+// References editor changes the casting selection so a stale result is
+// never presented as belonging to the new selection.
+const CASTING_STALE_RESULT_PARAMS = [
+  "jobId",
+  "generationError",
+  "sequenceStoryboardDraftSaved",
+  "sequenceStoryboardDraftError",
+];
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; workflowId: string }>;
@@ -271,6 +284,37 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     }
   }
 
+  // Lot D (SEQGEN.STORYBOARD.CASTING.FIX1) — the same shape StoryboardAssetsPanel
+  // already renders on the Storyboard workspace, recomputed here from the
+  // data already fetched above (no second query, no second selection
+  // contract): every Asset cast anywhere in this Sequence, including
+  // references not currently selected.
+  const shotIdsByAsset = new Map<number, Set<number>>();
+  for (const row of castRows) {
+    const shotSet = shotIdsByAsset.get(row.assetId) ?? new Set<number>();
+    shotSet.add(row.shotId);
+    shotIdsByAsset.set(row.assetId, shotSet);
+  }
+  const castingEditorAssets: StoryboardCastAsset[] = uniqueAssetIds.map((assetId) => {
+    const meta = assetMetaById.get(assetId)!;
+    const refs = assetRefsByAsset.get(assetId) ?? [];
+    return {
+      assetId,
+      assetName: meta.assetName,
+      assetType: meta.assetType,
+      shotCount: shotIdsByAsset.get(assetId)?.size ?? 0,
+      references: refs.map((r) => ({
+        id: r.id,
+        refId: `asset-${assetId}-${r.id}`,
+        imageUrl: refImageUrl(r.imagePath),
+        label: r.label,
+        roleLabel: getReferenceImageRoleLabel(r.imageRole),
+        variantState: r.variantState,
+        approvedForGeneration: r.approvedForGeneration,
+      })),
+    };
+  });
+
   const storyboardRefsParam = currentSearchParams["storyboardRefs"] ?? "";
   const storyboardSelectedRefIds = storyboardRefsParam
     .split(",")
@@ -319,17 +363,26 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
       // initialized it below) — this is always the source of truth once
       // present, for both modes.
       batchSelectedIds = rawParam.split(",").map((s) => s.trim()).filter(Boolean);
-    } else if (batchUiInfo.kind === "ready" && batchUiInfo.mode === "direct-repeatable-inputs") {
-      // SEQGEN.STORYBOARD.3-FIX3 — direct mode has no separate selection
-      // step of its own: `storyboardRefs` (already resolved into
-      // `availableImages`, in the user's selected order) IS the intended
-      // selection. Initializing from it here means the first render
-      // already has a usable preview/Update Preview, instead of requiring
-      // an extra manual pick in the Dynamic Image Batch panel. Classic
-      // Dynamic Batch workflows are untouched: batchSelectedIds stays []
-      // when their query param is absent, exactly as before.
+    } else if (batchUiInfo.kind === "ready") {
+      // SEQGEN.STORYBOARD.3-FIX3, extended by
+      // SEQGEN.STORYBOARD.CASTING.FIX1 (Lot C) to both modes — when the URL
+      // has no explicit `batchImages_<nodeId>` yet, the casting selection
+      // (`storyboardRefs`, already resolved into `availableImages` in its
+      // own selection order) IS the intended initial Dynamic Batch/Direct
+      // Repeatable selection, so the first render already shows it
+      // pre-loaded, without an extra manual "Add Image" click. The moment
+      // the param becomes explicitly present (including empty, e.g. after
+      // Clear Images or a manual remove) the branch above takes over and
+      // this preload never runs again for that render.
       batchSelectedIds = availableImages.map((img) => img.id);
     }
+    // Lot D (SEQGEN.STORYBOARD.CASTING.FIX1) — a reference the user just
+    // removed from the casting selection (via the inline Casting References
+    // editor) must be pruned from every `batchImages_<nodeId>`, whether it
+    // came from an explicit URL param or the preload above. Same canonical
+    // helper as StoryboardAssetsPanel's client-side reconciliation below —
+    // one rule, not two independently-maintained filters.
+    batchSelectedIds = pruneDynamicBatchIds(batchSelectedIds, availableImages.map((img) => img.id));
     if (batchPreview) {
       batchPreview.selectedImageCount = batchSelectedIds.length;
       batchPreview.clonedNodeCount = batchSelectedIds.length * batchPreview.templateChainTitles.length;
@@ -487,7 +540,11 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     { projectId: pid, sequenceId: sid, sequenceTitle: sequence.title, sequenceCode: sequence.sequenceCode },
     shotInputs
   );
-  const packageText = formatSequenceGenerationPackageText(pkg);
+  // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — no `Warnings:` block in the
+  // text fed into the prompt preview/queue; preview and queue must never
+  // diverge, so this preview-only build uses the exact same option as the
+  // action (buildSequenceStoryboardGenerationContext).
+  const packageText = formatSequenceGenerationPackageText(pkg, { includeWarnings: false });
 
   const promptResult = buildSequenceStoryboardPrompt({
     projectId: pid,
@@ -695,22 +752,21 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               })}
             </div>
           )}
-          {promptResult.warnings.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-[#1e2124] flex flex-col gap-0.5">
-              {promptResult.warnings.map((w, i) => (
-                <p key={i} className="text-[10px] text-[#cda24f]">
-                  ⚠ {w}
-                </p>
-              ))}
-            </div>
-          )}
+          {/* Lot D — inline casting editor replaces the "Edit Selection in
+              Storyboard Assets" link: every Asset cast in this Sequence,
+              including references not currently selected, editable without
+              leaving this page. Reuses StoryboardAssetsPanel's canonical
+              selection logic (stable Asset-then-Reference order,
+              `asset-{assetId}-{imageId}` ids, `storyboardRefs` via local
+              `router.replace`, no scroll-to-top) — same component the
+              Storyboard workspace uses, not a second implementation. */}
           <div className="mt-3 pt-3 border-t border-[#1e2124]">
-            <Link
-              href={storyboardWorkspaceReturnTo}
-              className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-            >
-              Edit Selection in Storyboard Assets →
-            </Link>
+            <StoryboardAssetsPanel
+              projectId={pid}
+              assets={castingEditorAssets}
+              clearParamsOnChange={CASTING_STALE_RESULT_PARAMS}
+              castingBatchSync={batchDetectionOk ? { workflowId: String(wid), batchNodeId } : undefined}
+            />
           </div>
         </Card>
 
@@ -728,6 +784,19 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
             <p className="text-sm text-[#cf7b6b]">This workflow JSON could not be parsed.</p>
           ) : (
             <WorkflowRuntimeMappingPanel
+              // P1 retake (SEQGEN.STORYBOARD.CASTING.FIX1) — remount the
+              // whole panel (including WorkflowTextOverrideForm's own
+              // useState-once "Suggested Text") whenever the casting +
+              // Dynamic Batch order signature that drives the canonical
+              // suggested prompt (@ImageN lines, Lot B) changes. When a
+              // `textNode_*` override is already applied, `mapping.
+              // suggestedText` already equals that override (see
+              // mapWorkflowInputs: `textOverrideByNodeId?.[nodeId] ??
+              // suggestedText`), so remounting never discards it — only an
+              // unapplied, in-progress local edit can be reset here, which
+              // is the documented, sanctioned tradeoff for never silently
+              // Applying a stale prompt.
+              key={orderedReferenceIds.join(",")}
               mappings={mappings}
               scalarValueByNodeId={scalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
@@ -752,6 +821,13 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
         {batchDetectionOk && (
           <Card title="Dynamic Image Batch">
             <DynamicBatchImageList
+              // Lot D — remount when the casting selection itself changes
+              // (never on a batch-only tweak) so this Client Component's
+              // internal `selected` state, seeded once from
+              // `selectedImageIds`, always picks up the freshly pruned/
+              // preloaded server value instead of going stale after the
+              // inline Casting References editor's same-page navigation.
+              key={`batch-${storyboardRefsParam}`}
               batchNodeId={batchNodeId}
               preview={batchPreview}
               error={batchError}
@@ -760,6 +836,8 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               passthroughParams={currentSearchParams}
               basePath={basePath}
               contextType="sequence"
+              showAddFromCasting
+              preserveExplicitEmptySelection
               projectId={pid}
               workflowId={String(wid)}
               sequenceId={sid}

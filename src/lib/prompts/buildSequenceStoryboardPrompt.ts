@@ -125,17 +125,16 @@ export function buildSequenceStoryboardPrompt(
     }, one per Shot, arranged in Sequence order (left to right, top to bottom). Each thumbnail must depict that Shot's framing, composition, staging and continuity as described in the Sequence Generation Package below. Do not merge, skip, duplicate or reorder Shots.`,
   ];
 
+  // Lot B (SEQGEN.STORYBOARD.CASTING.FIX1) — the LLM-facing line is exactly
+  // `@ImageN — {assetName} ({assetType})`, never `roleLabel`, `variantState`
+  // or an approval status: those stay internal metadata (still carried on
+  // `imageMappings` for the UI/snapshot/traceability below), and never
+  // become an implicit block or auto-approval signal for the model.
   const castingLines: string[] = [];
   if (imageMappings.length > 0) {
     castingLines.push("", "Casting References:");
     for (const m of imageMappings) {
-      const parts = [
-        `${m.imageLabel} — ${m.assetName} (${m.assetType})`,
-        m.roleLabel ? m.roleLabel : null,
-        m.variantState ? m.variantState : null,
-        !m.approvedForGeneration ? "(Not approved for generation)" : null,
-      ].filter((p): p is string => Boolean(p));
-      castingLines.push(parts.join(" · "));
+      castingLines.push(`${m.imageLabel} — ${m.assetName} (${m.assetType})`);
     }
   }
 

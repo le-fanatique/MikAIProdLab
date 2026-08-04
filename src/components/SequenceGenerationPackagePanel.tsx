@@ -323,23 +323,11 @@ export default async function SequenceGenerationPackagePanel({
             <CopyTextButton text={formattedJson} label="Copy JSON" />
           </div>
 
-          {/* Lot E — the top-level warnings banner is gone; every warning
-              here is non-blocking (this Server Component never disables
-              Apply/Copy based on pkg.warnings — see the report's diagnostic
-              inventory) so it moves to a closed-by-default sub-panel. */}
-          <Collapsible label={`Diagnostics (${pkg.warnings.length})`}>
-            {pkg.warnings.length > 0 ? (
-              <ul className="flex flex-col gap-0.5">
-                {pkg.warnings.map((w, i) => (
-                  <li key={i} className="text-xs text-[#cda24f]">
-                    {w}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-[#4b5158]">No diagnostics.</p>
-            )}
-          </Collapsible>
+          {/* Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — the non-blocking
+              Diagnostics collapsible is removed entirely from the Storyboard
+              workspace. `pkg.warnings` is still computed (untouched
+              structured contract, still read by other consumers such as
+              Sequence Detail) — only this decorative display is gone. */}
 
           <Collapsible label={`Shot-by-shot detail (${pkg.shotCount})`}>
             <div className="flex flex-col gap-3">

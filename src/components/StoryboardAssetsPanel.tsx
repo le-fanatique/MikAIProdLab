@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Collapsible from "@/components/Collapsible";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
+import { buildBatchKey } from "@/components/DynamicBatchImageList";
+import { pruneDynamicBatchIds } from "@/lib/comfy/pruneDynamicBatchSelection";
 
 export type StoryboardAssetReference = {
   id: number;
@@ -29,6 +32,28 @@ export type StoryboardCastAsset = {
 type Props = {
   projectId: number;
   assets: StoryboardCastAsset[];
+  /**
+   * SEQGEN.STORYBOARD.CASTING.FIX1 — Lot D. Optional query params to drop
+   * from the current URL whenever the casting selection changes, in
+   * addition to updating `storyboardRefs` itself. Used by the Generate
+   * Sequence Storyboard page so editing casting inline never leaves a
+   * previous job/draft result (`jobId`, `generationError`, draft
+   * save flash params) presented as if it belonged to the new selection.
+   * Undefined (the Storyboard workspace caller) preserves every other
+   * param exactly as before.
+   */
+  clearParamsOnChange?: string[];
+  /**
+   * SEQGEN.STORYBOARD.CASTING.FIX1 (P1 retake). When this casting editor
+   * sits on a page with an active Dynamic Batch/Direct Repeatable node,
+   * pass its `workflowId`/`batchNodeId` so a removed casting reference is
+   * reconciled out of the batch canonically, in the same place
+   * `DynamicBatchFormSync` reads at submit time (sessionStorage first, URL
+   * fallback) — not just in the next server render. Undefined (the
+   * Storyboard workspace caller, which has no Dynamic Batch concept at
+   * all) skips this entirely.
+   */
+  castingBatchSync?: { workflowId: string; batchNodeId: string };
 };
 
 /**
@@ -43,7 +68,12 @@ type Props = {
  * `availableImages` down to them (see that component and the report for the
  * full transport chain).
  */
-export default function StoryboardAssetsPanel({ projectId, assets }: Props) {
+export default function StoryboardAssetsPanel({
+  projectId,
+  assets,
+  clearParamsOnChange,
+  castingBatchSync,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -76,6 +106,60 @@ export default function StoryboardAssetsPanel({ projectId, assets }: Props) {
     const params = new URLSearchParams(searchParams.toString());
     if (ids.length > 0) params.set("storyboardRefs", ids.join(","));
     else params.delete("storyboardRefs");
+    for (const key of clearParamsOnChange ?? []) params.delete(key);
+
+    // P1 retake — reconcile the Dynamic Batch selection against the new
+    // casting set through the exact same canonical helper the server uses
+    // (`pruneDynamicBatchIds`), in BOTH places `DynamicBatchFormSync` might
+    // read it from at submit time: sessionStorage (checked first there) and
+    // the URL param (fallback). Without this, a same-tick submit right
+    // after removing a casting reference could still send a stale id from
+    // sessionStorage, or the URL could keep showing/queuing an id no longer
+    // in the casting selection. Adding a casting reference is always a
+    // no-op here — `pruneDynamicBatchIds` only ever removes ids, it can
+    // never add one; `Add From Casting` remains the deliberate action.
+    if (castingBatchSync?.batchNodeId) {
+      const { workflowId, batchNodeId } = castingBatchSync;
+      const paramKey = `batchImages_${batchNodeId}`;
+      const ssKey = buildBatchKey(workflowId, batchNodeId);
+
+      let currentBatchIds: string[] | null = null;
+      try {
+        const fromSession = sessionStorage.getItem(ssKey);
+        if (fromSession !== null) {
+          currentBatchIds = fromSession.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      } catch {
+        // sessionStorage unavailable — fall through to the URL below.
+      }
+      if (currentBatchIds === null) {
+        const fromUrl = params.get(paramKey);
+        if (fromUrl !== null) {
+          currentBatchIds = fromUrl.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      }
+
+      // `currentBatchIds === null` means the batch has never been touched
+      // explicitly (still a pure preload mirror of casting) — nothing
+      // stored to reconcile; the next render's own preload already
+      // reflects `ids`.
+      if (currentBatchIds !== null) {
+        const prunedBatchIds = pruneDynamicBatchIds(currentBatchIds, ids);
+        // Retake Round 2 — this batch was already explicit (present in the
+        // URL and/or sessionStorage), so pruning it down to zero must keep
+        // it explicitly empty (`batchImages_<nodeId>=`), never delete the
+        // key. Deleting it would make the param absent again, and absent
+        // means "preload the full casting selection" on this surface —
+        // exactly the silent resurrection this fix prevents.
+        params.set(paramKey, prunedBatchIds.join(","));
+        try {
+          sessionStorage.setItem(ssKey, prunedBatchIds.join(","));
+        } catch {
+          // sessionStorage unavailable — the URL correction above still stands.
+        }
+      }
+    }
+
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
@@ -128,12 +212,19 @@ export default function StoryboardAssetsPanel({ projectId, assets }: Props) {
                           }`}
                         >
                           <div className="relative aspect-square w-full bg-[#0d0e10] overflow-hidden rounded">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <ThumbnailHoverPreview
                               src={ref.imageUrl}
                               alt={ref.label ?? asset.assetName}
-                              className="w-full h-full object-cover"
-                            />
+                              previewSize={320}
+                              className="w-full h-full"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={ref.imageUrl}
+                                alt={ref.label ?? asset.assetName}
+                                className="w-full h-full object-cover"
+                              />
+                            </ThumbnailHoverPreview>
                             <input
                               type="checkbox"
                               checked={isSelected}

@@ -365,7 +365,11 @@ async function buildSequenceStoryboardGenerationContext(
     },
     shotInputs
   );
-  const packageText = formatSequenceGenerationPackageText(pkg);
+  // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — the text sent to the Sequence
+  // Storyboard workflow never carries a `Warnings:` block. Blocking errors
+  // (no casting, invalid workflow, ownership, provider, queue) still stop
+  // generation elsewhere in this action; this is presentation-only.
+  const packageText = formatSequenceGenerationPackageText(pkg, { includeWarnings: false });
 
   return {
     ok: true,
@@ -519,6 +523,28 @@ export async function runSequenceGeneration(input: {
     input.selectedRefIds
   );
   if (!context.ok) return { ok: false, error: context.error };
+
+  // P1 retake (SEQGEN.STORYBOARD.CASTING.FIX1) — `filterAvailableImagesBySelection`
+  // (used inside buildSequenceStoryboardGenerationContext) silently drops any
+  // id it can't match — that shared contract is correct for its other
+  // callers and is never changed here. This ticket requires the opposite for
+  // Sequence Storyboard casting specifically: a forged, cross-Project, or
+  // duplicate id must be refused before any job/`/prompt`, never silently
+  // resolved down to "whatever matched". `context.availableImages` is
+  // already strictly built from the real Assets cast in THIS Sequence/
+  // Project, so any requested id absent from it never belonged here.
+  const uniqueRequestedRefIds = new Set(input.selectedRefIds);
+  if (uniqueRequestedRefIds.size !== input.selectedRefIds.length) {
+    return { ok: false, error: "Duplicate casting reference selected." };
+  }
+  const resolvedAvailableRefIds = new Set(context.availableImages.map((img) => img.id));
+  const unresolvedRefIds = input.selectedRefIds.filter((id) => !resolvedAvailableRefIds.has(id));
+  if (unresolvedRefIds.length > 0) {
+    return {
+      ok: false,
+      error: "One or more selected casting references are unknown or do not belong to this Sequence.",
+    };
+  }
 
   const metaByRefId = await buildReferenceMetaByRefId(sequenceId);
 

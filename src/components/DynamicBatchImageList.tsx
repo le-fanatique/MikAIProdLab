@@ -56,6 +56,23 @@ type Props = {
   basePath: string;
   /** "shot" or "asset" determine which panel upload server action to use; "sequence" (SEQGEN.STORYBOARD.3) has no upload action — only casting references already in the DB feed the batch, so the Upload Image form is not rendered for it. */
   contextType: "shot" | "asset" | "sequence";
+  /** SEQGEN.STORYBOARD.CASTING.FIX1 — Lot C. Renders the "Add From Casting" button, restricted to the Sequence Storyboard surface only (contextType "sequence" is also used by Sequence Video, which this ticket never touches). Defaults to false everywhere else. */
+  showAddFromCasting?: boolean;
+  /**
+   * SEQGEN.STORYBOARD.CASTING.FIX1 (Retake Round 2). Restricted to the
+   * Sequence Storyboard surface only. When true, an explicit user action
+   * that empties the batch (`Clear Images`, removing the last image) keeps
+   * `batchImages_<nodeId>` PRESENT but empty in both the URL and
+   * sessionStorage, instead of omitting the key entirely. This surface's
+   * contract is: param absent = preload the full casting selection; param
+   * present (even empty) = authoritative. Omitting the key on empty would
+   * silently resurrect the full casting selection on the next render — the
+   * opposite of what `Clear Images` means here. Shot/Asset/Sequence Video
+   * callers never pass this (default `false`), so their existing
+   * default-preserve convention (absent = show everything available) is
+   * byte-identical.
+   */
+  preserveExplicitEmptySelection?: boolean;
   projectId: number;
   workflowId: string;
   shotId?: number;
@@ -89,6 +106,8 @@ export default function DynamicBatchImageList({
   passthroughParams,
   basePath,
   contextType,
+  showAddFromCasting = false,
+  preserveExplicitEmptySelection = false,
   projectId,
   workflowId,
   shotId,
@@ -122,13 +141,20 @@ export default function DynamicBatchImageList({
       if (!k.startsWith("batchImages_") && k !== "jobId") params.set(k, v);
     }
     const urlKey = buildBatchParamKey(batchNodeId);
-    if (newIds.length > 0) params.set(urlKey, newIds.join(","));
+    // Retake Round 2 — once the user has explicitly acted on this batch
+    // (this function only ever runs from an explicit action), the param
+    // stays PRESENT even when it empties out, on the Sequence Storyboard
+    // surface only. Every other surface keeps the historical "empty means
+    // absent" behavior byte-identical.
+    if (newIds.length > 0 || preserveExplicitEmptySelection) {
+      params.set(urlKey, newIds.join(","));
+    }
     router.replace(`${basePath}?${params.toString()}`, { scroll: false });
 
     // Sync sessionStorage immediately so DynamicBatchFormSync can read it
     // at submit time before router.replace has updated window.location.search.
     try {
-      if (newIds.length > 0) {
+      if (newIds.length > 0 || preserveExplicitEmptySelection) {
         sessionStorage.setItem(ssKey, newIds.join(","));
       } else {
         sessionStorage.removeItem(ssKey);
@@ -156,6 +182,21 @@ export default function DynamicBatchImageList({
     setSelected(next);
     pushState(next);
     setPickerOpen(false);
+  }
+
+  // SEQGEN.STORYBOARD.CASTING.FIX1 — Lot C. Appends every casting reference
+  // not already in the current batch, in `allPickerItems`' own order (the
+  // caller's casting order for the "sequence" context), preserving the
+  // already-chosen order/subset and never duplicating an id already
+  // present. Same update path as `handleAdd` — one state update, one
+  // `pushState` (React state, URL, sessionStorage all move together,
+  // consistent before a same-tick submit).
+  function handleAddFromCasting() {
+    const missing = allPickerItems.filter((item) => !selected.includes(item.id)).map((item) => item.id);
+    if (missing.length === 0) return;
+    const next = [...selected, ...missing];
+    setSelected(next);
+    pushState(next);
   }
 
   function handleMoveUp(index: number) {
@@ -356,6 +397,17 @@ export default function DynamicBatchImageList({
             className="self-start rounded border border-[#3a2820] text-[#cf7b6b] px-2.5 py-1 text-xs hover:border-[#5a3830] hover:text-[#e89478] hover:bg-[#2a1210] transition-colors"
           >
             Clear Images
+          </button>
+        )}
+        {/* Lot C — "Add From Casting", Sequence Storyboard only. Hidden once
+            every casting reference is already in the batch. */}
+        {showAddFromCasting && allPickerItems.some((item) => !selected.includes(item.id)) && (
+          <button
+            type="button"
+            onClick={handleAddFromCasting}
+            className="self-start rounded border border-[#2c3035] text-[#a4abb2] px-2.5 py-1 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Add From Casting
           </button>
         )}
         {!pickerOpen ? (
