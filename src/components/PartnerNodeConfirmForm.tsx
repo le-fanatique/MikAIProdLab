@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useRef, useState, useTransition } from "react";
 import type { ReactNode } from "react";
+import { unstable_rethrow } from "next/navigation";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
@@ -113,7 +114,21 @@ export default function PartnerNodeConfirmForm({
         startTransition(async () => {
           try {
             await action(formData);
-          } catch {
+          } catch (err) {
+            // GEN.ASSET.INPUT.ISOLATION.1 (Round 3) — `redirect()` (called by
+            // every real Server Action passed as `action` here on success —
+            // see runAssetGenerationFromForm/runWorkflowGenerationFromForm/
+            // etc.) deliberately THROWS a framework-internal `NEXT_REDIRECT`
+            // control-flow error; that is Next's own documented mechanism
+            // for performing the navigation, not a failure. Must be the
+            // first statement in this catch block, called with the raw
+            // caught value — never a manual inspection of `digest`/
+            // `message`, which are internal/unstable shape. It rethrows
+            // ONLY framework-controlled exceptions (redirect/notFound/
+            // dynamic-API bailout); it returns normally for any ordinary
+            // application error, which then falls through to the generic
+            // message below exactly as before.
+            unstable_rethrow(err);
             // A rejected `action` (e.g. a genuine transport failure — the
             // real Server Actions here return `{ ok: false, error }` and
             // never throw in normal operation) must never crash the whole

@@ -39,7 +39,20 @@ export type GenerationSnapshot = {
     selectedImageCount: number;
     clonedNodeCount: number;
   };
-  promptText: string;
+  /**
+   * GEN.ASSET.INPUT.ISOLATION.1 — set to `deriveQueuedPromptText`'s result
+   * (`src/lib/comfy/verifyWorkflowMutations.ts`): the value actually sitting
+   * in the FINAL queued payload at every real `kind: "text"` patch's exact
+   * `<nodeId>.inputs.<inputKey>` location. Absent (never a compiled-but-
+   * never-injected Asset/Shot prompt, FB-20260724-001) whenever there are no
+   * real text patches, OR any one of their paths fails to resolve, in the
+   * final payload, to a string — a missing node, a missing/deleted input
+   * key, a non-string value (number/null/object), or two real text inputs
+   * whose final values diverge all omit this field rather than publish a
+   * partial or misleading value. Legacy rows always carry a `string` and
+   * remain readable as-is.
+   */
+  promptText?: string;
   /** True when the Advanced Payload Editor's edited JSON was used instead of the computed mapping. */
   overrideUsed: boolean;
   warnings: string[];

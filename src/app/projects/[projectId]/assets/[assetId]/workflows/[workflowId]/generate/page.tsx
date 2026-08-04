@@ -21,6 +21,7 @@ import {
 import {
   buildGenerationPayload,
   detectDynamicBatchUiInfo,
+  summarizeGenerationMutations,
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
@@ -453,6 +454,9 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
           <>
             <SectionLabel label="Preview" />
             <Card title="Payload Preview">
+              <p className="text-xs text-[#a4abb2] mb-3">
+                {summarizeGenerationMutations(payloadPreview.patches)}
+              </p>
               <WorkflowPayloadPreviewPanel result={payloadPreview} />
             </Card>
           </>

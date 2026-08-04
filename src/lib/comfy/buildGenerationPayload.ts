@@ -33,7 +33,7 @@ import {
   detectDirectRepeatableInput,
   expandDirectRepeatableInputsWorkflow,
 } from "@/lib/comfy/expandDirectRepeatableInputs";
-import { patchWorkflowPayload, type WorkflowPayloadPatchResult } from "@/lib/comfy/patchWorkflowPayload";
+import { patchWorkflowPayload, type WorkflowPayloadPatchResult, type WorkflowPayloadPatch } from "@/lib/comfy/patchWorkflowPayload";
 
 // ---------------------------------------------------------------------------
 // resolveImageExpansionMode — SEQGEN.STORYBOARD.3-FIX2
@@ -216,6 +216,53 @@ export function buildGenerationPayload(
   });
 
   return { ok: true, mappings, displayMappings, expansion, patch };
+}
+
+// ---------------------------------------------------------------------------
+// summarizeGenerationMutations — GEN.ASSET.INPUT.ISOLATION.1, Lot C
+//
+// The single honest-mutation-summary sentence rendered before Generate, e.g.
+// "Automatic mapping: 1 image input will be replaced. Workflow prompt and
+// settings remain unchanged. Manual JSON edits, if any, are additional."
+// Derived strictly from the same `patch.patches` the queued payload itself
+// is built from (never a second, potentially divergent description) —
+// shared by AssetGenerationPanel.tsx and the /generate page.
+//
+// Round 3 (Codex REVISE, P2) — `patches` only ever describes the automatic
+// SSR mapping step; it says nothing about a possible Advanced Payload
+// Editor edit, which can replace prompt/model/seed/anything in the FINAL
+// payload after this summary was computed. Explicitly scoping the sentence
+// to "Automatic mapping" and naming Advanced JSON edits as additional
+// avoids ever implying the whole final payload is bounded by this summary —
+// without building a second, divergent diff of the edited JSON.
+// ---------------------------------------------------------------------------
+
+export function summarizeGenerationMutations(patches: WorkflowPayloadPatch[]): string {
+  const imageCount = patches.filter((p) => p.kind === "image" || p.kind === "video").length;
+  const textCount = patches.filter((p) => p.kind === "text").length;
+  const settingsCount = patches.length - imageCount - textCount;
+
+  const changed: string[] = [];
+  if (imageCount > 0) changed.push(`${imageCount} image input${imageCount === 1 ? "" : "s"}`);
+  if (textCount > 0) changed.push(`${textCount} prompt input${textCount === 1 ? "" : "s"}`);
+  if (settingsCount > 0) changed.push(`${settingsCount} setting${settingsCount === 1 ? "" : "s"}`);
+
+  const additionalNote = "Manual JSON edits, if any, are additional.";
+
+  if (changed.length === 0) {
+    return `Automatic mapping: no workflow inputs will be changed. ${additionalNote}`;
+  }
+
+  const changedSentence = `${changed.join(" and ")} will be replaced.`;
+
+  const unchanged: string[] = [];
+  if (textCount === 0) unchanged.push("prompt");
+  if (settingsCount === 0) unchanged.push("settings");
+  if (unchanged.length === 0) {
+    return `Automatic mapping: ${changedSentence} ${additionalNote}`;
+  }
+
+  return `Automatic mapping: ${changedSentence} Workflow ${unchanged.join(" and ")} remain unchanged. ${additionalNote}`;
 }
 
 // ---------------------------------------------------------------------------

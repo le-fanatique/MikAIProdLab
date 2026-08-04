@@ -18,6 +18,7 @@ import {
 import {
   buildGenerationPayload,
   detectDynamicBatchUiInfo,
+  summarizeGenerationMutations,
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
@@ -452,6 +453,9 @@ export default async function AssetGenerationPanel({
           <div className="border-t border-[#232629] pt-4 flex flex-col gap-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
               Preview
+            </p>
+            <p className="text-xs text-[#a4abb2]">
+              {summarizeGenerationMutations(payloadPreview.patches)}
             </p>
             <WorkflowPayloadPreviewPanel result={payloadPreview} />
           </div>

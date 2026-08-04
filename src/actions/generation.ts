@@ -18,6 +18,11 @@ import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch"
 import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
+import {
+  verifyPrePatchMutations,
+  verifyPostUploadMutations,
+  deriveQueuedPromptText,
+} from "@/lib/comfy/verifyWorkflowMutations";
 import { ensureVideoOutputSavedToLibrary } from "@/lib/shotVideoLibrary/ensureSaved";
 import { approveShotVideoPath } from "@/lib/shotVideoLibrary/approve";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
@@ -354,6 +359,20 @@ export async function runAssetGeneration(input: {
     return { ok: false, error: built.error };
   }
 
+  // GEN.ASSET.INPUT.ISOLATION.1 — the canonical patch step (expanded
+  // workflow -> patchWorkflowPayload's output) may only ever change fields
+  // that a real patch record accounts for. This checks our own computed
+  // payload, not the caller's optional override (see overrideUsed below,
+  // which is honestly allowed to diverge).
+  const prePatchCheck = verifyPrePatchMutations({
+    beforePatchJson: built.expansion.workflowJson,
+    patchedJson: built.patch.patchedJson,
+    patches: built.patch.patches,
+  });
+  if (!prePatchCheck.ok) {
+    return { ok: false, error: prePatchCheck.error };
+  }
+
   const overrideUsed = input.patchedJsonOverride !== undefined;
   const finalPatchedJson: Record<string, unknown> = input.patchedJsonOverride ?? built.patch.patchedJson;
 
@@ -377,10 +396,13 @@ export async function runAssetGeneration(input: {
     if (mismatch) return { ok: false, error: mismatch };
   }
 
-  // Never claim a styled prompt was queued when it never touched a real
-  // input — the snapshot must describe exactly the unstyled base prompt
-  // that was actually used to build `finalPatchedJson` in that case.
-  const assetPromptTextForSnapshot = assetStyleActuallyInjected ? effectiveSuggestedText : assetPromptText;
+  // GEN.ASSET.INPUT.ISOLATION.1 (Round 2) — `promptText` must never
+  // represent a compiled-but-never-injected Asset prompt (FB-20260724-001),
+  // AND must never represent a stale computed string once an Advanced
+  // Payload Override has changed/restored the real queued text. Read back
+  // the actual value(s) sitting at each real text patch's exact location in
+  // `finalPatchedJson` (the payload actually queued) instead.
+  const assetPromptTextForSnapshot = deriveQueuedPromptText(assetTextPatches, finalPatchedJson);
 
   // --- 9b. Comfy Cloud preflight (COMFY.PROVIDER.1) — see runShotGenerationCore. ---
   if (comfySettings.provider === "cloud") {
@@ -432,6 +454,20 @@ export async function runAssetGeneration(input: {
         : { provider: "local" }
     );
 
+    // GEN.ASSET.INPUT.ISOLATION.1 — the upload step may only rewrite
+    // `inputs.image` on the nodes it actually uploaded, to the exact
+    // recorded provider filename. Checked regardless of overrideUsed —
+    // this guards the upload transport itself, not the payload's origin.
+    const postUploadCheck = verifyPostUploadMutations({
+      prePatchedJson: finalPatchedJson,
+      uploadedJson: prepared.workflow,
+      uploadedImages: prepared.uploadedImages,
+    });
+    if (!postUploadCheck.ok) {
+      await markJobFailed(jobId, postUploadCheck.error);
+      return { ok: false, error: postUploadCheck.error };
+    }
+
     // --- 11a. Snapshot (GEN.SEEDANCE.1) ---
     const snapshot: GenerationSnapshot = {
       workflowId,
@@ -453,7 +489,7 @@ export async function runAssetGeneration(input: {
         selectedImageCount: built.expansion.preview.selectedImageCount,
         clonedNodeCount: built.expansion.preview.clonedNodeCount,
       },
-      promptText: assetPromptTextForSnapshot,
+      ...(assetPromptTextForSnapshot !== undefined ? { promptText: assetPromptTextForSnapshot } : {}),
       overrideUsed,
       // REVISE (GEN.SEEDANCE.1) — prepared.warnings (e.g. "local images were
       // uploaded to ComfyUI and LoadImage inputs rewritten") were previously

@@ -43,6 +43,11 @@ import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch"
 import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
+import {
+  verifyPrePatchMutations,
+  verifyPostUploadMutations,
+  deriveQueuedPromptText,
+} from "@/lib/comfy/verifyWorkflowMutations";
 import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
 import { prepareGenerationStyleSource, type PreparedGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import type { GenerationConsumer } from "@/lib/projectStyle/generationStyleSource";
@@ -281,6 +286,17 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
     return { ok: false, error: built.error };
   }
 
+  // GEN.ASSET.INPUT.ISOLATION.1 — see the identical check/comment in
+  // src/actions/generation.ts's runAssetGeneration.
+  const prePatchCheck = verifyPrePatchMutations({
+    beforePatchJson: built.expansion.workflowJson,
+    patchedJson: built.patch.patchedJson,
+    patches: built.patch.patches,
+  });
+  if (!prePatchCheck.ok) {
+    return { ok: false, error: prePatchCheck.error };
+  }
+
   // REVISE (round 1, finding 5) — a video input can be MAPPED (preview
   // works, `Video Sources`/`Video Inputs` shows a real selector) but
   // ComfyUI generation must still be explicitly refused here: unlike
@@ -322,12 +338,14 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
     if (mismatch) return { ok: false, error: mismatch };
   }
 
-  // When Style was not actually injected (no effective Style, or no
-  // patchable text input), `promptText` and the snapshot must describe
-  // EXACTLY the unstyled base prompt and overrides that were actually used
-  // to build `finalPatchedJson` — never the styled strings, which never
-  // reached any queued node in that case.
-  const promptTextForSnapshot = styleActuallyInjected ? effectiveSuggestedText : compiledShotPrompt.text;
+  // GEN.ASSET.INPUT.ISOLATION.1 (Round 2) — `promptText` must never
+  // represent a compiled-but-never-injected Shot prompt (FB-20260724-001),
+  // AND must never represent a stale computed string once an Advanced
+  // Payload Override has changed/restored the real queued text. Read back
+  // the actual value(s) sitting at each real text patch's exact location in
+  // `finalPatchedJson` (the payload actually queued) instead — see
+  // `deriveQueuedPromptText`'s own doc comment for the full contract.
+  const promptTextForSnapshot = deriveQueuedPromptText(textPatches, finalPatchedJson);
 
   // --- 5b. Comfy Cloud preflight (COMFY.PROVIDER.1) — before any job row is
   //         created, never a silent paid submission. No-op for local. ---
@@ -371,6 +389,18 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       comfySettings.provider === "cloud" ? { provider: "cloud", cloudApiKey: comfySettings.cloudApiKey } : { provider: "local" }
     );
 
+    // GEN.ASSET.INPUT.ISOLATION.1 — see the identical check/comment in
+    // src/actions/generation.ts's runAssetGeneration.
+    const postUploadCheck = verifyPostUploadMutations({
+      prePatchedJson: finalPatchedJson,
+      uploadedJson: prepared.workflow,
+      uploadedImages: prepared.uploadedImages,
+    });
+    if (!postUploadCheck.ok) {
+      await markJobFailed(jobId, postUploadCheck.error);
+      return { ok: false, error: postUploadCheck.error };
+    }
+
     // --- 7a. Snapshot (GEN.SEEDANCE.1) — created before queueing, from the
     //        exact payload about to be sent, so it stays accurate even if
     //        the queue call itself fails or the library workflow changes later. ---
@@ -394,7 +424,7 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
         selectedImageCount: built.expansion.preview.selectedImageCount,
         clonedNodeCount: built.expansion.preview.clonedNodeCount,
       },
-      promptText: promptTextForSnapshot,
+      ...(promptTextForSnapshot !== undefined ? { promptText: promptTextForSnapshot } : {}),
       overrideUsed,
       // REVISE (GEN.SEEDANCE.1) — prepared.warnings (e.g. "local images were
       // uploaded to ComfyUI and LoadImage inputs rewritten") were previously
