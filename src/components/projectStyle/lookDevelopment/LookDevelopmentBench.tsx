@@ -283,6 +283,13 @@ const segButtonBase =
   "rounded border px-3 py-1.5 text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 const segButtonActive = "border-[#5b93d6] text-[#e7e9ec] bg-[#14202e]";
 const segButtonInactive = "border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046]";
+// Local variant for the Image/Video mode control only — segButtonActive
+// above is shared with the Source segmented control, and its literal
+// bg-[#14202e] must stay theme-unaware there (out of scope for this
+// retake); this variant keeps every other class identical but makes the
+// background reference the existing Raised token directly, same fallback
+// value so Default rendering is unchanged.
+const modeSegButtonActive = "border-[#5b93d6] text-[#e7e9ec] [background-color:var(--mikros-raised,#14202e)]";
 const sectionTitleClass = "text-xs font-medium uppercase tracking-wider text-[#6e767d]";
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -1055,7 +1062,7 @@ export default function LookDevelopmentBench({
                 key={m}
                 type="button"
                 aria-pressed={mode === m}
-                className={`${segButtonBase} ${mode === m ? segButtonActive : segButtonInactive}`}
+                className={`${segButtonBase} w-20 text-center ${mode === m ? modeSegButtonActive : segButtonInactive}`}
                 onClick={() => handleModeChange(m)}
               >
                 {m === "image" ? "Image" : "Video"}

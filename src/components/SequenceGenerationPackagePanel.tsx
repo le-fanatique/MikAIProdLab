@@ -359,15 +359,6 @@ export default async function SequenceGenerationPackagePanel({
                   <pre className="text-[11px] text-[#a4abb2] whitespace-pre-wrap">
                     {s.compiledPrompt.text || "(no compiled prompt)"}
                   </pre>
-                  {s.warnings.length > 0 && (
-                    <ul className="mt-1.5 flex flex-col gap-0.5">
-                      {s.warnings.map((w, wi) => (
-                        <li key={wi} className="text-[10px] text-[#cda24f]">
-                          ⚠ {w}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               ))}
             </div>

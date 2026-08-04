@@ -91,7 +91,11 @@ function RunCard({
   const runRefByRefId = useMemo(() => new Map(runRefs.map((rr) => [rr.referenceId, rr])), [runRefs]);
 
   return (
-    <div className={`rounded border p-3 flex flex-col gap-2 ${isOpen ? "border-[#5b93d6] bg-[#101a26]" : "border-[#2c3035] bg-[#141618]"}`}>
+    <div
+      className={`rounded border p-3 flex flex-col gap-2 ${
+        isOpen ? "border-[#5b93d6] [background-color:var(--mikros-raised,#101a26)]" : "border-[#2c3035] bg-[#141618]"
+      }`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -262,7 +266,7 @@ export default function RunHistoryPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">
+      <h4 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">
         Analysis History ({runs.length})
       </h4>
       {runs.map((run) => {

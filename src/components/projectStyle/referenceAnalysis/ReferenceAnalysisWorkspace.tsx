@@ -426,8 +426,8 @@ export default function ReferenceAnalysisWorkspace({
   // ── Render ──────────────────────────────────────────────────────────
 
   return (
-    <section className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-4">
-      <h3 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">
+    <section className="rounded border border-[#232629] p-4 flex flex-col gap-4 [background-color:var(--mikros-border,#2c3035)]">
+      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">
         Reference Analysis
       </h3>
 

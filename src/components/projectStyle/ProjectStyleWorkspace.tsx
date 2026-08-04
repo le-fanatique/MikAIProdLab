@@ -258,8 +258,8 @@ function PillarPanel({
   onReorderSection: (sectionId: number, direction: "up" | "down") => Promise<void>;
 }) {
   return (
-    <div className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-3">
-      <h3 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">{title}</h3>
+    <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
+      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">{title}</h3>
       <div className="flex flex-col gap-1.5">
         <label className="text-[10px] text-[#6e767d]">General direction</label>
         <textarea
@@ -333,8 +333,8 @@ function RulesPanel({
   };
 
   return (
-    <div className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-3">
-      <h3 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">Style Rules ({rules.length})</h3>
+    <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
+      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Style Rules ({rules.length})</h3>
       <div className="flex flex-col gap-2">
         {rules.map((r, idx) => (
           <div key={r.id} className={`rounded border p-2 flex flex-col gap-1.5 ${r.status === "disabled" ? "border-[#2c3035] opacity-50" : "border-[#2c3035]"}`}>
@@ -991,9 +991,9 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         </Link>
       </div>
 
-      <div className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-3">
+      <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">Direction Brief</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Direction Brief</h3>
           <div className="flex items-center gap-2">
             {isReadOnlyActiveView && <StateBadge tone="warn">Read-only — click Edit Active Style to change</StateBadge>}
             <StateBadge tone={stateTone}>{stateLabel}</StateBadge>
@@ -1085,8 +1085,8 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         </div>
       )}
 
-      <div className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-3">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">Compiled preview</h3>
+      <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
+        <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Compiled preview</h3>
         {compiledPreview ? (
           <pre className="text-xs text-[#a4abb2] whitespace-pre-wrap font-mono bg-[#0d0e10] border border-[#2c3035] rounded p-3">{compiledPreview}</pre>
         ) : (
@@ -1094,8 +1094,8 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         )}
       </div>
 
-      <div className="rounded border border-[#232629] bg-[#101214] p-4 flex flex-col gap-3">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-[#6e767d]">Versions & Publish</h3>
+      <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
+        <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Versions & Publish</h3>
 
         <div className="flex items-center gap-2">
           <span className="text-xs text-[#6e767d]">Status:</span>
