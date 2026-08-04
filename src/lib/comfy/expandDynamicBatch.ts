@@ -300,6 +300,70 @@ export function traceUpstreamTemplateChain(
 }
 
 // ---------------------------------------------------------------------------
+// removeOrphanedTemplateChainNodes — WFBUILD.1.B-FIX1
+//
+// After an expansion has cloned every template chain node once per selected
+// image and rewired the batch/target node onto the clones, the original
+// template chain nodes (`chainNodeIds`) are disconnected but still present
+// in the workflow. ComfyUI validates every node it receives — including
+// disconnected ones — so a stale `LoadImage` still holding a filename from a
+// previous session (or none at all) makes the whole prompt fail even though
+// nothing actually references it anymore.
+//
+// Shared by expandDynamicBatch.ts and expandDirectRepeatableInputs.ts so
+// both expansion modes apply the exact same ownership audit: any node
+// outside `chainNodeIds` that still references one of these ids is treated
+// as a real external consumer, and removal is refused rather than silently
+// dropping a shared node.
+// ---------------------------------------------------------------------------
+
+export function removeOrphanedTemplateChainNodes(
+  expanded: ComfyWorkflow,
+  chainNodeIds: string[]
+): { ok: true } | { ok: false; error: string } {
+  const chainSet = new Set(chainNodeIds);
+
+  // 1. Ownership audit: refuse if any node outside the chain still points
+  // into it. Internal chain-to-chain references don't count — the whole
+  // chain set is removed together.
+  for (const [nodeId, node] of Object.entries(expanded)) {
+    if (chainSet.has(nodeId)) continue;
+    if (!isRecord(node.inputs)) continue;
+    for (const [key, value] of Object.entries(node.inputs)) {
+      if (isStringArray2(value) && chainSet.has(value[0])) {
+        return {
+          ok: false,
+          error:
+            `Node ${value[0]} from the original template chain is still connected to node ${nodeId} ` +
+            `(input "${key}") outside the expansion. Remove that shared connection, or give it its ` +
+            `own source node, before generating.`,
+        };
+      }
+    }
+  }
+
+  // 2. Remove the now-orphaned originals.
+  for (const id of chainNodeIds) {
+    delete expanded[id];
+  }
+
+  // 3. Sanity check: no surviving connection may reference a removed node.
+  for (const [nodeId, node] of Object.entries(expanded)) {
+    if (!isRecord(node.inputs)) continue;
+    for (const [key, value] of Object.entries(node.inputs)) {
+      if (isStringArray2(value) && chainSet.has(value[0])) {
+        return {
+          ok: false,
+          error: `Internal error: node ${nodeId} input "${key}" still references removed node ${value[0]}.`,
+        };
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // buildIncrementedInputName
 // ---------------------------------------------------------------------------
 
@@ -515,6 +579,10 @@ export function expandDynamicBatchWorkflow(params: {
     }
     batchNode.inputs[inputName] = [lastClonedId, 0];
   }
+
+  // --- 12. Remove the original template chain, now orphaned by step 6 ---
+  const removal = removeOrphanedTemplateChainNodes(expanded, templateChainNodeIds);
+  if (!removal.ok) return { ok: false, error: removal.error };
 
   return {
     ok: true,

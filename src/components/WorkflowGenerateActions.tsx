@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import EditablePatchedJsonPanel from "@/components/EditablePatchedJsonPanel";
+import { useGenerationFormState } from "@/components/PartnerNodeConfirmForm";
 
 type Props = {
   initialJsonText: string;
@@ -16,26 +17,35 @@ type Props = {
 export default function WorkflowGenerateActions({ initialJsonText, buttonLabel }: Props) {
   const [isJsonValid, setIsJsonValid] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  // WFBUILD.1.B-FIX1 (retake) — display only. The actual double-submit
+  // guard is the parent form's synchronous ref (see PartnerNodeConfirmForm),
+  // never this render-driven flag: React state updates land one render
+  // after the fact, too late to block a second synchronous submit event.
+  const { pending, submissionError } = useGenerationFormState();
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={!isJsonValid}
+          disabled={!isJsonValid || pending}
           className={[
             "rounded border px-4 py-2 text-sm font-medium transition-colors",
-            isJsonValid
+            isJsonValid && !pending
               ? "border-[#5b93d6]/50 text-[#5b93d6] hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10"
               : "border-[#2c3035] text-[#4b5158] cursor-not-allowed",
           ].join(" ")}
         >
-          {buttonLabel}
+          {pending ? "Queueing…" : buttonLabel}
         </button>
-        <p className={`text-xs ${isJsonValid ? "text-[#6e767d]" : "text-[#cf7b6b]"}`}>
-          {isJsonValid
-            ? "Queue this workflow in ComfyUI."
-            : "Fix the JSON error before generating."}
+        <p className={`text-xs ${isJsonValid && !submissionError ? "text-[#6e767d]" : "text-[#cf7b6b]"}`}>
+          {!isJsonValid
+            ? "Fix the JSON error before generating."
+            : pending
+              ? "Submitting to ComfyUI…"
+              : submissionError
+                ? submissionError
+                : "Queue this workflow in ComfyUI."}
         </p>
       </div>
 

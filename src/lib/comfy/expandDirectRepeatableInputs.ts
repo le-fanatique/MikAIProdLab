@@ -37,6 +37,7 @@ import {
   parseWorkflowJson,
   traceUpstreamTemplateChain,
   buildIncrementedInputName,
+  removeOrphanedTemplateChainNodes,
 } from "./expandDynamicBatch";
 
 // ---------------------------------------------------------------------------
@@ -338,6 +339,12 @@ export function expandDirectRepeatableInputsWorkflow(params: {
     if (!targetNode.inputs) targetNode.inputs = {};
     targetNode.inputs[portKey] = [lastClonedId, 0];
   }
+
+  // Remove every originally-populated port's source chain, now orphaned —
+  // not only the port[0] chain reused as the clone template. All of them
+  // were disconnected from targetNode above.
+  const removal = removeOrphanedTemplateChainNodes(expanded, allChains.unionNodeIds);
+  if (!removal.ok) return { ok: false, error: removal.error };
 
   return {
     ok: true,
