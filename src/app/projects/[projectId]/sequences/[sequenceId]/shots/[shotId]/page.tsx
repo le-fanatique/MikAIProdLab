@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, shotVideos, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -669,6 +670,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                   projectId={pid}
                   sequenceId={sid}
                   shotId={shid}
+                  mediaLabel={deriveMediaLabel(
+                    `${shot.shotCode ? `${shot.shotCode} — ` : ""}${shot.title} — Approved Output`,
+                    shot.approvedVideoPath
+                  )}
                   defaultFps={24}
                   captureDestinations={captureDestinations}
                 />

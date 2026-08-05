@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 
 export type StoryboardCardStatus = "approved" | "generating" | "failed" | "none";
 
@@ -58,13 +59,9 @@ export default function SequenceStoryboardGrid({ shots, projectId, sequenceId }:
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
       {shots.map((shot, index) => {
         const shotHref = `/projects/${projectId}/sequences/${sequenceId}/shots/${shot.id}`;
-        return (
-          <Link
-            key={shot.id}
-            href={shotHref}
-            aria-label={`Open Shot ${shot.shotCode ?? shot.title}`}
-            className="group flex flex-col rounded border border-[#232629] bg-[#141618] overflow-hidden hover:border-[#3a4046] focus:outline-none focus:ring-1 focus:ring-[#5b93d6] transition-colors"
-          >
+
+        const cardBody = (
+          <>
             <div className="relative aspect-video w-full bg-[#0d0e10] shrink-0 overflow-hidden">
               {shot.videoUrl ? (
                 <video
@@ -110,6 +107,43 @@ export default function SequenceStoryboardGrid({ shots, projectId, sequenceId }:
                 Open Shot →
               </span>
             </div>
+          </>
+        );
+
+        const cardClassName =
+          "relative group flex flex-col rounded border border-[#232629] bg-[#141618] overflow-hidden hover:border-[#3a4046] focus-within:ring-1 focus-within:ring-[#5b93d6] transition-colors";
+
+        // Retake Round 1 (Codex P2) — when a thumbnail is shown, the whole
+        // card is wrapped so the popup's mouse/focus/Escape handling lives
+        // on a REAL box (this wrapper) — focus reaches it because it
+        // bubbles UP from a descendant, never down from an ancestor, so the
+        // Link can no longer be the outermost element. The Link becomes an
+        // absolutely positioned, visually invisible overlay covering the
+        // whole card (a "stretched link", same pattern used everywhere a
+        // card needs one fully-clickable/focusable area) — same click/tab
+        // target as before, same visible layout, no `display:contents` on
+        // an anchor.
+        if (shot.imageUrl && !shot.videoUrl) {
+          return (
+            <ThumbnailHoverPreview key={shot.id} src={shot.imageUrl} alt="" className={cardClassName}>
+              {cardBody}
+              <Link
+                href={shotHref}
+                aria-label={`Open Shot ${shot.shotCode ?? shot.title}`}
+                className="absolute inset-0 focus:outline-none"
+              />
+            </ThumbnailHoverPreview>
+          );
+        }
+
+        return (
+          <Link
+            key={shot.id}
+            href={shotHref}
+            aria-label={`Open Shot ${shot.shotCode ?? shot.title}`}
+            className={`${cardClassName} focus:outline-none focus:ring-1 focus:ring-[#5b93d6]`}
+          >
+            {cardBody}
           </Link>
         );
       })}

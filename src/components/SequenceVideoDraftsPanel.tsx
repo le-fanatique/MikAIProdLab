@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Collapsible from "@/components/Collapsible";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 
 export type SequenceVideoDraftItem = {
   id: number;
@@ -64,7 +66,12 @@ export default function SequenceVideoDraftsPanel({ projectId, sequenceId, drafts
       {drafts.map((d) => (
         <div key={d.id} className="flex flex-col rounded border border-[#232629] bg-[#141618] overflow-hidden">
           <div className="relative bg-[#0d0e10]">
-            <VideoFrameReviewPlayer src={d.videoUrl} projectId={projectId} captureDestinations={[]} />
+            <VideoFrameReviewPlayer
+              src={d.videoUrl}
+              projectId={projectId}
+              mediaLabel={deriveMediaLabel(`Sequence Video Draft #${d.id}`, d.videoUrl)}
+              captureDestinations={[]}
+            />
             <span
               className={`absolute top-1.5 right-1.5 text-[9px] uppercase tracking-wider border rounded px-1.5 py-px bg-[#0d0e10]/80 ${statusClass(d.status)}`}
             >
@@ -75,8 +82,10 @@ export default function SequenceVideoDraftsPanel({ projectId, sequenceId, drafts
             <div className="flex items-center gap-2">
               {d.sourceStoryboardImageUrl && (
                 <div className="relative w-12 aspect-video bg-[#0d0e10] shrink-0 overflow-hidden rounded">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={d.sourceStoryboardImageUrl} alt="" className="w-full h-full object-cover" />
+                  <ThumbnailHoverPreview src={d.sourceStoryboardImageUrl} alt="" className="w-full h-full" focusable>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={d.sourceStoryboardImageUrl} alt="" className="w-full h-full object-cover" />
+                  </ThumbnailHoverPreview>
                 </div>
               )}
               <span className="text-[10px] font-mono text-[#4b5158]">{fmtDate(d.createdAt)}</span>

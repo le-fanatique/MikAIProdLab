@@ -1,13 +1,14 @@
 "use server";
 
 import { db } from "@/db";
-import { projects, projectStyleReferenceImages, lookTests, lookTestResults, generationJobs } from "@/db/schema";
+import { projects, sequences, projectStyleReferenceImages, lookTests, lookTestResults, generationJobs } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { isConfinedReferenceImagePath } from "@/lib/projectStyle/uploadReferenceImage";
 import { isWithinLookDevelopmentRoot } from "@/lib/lookDevelopment/paths";
+import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/uploadNavigationBackground";
 
 export async function createProject(formData: FormData) {
   const name = formData.get("name") as string;
@@ -110,6 +111,40 @@ export async function deleteProject(id: number) {
     }
   }
 
+  // UX.MEDIA.PREVIEW.1 — the Project's own row background AND every child
+  // Sequence's row background are file-backed under
+  // uploads/navigation-backgrounds/. The DB rows are cascade-deleted with
+  // the Project (FK onDelete: "cascade"), but a cascade never touches the
+  // filesystem — every confined path found here joins the same
+  // quarantine/unlink discipline as Style references and Look results.
+  const [projectRow] = await db
+    .select({ rowBackgroundImagePath: projects.rowBackgroundImagePath })
+    .from(projects)
+    .where(eq(projects.id, id));
+  const projectBackgroundPath = projectRow?.rowBackgroundImagePath ?? null;
+  // Retake Round 2 (Codex P1) — owner-aware: the path must be confined to
+  // THIS Project's own `project-<id>` subfolder, not just somewhere under
+  // the shared navigation-backgrounds root (a corrupted row pointing at a
+  // DIFFERENT owner's subfolder must never be treated as this Project's own
+  // file to quarantine/delete).
+  if (projectBackgroundPath && !isConfinedNavigationBackgroundPathForOwner(projectBackgroundPath, "project", id)) {
+    throw new Error(
+      `deleteProject(${id}): refusing to delete — the Project's row background is not confined to this Project's own subfolder ("${projectBackgroundPath}"). Fix this row manually before retrying.`
+    );
+  }
+
+  const sequenceBackgrounds = await db
+    .select({ id: sequences.id, imagePath: sequences.rowBackgroundImagePath })
+    .from(sequences)
+    .where(eq(sequences.projectId, id));
+  for (const seq of sequenceBackgrounds) {
+    if (seq.imagePath && !isConfinedNavigationBackgroundPathForOwner(seq.imagePath, "sequence", seq.id)) {
+      throw new Error(
+        `deleteProject(${id}): refusing to delete — Sequence ${seq.id}'s row background is not confined to that Sequence's own subfolder ("${seq.imagePath}"). Fix this row manually before retrying.`
+      );
+    }
+  }
+
   // STYLE.1.G.CORE.1 — Look Development results are file-backed exactly
   // like Project Style references, under their own dedicated confined
   // root (uploads/look-development/), and must leave zero orphaned file on
@@ -140,14 +175,26 @@ export async function deleteProject(id: number) {
   // otherwise it is indistinguishable from a brand-new concurrent
   // publication and permanently blocks deletion (Round 5 Finding).
   const initialLookResultPathById = new Map(lookResults.map((r) => [r.id, r.filePath] as const));
+  // UX.MEDIA.PREVIEW.1 (Retake Round 1) — same anti-race discipline for the
+  // Project's own row background and every child Sequence's row background:
+  // `sequenceBackgrounds` already covers every Sequence of this Project
+  // (not just ones with a background), so a missing entry below can only
+  // mean a Sequence created after collection began.
+  const initialSequenceBackgroundPathById = new Map(sequenceBackgrounds.map((s) => [s.id, s.imagePath] as const));
 
-  type QuarantineEntry = { source: "style-reference" | "look-result"; id: number; imagePath: string };
+  type QuarantineEntry = { source: "style-reference" | "look-result" | "navigation-background"; id: number; imagePath: string };
   const filesToQuarantine: QuarantineEntry[] = [
     ...styleReferences.map((ref): QuarantineEntry => ({ source: "style-reference", id: ref.id, imagePath: ref.imagePath })),
     ...lookResults.map((r): QuarantineEntry => ({ source: "look-result", id: r.id, imagePath: r.filePath })),
+    ...(projectBackgroundPath
+      ? [{ source: "navigation-background" as const, id, imagePath: projectBackgroundPath }]
+      : []),
+    ...sequenceBackgrounds
+      .filter((seq) => seq.imagePath)
+      .map((seq): QuarantineEntry => ({ source: "navigation-background", id: seq.id, imagePath: seq.imagePath! })),
   ];
 
-  const quarantined: { source: "style-reference" | "look-result"; id: number; originalAbsolute: string; quarantineAbsolute: string }[] = [];
+  const quarantined: { source: "style-reference" | "look-result" | "navigation-background"; id: number; originalAbsolute: string; quarantineAbsolute: string }[] = [];
 
   for (const ref of filesToQuarantine) {
     const originalAbsolute = path.join(publicRoot, ref.imagePath);
@@ -230,6 +277,44 @@ export async function deleteProject(id: number) {
         if (initialPath !== r.filePath) {
           throw new Error(
             `deleteProject(${id}): Look result #${r.id}'s file path changed after file collection began (was "${initialPath}", now "${r.filePath}"). Rollback — quarantine the new file and retry.`
+          );
+        }
+      }
+
+      // UX.MEDIA.PREVIEW.1 (Retake Round 1, Codex P1) — re-verify the exact
+      // Project background path AND every Sequence's exact background path
+      // inside this same transaction, immediately before the cascade
+      // delete. A background published/replaced between collection and now
+      // rolls the whole transaction back (its file was never quarantined,
+      // so it must not be cascade-deleted from the DB while surviving,
+      // orphaned, on disk).
+      const currentProjectRows = tx
+        .select({ rowBackgroundImagePath: projects.rowBackgroundImagePath })
+        .from(projects)
+        .where(eq(projects.id, id))
+        .all() as { rowBackgroundImagePath: string | null }[];
+      const currentProjectRow = currentProjectRows[0];
+      if (!currentProjectRow) {
+        throw new Error(`deleteProject(${id}): Project disappeared before delete.`);
+      }
+      if (currentProjectRow.rowBackgroundImagePath !== projectBackgroundPath) {
+        throw new Error(
+          `deleteProject(${id}): the Project's row background changed after file collection began (was ${JSON.stringify(projectBackgroundPath)}, now ${JSON.stringify(currentProjectRow.rowBackgroundImagePath)}). Rollback — quarantine the new file and retry.`
+        );
+      }
+
+      const currentSequenceRows = tx
+        .select({ id: sequences.id, rowBackgroundImagePath: sequences.rowBackgroundImagePath })
+        .from(sequences)
+        .where(eq(sequences.projectId, id))
+        .all() as { id: number; rowBackgroundImagePath: string | null }[];
+      for (const seqRow of currentSequenceRows) {
+        const initialPath = initialSequenceBackgroundPathById.has(seqRow.id)
+          ? initialSequenceBackgroundPathById.get(seqRow.id)!
+          : null;
+        if (initialPath !== seqRow.rowBackgroundImagePath) {
+          throw new Error(
+            `deleteProject(${id}): Sequence #${seqRow.id}'s row background changed after file collection began (was ${JSON.stringify(initialPath)}, now ${JSON.stringify(seqRow.rowBackgroundImagePath)}). Rollback — quarantine the new file and retry.`
           );
         }
       }

@@ -49,7 +49,14 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const projectRows = await db
-    .select({ id: projects.id, name: projects.name, status: projects.status })
+    .select({
+      id: projects.id,
+      name: projects.name,
+      status: projects.status,
+      rowBackgroundImagePath: projects.rowBackgroundImagePath,
+      rowBackgroundOpacity: projects.rowBackgroundOpacity,
+      updatedAt: projects.updatedAt,
+    })
     .from(projects)
     .orderBy(asc(projects.name));
 
@@ -59,6 +66,9 @@ export default async function RootLayout({
       projectId: sequences.projectId,
       title: sequences.title,
       orderIndex: sequences.orderIndex,
+      rowBackgroundImagePath: sequences.rowBackgroundImagePath,
+      rowBackgroundOpacity: sequences.rowBackgroundOpacity,
+      updatedAt: sequences.updatedAt,
     })
     .from(sequences)
     .orderBy(asc(sequences.orderIndex));

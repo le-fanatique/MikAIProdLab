@@ -5,6 +5,7 @@ import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
+import { RowBackgroundLayer } from "@/components/RowBackground";
 
 export const dynamic = "force-dynamic";
 
@@ -65,55 +66,66 @@ export default async function ProjectsPage() {
           }
         />
       ) : (
-        <div className="rounded-lg border border-[#232629] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#232629] bg-[#141618]">
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
-                  Project
-                </th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
-                  Status
-                </th>
-                <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hidden sm:table-cell">
-                  Seq.
-                </th>
-                <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158] hidden sm:table-cell">
-                  Shots
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {allProjects.map((project) => (
-                <tr
-                  key={project.id}
-                  className="border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <Link href={`/projects/${project.id}`} className="block group">
-                      <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
-                        {project.name}
-                      </span>
-                      {project.pitch && (
-                        <p className="text-xs text-[#6e767d] mt-0.5 line-clamp-1">
-                          {project.pitch}
-                        </p>
-                      )}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={project.status} />
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[#6e767d] hidden sm:table-cell">
-                    {seqMap.get(project.id) ?? 0}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[#6e767d] hidden sm:table-cell">
-                    {shotMap.get(project.id) ?? 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        // UX.MEDIA.PREVIEW.1 (Retake Round 1, Codex P2) — a real <table>'s
+        // per-<td> containing blocks mean `RowBackgroundLayer`'s
+        // `absolute inset-0` can only ever cover the cell it's placed in,
+        // not the full visual row (Status/Seq./Shots stayed background-free).
+        // A CSS grid "row" (ARIA table roles preserve the exact same
+        // semantics/accessibility a real <table> gave screen readers) lets
+        // one `relative` wrapper per row host a single background layer
+        // behind every column at once — the same component, applied once,
+        // never duplicated per cell.
+        <div className="rounded-lg border border-[#232629] overflow-hidden" role="table">
+          <div
+            role="row"
+            className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_3.5rem_3.5rem] items-center border-b border-[#232629] bg-[#141618]"
+          >
+            <span role="columnheader" className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+              Project
+            </span>
+            <span role="columnheader" className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+              Status
+            </span>
+            <span role="columnheader" className="hidden sm:block text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+              Seq.
+            </span>
+            <span role="columnheader" className="hidden sm:block text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
+              Shots
+            </span>
+          </div>
+          {allProjects.map((project) => (
+            <div
+              key={project.id}
+              role="row"
+              className="relative grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_3.5rem_3.5rem] items-center border-b border-[#1a1d20] last:border-0 hover:bg-[#1a1d20] transition-colors"
+            >
+              <RowBackgroundLayer
+                imagePath={project.rowBackgroundImagePath}
+                opacity={project.rowBackgroundOpacity}
+              />
+              <span role="cell" className="relative px-4 py-3 min-w-0">
+                <Link href={`/projects/${project.id}`} className="block group">
+                  <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
+                    {project.name}
+                  </span>
+                  {project.pitch && (
+                    <p className="text-xs text-[#6e767d] mt-0.5 line-clamp-1">
+                      {project.pitch}
+                    </p>
+                  )}
+                </Link>
+              </span>
+              <span role="cell" className="relative px-4 py-3">
+                <StatusBadge status={project.status} />
+              </span>
+              <span role="cell" className="relative hidden sm:block px-4 py-3 text-right font-mono text-xs text-[#6e767d]">
+                {seqMap.get(project.id) ?? 0}
+              </span>
+              <span role="cell" className="relative hidden sm:block px-4 py-3 text-right font-mono text-xs text-[#6e767d]">
+                {shotMap.get(project.id) ?? 0}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

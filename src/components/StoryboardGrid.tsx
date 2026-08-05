@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Collapsible from "@/components/Collapsible";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { approveStoryboardDraft } from "@/actions/storyboard";
 
 export type StoryboardGridStatus = "not_generated" | "generating" | "generated" | "approved" | "failed";
@@ -89,8 +90,10 @@ export default function StoryboardGrid({ projectId, sequenceId, shots, returnTo,
           >
             <div className="relative aspect-video w-full bg-[#0d0e10] shrink-0 overflow-hidden">
               {shot.displayImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={shot.displayImageUrl} alt="" className="w-full h-full object-cover" />
+                <ThumbnailHoverPreview src={shot.displayImageUrl} alt="" className="w-full h-full" focusable>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={shot.displayImageUrl} alt="" className="w-full h-full object-cover" />
+                </ThumbnailHoverPreview>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <span className="text-[9px] uppercase tracking-wider text-[#3a4046]">

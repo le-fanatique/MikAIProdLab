@@ -8,6 +8,7 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import Collapsible from "@/components/Collapsible";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { refImageUrl } from "@/lib/refImageUrl";
 import {
   extractEligiblePlyOutput,
@@ -361,12 +362,18 @@ export default async function CameraLabPage({ params, searchParams }: Props) {
                                 : "border-[#2c3035] text-[#a4abb2]"
                             }`}
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <ThumbnailHoverPreview
                               src={refImageUrl(ref.imagePath)}
                               alt={ref.label ?? ref.sourceFilename ?? `Reference ${ref.id}`}
-                              className="h-9 w-14 rounded object-cover border border-[#232629]"
-                            />
+                              focusable
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={refImageUrl(ref.imagePath)}
+                                alt={ref.label ?? ref.sourceFilename ?? `Reference ${ref.id}`}
+                                className="h-9 w-14 rounded object-cover border border-[#232629]"
+                              />
+                            </ThumbnailHoverPreview>
                             <span className="min-w-0">
                               <span className="block truncate">
                                 {ref.label ?? ref.sourceFilename ?? `Reference #${ref.id}`}

@@ -15,6 +15,8 @@ import CreateFilmResultDraftButton from "@/components/CreateFilmResultDraftButto
 import RenderFilmResultButton from "@/components/RenderFilmResultButton";
 import Collapsible from "@/components/Collapsible";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
+import { RowBackgroundLayer } from "@/components/RowBackground";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { deleteProject } from "@/actions/projects";
 import { listFilmResults, setActiveFilmResult, archiveFilmResult } from "@/actions/filmResults";
 import { buildFilmResultManifest, computeFilmResultTotalDuration, FilmResultManifestError } from "@/lib/film/filmResultManifest";
@@ -226,12 +228,16 @@ export default async function ProjectPage({ params }: Props) {
             <Link
               key={seq.id}
               href={`/projects/${id}/sequences/${seq.id}`}
-              className="flex items-center gap-4 rounded-lg border border-[#232629] bg-[#1a1d20] px-5 py-3.5 hover:border-[#2c3035] hover:bg-[#212529] transition-colors group"
+              className="relative flex items-center gap-4 rounded-lg border border-[#232629] bg-[#1a1d20] px-5 py-3.5 hover:border-[#2c3035] hover:bg-[#212529] transition-colors group overflow-hidden"
             >
-              <span className="text-[#4b5158] text-sm font-mono w-6 shrink-0">
+              <RowBackgroundLayer
+                imagePath={seq.rowBackgroundImagePath}
+                opacity={seq.rowBackgroundOpacity}
+              />
+              <span className="relative text-[#4b5158] text-sm font-mono w-6 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="relative min-w-0 flex-1">
                 <span className="font-medium text-[#e7e9ec] group-hover:text-white transition-colors">
                   {seq.title}
                 </span>
@@ -255,7 +261,7 @@ export default async function ProjectPage({ params }: Props) {
                   </div>
                 )}
               </div>
-              <span className="text-[#3a4046] text-sm shrink-0 group-hover:text-[#6e767d] transition-colors">
+              <span className="relative text-[#3a4046] text-sm shrink-0 group-hover:text-[#6e767d] transition-colors">
                 →
               </span>
             </Link>
@@ -336,6 +342,7 @@ export default async function ProjectPage({ params }: Props) {
                 <VideoFrameReviewPlayer
                   src={refImageUrl(activeFilmResult.videoPath)}
                   projectId={id}
+                  mediaLabel={deriveMediaLabel(`Film Result #${activeFilmResult.id}`, activeFilmResult.videoPath)}
                   defaultFps={24}
                   captureDestinations={[]}
                 />

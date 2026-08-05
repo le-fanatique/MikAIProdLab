@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
@@ -334,8 +335,10 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
         <Card title="@Image1 — Sequence Storyboard Board (mandatory)">
           <div className="flex items-center gap-3">
             <div className="relative w-28 aspect-video bg-[#0d0e10] shrink-0 overflow-hidden rounded">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={refImageUrl(board.imagePath)} alt="" className="w-full h-full object-cover" />
+              <ThumbnailHoverPreview src={refImageUrl(board.imagePath)} alt="" focusable>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={refImageUrl(board.imagePath)} alt="" className="w-full h-full object-cover" />
+              </ThumbnailHoverPreview>
             </div>
             <p className="text-xs text-[#a4abb2]">
               This board is always sent as @Image1 — the visual plan for staging, framing and Shot order. It is never
@@ -406,8 +409,10 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
                       <div key={m.refId} className="flex flex-col gap-1 rounded border border-[#232629] p-1.5">
                         {img && (
                           <div className="relative aspect-square w-full bg-[#0d0e10] overflow-hidden rounded">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={refImageUrl(img.imagePath)} alt={m.assetName} className="w-full h-full object-cover" />
+                            <ThumbnailHoverPreview src={refImageUrl(img.imagePath)} alt={m.assetName} focusable>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={refImageUrl(img.imagePath)} alt={m.assetName} className="w-full h-full object-cover" />
+                            </ThumbnailHoverPreview>
                           </div>
                         )}
                         <span className="text-[10px] font-mono text-[#5b93d6]">{m.imageLabel}</span>

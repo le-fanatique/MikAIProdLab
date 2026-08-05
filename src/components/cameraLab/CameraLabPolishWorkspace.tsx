@@ -26,6 +26,7 @@ import dynamic from "next/dynamic";
 import { refImageUrl } from "@/lib/refImageUrl";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import {
   queueGaussianPlyGeneration,
   refreshGaussianViewer,
@@ -686,12 +687,18 @@ export default function CameraLabPolishWorkspace({
 
               {effectiveSnapshot ? (
                 <div className="flex items-center gap-2 rounded border border-[#2c3035] p-1.5">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <ThumbnailHoverPreview
                     src={effectiveSnapshot.objectUrl}
                     alt={snapshotSource === "uploaded-override" ? "Uploaded snapshot override" : "Captured snapshot"}
-                    className="h-10 w-14 rounded object-cover border border-[#232629]"
-                  />
+                    focusable
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={effectiveSnapshot.objectUrl}
+                      alt={snapshotSource === "uploaded-override" ? "Uploaded snapshot override" : "Captured snapshot"}
+                      className="h-10 w-14 rounded object-cover border border-[#232629]"
+                    />
+                  </ThumbnailHoverPreview>
                   <span className="text-[10px] font-mono text-[#8fc9a0]">
                     {effectiveSnapshot.width} × {effectiveSnapshot.height}
                   </span>

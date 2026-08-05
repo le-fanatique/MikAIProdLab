@@ -11,6 +11,12 @@ export const projects = sqliteTable("projects", {
   status: text("status", { enum: ["draft", "active", "archived"] })
     .notNull()
     .default("draft"),
+  // UX.MEDIA.PREVIEW.1 — additive, nullable: optional decorative background
+  // for this Project's navigation row. Existing rows stay null (no
+  // historical value implied). `rowBackgroundOpacity` is only meaningful
+  // once `rowBackgroundImagePath` is set.
+  rowBackgroundImagePath: text("row_background_image_path"),
+  rowBackgroundOpacity: real("row_background_opacity"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
@@ -33,6 +39,9 @@ export const sequences = sqliteTable("sequences", {
   locationHint: text("location_hint"),
   sequencePrompt: text("sequence_prompt"),
   orderIndex: int("order_index").notNull().default(0),
+  // UX.MEDIA.PREVIEW.1 — same additive contract as projects.rowBackground*.
+  rowBackgroundImagePath: text("row_background_image_path"),
+  rowBackgroundOpacity: real("row_background_opacity"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),

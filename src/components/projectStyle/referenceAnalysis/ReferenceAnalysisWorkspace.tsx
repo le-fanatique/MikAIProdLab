@@ -485,8 +485,10 @@ export default function ReferenceAnalysisWorkspace({
               return (
                 <div key={r.id} className="flex items-center gap-1.5 rounded border border-[#5b93d6] px-2 py-1">
                   <span className="text-[10px] font-mono text-[#5b93d6]">R{idx + 1}</span>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={refImageUrl(r.imagePath)} alt={displayLabel} className="w-5 h-5 object-cover rounded" />
+                  <ThumbnailHoverPreview src={refImageUrl(r.imagePath)} alt={displayLabel} focusable>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={refImageUrl(r.imagePath)} alt={displayLabel} className="w-5 h-5 object-cover rounded" />
+                  </ThumbnailHoverPreview>
                   <span className="text-[10px] text-[#a4abb2] truncate max-w-[80px]">{displayLabel}</span>
                   {v.domains.length > 0 && (
                     <span className="text-[9px] text-[#4b5158]">({v.domains.join(", ")})</span>

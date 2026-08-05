@@ -19,6 +19,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import VideoFrameReviewPlayer, { type VideoFrameReviewPlayerHandle } from "@/components/VideoFrameReviewPlayer";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { formatTimecode, secondsToFrame, isReliableFps } from "@/lib/sequenceVideoSplit/frameTime";
@@ -65,6 +66,10 @@ type Props = {
   sequenceId: number;
   projectId: number;
   videoUrl: string;
+  /** UX.MEDIA.PREVIEW.1 (Retake Round 1) — precomputed via `deriveMediaLabel`
+   * from the page (Sequence Video Draft id + Sequence title, falling back to
+   * a basename of the video path); rendered as the player's overlay label. */
+  mediaLabel: string | undefined;
   sourceFps: number | null;
   /**
    * REVISE (round 2, finding 2) — explicit, server-parsed proof of a
@@ -139,6 +144,7 @@ export default function SplitWorkspaceClient({
   sequenceId,
   projectId,
   videoUrl,
+  mediaLabel,
   sourceFps,
   frameRateMode,
   sourceDurationSeconds,
@@ -340,6 +346,7 @@ export default function SplitWorkspaceClient({
           ref={playerRef}
           src={videoUrl}
           projectId={projectId}
+          mediaLabel={mediaLabel}
           captureDestinations={[]}
           defaultFps={isReliableFps(sourceFps) ? sourceFps : 24}
           onFrameChange={setFrameInfo}
@@ -446,19 +453,41 @@ export default function SplitWorkspaceClient({
               className={`rounded-lg border p-4 ${isSelected ? "border-[#5b93d6]/60 bg-[#161b20]" : "border-[#2c3035] bg-[#1a1d20]"}`}
             >
               <div className="flex items-start gap-4">
-                <button
-                  type="button"
-                  onClick={() => handleSelectSegment(s)}
-                  className="relative w-28 aspect-video bg-[#0d0e10] shrink-0 overflow-hidden rounded cursor-pointer"
-                  title="Select this segment and seek the player to its start"
-                >
-                  {s.thumbnailPath ? (
-                    // eslint-disable-next-line @next/next/no-img-element
+                {s.thumbnailPath ? (
+                  // Retake Round 1 (Codex P2) — ThumbnailHoverPreview must
+                  // be the OUTER element for keyboard focus to ever reach
+                  // it (focus bubbles up from a descendant to an ancestor,
+                  // never the reverse). The button becomes an absolutely
+                  // positioned sibling overlay of the <img> — same click
+                  // target, same full-tile hit area, same visible frame —
+                  // rather than wrapping (or being wrapped by) the image,
+                  // avoiding `display:contents` on a <button> (inconsistent
+                  // browser/AT support for form controls).
+                  <ThumbnailHoverPreview
+                    src={refImageUrl(s.thumbnailPath)}
+                    alt=""
+                    className="relative w-28 aspect-video bg-[#0d0e10] shrink-0 overflow-hidden rounded"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={refImageUrl(s.thumbnailPath)} alt="" className="w-full h-full object-cover" />
-                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSegment(s)}
+                      className="absolute inset-0 cursor-pointer"
+                      title="Select this segment and seek the player to its start"
+                      aria-label="Select this segment and seek the player to its start"
+                    />
+                  </ThumbnailHoverPreview>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSegment(s)}
+                    className="relative w-28 aspect-video bg-[#0d0e10] shrink-0 overflow-hidden rounded cursor-pointer"
+                    title="Select this segment and seek the player to its start"
+                  >
                     <div className="w-full h-full flex items-center justify-center text-[9px] text-[#4b5158]">No thumbnail</div>
-                  )}
-                </button>
+                  </button>
+                )}
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">

@@ -16,6 +16,7 @@ import {
   deleteEditorialGap,
 } from "@/actions/editorialTimeline";
 import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 
 export type EditorialWorkspaceShot = EditorialTimelineShot;
 
@@ -201,6 +202,7 @@ export default function EditorialWorkspace({
             projectId={projectId}
             sequenceId={sequenceId}
             shotId={currentEntry.shotId ?? undefined}
+            mediaLabel={deriveMediaLabel(currentEntry.title, currentEntry.videoUrl)}
             defaultFps={24}
             // EDITORIAL.POLISH.1: capture destinations intentionally empty
             // here — a gap has no natural Shot to capture into, and

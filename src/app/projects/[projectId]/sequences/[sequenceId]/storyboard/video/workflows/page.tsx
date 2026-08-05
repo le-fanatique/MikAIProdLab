@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import EmptyState from "@/components/EmptyState";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import { refImageUrl } from "@/lib/refImageUrl";
@@ -114,8 +115,10 @@ export default async function SequenceVideoWorkflowListPage({ params, searchPara
       <Card title="Source board" className="mb-4">
         <div className="flex items-center gap-3">
           <div className="relative w-28 aspect-video bg-[#0d0e10] shrink-0 overflow-hidden rounded">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={refImageUrl(board.imagePath)} alt="" className="w-full h-full object-cover" />
+            <ThumbnailHoverPreview src={refImageUrl(board.imagePath)} alt="" focusable>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={refImageUrl(board.imagePath)} alt="" className="w-full h-full object-cover" />
+            </ThumbnailHoverPreview>
           </div>
           <p className="text-xs text-[#a4abb2]">
             This Sequence Video will be generated from this Sequence Storyboard board, used as the visual plan for

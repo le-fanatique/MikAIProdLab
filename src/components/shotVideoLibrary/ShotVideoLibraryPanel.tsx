@@ -19,6 +19,7 @@ import Link from "next/link";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { approveShotVideo, deleteShotVideo } from "@/actions/shotVideoLibrary";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 
 export type ShotVideoLibraryRow = {
   id: number;
@@ -38,6 +39,16 @@ function provenanceLabel(row: ShotVideoLibraryRow): string {
     return `Split Run #${row.splitRunId}${row.splitSegmentOrderIndex !== null ? ` · Segment #${row.splitSegmentOrderIndex + 1}` : ""}`;
   }
   return "Generation Content";
+}
+
+/** UX.MEDIA.PREVIEW.1 (Retake Round 1) — `provenanceLabel` alone already
+ * identifies a specific Split Run/Segment, but "Generation Content" is
+ * shared by every generation-sourced video for this Shot; this row's own id
+ * makes that branch specific too, without changing `provenanceLabel` itself
+ * (still used verbatim for the row's aria-label elsewhere). */
+function overlayMediaLabel(row: ShotVideoLibraryRow): string {
+  if (row.source === "sequence_split") return provenanceLabel(row);
+  return `${provenanceLabel(row)} #${row.id}`;
 }
 
 export default function ShotVideoLibraryPanel({
@@ -109,7 +120,15 @@ export default function ShotVideoLibraryPanel({
   return (
     <div className="flex flex-col gap-3">
       {selected && (
-        <VideoFrameReviewPlayer src={selected.videoUrl} projectId={projectId} sequenceId={sequenceId} shotId={shotId} defaultFps={24} captureDestinations={[]} />
+        <VideoFrameReviewPlayer
+          src={selected.videoUrl}
+          projectId={projectId}
+          sequenceId={sequenceId}
+          shotId={shotId}
+          mediaLabel={deriveMediaLabel(overlayMediaLabel(selected), selected.videoUrl)}
+          defaultFps={24}
+          captureDestinations={[]}
+        />
       )}
 
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="Shot Videos">

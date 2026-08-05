@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Collapsible from "@/components/Collapsible";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 
 export type SequenceStoryboardDraft = {
   id: number;
@@ -111,8 +112,10 @@ export default function SequenceStoryboardDraftsPanel({
               className="flex flex-col rounded border border-[#232629] bg-[#141618] overflow-hidden"
             >
               <div className="relative aspect-video w-full bg-[#0d0e10] shrink-0 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={d.imageUrl} alt="" className="w-full h-full object-cover" />
+                <ThumbnailHoverPreview src={d.imageUrl} alt="" className="w-full h-full" focusable>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={d.imageUrl} alt="" className="w-full h-full object-cover" />
+                </ThumbnailHoverPreview>
                 <span
                   className={`absolute top-1.5 right-1.5 text-[9px] uppercase tracking-wider border rounded px-1.5 py-px bg-[#0d0e10]/80 ${statusClass(d.status)}`}
                 >

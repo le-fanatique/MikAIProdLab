@@ -52,6 +52,15 @@ type Props = {
    * never itself rounded to any frame boundary.
    */
   onFrameChange?: (info: { frame: number; totalFrames: number; fps: number; currentTimeSeconds: number }) => void;
+  /**
+   * UX.MEDIA.PREVIEW.1 — optional, additive: a durable, human-readable name
+   * for the currently loaded media (e.g. a Result/Draft/Candidate label, or
+   * a confined basename fallback — never a raw URL). Every existing caller
+   * omits this prop and renders exactly as before (no overlay at all).
+   * Rendered as a persistent, truncated, `pointer-events: none` overlay so
+   * it never intercepts clicks or covers the controls below the video.
+   */
+  mediaLabel?: string;
 };
 
 /**
@@ -152,6 +161,7 @@ function VideoFrameReviewPlayer(
     defaultFps = 24,
     captureDestinations,
     onFrameChange,
+    mediaLabel,
   }: Props,
   forwardedRef: React.ForwardedRef<VideoFrameReviewPlayerHandle>
 ) {
@@ -493,22 +503,34 @@ function VideoFrameReviewPlayer(
   return (
     <div className="flex flex-col gap-3">
       {/* Video */}
-      <video
-        ref={videoRef}
-        src={src}
-        preload="metadata"
-        playsInline
-        className="w-full rounded border border-[#2c3035]"
-        onLoadedMetadata={syncMetadata}
-        onDurationChange={syncMetadata}
-        onLoadedData={syncMetadata}
-        onCanPlay={syncMetadata}
-        onTimeUpdate={handleTimeUpdateForAudioDetection}
-        onPlay={handlePlay}
-        onPause={handlePause}
-        onEnded={handlePause}
-        onError={() => setMetadataError("Video failed to load.")}
-      />
+      <div className="relative">
+        <video
+          ref={videoRef}
+          src={src}
+          preload="metadata"
+          playsInline
+          className="w-full rounded border border-[#2c3035]"
+          onLoadedMetadata={syncMetadata}
+          onDurationChange={syncMetadata}
+          onLoadedData={syncMetadata}
+          onCanPlay={syncMetadata}
+          onTimeUpdate={handleTimeUpdateForAudioDetection}
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onEnded={handlePause}
+          onError={() => setMetadataError("Video failed to load.")}
+        />
+        {mediaLabel && (
+          <div
+            className="absolute top-2 left-2 max-w-[75%] rounded bg-[#0d0e10]/80 px-2 py-1 pointer-events-none"
+            style={{ pointerEvents: "none" }}
+          >
+            <span className="block truncate text-[10px] font-mono text-[#e7e9ec]" title={mediaLabel}>
+              {mediaLabel}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Metadata error */}
       {metadataError && (

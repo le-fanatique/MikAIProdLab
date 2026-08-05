@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { RowBackgroundLayer, RowBackgroundEditButton, type RowBackgroundEditState } from "@/components/RowBackground";
 
 type SidebarShot = {
   id: number;
@@ -15,6 +17,9 @@ type SidebarSequence = {
   title: string;
   orderIndex: number;
   shots: SidebarShot[];
+  rowBackgroundImagePath: string | null;
+  rowBackgroundOpacity: number | null;
+  updatedAt: string;
 };
 
 type SidebarProject = {
@@ -22,6 +27,9 @@ type SidebarProject = {
   name: string;
   status: string;
   sequences: SidebarSequence[];
+  rowBackgroundImagePath: string | null;
+  rowBackgroundOpacity: number | null;
+  updatedAt: string;
 };
 
 type Props = {
@@ -32,6 +40,34 @@ const PROJECT_FUTURE = ["Prompt Packages"] as const;
 
 export default function Sidebar({ tree }: Props) {
   const pathname = usePathname();
+
+  // UX.MEDIA.PREVIEW.1 — local overrides applied on top of the server tree
+  // right after a successful mutation, so the row updates immediately
+  // without waiting on a full navigation/revalidation round trip. Reload
+  // and server restart both read the durable DB value via `tree` itself
+  // (see the manual proof checklist), never this map.
+  const [projectBgOverrides, setProjectBgOverrides] = useState<Record<number, RowBackgroundEditState>>({});
+  const [sequenceBgOverrides, setSequenceBgOverrides] = useState<Record<number, RowBackgroundEditState>>({});
+
+  function projectBgState(project: SidebarProject): RowBackgroundEditState {
+    return (
+      projectBgOverrides[project.id] ?? {
+        rowBackgroundImagePath: project.rowBackgroundImagePath,
+        rowBackgroundOpacity: project.rowBackgroundOpacity,
+        updatedAt: project.updatedAt,
+      }
+    );
+  }
+
+  function sequenceBgState(seq: SidebarSequence): RowBackgroundEditState {
+    return (
+      sequenceBgOverrides[seq.id] ?? {
+        rowBackgroundImagePath: seq.rowBackgroundImagePath,
+        rowBackgroundOpacity: seq.rowBackgroundOpacity,
+        updatedAt: seq.updatedAt,
+      }
+    );
+  }
 
   const segs = pathname.split("/");
   const activeProjectId = segs[2] ? parseInt(segs[2]) : null;
@@ -61,26 +97,44 @@ export default function Sidebar({ tree }: Props) {
               pathname.startsWith(`/projects/${project.id}/story`) ||
               pathname.startsWith(`/projects/${project.id}/outline`);
 
+            const projectBg = projectBgState(project);
+
             return (
               <div key={project.id}>
-                {/* Project row */}
-                <Link
-                  href={`/projects/${project.id}`}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
-                    isProjectActive && !isAssetsActive && !isStoryActive && !isStyleActive
-                      ? "text-[#e7e9ec] bg-[#5b93d6]/10"
-                      : "text-[#a4abb2] hover:text-[#e7e9ec] hover:bg-[#1a1d20]"
-                  }`}
-                >
-                  <span
-                    className={`text-[10px] leading-none shrink-0 ${
-                      isProjectActive ? "text-[#5b93d6]" : "text-[#4b5158]"
+                {/* Project row — background layer, Link and the edit button are
+                    siblings of the same `relative group/row` wrapper: the edit
+                    button is never nested inside the Link (UX.MEDIA.PREVIEW.1). */}
+                <div className="relative group/row rounded">
+                  <RowBackgroundLayer
+                    imagePath={projectBg.rowBackgroundImagePath}
+                    opacity={projectBg.rowBackgroundOpacity}
+                  />
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className={`relative flex items-center gap-2 pl-2 pr-7 py-1.5 rounded text-sm transition-colors ${
+                      isProjectActive && !isAssetsActive && !isStoryActive && !isStyleActive
+                        ? "text-[#e7e9ec] bg-[#5b93d6]/10"
+                        : "text-[#a4abb2] hover:text-[#e7e9ec] hover:bg-[#1a1d20]"
                     }`}
                   >
-                    ▸
-                  </span>
-                  <span className="truncate font-medium text-xs">{project.name}</span>
-                </Link>
+                    <span
+                      className={`text-[10px] leading-none shrink-0 ${
+                        isProjectActive ? "text-[#5b93d6]" : "text-[#4b5158]"
+                      }`}
+                    >
+                      ▸
+                    </span>
+                    <span className="truncate font-medium text-xs">{project.name}</span>
+                  </Link>
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <RowBackgroundEditButton
+                      owner={{ kind: "project", projectId: project.id }}
+                      state={projectBg}
+                      label={`Edit ${project.name} background`}
+                      onChange={(next) => setProjectBgOverrides((prev) => ({ ...prev, [project.id]: next }))}
+                    />
+                  </div>
+                </div>
 
                 {/* Project-level nav — shown when project active */}
                 {isProjectActive && (
@@ -100,19 +154,34 @@ export default function Sidebar({ tree }: Props) {
                     {/* Sequences */}
                     {project.sequences.map((seq) => {
                       const isSeqActive = activeSequenceId === seq.id;
+                      const seqBg = sequenceBgState(seq);
                       return (
                         <div key={seq.id}>
-                          <Link
-                            href={`/projects/${project.id}/sequences/${seq.id}`}
-                            className={`flex items-center gap-1.5 pl-6 pr-2 py-1 rounded text-xs transition-colors ${
-                              isSeqActive
-                                ? "text-[#a4abb2] bg-[#1a1d20]"
-                                : "text-[#6e767d] hover:text-[#a4abb2] hover:bg-[#1a1d20]"
-                            }`}
-                          >
-                            <span className="text-[9px] text-[#3a4046] shrink-0">▸</span>
-                            <span className="truncate">{seq.title}</span>
-                          </Link>
+                          <div className="relative group/row rounded">
+                            <RowBackgroundLayer
+                              imagePath={seqBg.rowBackgroundImagePath}
+                              opacity={seqBg.rowBackgroundOpacity}
+                            />
+                            <Link
+                              href={`/projects/${project.id}/sequences/${seq.id}`}
+                              className={`relative flex items-center gap-1.5 pl-6 pr-7 py-1 rounded text-xs transition-colors ${
+                                isSeqActive
+                                  ? "text-[#a4abb2] bg-[#1a1d20]"
+                                  : "text-[#6e767d] hover:text-[#a4abb2] hover:bg-[#1a1d20]"
+                              }`}
+                            >
+                              <span className="text-[9px] text-[#3a4046] shrink-0">▸</span>
+                              <span className="truncate">{seq.title}</span>
+                            </Link>
+                            <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100 transition-opacity">
+                              <RowBackgroundEditButton
+                                owner={{ kind: "sequence", projectId: project.id, sequenceId: seq.id }}
+                                state={seqBg}
+                                label={`Edit ${seq.title} background`}
+                                onChange={(next) => setSequenceBgOverrides((prev) => ({ ...prev, [seq.id]: next }))}
+                              />
+                            </div>
+                          </div>
 
                           {/* Shots — shown when sequence active */}
                           {isSeqActive &&

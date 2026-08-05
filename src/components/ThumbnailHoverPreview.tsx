@@ -8,6 +8,18 @@ type Props = {
   previewSize?: number;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Retake Round 1 (Codex P2) — explicit, opt-in accessible contract: set
+   * `true` when `children` contains NO focusable descendant and no
+   * ancestor already forwards focus here (a bare `<img>`, a decorative
+   * chip, etc.) — the wrapper itself then becomes the keyboard target
+   * (`tabIndex={0}`), so "hover or focus opens the same preview" holds even
+   * with nothing else to focus. Leave `false` (default, unchanged
+   * behavior) when `children`/an ancestor is already independently
+   * focusable (a real `<button>`/`<a>`) — the two would otherwise become
+   * two separate tab stops for the same visual thumbnail.
+   */
+  focusable?: boolean;
 };
 
 export default function ThumbnailHoverPreview({
@@ -16,6 +28,7 @@ export default function ThumbnailHoverPreview({
   previewSize = 160,
   children,
   className,
+  focusable = false,
 }: Props) {
   const [preview, setPreview] = useState<{ x: number; y: number; size: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -48,7 +61,27 @@ export default function ThumbnailHoverPreview({
   const hide = useCallback(() => setPreview(null), []);
 
   return (
-    <div ref={wrapRef} onMouseEnter={show} onMouseLeave={hide} className={className}>
+    <div
+      ref={wrapRef}
+      tabIndex={focusable ? 0 : undefined}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      // UX.MEDIA.PREVIEW.1 — keyboard focus opens the same popup as mouse
+      // hover (React's onFocus/onBlur here behave like native
+      // focusin/focusout: they bubble from any focusable descendant, e.g. a
+      // wrapped <button>/<a>, without this wrapper itself needing
+      // tabIndex). onBlur only hides when focus actually leaves this
+      // wrapper — not when it merely moves between two focusable
+      // descendants of the SAME thumbnail (relatedTarget still inside).
+      onFocus={show}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hide();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") hide();
+      }}
+      className={className}
+    >
       {children}
       {preview !== null && (
         <div

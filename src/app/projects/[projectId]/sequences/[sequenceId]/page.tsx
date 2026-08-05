@@ -28,6 +28,7 @@ import SequenceStoryboardGrid, { type StoryboardShot } from "@/components/Sequen
 import SequenceGenerationPackagePanel from "@/components/SequenceGenerationPackagePanel";
 import { getLLMSettings, getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
 import { parseResultWarnings, sequenceResultSourceModeLabel } from "@/types/sequenceResult";
 import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
@@ -454,6 +455,7 @@ npx -y pnpm@9.0.0 dev`}
                   projectId={pid}
                   sequenceId={sid}
                   shotId={sequenceResultSourceShotId}
+                  mediaLabel={deriveMediaLabel(`${sequence.title} — Sequence Result #${activeResult.id}`, activeResult.videoPath)}
                   defaultFps={24}
                   captureDestinations={sequenceResultCaptureDestinations}
                 />

@@ -2,10 +2,13 @@
 
 import { db } from "@/db";
 import { sequences } from "@/db/schema";
-import { eq, max } from "drizzle-orm";
+import { eq, max, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
+import { rename, unlink } from "node:fs/promises";
+import path from "node:path";
+import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/uploadNavigationBackground";
 
 export async function createSequence(projectId: number, formData: FormData) {
   const title = formData.get("title") as string;
@@ -84,13 +87,127 @@ export async function updateSequence(
   redirect(`/projects/${projectId}/sequences/${id}`);
 }
 
+/**
+ * UX.MEDIA.PREVIEW.1 (Retake Round 1) — a Sequence's row background is
+ * file-backed under uploads/navigation-backgrounds/. `db.delete(sequences)`
+ * removes the row (and cascades any child rows), but never touches the
+ * filesystem, so the file is quarantined BEFORE the DB delete and only
+ * permanently removed AFTER it commits — a DB failure restores the file
+ * untouched, mirroring the discipline in
+ * deleteProject/deleteProjectStyleReferenceAction.
+ *
+ * Round 1 fix (Codex P1): `projectId` is now actually verified — both at
+ * collection time and again, synchronously, inside the SAME transaction
+ * that deletes the row, alongside a recheck of the exact background path
+ * collected. A background published/replaced (or a Sequence reassigned to
+ * a different Project) between collection and delete rolls the whole
+ * transaction back — the quarantined file is then restored and nothing is
+ * lost, rather than being cascade-deleted from the DB while surviving,
+ * orphaned, on disk. The DELETE itself is conditioned on BOTH ids, so an
+ * `id` belonging to a different Project can never be deleted here.
+ */
+async function deleteSequenceRow(id: number, projectId: number): Promise<void> {
+  const [row] = await db
+    .select({ rowBackgroundImagePath: sequences.rowBackgroundImagePath, projectId: sequences.projectId })
+    .from(sequences)
+    .where(eq(sequences.id, id));
+  if (!row || row.projectId !== projectId) {
+    throw new Error(`deleteSequence(${id}): Sequence not found in Project ${projectId}.`);
+  }
+  const imagePath = row.rowBackgroundImagePath;
+  // Retake Round 2 (Codex P1) — owner-aware: must be confined to THIS
+  // Sequence's own `sequence-<id>` subfolder, not just somewhere under the
+  // shared navigation-backgrounds root.
+  if (imagePath && !isConfinedNavigationBackgroundPathForOwner(imagePath, "sequence", id)) {
+    throw new Error(
+      `deleteSequence(${id}): refusing to delete — this Sequence's row background is not confined to this Sequence's own subfolder ("${imagePath}"). Fix this row manually before retrying.`
+    );
+  }
+
+  const publicRoot = path.join(process.cwd(), "public");
+  const absolute = imagePath ? path.join(publicRoot, imagePath) : null;
+  const quarantineAbsolute = absolute ? `${absolute}.trash-${Date.now()}-${id}` : null;
+
+  let quarantined = false;
+  if (absolute && quarantineAbsolute) {
+    try {
+      await rename(absolute, quarantineAbsolute);
+      quarantined = true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") {
+        throw new Error(
+          `deleteSequence(${id}): failed to prepare the row background for deletion — nothing was changed: ${
+            e instanceof Error ? e.message : String(e)
+          }`
+        );
+      }
+    }
+  }
+
+  try {
+    db.transaction((tx) => {
+      const currentRows = tx
+        .select({ rowBackgroundImagePath: sequences.rowBackgroundImagePath, projectId: sequences.projectId })
+        .from(sequences)
+        .where(eq(sequences.id, id))
+        .all() as { rowBackgroundImagePath: string | null; projectId: number }[];
+      const current = currentRows[0];
+      if (!current) {
+        throw new Error(`Sequence #${id} disappeared before delete.`);
+      }
+      if (current.projectId !== projectId) {
+        throw new Error(`Sequence #${id} no longer belongs to Project ${projectId} (now Project ${current.projectId}).`);
+      }
+      if (current.rowBackgroundImagePath !== imagePath) {
+        throw new Error(
+          `Sequence #${id}'s row background changed after file collection began (was ${JSON.stringify(imagePath)}, now ${JSON.stringify(current.rowBackgroundImagePath)}). Rollback — quarantine the new file and retry.`
+        );
+      }
+      const deleted = tx
+        .delete(sequences)
+        .where(and(eq(sequences.id, id), eq(sequences.projectId, projectId)))
+        .run();
+      if (deleted.changes === 0) {
+        throw new Error(`Sequence #${id} delete affected 0 rows (concurrent change) — rollback.`);
+      }
+    });
+  } catch (e) {
+    if (quarantined && quarantineAbsolute && absolute) {
+      try {
+        await rename(quarantineAbsolute, absolute);
+      } catch (restoreErr) {
+        throw new Error(
+          `deleteSequence(${id}): DB delete failed (${e instanceof Error ? e.message : String(e)}), and the row background could not be restored from quarantine ("${quarantineAbsolute}"): ${
+            restoreErr instanceof Error ? restoreErr.message : String(restoreErr)
+          }.`
+        );
+      }
+    }
+    throw new Error(`deleteSequence(${id}): DB delete failed — nothing was changed. ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  if (quarantined && quarantineAbsolute) {
+    try {
+      await unlink(quarantineAbsolute);
+    } catch (e) {
+      // The Sequence and its DB rows are already gone; a leftover quarantined
+      // file is unreferenced but must be reported, not silently swallowed.
+      throw new Error(
+        `deleteSequence(${id}): the Sequence was deleted successfully, but its row background file could not be fully removed and remains at "${quarantineAbsolute}": ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
+    }
+  }
+}
+
 export async function deleteSequence(id: number, projectId: number) {
-  await db.delete(sequences).where(eq(sequences.id, id));
+  await deleteSequenceRow(id, projectId);
   redirect(`/projects/${projectId}`);
 }
 
-export async function deleteSequenceAndReturn(sequenceId: number, returnTo: string) {
-  await db.delete(sequences).where(eq(sequences.id, sequenceId));
+export async function deleteSequenceAndReturn(sequenceId: number, projectId: number, returnTo: string) {
+  await deleteSequenceRow(sequenceId, projectId);
   redirect(returnTo);
 }
 

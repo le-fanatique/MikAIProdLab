@@ -29,6 +29,7 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { approveShotVideoCandidate, deleteShotVideoCandidate } from "@/actions/sequenceVideoPush";
 
@@ -98,7 +99,18 @@ export default function ShotVideoCandidatesPanel({
   return (
     <div className="flex flex-col gap-3">
       {selected && (
-        <VideoFrameReviewPlayer src={selected.clipUrl} projectId={projectId} sequenceId={sequenceId} shotId={shotId} defaultFps={24} captureDestinations={[]} />
+        <VideoFrameReviewPlayer
+          src={selected.clipUrl}
+          projectId={projectId}
+          sequenceId={sequenceId}
+          shotId={shotId}
+          mediaLabel={deriveMediaLabel(
+            `Candidate #${selected.id} · ${selected.sourceStartSeconds.toFixed(1)}s–${selected.sourceEndSeconds.toFixed(1)}s`,
+            selected.clipUrl
+          )}
+          defaultFps={24}
+          captureDestinations={[]}
+        />
       )}
 
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="Sequence Video Candidates">

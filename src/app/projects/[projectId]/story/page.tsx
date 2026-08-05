@@ -365,7 +365,7 @@ export default async function StoryPage({ params, searchParams }: Props) {
                       Open →
                     </Link>
                     <DeleteButton
-                      action={deleteSequenceAndReturn.bind(null, seq.id, storyReturnTo)}
+                      action={deleteSequenceAndReturn.bind(null, seq.id, pid, storyReturnTo)}
                       confirm={`Delete "${seq.title}" and all its shots?`}
                       label="Delete"
                       className="text-[10px] text-[#3a4046] hover:text-[#cf7b6b] transition-colors"

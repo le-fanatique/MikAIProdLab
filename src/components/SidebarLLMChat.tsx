@@ -7,6 +7,7 @@ import { listImageModels } from "@/actions/llm/imageGeneration";
 import { saveLLMChatImageAsReference } from "@/actions/llm/chatImageReferences";
 import type { ChatGeneratedImage, ChatImageGenerationMetadata, ChatImageReference, ChatImageSize, ChatMessage, ChatMessageContentPart, ChatSystemPrompt, ImageModelInfo, LLMProvider } from "@/types/llm";
 import ModelPickerWithFilter from "@/components/ModelPickerWithFilter";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1143,11 +1144,13 @@ export default function SidebarLLMChat() {
                     )}
                     {msg.imageThumbnailDataUrl && (
                       <div className={msg.content || msg.attachmentLabel ? "mt-1" : ""}>
-                        <img
-                          src={msg.imageThumbnailDataUrl}
-                          alt={msg.imageLabel ?? "attached image"}
-                          className="max-w-[120px] max-h-[80px] object-contain rounded border border-[#232629]"
-                        />
+                        <ThumbnailHoverPreview src={msg.imageThumbnailDataUrl} alt={msg.imageLabel ?? "attached image"} focusable>
+                          <img
+                            src={msg.imageThumbnailDataUrl}
+                            alt={msg.imageLabel ?? "attached image"}
+                            className="max-w-[120px] max-h-[80px] object-contain rounded border border-[#232629]"
+                          />
+                        </ThumbnailHoverPreview>
                         {msg.imageLabel && (
                           <div className="mt-0.5">
                             <span className="inline-block px-1.5 py-0.5 bg-[#0d0e10] border border-[#232629] rounded text-[9px] font-mono text-[#7d8cf0]">
@@ -1256,11 +1259,13 @@ export default function SidebarLLMChat() {
               {/* Image attachment badge */}
               {attachedImage && (
                 <div className="flex items-center gap-1.5 mb-1 px-1">
-                  <img
-                    src={attachedImage.dataUrl}
-                    alt={attachedImage.name}
-                    className="w-8 h-8 object-cover rounded border border-[#232629] shrink-0"
-                  />
+                  <ThumbnailHoverPreview src={attachedImage.dataUrl} alt={attachedImage.name} focusable>
+                    <img
+                      src={attachedImage.dataUrl}
+                      alt={attachedImage.name}
+                      className="w-8 h-8 object-cover rounded border border-[#232629] shrink-0"
+                    />
+                  </ThumbnailHoverPreview>
                   <span className="text-[9px] text-[#7d8cf0] font-mono truncate flex-1">
                     {attachedImage.name} · {fmtBytes(attachedImage.sizeBytes)}
                   </span>
@@ -1503,11 +1508,13 @@ export default function SidebarLLMChat() {
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {imageGenAttachments.map((img, idx) => (
                     <div key={idx} className="relative group">
-                      <img
-                        src={img.dataUrl}
-                        alt={img.name}
-                        className="w-10 h-10 object-cover rounded border border-[#232629]"
-                      />
+                      <ThumbnailHoverPreview src={img.dataUrl} alt={img.name} focusable>
+                        <img
+                          src={img.dataUrl}
+                          alt={img.name}
+                          className="w-10 h-10 object-cover rounded border border-[#232629]"
+                        />
+                      </ThumbnailHoverPreview>
                       <button
                         type="button"
                         onClick={() =>

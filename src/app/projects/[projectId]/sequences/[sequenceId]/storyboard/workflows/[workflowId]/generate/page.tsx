@@ -17,6 +17,7 @@ import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
 import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPanel";
@@ -734,8 +735,10 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                   <div key={m.refId} className="flex flex-col gap-1 rounded border border-[#232629] p-1.5">
                     {img && (
                       <div className="relative aspect-square w-full bg-[#0d0e10] overflow-hidden rounded">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={refImageUrl(img.imagePath)} alt={m.assetName} className="w-full h-full object-cover" />
+                        <ThumbnailHoverPreview src={refImageUrl(img.imagePath)} alt={m.assetName} focusable>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={refImageUrl(img.imagePath)} alt={m.assetName} className="w-full h-full object-cover" />
+                        </ThumbnailHoverPreview>
                       </div>
                     )}
                     <span className="text-[10px] font-mono text-[#5b93d6]">{m.imageLabel}</span>

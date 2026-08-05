@@ -15,6 +15,7 @@ import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import Collapsible from "@/components/Collapsible";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import RegionCropBox from "@/components/RegionCropBox";
 import UseShotCountButton from "@/components/UseShotCountButton";
 import UpdateAllButton from "@/components/UpdateAllButton";
@@ -176,8 +177,10 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
               {sourceDrafts.map((d) => (
                 <div key={d.id} className="flex flex-col rounded border border-[#232629] bg-[#141618] overflow-hidden">
                   <div className="relative aspect-video w-full bg-[#0d0e10] shrink-0 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={refImageUrl(d.imagePath)} alt="" className="w-full h-full object-cover" />
+                    <ThumbnailHoverPreview src={refImageUrl(d.imagePath)} alt="" focusable>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={refImageUrl(d.imagePath)} alt="" className="w-full h-full object-cover" />
+                    </ThumbnailHoverPreview>
                   </div>
                   <div className="flex flex-col gap-1.5 px-2 py-1.5">
                     <span className="text-[10px] font-mono text-[#4b5158]">
