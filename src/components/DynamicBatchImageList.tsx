@@ -323,7 +323,6 @@ export default function DynamicBatchImageList({
                   <ThumbnailHoverPreview
                     src={refImageUrl(getImagePath(id))}
                     alt={getLabel(id)}
-                    previewSize={320}
                     className="w-full h-full"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}

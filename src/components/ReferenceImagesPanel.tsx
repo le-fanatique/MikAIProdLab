@@ -75,7 +75,6 @@ export default function ReferenceImagesPanel({
               <ThumbnailHoverPreview
                 src={refImageUrl(image.imagePath)}
                 alt={altText}
-                previewSize={480}
                 className="shrink-0"
               >
                 <div className="w-10 h-10 rounded overflow-hidden border border-[#232629] bg-[#141618] flex items-center justify-center">

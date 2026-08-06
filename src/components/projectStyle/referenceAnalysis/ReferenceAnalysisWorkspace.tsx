@@ -465,7 +465,7 @@ export default function ReferenceAnalysisWorkspace({
                 aria-pressed={isSelected}
                 aria-label={`${isSelected ? "Deselect" : approved ? "Select" : "Not approved for analysis: "}${displayLabel}`}
               >
-                <ThumbnailHoverPreview src={refImageUrl(r.imagePath)} alt={displayLabel} previewSize={320}>
+                <ThumbnailHoverPreview src={refImageUrl(r.imagePath)} alt={displayLabel}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={refImageUrl(r.imagePath)} alt={displayLabel} className="w-8 h-8 object-cover rounded" />
                 </ThumbnailHoverPreview>

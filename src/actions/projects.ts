@@ -8,7 +8,7 @@ import { rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { isConfinedReferenceImagePath } from "@/lib/projectStyle/uploadReferenceImage";
 import { isWithinLookDevelopmentRoot } from "@/lib/lookDevelopment/paths";
-import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/uploadNavigationBackground";
+import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/legacyNavigationBackground";
 
 export async function createProject(formData: FormData) {
   const name = formData.get("name") as string;

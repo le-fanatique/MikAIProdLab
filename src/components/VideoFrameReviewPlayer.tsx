@@ -525,7 +525,7 @@ function VideoFrameReviewPlayer(
             className="absolute top-2 left-2 max-w-[75%] rounded bg-[#0d0e10]/80 px-2 py-1 pointer-events-none"
             style={{ pointerEvents: "none" }}
           >
-            <span className="block truncate text-[10px] font-mono text-[#e7e9ec]" title={mediaLabel}>
+            <span className="block truncate text-[10px] font-mono text-white" title={mediaLabel}>
               {mediaLabel}
             </span>
           </div>

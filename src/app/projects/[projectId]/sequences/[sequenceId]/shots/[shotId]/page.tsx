@@ -671,7 +671,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                   sequenceId={sid}
                   shotId={shid}
                   mediaLabel={deriveMediaLabel(
-                    `${shot.shotCode ? `${shot.shotCode} — ` : ""}${shot.title} — Approved Output`,
+                    shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title,
                     shot.approvedVideoPath
                   )}
                   defaultFps={24}
@@ -720,6 +720,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               shotId={shid}
               sequenceId={sid}
               projectId={pid}
+              shotLabel={shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title}
               returnTo={shotDetailReturnTo}
               openReelExportHref={`/api/projects/${pid}/sequences/${sid}/shots/${shid}/open-in-openreel`}
             />

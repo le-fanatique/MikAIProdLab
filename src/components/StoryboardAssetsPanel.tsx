@@ -215,7 +215,6 @@ export default function StoryboardAssetsPanel({
                             <ThumbnailHoverPreview
                               src={ref.imageUrl}
                               alt={ref.label ?? asset.assetName}
-                              previewSize={320}
                               className="w-full h-full"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}

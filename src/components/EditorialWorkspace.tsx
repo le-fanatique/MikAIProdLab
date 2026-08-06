@@ -149,6 +149,7 @@ export default function EditorialWorkspace({
     kind: "shot" | "gap";
     shotId: number | null;
     title: string | null;
+    shotCode: string | null;
     videoUrl: string | null;
     durationSeconds: number | null;
   };
@@ -160,6 +161,7 @@ export default function EditorialWorkspace({
           kind: selectedItem.type,
           shotId: selectedItem.shotId,
           title: selectedItem.title,
+          shotCode: selectedItem.shotCode,
           videoUrl: selectedItem.type === "shot" ? selectedItem.videoUrl : null,
           durationSeconds: selectedItem.durationSeconds,
         }
@@ -170,10 +172,19 @@ export default function EditorialWorkspace({
         kind: "shot",
         shotId: fallbackSelectedShot.id,
         title: fallbackSelectedShot.title,
+        shotCode: fallbackSelectedShot.shotCode,
         videoUrl: fallbackSelectedShot.videoUrl,
         durationSeconds: fallbackSelectedShot.durationSeconds,
       }
     : null;
+
+  // Player overlay name (UX.MEDIA.PREVIEW.1-RETARGET1) — the Shot's own
+  // name (`shotCode — title` when both exist, else the best non-empty
+  // value), never a technical item id.
+  const currentEntryShotLabel =
+    currentEntry?.shotCode && currentEntry?.title
+      ? `${currentEntry.shotCode} — ${currentEntry.title}`
+      : currentEntry?.title ?? currentEntry?.shotCode ?? null;
 
   // Shot navigation from the list below (EDITORIAL.SHOTNAV.1) — resolves
   // to the matching editorial item when the gap-aware layer is active,
@@ -202,7 +213,7 @@ export default function EditorialWorkspace({
             projectId={projectId}
             sequenceId={sequenceId}
             shotId={currentEntry.shotId ?? undefined}
-            mediaLabel={deriveMediaLabel(currentEntry.title, currentEntry.videoUrl)}
+            mediaLabel={deriveMediaLabel(currentEntryShotLabel, currentEntry.videoUrl)}
             defaultFps={24}
             // EDITORIAL.POLISH.1: capture destinations intentionally empty
             // here — a gap has no natural Shot to capture into, and

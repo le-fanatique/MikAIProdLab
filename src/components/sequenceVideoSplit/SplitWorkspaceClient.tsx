@@ -22,6 +22,7 @@ import VideoFrameReviewPlayer, { type VideoFrameReviewPlayerHandle } from "@/com
 import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { formatTimecode, secondsToFrame, isReliableFps } from "@/lib/sequenceVideoSplit/frameTime";
 import {
   MIN_SCENE_THRESHOLD,
@@ -66,10 +67,6 @@ type Props = {
   sequenceId: number;
   projectId: number;
   videoUrl: string;
-  /** UX.MEDIA.PREVIEW.1 (Retake Round 1) — precomputed via `deriveMediaLabel`
-   * from the page (Sequence Video Draft id + Sequence title, falling back to
-   * a basename of the video path); rendered as the player's overlay label. */
-  mediaLabel: string | undefined;
   sourceFps: number | null;
   /**
    * REVISE (round 2, finding 2) — explicit, server-parsed proof of a
@@ -144,7 +141,6 @@ export default function SplitWorkspaceClient({
   sequenceId,
   projectId,
   videoUrl,
-  mediaLabel,
   sourceFps,
   frameRateMode,
   sourceDurationSeconds,
@@ -272,6 +268,15 @@ export default function SplitWorkspaceClient({
 
   const shotById = new Map(shots.map((s) => [s.id, s]));
   const selectedSegment = segments.find((s) => s.id === selectedSegmentId) ?? null;
+  // UX.MEDIA.PREVIEW.1-RETARGET1 — the player overlay always names the
+  // segment CURRENTLY selected below it, exactly `Segment N` (N =
+  // orderIndex + 1). Recomputed on every selection change and after a
+  // split renders a new segment list (`selectedSegment` itself changes),
+  // never a stale precomputed prop from the page.
+  const playerMediaLabel =
+    selectedSegment !== null
+      ? `Segment ${selectedSegment.orderIndex + 1}`
+      : deriveMediaLabel(null, videoUrl);
   const selectedSegmentFrameRange =
     selectedSegment && frameSplitAvailable
       ? { start: secondsToFrame(selectedSegment.startSeconds, sourceFps as number), end: secondsToFrame(selectedSegment.endSeconds, sourceFps as number) - 1 }
@@ -346,7 +351,7 @@ export default function SplitWorkspaceClient({
           ref={playerRef}
           src={videoUrl}
           projectId={projectId}
-          mediaLabel={mediaLabel}
+          mediaLabel={playerMediaLabel}
           captureDestinations={[]}
           defaultFps={isReliableFps(sourceFps) ? sourceFps : 24}
           onFrameChange={setFrameInfo}

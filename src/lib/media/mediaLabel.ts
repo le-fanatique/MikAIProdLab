@@ -1,11 +1,10 @@
 // ---------------------------------------------------------------------------
-// mediaLabel.ts — UX.MEDIA.PREVIEW.1 (Retake Round 1, Codex P2)
+// mediaLabel.ts — UX.MEDIA.PREVIEW.1-RETARGET1
 //
 // Pure helper deriving the `mediaLabel` overlay text for
-// `VideoFrameReviewPlayer`: a specific, durable name when the caller has
-// one (including an id/version whenever multiple items could otherwise
-// share the same context-only name — a bare Sequence/Shot title is NOT
-// specific enough on its own), otherwise a decoded, length-bounded
+// `VideoFrameReviewPlayer`: the caller's business name (a segment, Shot,
+// Asset, or Project/Sequence aggregate — never a technical Result/Draft/
+// Candidate/id label) when it has one, otherwise a decoded, length-bounded
 // basename of the actual media path — NEVER a raw URL, and NEVER a silent
 // wrong guess. Returns `undefined` when neither is available, so a caller
 // with no identifiable media renders no label at all.

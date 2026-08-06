@@ -138,7 +138,7 @@ export default function ObservationCard({
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10px] font-mono text-[#5b93d6]">{refInfo.referenceKey}</span>
         {refInfo.imagePath && (
-          <ThumbnailHoverPreview src={refImageUrl(refInfo.imagePath)} alt={refInfo.label ?? ""} previewSize={320}>
+          <ThumbnailHoverPreview src={refImageUrl(refInfo.imagePath)} alt={refInfo.label ?? ""}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={refImageUrl(refInfo.imagePath)} alt={refInfo.label ?? ""} className="w-6 h-6 object-cover rounded" />
           </ThumbnailHoverPreview>

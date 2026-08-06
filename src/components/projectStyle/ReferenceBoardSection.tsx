@@ -585,7 +585,7 @@ function ReferenceCard({
   return (
     <div className="rounded border border-[#2c3035] bg-[#141618] p-2 flex flex-col gap-1.5">
       {/* Thumbnail — full image, no crop, hover popup via the shared ImageSourcePicker pattern */}
-      <ThumbnailHoverPreview src={refImageUrl(r.imagePath)} alt={displayLabel} previewSize={640}>
+      <ThumbnailHoverPreview src={refImageUrl(r.imagePath)} alt={displayLabel}>
         <div className="relative w-full aspect-[4/3] rounded overflow-hidden bg-[#0d0e10]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

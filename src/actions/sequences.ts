@@ -8,7 +8,7 @@ import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
 import { rename, unlink } from "node:fs/promises";
 import path from "node:path";
-import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/uploadNavigationBackground";
+import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/legacyNavigationBackground";
 
 export async function createSequence(projectId: number, formData: FormData) {
   const title = formData.get("title") as string;

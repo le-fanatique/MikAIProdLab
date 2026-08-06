@@ -477,7 +477,7 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
       />
 
       <SectionLabel label="Sequence Video Drafts" />
-      <SequenceVideoDraftsPanel projectId={pid} sequenceId={sid} drafts={sequenceVideoDraftItems} />
+      <SequenceVideoDraftsPanel projectId={pid} sequenceId={sid} sequenceLabel={sequence.title} drafts={sequenceVideoDraftItems} />
 
       <SectionLabel label="Storyboard Assets" />
       <StoryboardAssetsPanel projectId={pid} assets={storyboardCastAssets} />

@@ -252,7 +252,7 @@ export default function CandidateRuleCard({
             <div key={i} className="flex items-center gap-1 rounded border border-[#2c3035] px-1.5 py-0.5">
               <span className="text-[9px] font-mono text-[#5b93d6]">{info.referenceKey}</span>
               {info.imagePath && (
-                <ThumbnailHoverPreview src={refImageUrl(info.imagePath)} alt={info.label ?? ""} previewSize={320}>
+                <ThumbnailHoverPreview src={refImageUrl(info.imagePath)} alt={info.label ?? ""}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={refImageUrl(info.imagePath)} alt={info.label ?? ""} className="w-5 h-5 object-cover rounded" />
                 </ThumbnailHoverPreview>

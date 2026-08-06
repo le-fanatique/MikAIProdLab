@@ -41,21 +41,12 @@ function provenanceLabel(row: ShotVideoLibraryRow): string {
   return "Generation Content";
 }
 
-/** UX.MEDIA.PREVIEW.1 (Retake Round 1) — `provenanceLabel` alone already
- * identifies a specific Split Run/Segment, but "Generation Content" is
- * shared by every generation-sourced video for this Shot; this row's own id
- * makes that branch specific too, without changing `provenanceLabel` itself
- * (still used verbatim for the row's aria-label elsewhere). */
-function overlayMediaLabel(row: ShotVideoLibraryRow): string {
-  if (row.source === "sequence_split") return provenanceLabel(row);
-  return `${provenanceLabel(row)} #${row.id}`;
-}
-
 export default function ShotVideoLibraryPanel({
   entries,
   shotId,
   sequenceId,
   projectId,
+  shotLabel,
   returnTo,
   openReelExportHref,
 }: {
@@ -63,6 +54,11 @@ export default function ShotVideoLibraryPanel({
   shotId: number;
   sequenceId: number;
   projectId: number;
+  /** The Shot this library belongs to — `shotCode — title` if both exist,
+   *  else the best non-empty value. Used as the player overlay name: every
+   *  entry here belongs to the same Shot, so the label never changes with
+   *  the selected video. */
+  shotLabel: string;
   returnTo: string;
   /**
    * GET route that redirects to the OpenReel sidecar with this Shot's
@@ -125,7 +121,7 @@ export default function ShotVideoLibraryPanel({
           projectId={projectId}
           sequenceId={sequenceId}
           shotId={shotId}
-          mediaLabel={deriveMediaLabel(overlayMediaLabel(selected), selected.videoUrl)}
+          mediaLabel={deriveMediaLabel(shotLabel, selected.videoUrl)}
           defaultFps={24}
           captureDestinations={[]}
         />

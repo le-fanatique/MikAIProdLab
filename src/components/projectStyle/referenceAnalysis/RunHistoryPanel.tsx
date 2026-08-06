@@ -130,7 +130,7 @@ function RunCard({
           return (
             <div key={rr.id} className="flex items-center gap-1.5 rounded border border-[#2c3035] px-2 py-1">
               {imageSrc ? (
-                <ThumbnailHoverPreview src={refImageUrl(imageSrc)} alt={displayLabel} previewSize={320}>
+                <ThumbnailHoverPreview src={refImageUrl(imageSrc)} alt={displayLabel}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={refImageUrl(imageSrc)} alt={displayLabel} className="w-8 h-8 object-cover rounded" />
                 </ThumbnailHoverPreview>

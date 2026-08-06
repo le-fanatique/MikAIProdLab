@@ -16,6 +16,10 @@ export type SequenceVideoDraftItem = {
 type Props = {
   projectId: number;
   sequenceId: number;
+  /** This Sequence's name — every draft here is a Sequence-level aggregate
+   *  with no single source Shot, so the player overlay uses the Sequence's
+   *  own name rather than a technical draft id. */
+  sequenceLabel: string;
   drafts: SequenceVideoDraftItem[];
 };
 
@@ -51,7 +55,7 @@ function statusClass(status: SequenceVideoDraftItem["status"]): string {
  * here; `SEQGEN.SPLIT.1` will own turning this video into Shot clips).
  * Nothing here approves, splits, or pushes to Shots.
  */
-export default function SequenceVideoDraftsPanel({ projectId, sequenceId, drafts }: Props) {
+export default function SequenceVideoDraftsPanel({ projectId, sequenceId, sequenceLabel, drafts }: Props) {
   if (drafts.length === 0) {
     return (
       <p className="text-xs text-[#4b5158]">
@@ -69,7 +73,7 @@ export default function SequenceVideoDraftsPanel({ projectId, sequenceId, drafts
             <VideoFrameReviewPlayer
               src={d.videoUrl}
               projectId={projectId}
-              mediaLabel={deriveMediaLabel(`Sequence Video Draft #${d.id}`, d.videoUrl)}
+              mediaLabel={deriveMediaLabel(sequenceLabel, d.videoUrl)}
               captureDestinations={[]}
             />
             <span

@@ -80,7 +80,6 @@ function PickerGrid({
           key={item.id}
           src={refImageUrl(item.imagePath)}
           alt={item.label}
-          previewSize={640}
           className="w-full"
         >
           <PickerCard

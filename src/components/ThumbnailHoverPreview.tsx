@@ -5,7 +5,6 @@ import { useState, useRef, useCallback } from "react";
 type Props = {
   src: string;
   alt: string;
-  previewSize?: number;
   children: React.ReactNode;
   className?: string;
   /**
@@ -22,10 +21,26 @@ type Props = {
   focusable?: boolean;
 };
 
+// UX.MEDIA.PREVIEW.1-RETARGET1 — one global size, never per-caller: roughly
+// a third of the viewport width on desktop, clamped to 80% of the viewport
+// on narrow/short screens so the popup never overflows or needs its own
+// scroll. The 160px floor only applies when the 80% viewport clamp still
+// leaves room for it — a genuinely small viewport clamps below the floor
+// rather than overflowing.
+const TARGET_WIDTH_FRACTION = 1 / 3;
+const VIEWPORT_CLAMP_FRACTION = 0.8;
+const MIN_PREVIEW_SIZE = 160;
+
+function computePreviewSize(vw: number, vh: number): number {
+  const maxByViewport = Math.floor(Math.min(vw, vh) * VIEWPORT_CLAMP_FRACTION);
+  const target = Math.floor(vw * TARGET_WIDTH_FRACTION);
+  const withFloor = Math.max(target, Math.min(MIN_PREVIEW_SIZE, maxByViewport));
+  return Math.min(withFloor, maxByViewport);
+}
+
 export default function ThumbnailHoverPreview({
   src,
   alt,
-  previewSize = 160,
   children,
   className,
   focusable = false,
@@ -41,8 +56,10 @@ export default function ThumbnailHoverPreview({
     const vh = window.innerHeight;
     const gap = 12;
 
-    // Clamp to 80% of viewport so large previewSize values never overflow
-    const size = Math.min(previewSize, Math.floor(vw * 0.8), Math.floor(vh * 0.8));
+    // Recomputed on every open — never a stale size from a previous
+    // viewport (window resize, orientation change, or simply a different
+    // page since size is no longer stored anywhere).
+    const size = computePreviewSize(vw, vh);
 
     // Prefer right side, fall back to left if not enough space
     let x = rect.right + gap;
@@ -56,7 +73,7 @@ export default function ThumbnailHoverPreview({
     y = Math.max(4, y);
 
     setPreview({ x, y, size });
-  }, [previewSize]);
+  }, []);
 
   const hide = useCallback(() => setPreview(null), []);
 

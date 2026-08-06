@@ -455,7 +455,7 @@ npx -y pnpm@9.0.0 dev`}
                   projectId={pid}
                   sequenceId={sid}
                   shotId={sequenceResultSourceShotId}
-                  mediaLabel={deriveMediaLabel(`${sequence.title} — Sequence Result #${activeResult.id}`, activeResult.videoPath)}
+                  mediaLabel={deriveMediaLabel(sequence.title, activeResult.videoPath)}
                   defaultFps={24}
                   captureDestinations={sequenceResultCaptureDestinations}
                 />

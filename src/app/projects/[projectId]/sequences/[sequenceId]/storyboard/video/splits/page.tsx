@@ -9,7 +9,6 @@ import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { refImageUrl } from "@/lib/refImageUrl";
-import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { startSequenceVideoSplitDetection, startManualSplit, clearUnusedSplitRuns } from "@/actions/sequenceVideoSplit";
 import { pushSplitPlanToShots } from "@/actions/sequenceVideoPush";
 import SplitWorkspaceClient from "@/components/sequenceVideoSplit/SplitWorkspaceClient";
@@ -436,7 +435,6 @@ async function SplitWorkspaceBody({
           sequenceId={sid}
           projectId={pid}
           videoUrl={refImageUrl(draft.videoPath)}
-          mediaLabel={deriveMediaLabel(`Sequence Video Draft #${draft.id} — ${sequenceTitle}`, draft.videoPath)}
           sourceFps={run.sourceFps}
           frameRateMode={parseFrameRateModeFromParamsJson(run.paramsJson)}
           sourceDurationSeconds={run.sourceDurationSeconds}
