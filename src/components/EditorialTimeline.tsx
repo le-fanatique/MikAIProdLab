@@ -23,10 +23,24 @@ export type EditorialTimelineShot = {
   shotCode: string | null;
   title: string;
   durationSeconds: number | null;
-  hasApprovedVideo: boolean;
+  /**
+   * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — video AVAILABILITY UNDER THE
+   * CURRENT videoSourceMode, already existence-verified (approved-only:
+   * identical to real DB approval, unchanged; latest-generation: a
+   * resolved, on-disk-confirmed Shot Video Library entry). Never rendered
+   * as literal text in this component (only used for color/tooltip "no
+   * video"/summary counts) — see `videoSourceKind` for the one field that
+   * actually decides user-visible "Approved"/"Latest" wording elsewhere.
+   */
+  hasVideo: boolean;
+  /** Which kind of source `videoUrl` below actually is, for callers that render mode-aware badge text (e.g. EditorialShotList/EditorialWorkspace) — null when there is no resolved source at all. */
+  videoSourceKind: "approved" | "latest" | null;
+  /** TRUE `shots.approvedVideoPath !== null` — unaffected by videoSourceMode. The only field legacy Trim editing (approval-scoped, out of this ticket's scope) may gate on. */
+  isApproved: boolean;
   isPlaceholder: boolean;
   trimInSeconds: number | null;
   trimOutSeconds: number | null;
+  /** The resolved video URL under the current videoSourceMode — approved-only: identical to before this ticket. */
   videoUrl: string | null;
 };
 
@@ -42,7 +56,10 @@ export type EditorialItemView = {
   shotId: number | null;
   shotCode: string | null;
   title: string | null;
-  hasApprovedVideo: boolean;
+  /** EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — see EditorialTimelineShot's own doc comment: mode-resolved availability, not literal DB approval. */
+  hasVideo: boolean;
+  videoSourceKind: "approved" | "latest" | null;
+  isApproved: boolean;
   isPlaceholder: boolean;
   videoUrl: string | null;
 };
@@ -81,7 +98,7 @@ function itemEffectiveDuration(item: EditorialItemView): number {
 function itemStatusColor(item: EditorialItemView): string {
   if (item.type === "gap") return COLOR_NO_VIDEO;
   if (item.isPlaceholder) return COLOR_PLACEHOLDER;
-  if (item.hasApprovedVideo) return COLOR_APPROVED;
+  if (item.hasVideo) return COLOR_APPROVED;
   return COLOR_NO_VIDEO;
 }
 
@@ -133,7 +150,7 @@ function hasValidTrim(shot: EditorialTimelineShot): boolean {
 
 function statusColor(shot: EditorialTimelineShot): string {
   if (shot.isPlaceholder) return COLOR_PLACEHOLDER;
-  if (shot.hasApprovedVideo) return COLOR_APPROVED;
+  if (shot.hasVideo) return COLOR_APPROVED;
   return COLOR_NO_VIDEO;
 }
 
@@ -398,10 +415,10 @@ export default function EditorialTimeline({
   // Editorial summary counts (BASIC.EDITORIAL.2) — derived from the same
   // items already loaded for the lane, no new source of truth.
   const videoReadyCount = itemsMode
-    ? items!.filter((it) => it.type === "shot" && it.hasApprovedVideo && !it.isPlaceholder).length
+    ? items!.filter((it) => it.type === "shot" && it.hasVideo && !it.isPlaceholder).length
     : 0;
   const missingVideoCount = itemsMode
-    ? items!.filter((it) => it.type === "shot" && (it.isPlaceholder || !it.hasApprovedVideo)).length
+    ? items!.filter((it) => it.type === "shot" && (it.isPlaceholder || !it.hasVideo)).length
     : 0;
   const hasAnyItemTrim = itemsMode ? items!.some((it) => itemHasValidTrim(it)) : false;
 
@@ -623,7 +640,7 @@ export default function EditorialTimeline({
                 );
               }
               if (item.isPlaceholder) tooltipParts.push("Placeholder");
-              else if (!item.hasApprovedVideo) tooltipParts.push("No video");
+              else if (!item.hasVideo) tooltipParts.push("No video");
 
               return (
                 <div
@@ -763,7 +780,7 @@ export default function EditorialTimeline({
               }
               if (mismatch) tooltipParts.push(`Target: ${target!.toFixed(1)}s`);
               if (shot.isPlaceholder) tooltipParts.push("Placeholder");
-              else if (!shot.hasApprovedVideo) tooltipParts.push("No video");
+              else if (!shot.hasVideo) tooltipParts.push("No video");
 
               return (
                 <div

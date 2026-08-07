@@ -17,6 +17,7 @@ import {
 } from "@/actions/editorialTimeline";
 import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
 import { deriveMediaLabel } from "@/lib/media/mediaLabel";
+import type { VideoSourceMode } from "@/lib/editorial/videoSourceMode";
 
 export type EditorialWorkspaceShot = EditorialTimelineShot;
 
@@ -26,6 +27,8 @@ type Props = {
   sequenceId: number;
   returnTo: string;
   editorialItems: EditorialItemView[];
+  /** EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — drives empty-state wording and the "Selected" badge below; `shots`/`editorialItems` are ALREADY resolved for this mode by the caller. */
+  videoSourceMode: VideoSourceMode;
 };
 
 function SectionLabel({ label, badge }: { label: string; badge?: React.ReactNode }) {
@@ -41,10 +44,11 @@ function SectionLabel({ label, badge }: { label: string; badge?: React.ReactNode
 
 function StatusBadgeParts({
   isPlaceholder,
-  hasApprovedVideo,
+  videoSourceKind,
 }: {
   isPlaceholder: boolean;
-  hasApprovedVideo: boolean;
+  /** EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — which kind of source is resolved under the CURRENT videoSourceMode; never claims "Approved" for a Latest-generation source. */
+  videoSourceKind: "approved" | "latest" | null;
 }) {
   if (isPlaceholder) {
     return (
@@ -53,10 +57,17 @@ function StatusBadgeParts({
       </span>
     );
   }
-  if (hasApprovedVideo) {
+  if (videoSourceKind === "approved") {
     return (
       <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#6b9e72] border border-[#2a3d2e] rounded px-1.5 py-px">
         Approved video
+      </span>
+    );
+  }
+  if (videoSourceKind === "latest") {
+    return (
+      <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#5b93d6] border border-[#233047] rounded px-1.5 py-px">
+        Latest video
       </span>
     );
   }
@@ -79,6 +90,7 @@ export default function EditorialWorkspace({
   sequenceId,
   returnTo,
   editorialItems,
+  videoSourceMode,
 }: Props) {
   const hasEditorialItems = editorialItems.length > 0;
 
@@ -238,12 +250,17 @@ export default function EditorialWorkspace({
         ) : currentEntry ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10 border border-dashed border-[#2c3035] rounded">
             <span className="text-xs text-[#4b5158]">
-              {currentEntry.title ?? "This shot"} has no approved video yet.
+              {currentEntry.title ?? "This shot"}{" "}
+              {videoSourceMode === "latest-generation"
+                ? "has no generated Shot Video Library video yet."
+                : "has no approved video yet."}
             </span>
           </div>
         ) : (
           <p className="text-xs text-[#4b5158] py-6 text-center">
-            No approved videos in this sequence yet.
+            {videoSourceMode === "latest-generation"
+              ? "No generated Shot videos are available in this sequence yet."
+              : "No approved videos in this sequence yet."}
           </p>
         )}
       </Card>
@@ -294,7 +311,7 @@ export default function EditorialWorkspace({
               </span>
               <StatusBadgeParts
                 isPlaceholder={selectedItem.isPlaceholder}
-                hasApprovedVideo={selectedItem.hasApprovedVideo}
+                videoSourceKind={selectedItem.videoSourceKind}
               />
               {selectedItemTargetDuration !== null && (
                 <span className="text-[10px] font-mono text-[#6e767d]">
@@ -406,7 +423,7 @@ export default function EditorialWorkspace({
           </span>
           <StatusBadgeParts
             isPlaceholder={fallbackSelectedShot.isPlaceholder}
-            hasApprovedVideo={fallbackSelectedShot.hasApprovedVideo}
+            videoSourceKind={fallbackSelectedShot.videoSourceKind}
           />
           {fallbackSelectedShot.durationSeconds !== null && (
             <span className="text-[10px] font-mono text-[#6e767d]">
@@ -456,7 +473,8 @@ export default function EditorialWorkspace({
             shotCode: s.shotCode,
             title: s.title,
             durationSeconds: s.durationSeconds,
-            hasApprovedVideo: s.hasApprovedVideo,
+            isApproved: s.isApproved,
+            videoSourceKind: s.videoSourceKind,
             trimInSeconds: s.trimInSeconds,
             trimOutSeconds: s.trimOutSeconds,
           }))}

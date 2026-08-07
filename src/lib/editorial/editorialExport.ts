@@ -19,6 +19,7 @@ import {
   type EditorialDocument,
 } from "./editorialDocument";
 import { buildEditorialSnapshot, type EditorialSnapshot } from "./editorialSnapshot";
+import type { VideoSourceMode, SourceProvenance } from "./videoSourceModeShared";
 
 export const MIKAI_EDITORIAL_EXPORT_SCHEMA_VERSION = "mikai-editorial-export-v1";
 
@@ -50,6 +51,14 @@ export type MikAIEditorialExportV1 = {
   /** SHOT.VIDEO.LIBRARY.1, Lot D — present only when `sourceMode === "shot-videos"`; every item in every track then belongs to this one Shot. */
   shot?: { id: number; title: string };
   /**
+   * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — additive: which video source mode
+   * resolved every item's `mediaUrl` below (`approvedVideoPath` is ALWAYS
+   * the real approval, regardless of this value). Absent on any export
+   * built before this field existed, or when the caller never asked for a
+   * specific mode — always treat a missing value as `"approved-only"`.
+   */
+  videoSourceMode?: VideoSourceMode;
+  /**
    * Structural fingerprint of the sequence's editorial state at export
    * time (OPENREEL.CONFLICT.1) — additive field, existing consumers that
    * don't know about it are unaffected. A patch built from this export
@@ -75,6 +84,8 @@ export type MikAIEditorialExportV1 = {
       mediaUrl?: string | null;
       prompt?: string | null;
       description?: string | null;
+      /** EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — additive: the exact durable candidate that produced `mediaUrl` under the requested `videoSourceMode`. Absent when there is none, or when the caller never asked for a resolved mode. */
+      provenance?: SourceProvenance;
     }>;
   }>;
   emptySpaces: Array<{
@@ -96,6 +107,19 @@ export type EditorialExportShotExtra = {
 /**
  * Builds a MikAIEditorialExportV1 from an already-built EditorialDocument.
  * Pure — does not mutate its inputs, no DB access, no side effects.
+ *
+ * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — `videoSourceMode`/`resolvedMediaByShotId`
+ * are additive and OPTIONAL. When given, they OVERRIDE each item's
+ * `mediaUrl`/`provenance` only — `approvedVideoPath` (the real approval),
+ * `status`, and the `editorialSnapshot` (built from `document` exactly as
+ * before, untouched by these two params) are NEVER affected. This is
+ * deliberate: `document`'s own `status`/fingerprint inputs must stay
+ * approved-only-derived regardless of the requested export mode, so a
+ * fresh Latest-generation OpenReel session never trips a false "stale"
+ * 409 from `editorial-timing-patch` (which always recomputes its own
+ * snapshot the same, approved-only way) just because its media isn't
+ * approved. Omitted entirely, behavior is byte-identical to before this
+ * ticket.
  */
 export function buildEditorialExport(args: {
   project: { id: number; name: string };
@@ -103,14 +127,17 @@ export function buildEditorialExport(args: {
   document: EditorialDocument;
   shotExtrasById: Map<number, EditorialExportShotExtra>;
   exportedAt?: string;
+  videoSourceMode?: VideoSourceMode;
+  resolvedMediaByShotId?: Map<number, { mediaUrl: string | null; provenance: SourceProvenance | null }>;
 }): MikAIEditorialExportV1 {
-  const { project, sequence, document, shotExtrasById } = args;
+  const { project, sequence, document, shotExtrasById, resolvedMediaByShotId } = args;
 
   const tracks = document.tracks.map((track) => {
     const items = track.items
       .filter((item) => item.sourceType === "shot" && item.shotId != null)
       .map((item) => {
         const extra = shotExtrasById.get(item.shotId!);
+        const resolved = resolvedMediaByShotId?.get(item.shotId!);
         return {
           id: item.id,
           shotId: item.shotId!,
@@ -122,9 +149,10 @@ export function buildEditorialExport(args: {
           trimInSeconds: item.trimIn ?? null,
           trimOutSeconds: item.trimOut ?? null,
           approvedVideoPath: extra?.approvedVideoPath ?? null,
-          mediaUrl: item.mediaUrl ?? null,
+          mediaUrl: resolved ? resolved.mediaUrl : (item.mediaUrl ?? null),
           prompt: extra?.prompt ?? null,
           description: extra?.description ?? null,
+          ...(resolved?.provenance ? { provenance: resolved.provenance } : {}),
         };
       });
 
@@ -148,6 +176,7 @@ export function buildEditorialExport(args: {
       title: sequence.title,
       durationSeconds: document.durationSeconds,
     },
+    ...(args.videoSourceMode ? { videoSourceMode: args.videoSourceMode } : {}),
     editorialSnapshot: buildEditorialSnapshot({ sequenceId: sequence.id, document }),
     tracks,
     emptySpaces,

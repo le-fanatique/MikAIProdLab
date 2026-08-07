@@ -14,10 +14,16 @@
 // the renderer needs a real filesystem path, not a URL).
 //
 // "video" vs "placeholder" status here is a DB-only judgment (does this
-// shot have an approvedVideoPath at all) — whether that file still exists
-// on disk is checked later, in the renderer, which is where a missing-file
-// discovery can usefully downgrade to a placeholder with a warning right
-// before the ffmpeg invocation that would otherwise fail.
+// shot have a resolved video source at all under the requested
+// videoSourceMode) — whether that file still exists on disk is checked
+// later, in the renderer, which is where a missing-file discovery can
+// usefully downgrade to a placeholder with a warning right before the
+// ffmpeg invocation that would otherwise fail.
+//
+// EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — source resolution itself (which
+// exact path represents each Shot) is delegated to
+// videoSourceMode.ts's resolveVideoSourcesForShotList, the one place both
+// this builder and the Editorial page agree on what a given mode means.
 // ---------------------------------------------------------------------------
 
 import { db } from "@/db";
@@ -29,6 +35,13 @@ import {
   type EditorialDocument,
   type EditorialDocumentInputItem,
 } from "./editorialDocument";
+import {
+  resolveVideoSourcesForShotList,
+  DEFAULT_VIDEO_SOURCE_MODE,
+  type VideoSourceMode,
+  type ResolvedShotSource,
+  type SourceProvenance,
+} from "./videoSourceMode";
 
 export const BASIC_CUT_MANIFEST_SCHEMA_VERSION = "mikai-basic-cut-manifest-v1";
 
@@ -43,6 +56,14 @@ export type BasicCutManifestItem = {
   trimOutSeconds: number | null;
   status: "video" | "placeholder";
   placeholderReason?: string;
+  /**
+   * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — additive: which exact durable
+   * source produced `sourceVideoPath`. Absent (never `null`) on any item
+   * with no resolved source, so a manifest predating this field, or an item
+   * with none, are both indistinguishable "no provenance" — never a new
+   * required field older readers must migrate for.
+   */
+  provenance?: SourceProvenance;
 };
 
 export type BasicCutManifestEmptySpace = {
@@ -56,6 +77,14 @@ export type BasicCutManifest = {
   sequenceId: number;
   createdAt: string;
   sourceMode: "basic";
+  /**
+   * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — additive top-level field: which
+   * video source mode produced every item's `sourceVideoPath` below.
+   * Absent on every manifest published before this field existed — always
+   * treat a missing value as `"approved-only"` (the only mode that existed
+   * then), never as an error.
+   */
+  videoSourceMode?: VideoSourceMode;
   items: BasicCutManifestItem[];
   emptySpaces: BasicCutManifestEmptySpace[];
   warnings: string[];
@@ -73,6 +102,23 @@ const MIN_ITEM_DURATION_SECONDS = 0.05;
 export type EditorialDocumentForSequence = {
   document: EditorialDocument;
   shotById: Map<number, Shot>;
+  /**
+   * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — additive: the resolved video
+   * source per Shot under whichever `videoSourceMode` this load requested
+   * (defaults to `"approved-only"`, which resolves to exactly
+   * `shot.approvedVideoPath` — byte-identical to this module's pre-existing
+   * behavior, so every caller that never passes the option is unaffected).
+   */
+  videoSources: Map<number, ResolvedShotSource>;
+  /**
+   * The EXACT mode `videoSources` above was resolved under — carried on the
+   * object itself (not just the caller's own local variable) so
+   * `buildBasicCutManifest` can derive the manifest's `videoSourceMode` from
+   * `preloaded` directly, structurally, rather than trusting a SEPARATE
+   * `options.videoSourceMode` that could silently diverge from what this
+   * `preloaded` object was actually built with.
+   */
+  videoSourceMode: VideoSourceMode;
 };
 
 /**
@@ -84,11 +130,19 @@ export type EditorialDocumentForSequence = {
  * the same EditorialDocument to compute this publish's editorialSnapshot
  * (OPENREEL.CONFLICT.1) without re-deriving it from scratch.
  *
+ * `videoSourceMode` (default `"approved-only"`) only changes `videoSources`
+ * on the returned object — the EditorialDocument/shotById themselves are
+ * built exactly as before, since every OTHER caller (editorial-export,
+ * editorial-timing-patch, editorial-insert-shot, editorial-push-duration,
+ * nle-prototype) reads only those two fields and must keep behaving
+ * identically to before this ticket.
+ *
  * Throws BasicCutManifestError if the project/sequence doesn't exist.
  */
 export async function loadEditorialDocumentForSequence(
   projectId: number,
-  sequenceId: number
+  sequenceId: number,
+  options: { videoSourceMode?: VideoSourceMode } = {}
 ): Promise<EditorialDocumentForSequence> {
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
   if (!project) throw new BasicCutManifestError(`Project ${projectId} not found.`);
@@ -133,7 +187,11 @@ export async function loadEditorialDocumentForSequence(
   });
 
   const document = buildEditorialDocument({ projectId, sequenceId, items: inputItems });
-  return { document, shotById };
+
+  const mode = options.videoSourceMode ?? DEFAULT_VIDEO_SOURCE_MODE;
+  const videoSources = await resolveVideoSourcesForShotList(shotList, mode);
+
+  return { document, shotById, videoSources, videoSourceMode: mode };
 }
 
 /**
@@ -144,11 +202,34 @@ export async function loadEditorialDocumentForSequence(
 export async function buildBasicCutManifest(
   projectId: number,
   sequenceId: number,
-  options: { now?: () => string; preloaded?: EditorialDocumentForSequence } = {}
+  options: {
+    now?: () => string;
+    preloaded?: EditorialDocumentForSequence;
+    /**
+     * EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — default `"approved-only"`,
+     * unchanged behavior. Meaningless (and checked, never silently ignored)
+     * when `preloaded` is given: the manifest's mode is then derived
+     * STRUCTURALLY from `preloaded.videoSourceMode` — the only value that
+     * can possibly be true, since that's what `preloaded.videoSources` was
+     * actually resolved under. Passing a DIFFERENT mode alongside a
+     * `preloaded` is a caller bug (two sources of truth that could
+     * silently diverge), not a runtime input to tolerate — it throws.
+     */
+    videoSourceMode?: VideoSourceMode;
+  } = {}
 ): Promise<BasicCutManifest> {
   const now = options.now ?? (() => new Date().toISOString());
 
-  const { document, shotById } = options.preloaded ?? (await loadEditorialDocumentForSequence(projectId, sequenceId));
+  if (options.preloaded && options.videoSourceMode !== undefined && options.videoSourceMode !== options.preloaded.videoSourceMode) {
+    throw new BasicCutManifestError(
+      `buildBasicCutManifest: options.videoSourceMode ("${options.videoSourceMode}") does not match preloaded.videoSourceMode ("${options.preloaded.videoSourceMode}") — caller bug, refusing to guess which one is authoritative.`
+    );
+  }
+
+  const videoSourceMode = options.preloaded?.videoSourceMode ?? options.videoSourceMode ?? DEFAULT_VIDEO_SOURCE_MODE;
+
+  const { document, shotById, videoSources } =
+    options.preloaded ?? (await loadEditorialDocumentForSequence(projectId, sequenceId, { videoSourceMode }));
   const emptySpaces = deriveEmptySpaces(document);
 
   const warnings: string[] = [];
@@ -159,12 +240,19 @@ export async function buildBasicCutManifest(
       if (docItem.sourceType !== "shot" || docItem.shotId == null) continue;
 
       const shot = shotById.get(docItem.shotId);
-      const sourceVideoPath = shot?.approvedVideoPath ?? null;
+      const resolved = videoSources.get(docItem.shotId);
+      const sourceVideoPath = resolved?.videoPath ?? null;
       const hasVideo = sourceVideoPath !== null && !docItem.isPlaceholder;
 
       let placeholderReason: string | undefined;
       if (!hasVideo) {
-        placeholderReason = shot ? "No approved video for this shot." : "Shot not found — editorial item is orphaned.";
+        placeholderReason = !shot
+          ? "Shot not found — editorial item is orphaned."
+          : resolved?.unavailableReason
+            ? resolved.unavailableReason
+            : videoSourceMode === "latest-generation"
+              ? "No durable Shot Video Library entry for this shot."
+              : "No approved video for this shot.";
       }
 
       if (docItem.duration < MIN_ITEM_DURATION_SECONDS) {
@@ -194,6 +282,11 @@ export async function buildBasicCutManifest(
         trimOutSeconds: docItem.trimOut ?? null,
         status: hasVideo ? "video" : "placeholder",
         ...(placeholderReason ? { placeholderReason } : {}),
+        // Kept even when the candidate was REJECTED (hasVideo === false but
+        // resolved.provenance !== null) — explains WHY a Shot has no usable
+        // video without ever presenting that candidate as one that was
+        // actually used (status stays "placeholder" regardless).
+        ...(resolved?.provenance ? { provenance: resolved.provenance } : {}),
       });
     }
   }
@@ -208,6 +301,7 @@ export async function buildBasicCutManifest(
     sequenceId,
     createdAt: now(),
     sourceMode: "basic",
+    videoSourceMode,
     items,
     emptySpaces: emptySpaces.map((s) => ({ startSeconds: s.start, durationSeconds: s.duration })),
     warnings,

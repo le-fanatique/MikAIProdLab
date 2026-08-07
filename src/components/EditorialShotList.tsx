@@ -9,7 +9,10 @@ type EditorialShot = {
   shotCode: string | null;
   title: string;
   durationSeconds: number | null;
-  hasApprovedVideo: boolean;
+  /** TRUE `shots.approvedVideoPath !== null` — gates legacy Trim editing below, unaffected by videoSourceMode (EDITORIAL.SEQUENCE.RESULT.SOURCES.1: this ticket never changes approvals). */
+  isApproved: boolean;
+  /** Which kind of video is available under the CURRENT videoSourceMode — null when none. Drives the status badge text, so it never claims "Approved video" for a Latest-generation source. */
+  videoSourceKind: "approved" | "latest" | null;
   trimInSeconds: number | null;
   trimOutSeconds: number | null;
 };
@@ -44,10 +47,17 @@ function StatusBadge({ shot }: { shot: EditorialShot }) {
       </span>
     );
   }
-  if (shot.hasApprovedVideo) {
+  if (shot.videoSourceKind === "approved") {
     return (
       <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#6b9e72] border border-[#2a3d2e] rounded px-1.5 py-px">
         Approved video
+      </span>
+    );
+  }
+  if (shot.videoSourceKind === "latest") {
+    return (
+      <span className="shrink-0 text-[9px] uppercase tracking-wider text-[#5b93d6] border border-[#233047] rounded px-1.5 py-px">
+        Latest video
       </span>
     );
   }
@@ -222,7 +232,7 @@ export default function EditorialShotList({
           </div>
 
           {/* ── Trim row — legacy shot trims, hidden when the editorial layer is active ── */}
-          {!editorialLayerActive && shot.hasApprovedVideo && (
+          {!editorialLayerActive && shot.isApproved && (
             <div className="flex items-center gap-2 pl-9 flex-wrap">
               <form
                 action={updateShotTrim}
