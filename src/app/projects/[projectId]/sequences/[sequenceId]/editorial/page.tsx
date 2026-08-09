@@ -10,6 +10,7 @@ import Card from "@/components/Card";
 import Collapsible from "@/components/Collapsible";
 import EditorialWorkspace from "@/components/EditorialWorkspace";
 import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
+import LatestApprovedButton from "@/components/LatestApprovedButton";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
@@ -241,6 +242,19 @@ export default async function SequenceEditorialPage({ params, searchParams }: Pr
           ? "Latest generation = newest durable Shot Video Library entry per Shot."
           : "Approved only = approved Shot outputs only."}
       </p>
+
+      {/* EDITORIAL.LATEST.APPROVAL.1 — visible only in "latest-generation"
+          mode; `eligibleCount` reuses `videoSourceSummary.available`, the
+          SAME resolved-source count already computed above for the mode
+          summary line, so both numbers can never disagree. Purely a
+          display hint — the Server Action re-resolves everything fresh. */}
+      <LatestApprovedButton
+        projectId={pid}
+        sequenceId={sid}
+        videoSourceMode={videoSourceMode}
+        eligibleCount={videoSourceSummary.available}
+        totalCount={videoSourceSummary.total}
+      />
 
       {/* ── Timeline + Sequence Preview (shared selection) ───────── */}
       {/* EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — `key={videoSourceMode}` forces
