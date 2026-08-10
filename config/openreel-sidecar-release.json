@@ -1,0 +1,8 @@
+{
+  "formatVersion": 1,
+  "repository": "https://github.com/le-fanatique/mikai-openreel-sidecar.git",
+  "releaseTag": "mikai-sidecar-v1.0.0",
+  "commit": "476ad9f3d75c05cab5297b26af535dc9663f3fb4",
+  "upstreamCommit": "8459024d4c82ee16a2e14537553884a623ae9c4e",
+  "defaultPort": 5173
+}
