@@ -44,6 +44,12 @@ export class SidecarPathError extends DeployError {
   }
 }
 
+export class PackageManagerError extends DeployError {
+  constructor(message) {
+    super("PACKAGE_MANAGER_INVALID", message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Release pin — closed, runtime-validated schema. Never falls back to
 // upstream/main, a branch tip, or a guessed sidecar version: every field
@@ -198,6 +204,71 @@ export function resolveSidecarDir({ mikaiRoot, env = process.env } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Sidecar package manager resolution — the pinned release is the ONLY source
+// of truth for which exact pnpm version to use, never a literal hardcoded
+// here. Must only be called once the checkout at `sidecarDir` is confirmed
+// at the pinned commit (ensureSidecarAtPin already ran) — a package.json
+// read before that could belong to a stale/legacy checkout with a different
+// packageManager contract.
+// ---------------------------------------------------------------------------
+
+const PACKAGE_MANAGER_RE = /^pnpm@\d+\.\d+\.\d+$/;
+
+/**
+ * Reads and validates the sidecar's own declared exact pnpm version. Never
+ * falls back to a range, `latest`, another package manager, or a hardcoded
+ * version — an absent/unreadable/malformed file or an invalid
+ * `packageManager` field all throw PackageManagerError before any pnpm
+ * command runs. Every message here is fixed/bounded: no absolute path,
+ * `err.message`, `stderr`, or Error object is ever interpolated — only the
+ * (non-path) declared `packageManager` value itself, when present, since
+ * that's what a caller needs to fix the sidecar's own package.json.
+ */
+export function resolveSidecarPackageManager(sidecarDir) {
+  const pkgPath = path.join(sidecarDir, "package.json");
+  let raw;
+  try {
+    raw = fs.readFileSync(pkgPath, "utf8");
+  } catch {
+    throw new PackageManagerError(
+      "Could not read the sidecar's package.json — the sidecar checkout may be missing or unreadable. Run install/update first."
+    );
+  }
+  let pkg;
+  try {
+    pkg = JSON.parse(raw);
+  } catch {
+    throw new PackageManagerError(
+      "The sidecar's package.json is not valid JSON — the checkout may be corrupted. Run install/update to restore it."
+    );
+  }
+  if (typeof pkg.packageManager !== "string" || !PACKAGE_MANAGER_RE.test(pkg.packageManager)) {
+    throw new PackageManagerError(
+      `The sidecar's package.json must declare an exact "pnpm@<major>.<minor>.<patch>" packageManager, got ${JSON.stringify(pkg.packageManager)}.`
+    );
+  }
+  return pkg.packageManager;
+}
+
+/**
+ * Env override for the pnpm subprocess ONLY (never mixed into the whole
+ * script's process.env, never passed to npm/git/other commands). Reproduced
+ * directly: a real pnpm-major-version transition (an existing node_modules
+ * built by an older pinned pnpm, e.g. 9, moving to a newer one, e.g. 11)
+ * makes pnpm itself refuse to recreate `node_modules` without a TTY —
+ * `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` — regardless of Corepack.
+ * pnpm's own error message names the fix: set `CI=true` (pnpm's documented
+ * non-interactive signal for exactly this confirmation, equivalent to
+ * `confirmModulesPurge: false`). Verified live: without this, `pnpm@11.7.0
+ * install --frozen-lockfile` against a pnpm@9-built `node_modules` aborts;
+ * with it, the same command succeeds and neither `package.json` nor the
+ * lockfile change. `COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"` is kept alongside
+ * it for the separate, legitimate case of Corepack itself needing to
+ * download a pnpm version this machine hasn't cached yet.
+ */
+const NONINTERACTIVE_PNPM_ENV = { CI: "true", COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" };
+
+// ---------------------------------------------------------------------------
 // Injectable process runner. Production default uses spawnSync exactly like
 // scripts/run-prod-lab.mjs (shell:true only where needed for npm/npx/corepack
 // shims on Windows). Every orchestrator step below calls commands ONLY
@@ -270,10 +341,10 @@ export function checkNpmVersion(run) {
   }
 }
 
-/** Acquires the pinned pnpm 9 contract deterministically through corepack — same mechanism run-prod-lab.mjs already relies on via `npx -y pnpm@9.0.0`, just verified reachable up front instead of failing mid-install. */
-export function checkPnpmAvailable(run) {
-  const result = run("npx", ["-y", "pnpm@9.0.0", "--version"], {});
-  requireSuccess("PNPM_MISSING", "npx -y pnpm@9.0.0 --version", result);
+/** Acquires the pnpm version the sidecar itself declares, deterministically through corepack — same mechanism run-prod-lab.mjs already relies on via `npx -y <packageManager>`. Must be called with the value `resolveSidecarPackageManager` read from the checkout already moved to the pin (see that function's own doc comment) — never a hardcoded version. */
+export function checkPnpmAvailable(run, packageManager, env = process.env) {
+  const result = run("npx", ["-y", packageManager, "--version"], { env: { ...env, ...NONINTERACTIVE_PNPM_ENV } });
+  requireSuccess("PNPM_MISSING", `npx -y ${packageManager} --version`, result);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,9 +583,12 @@ export function npmCiMikai(mikaiRoot, run) {
   requireSuccess("NPM_CI_FAILED", "npm ci (MikAI)", result);
 }
 
-export function pnpmInstallSidecar(sidecarDir, run) {
-  const result = run("npx", ["-y", "pnpm@9.0.0", "install", "--frozen-lockfile"], { cwd: sidecarDir });
-  requireSuccess("PNPM_INSTALL_FAILED", "pnpm install --frozen-lockfile (sidecar)", result);
+export function pnpmInstallSidecar(sidecarDir, run, packageManager, env = process.env) {
+  const result = run("npx", ["-y", packageManager, "install", "--frozen-lockfile"], {
+    cwd: sidecarDir,
+    env: { ...env, ...NONINTERACTIVE_PNPM_ENV },
+  });
+  requireSuccess("PNPM_INSTALL_FAILED", `${packageManager} install --frozen-lockfile (sidecar)`, result);
 }
 
 export function buildMikai(mikaiRoot, run) {
@@ -522,9 +596,12 @@ export function buildMikai(mikaiRoot, run) {
   requireSuccess("BUILD_FAILED", "npm run build (MikAI)", result);
 }
 
-export function buildSidecar(sidecarDir, run) {
-  const result = run("npx", ["-y", "pnpm@9.0.0", "build"], { cwd: sidecarDir });
-  requireSuccess("BUILD_FAILED", "pnpm build (sidecar)", result);
+export function buildSidecar(sidecarDir, run, packageManager, env = process.env) {
+  const result = run("npx", ["-y", packageManager, "build"], {
+    cwd: sidecarDir,
+    env: { ...env, ...NONINTERACTIVE_PNPM_ENV },
+  });
+  requireSuccess("BUILD_FAILED", `${packageManager} build (sidecar)`, result);
 }
 
 export function runMigrations(mikaiRoot, run) {
@@ -569,7 +646,6 @@ export async function install({ mikaiRoot, pinPath, run = defaultRun, env = proc
   checkNodeVersion();
   checkGitAvailable(run);
   checkNpmVersion(run);
-  checkPnpmAvailable(run);
   steps.push("preflight");
 
   const pin = loadReleasePin(resolvedPinPath);
@@ -587,10 +663,16 @@ export async function install({ mikaiRoot, pinPath, run = defaultRun, env = proc
   const sidecarState = ensureSidecarAtPin(sidecarDir, pin, run);
   steps.push("sidecar-at-pin");
 
+  // Resolved only now — the checkout is confirmed at the pin, never a
+  // stale/legacy checkout's own contract, and never a hardcoded version.
+  const packageManager = resolveSidecarPackageManager(sidecarDir);
+  checkPnpmAvailable(run, packageManager, env);
+  steps.push("pnpm-verified");
+
   npmCiMikai(mikaiRoot, run);
   steps.push("npm-ci");
 
-  pnpmInstallSidecar(sidecarDir, run);
+  pnpmInstallSidecar(sidecarDir, run, packageManager, env);
   steps.push("pnpm-install");
 
   // Codex Retake P1 — the pair must be confirmed stopped before ANY
@@ -629,7 +711,7 @@ export async function install({ mikaiRoot, pinPath, run = defaultRun, env = proc
   buildMikai(mikaiRoot, run);
   steps.push("build-mikai");
 
-  buildSidecar(sidecarDir, run);
+  buildSidecar(sidecarDir, run, packageManager, env);
   steps.push("build-sidecar");
 
   return { pin, sidecarDir, envLocal: envResult, createdDirs, sidecarState, backup, steps };
@@ -646,7 +728,6 @@ export async function update({ mikaiRoot, pinPath, run = defaultRun, env = proce
   checkNodeVersion();
   checkGitAvailable(run);
   checkNpmVersion(run);
-  checkPnpmAvailable(run);
   steps.push("preflight");
 
   const previousPin = loadReleasePin(resolvedPinPath);
@@ -696,7 +777,13 @@ export async function update({ mikaiRoot, pinPath, run = defaultRun, env = proce
   const sidecarState = ensureSidecarAtPin(sidecarDir, pin, run);
   steps.push("sidecar-at-pin");
 
-  pnpmInstallSidecar(sidecarDir, run);
+  // Resolved only now — see install()'s identical comment: the checkout is
+  // confirmed at the (possibly just re-read) pin, never a stale contract.
+  const packageManager = resolveSidecarPackageManager(sidecarDir);
+  checkPnpmAvailable(run, packageManager, env);
+  steps.push("pnpm-verified");
+
+  pnpmInstallSidecar(sidecarDir, run, packageManager, env);
   steps.push("pnpm-install");
 
   // Migrate before building MikAI — see install()'s own comment on this:
@@ -714,7 +801,7 @@ export async function update({ mikaiRoot, pinPath, run = defaultRun, env = proce
   buildMikai(mikaiRoot, run);
   steps.push("build-mikai");
 
-  buildSidecar(sidecarDir, run);
+  buildSidecar(sidecarDir, run, packageManager, env);
   steps.push("build-sidecar");
 
   return { previousPin, pin, mikaiSha: { before: beforeSha, after: afterSha }, sidecarDir, sidecarState, backup, steps };

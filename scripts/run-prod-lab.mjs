@@ -18,7 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -62,6 +62,93 @@ if (!existsSync(path.join(openreelDir, "package.json"))) {
   process.exit(1);
 }
 
+function resolveSidecarPackageManager(sidecarDir) {
+  let packageJson;
+  try {
+    packageJson = JSON.parse(readFileSync(path.join(sidecarDir, "package.json"), "utf8"));
+  } catch {
+    console.error(`[run-prod-lab] Could not read the OpenReel sidecar package manager from ${sidecarDir}.`);
+    process.exit(1);
+  }
+
+  if (typeof packageJson.packageManager !== "string" || !/^pnpm@\d+\.\d+\.\d+$/.test(packageJson.packageManager)) {
+    console.error("[run-prod-lab] OpenReel must declare an exact pnpm version in package.json.");
+    process.exit(1);
+  }
+
+  return packageJson.packageManager;
+}
+
+const openreelPackageManager = resolveSidecarPackageManager(openreelDir);
+
+// Env override for the OpenReel sidecar's own pnpm subprocess ONLY — never
+// merged into MikAI's npm calls. Reproduced directly: a real pnpm-major-
+// version transition (an existing node_modules built by an older pinned
+// pnpm moving to a newer one) makes pnpm itself refuse to recreate
+// node_modules without a TTY — ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY —
+// regardless of Corepack. pnpm's own error message names the fix: set
+// CI=true (pnpm's documented non-interactive signal for exactly this
+// confirmation). COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" is kept alongside it
+// for the separate, legitimate case of Corepack needing to download a pnpm
+// version this machine hasn't cached yet.
+const OPENREEL_PNPM_ENV = { ...process.env, CI: "true", COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" };
+
+// ---------------------------------------------------------------------------
+// Sidecar release-pin guard (DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 retake) — the
+// sidecar checkout must be at exactly the commit MikAI's own release pin
+// declares BEFORE cleanStart, any build, or any server launch. A stale/
+// legacy checkout at the wrong commit would silently ship a different UI/
+// playback engine than the one MikAI actually pins and tests against.
+// Refuses without killing any existing listener and without starting
+// MikAI/OpenReel — this check runs before cleanStart() is ever called.
+// ---------------------------------------------------------------------------
+
+// Every diagnostic below is fixed/bounded: no absolute path, `err.message`,
+// `stderr`, or Error object is ever printed — only the nature of the
+// failure and what to do about it. The pinned/HEAD commit hashes are kept
+// in the mismatch message since they're what explains a version drift, not
+// host/filesystem information.
+function loadPinnedSidecarCommit(mikaiRootDir) {
+  const pinPath = path.join(mikaiRootDir, "config", "openreel-sidecar-release.json");
+  let raw;
+  try {
+    raw = readFileSync(pinPath, "utf8");
+  } catch {
+    console.error("[run-prod-lab] Could not read the sidecar release pin (config/openreel-sidecar-release.json) — it may be missing or unreadable.");
+    process.exit(1);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    console.error("[run-prod-lab] The sidecar release pin (config/openreel-sidecar-release.json) is not valid JSON.");
+    process.exit(1);
+  }
+  if (typeof doc.commit !== "string" || !/^[0-9a-f]{40}$/.test(doc.commit)) {
+    console.error("[run-prod-lab] The sidecar release pin (config/openreel-sidecar-release.json) has an invalid or missing \"commit\" field.");
+    process.exit(1);
+  }
+  return doc.commit;
+}
+
+/** Refuses (without killing any existing listener or starting anything) unless `sidecarDir` is a readable git checkout whose HEAD is exactly `pinnedCommit`. */
+function assertSidecarAtPinnedCommit(sidecarDir, pinnedCommit, spawnImpl = spawnSync) {
+  const result = spawnImpl("git", ["rev-parse", "HEAD"], { cwd: sidecarDir, encoding: "utf8" });
+  if (result.error || result.status !== 0) {
+    console.error("[run-prod-lab] Could not read the OpenReel sidecar's current commit — it may not be a git checkout, or git is unavailable.");
+    console.error("[run-prod-lab] Set MIKAI_OPENREEL_DIR to a valid sidecar git checkout, or run install/update first.");
+    process.exit(1);
+  }
+  const head = result.stdout.trim();
+  if (head !== pinnedCommit) {
+    console.error(`[run-prod-lab] The OpenReel sidecar checkout is at commit ${head}, not the pinned commit ${pinnedCommit}.`);
+    console.error("[run-prod-lab] Run `npm run mikai:install` or `npm run mikai:update` to move it to the pinned release before starting dev/prod.");
+    process.exit(1);
+  }
+}
+
+assertSidecarAtPinnedCommit(openreelDir, loadPinnedSidecarCommit(mikaiRoot));
+
 // ---------------------------------------------------------------------------
 // Process plumbing — prefixed logs, sequential build steps, persistent
 // servers that take each other down on exit, and a clean Ctrl+C handler.
@@ -82,14 +169,14 @@ function pipeWithPrefix(stream, out, prefix) {
 
 const activeChildren = new Set();
 
-function spawnLabeled(label, command, args, cwd) {
+function spawnLabeled(label, command, args, cwd, env = process.env) {
   console.log(`[run-prod-lab] [${label}] $ ${command} ${args.join(" ")}`);
   const child = spawn(command, args, {
     cwd,
     // shell: true — needed on Windows to resolve npm/npx (.cmd shims) the
     // same way a user's own terminal would; still spawn(), never exec().
     shell: true,
-    env: process.env,
+    env,
     // POSIX only: makes this child the leader of its own process group,
     // so killTree() below can signal the whole tree (shell -> npm ->
     // next/vite) via a negative pid instead of only the immediate shell.
@@ -105,9 +192,9 @@ function spawnLabeled(label, command, args, cwd) {
 }
 
 /** Runs a command to completion, rejecting on a non-zero exit code — used for the build steps, which must fully succeed before any persistent server starts. */
-function runToCompletion(label, command, args, cwd) {
+function runToCompletion(label, command, args, cwd, env = process.env) {
   return new Promise((resolve, reject) => {
-    const child = spawnLabeled(label, command, args, cwd);
+    const child = spawnLabeled(label, command, args, cwd, env);
     child.on("error", reject);
     child.on("exit", (code, signal) => {
       if (code === 0) resolve();
@@ -514,8 +601,8 @@ async function cleanStart() {
 }
 
 /** Launches a long-running server. If it exits (crash or otherwise), the other persistent process is stopped too — one app dying alone and silently is worse than both going down together. */
-function launchPersistent(label, command, args, cwd) {
-  const child = spawnLabeled(label, command, args, cwd);
+function launchPersistent(label, command, args, cwd, env = process.env) {
+  const child = spawnLabeled(label, command, args, cwd, env);
   child.on("exit", (code, signal) => {
     if (shuttingDown) return;
     console.log(`[run-prod-lab] [${label}] exited (code ${code}${signal ? `, signal ${signal}` : ""}) — stopping the other process.`);
@@ -558,14 +645,14 @@ function openreelDevArgs() {
   // ticket requires, and the same value the OpenReel Sidecar URL setting
   // defaults to) never responds unless --host is passed explicitly. Next's
   // dev server doesn't have this problem, hence the asymmetry.
-  return ["-y", "pnpm@9.0.0", "dev", "--host", OPENREEL_HOST, "--port", OPENREEL_PORT];
+  return ["-y", openreelPackageManager, "dev", "--host", OPENREEL_HOST, "--port", OPENREEL_PORT];
 }
 
 function openreelPreviewArgs() {
   // Prod default: bind wide (0.0.0.0) so a server/Tailscale box is reachable
   // off-box out of the box, unless the user explicitly pinned OPENREEL_HOST.
   const bindHost = process.env.OPENREEL_HOST || "0.0.0.0";
-  return ["-y", "pnpm@9.0.0", "preview", "--host", bindHost, "--port", OPENREEL_PORT];
+  return ["-y", openreelPackageManager, "preview", "--host", bindHost, "--port", OPENREEL_PORT];
 }
 
 // ---------------------------------------------------------------------------
@@ -584,7 +671,7 @@ async function main() {
 
   if (mode === "dev") {
     launchPersistent("MikAI", "npm", mikaiDevArgs(), mikaiRoot);
-    launchPersistent("OpenReel", "npx", openreelDevArgs(), openreelDir);
+    launchPersistent("OpenReel", "npx", openreelDevArgs(), openreelDir, OPENREEL_PNPM_ENV);
     return;
   }
 
@@ -593,7 +680,7 @@ async function main() {
   // or missing output.
   try {
     await runToCompletion("MikAI:build", "npm", ["run", "build"], mikaiRoot);
-    await runToCompletion("OpenReel:build", "npx", ["-y", "pnpm@9.0.0", "build"], openreelDir);
+    await runToCompletion("OpenReel:build", "npx", ["-y", openreelPackageManager, "build"], openreelDir, OPENREEL_PNPM_ENV);
   } catch (err) {
     console.error(`[run-prod-lab] Build failed: ${err.message}`);
     console.error("[run-prod-lab] Not starting any server.");
@@ -602,7 +689,7 @@ async function main() {
 
   console.log("[run-prod-lab] Builds complete — starting servers.");
   launchPersistent("MikAI", "npm", mikaiStartArgs(), mikaiRoot);
-  launchPersistent("OpenReel", "npx", openreelPreviewArgs(), openreelDir);
+  launchPersistent("OpenReel", "npx", openreelPreviewArgs(), openreelDir, OPENREEL_PNPM_ENV);
 }
 
 // Guarded entrypoint (DEV.LAUNCHER.CLEANSTART.1) — only auto-runs `main()`

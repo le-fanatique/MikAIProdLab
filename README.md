@@ -218,8 +218,11 @@ update.bat
 ./update.sh
 ```
 
-- **`install`** — requires Git, Node 22, npm ≥10; acquires the pinned pnpm 9
-  toolchain via Corepack/`npx`. Clones the OpenReel sidecar next to this repo
+- **`install`** — requires Git, Node 22, npm ≥10; acquires the exact pnpm
+  version the pinned sidecar release itself declares (its `package.json`
+  `packageManager` field — never hardcoded here) via Corepack/`npx`, resolved
+  only after the sidecar checkout is confirmed at the pinned commit. Clones
+  the OpenReel sidecar next to this repo
   (or reuses `MIKAI_OPENREEL_DIR` if set) at the exact commit pinned in
   `config/openreel-sidecar-release.json` — never a branch tip. Preserves an
   existing `.env.local` byte-for-byte; creates one from `.env.local.example`
@@ -250,8 +253,12 @@ automatically.
 
 This setup is intentionally local-first and single-instance: no service
 manager, scheduled update, container, or multi-user behavior. Existing
-`setup-*`, `start-dev.*`, `doctor.*`, and `npm run dev:all`/`prod:all`
-remain the developer-focused tools and are unaffected.
+`setup-*`, `start-dev.*`, and `doctor.*` remain the developer-focused tools
+and are unaffected. `npm run dev:all`/`prod:all` (`scripts/run-prod-lab.mjs`)
+now also refuse to start — before touching any existing listener — unless
+the sidecar checkout they resolve is exactly at the commit pinned in
+`config/openreel-sidecar-release.json`, and use that same sidecar-declared
+pnpm version (never a hardcoded one) for its own `dev`/`build`/`preview`.
 
 ## Dev scripts
 
