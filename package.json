@@ -20,7 +20,11 @@
     "prod:all": "node scripts/run-prod-lab.mjs prod",
     "ai:init": "node scripts/agents-init.mjs",
     "ai:review": "node scripts/agents-review-instructions.mjs",
-    "storage:audit": "node scripts/storage-audit.mjs"
+    "storage:audit": "node scripts/storage-audit.mjs",
+    "backup:create": "node scripts/data-backup.mjs create",
+    "backup:verify": "node scripts/data-backup.mjs verify",
+    "backup:list": "node scripts/data-backup.mjs list",
+    "backup:restore": "node scripts/data-backup.mjs restore"
   },
   "engines": {
     "node": ">=22 <23",

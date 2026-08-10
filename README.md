@@ -229,6 +229,107 @@ To move an existing installation with all local data:
 
 If starting fresh (no data to transfer), skip steps 2–5 — the database will be created automatically.
 
+`npm run backup:create` / `backup:restore` (below) automate exactly this
+data set and are the recommended way to do it instead of copying files by
+hand.
+
+## Backup & Restore
+
+`scripts/data-backup.mjs` backs up and restores the complete durable MikAI
+data set: the SQLite database (a coherent snapshot via `better-sqlite3`'s
+online backup API — never a raw copy of a live WAL file) plus the four local
+media roots: `public/uploads`, `public/outputs`, `storage/uploads`,
+`storage/outputs`.
+
+One local instance, one local disk. No cloud target, no scheduler, no
+automatic deletion of old backups or media — retention is a manual decision.
+
+**Maintenance precondition:** stop the app (`Ctrl+C` on the `npm run dev` /
+`dev:host` process) before running `backup:create` for a production backup.
+The SQLite snapshot API safely handles a live WAL database, but a fully
+coherent DB + media snapshot — where no upload/output file is written mid-copy
+— requires the server not to be actively writing during the backup.
+`backup:create` detects a concurrently-modified media file and aborts with
+no partial backup left behind (same size+mtime+inode fingerprint checked
+right before and right after each copy); it also refuses any symlinked media
+root or file outright, before reading anything through it. The one residual
+gap this cannot close without file locking (which Node doesn't offer
+portably): a rewrite that lands between the post-copy check and the next
+read, keeps the exact same size, and completes within your filesystem's
+mtime resolution window is not detectable — another reason to back up with
+the app stopped.
+
+Symlink refusal checks every existing path segment from the volume root
+down — `--source-root`, `--backup-root`, `--db-path`, a backup directory
+passed to `verify`/`restore`, and `--target` (plus every ancestor above
+each of these, e.g. a symlinked directory *containing* your target) are all
+covered, not just the path you typed. Like the media-mutation check above,
+this can only see what already exists at the moment it runs: an attacker
+(or another process) that replaces a parent directory with a symlink after
+that check completes is a TOCTOU window this tool cannot close without
+OS-level locking. Run backups and restores on a machine/volume you control,
+with no concurrent untrusted process.
+
+`--db-path` (advanced; the default of `<source-root>/data/mikailab.db`
+covers normal use) must resolve to a path under `<source-root>/data/` — a
+database anywhere else is refused, so a backup can never silently combine a
+DB from one tree with media from another.
+
+| Command | Description |
+|---|---|
+| `npm run backup:create` | Create a new timestamped backup under `data/backups/` (default). Aborts with no partial backup left behind if any media file is unreadable, is a symlink, or changes size while being copied. |
+| `npm run backup:verify -- <backup-dir>` | Validate a backup's manifest and payload: exact file set, per-file SHA-256, DB `integrity_check`/`foreign_key_check`. Read-only. |
+| `npm run backup:list` | List backup directories under `data/backups/` with timestamp, file count, and size. Read-only. |
+| `npm run backup:restore -- <backup-dir> --target <dir>` | Re-verify, stage, and publish a backup into `<dir>`. |
+
+`--target <dir>` is treated as an existing **installation root** — it can be
+a fresh empty directory or an existing MikAI clone (code, `node_modules`,
+`.env.local` and all). Restore only ever reads or mutates 5 **managed
+surfaces** under `<dir>`: `data/mikailab.db` (plus any `-wal`/`-shm`
+sidecars) and the four media roots (`public/uploads`, `public/outputs`,
+`storage/uploads`, `storage/outputs`). Everything else under `<dir>` —
+source code, `node_modules`, `.env.local`, any other file — is never
+inspected, renamed, or removed, including under `--replace`.
+
+If any managed surface already has content, restore refuses and lists which
+ones unless `--replace` is also given. Under `--replace`, each occupied
+managed surface (and only that surface) is renamed aside to
+`<surface-path>.replaced-<timestamp>` next to it — never deleted — before
+the restored version is published; if anything fails partway through
+publish, every surface already moved aside is renamed back automatically,
+so `<dir>` ends up either fully updated or exactly as it was before, never a
+mix. Old `*.replaced-<timestamp>` copies are not deleted automatically —
+remove them by hand once you've confirmed the restore is good.
+
+Example — create a backup, verify it, and test-restore it into a scratch
+directory:
+
+```powershell
+npm run backup:create
+npm run backup:list
+npm run backup:verify -- data\backups\mikai-backup-2026-08-10T12-00-00-000Z
+npm run backup:restore -- data\backups\mikai-backup-2026-08-10T12-00-00-000Z --target C:\temp\mikai-restore-test
+```
+
+**Restoring onto a machine you intend to run**: point `--target` at a fresh
+directory and follow Quick Start to get code + `node_modules` in place, or
+restore straight into an existing clone's root — with `--replace` if it
+already has a database or media from a previous install — then `npm.cmd ci`
+(if not already done) and start the app normally.
+
+**Windows note on `--replace`:** each occupied managed surface is moved
+aside via a directory/file rename before its replacement is published.
+Renaming can fail if a process (Explorer, an editor, antivirus, or MikAI
+itself) holds a handle open inside it — close any such program first. If a
+later surface's publish step fails after earlier surfaces were already
+moved aside, the tool renames all of them back automatically and reports
+the failure; it never claims success without every managed surface actually
+published.
+
+Old dated backups under `data/backups/` are never pruned automatically —
+review `npm run backup:list` periodically and delete old directories by hand
+once you no longer need them.
+
 ## Project structure
 
 ```
