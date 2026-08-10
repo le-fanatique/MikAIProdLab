@@ -6,6 +6,12 @@ import WorkflowInputKindBadge from "@/components/WorkflowInputKindBadge";
 
 const SCALAR_KINDS = new Set(["integer", "float", "boolean", "select", "seed", "string"]);
 
+export const RANDOM_SEED_MAX_EXCLUSIVE = 100000;
+
+export function randomSeedValue(): number {
+  return Math.floor(Math.random() * RANDOM_SEED_MAX_EXCLUSIVE);
+}
+
 type Props = {
   mappings: WorkflowInputMapping[];
   scalarValueByNodeId: Record<string, string>;
@@ -35,7 +41,7 @@ export default function WorkflowScalarInputsForm({
   }
 
   function randomizeSeed(nodeId: string) {
-    setValue(nodeId, String(Math.floor(Math.random() * 2 ** 32)));
+    setValue(nodeId, String(randomSeedValue()));
   }
 
   if (scalarMappings.length === 0) {
