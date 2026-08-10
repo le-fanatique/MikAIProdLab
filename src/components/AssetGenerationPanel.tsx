@@ -25,7 +25,7 @@ import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/acti
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
-import { type FillSource } from "@/lib/textInputKind";
+import { buildAssetFillSources } from "@/lib/assetFillSources";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
@@ -122,15 +122,7 @@ export default async function AssetGenerationPanel({
     ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
     : textOverrideByNodeId;
 
-  const descTrimmed = asset.description?.trim() ?? "";
-  const notesTrimmed = asset.notes?.trim() ?? "";
-  const fillSources: FillSource[] = [
-    descTrimmed ? { id: "description", label: "Asset Description", text: descTrimmed } : null,
-    notesTrimmed ? { id: "notes", label: "Asset Notes", text: notesTrimmed } : null,
-    descTrimmed && notesTrimmed
-      ? { id: "desc_notes", label: "Description + Notes", text: `${descTrimmed}\n${notesTrimmed}` }
-      : null,
-  ].filter((s): s is FillSource => s !== null);
+  const fillSources = buildAssetFillSources(asset.description, asset.notes, asset.visualIdentity);
 
   const parsed = parseComfyWorkflow(workflow.workflowJson);
 

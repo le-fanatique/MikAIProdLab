@@ -30,7 +30,7 @@ import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
-import type { FillSource } from "@/lib/textInputKind";
+import { buildAssetFillSources } from "@/lib/assetFillSources";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
@@ -168,15 +168,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
     .filter((v): v is string => Boolean(v))
     .join("\n\n");
 
-  const descTrimmed = asset.description?.trim() ?? "";
-  const notesTrimmed = asset.notes?.trim() ?? "";
-  const fillSources: FillSource[] = [
-    descTrimmed ? { id: "description", label: "Asset Description", text: descTrimmed } : null,
-    notesTrimmed ? { id: "notes", label: "Asset Notes", text: notesTrimmed } : null,
-    descTrimmed && notesTrimmed
-      ? { id: "desc_notes", label: "Description + Notes", text: `${descTrimmed}\n${notesTrimmed}` }
-      : null,
-  ].filter((source): source is FillSource => source !== null);
+  const fillSources = buildAssetFillSources(asset.description, asset.notes, asset.visualIdentity);
 
   const parsed = parseComfyWorkflow(workflow.workflowJson);
 
