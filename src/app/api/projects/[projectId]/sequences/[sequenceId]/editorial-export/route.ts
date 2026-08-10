@@ -27,7 +27,13 @@ import {
   type EditorialExportShotExtra,
 } from "@/lib/editorial/editorialExport";
 import { loadEditorialDocumentForSequence, BasicCutManifestError } from "@/lib/editorial/basicCutManifest";
-import { parseVideoSourceModeStrict, DEFAULT_VIDEO_SOURCE_MODE, type VideoSourceMode } from "@/lib/editorial/videoSourceMode";
+import {
+  parseVideoSourceModeStrict,
+  DEFAULT_VIDEO_SOURCE_MODE,
+  augmentApprovedSourcesWithDurableDuration,
+  type VideoSourceMode,
+} from "@/lib/editorial/videoSourceMode";
+import { computeCompactRealDurationPositions, type CompactRealDurationResult } from "@/lib/editorial/compactRealDurationTiming";
 
 /**
  * Preflight for a cross-origin fetch (e.g. the OpenReel sidecar's
@@ -170,6 +176,28 @@ export async function GET(
     })
   );
 
+  // EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1 /
+  // EDITORIAL.APPROVED.REAL.DURATIONS.1 — compact, real-media timing is
+  // exclusive to an EXPLICITLY requested "latest-generation" OR
+  // "approved-only" export (never the legacy no-param shape, and never an
+  // absent/implicit mode): the Product Decision extends the SAME
+  // `timingBasis`/`computeCompactRealDurationPositions` contract to
+  // explicit Approved-only, since Editorial can assign planned Shot
+  // durations longer than what an approved video actually decodes to,
+  // exactly like Latest generation. Approved-only has no `shot_videos`
+  // duration on `videoSources` by construction (see
+  // `resolveApprovedOnlySources`'s own doc comment) — the exact-match
+  // durable lookup below is the ONLY new source resolution this ticket
+  // adds; the compact computation itself is reused verbatim, never
+  // duplicated.
+  let compactTiming: CompactRealDurationResult | undefined;
+  if (explicitVideoSourceMode === "latest-generation") {
+    compactTiming = computeCompactRealDurationPositions(document, videoSources);
+  } else if (explicitVideoSourceMode === "approved-only") {
+    const durableApprovedSources = await augmentApprovedSourcesWithDurableDuration([...shotById.values()], videoSources);
+    compactTiming = computeCompactRealDurationPositions(document, durableApprovedSources);
+  }
+
   const exportPayload = buildEditorialExport({
     project: { id: project.id, name: project.name },
     sequence: { id: sequence.id, title: sequence.title },
@@ -177,6 +205,7 @@ export async function GET(
     shotExtrasById,
     videoSourceMode: explicitVideoSourceMode ?? undefined,
     resolvedMediaByShotId,
+    compactTiming,
   });
 
   const filename = `mikai-sequence-${sid}-editorial-export-v1.json`;

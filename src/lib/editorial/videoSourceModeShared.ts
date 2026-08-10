@@ -91,6 +91,20 @@ export type ResolvedShotSource = {
   provenance: SourceProvenance | null;
   /** Set ONLY when a DB candidate existed but was rejected before being trusted as `videoPath` — an honest, English, non-leaking diagnostic. Never set when there was genuinely no candidate. */
   unavailableReason?: string;
+  /**
+   * EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1 — additive: the durable,
+   * probed duration of the resolved `shot_videos` row (`shot_videos
+   * .durationSeconds`), never a guessed/derived value. `null` for
+   * "approved-only" mode (which never resolves a `shot_videos` row, so
+   * there is nothing durable to report) and for a "latest-generation" row
+   * whose own `durationSeconds` was never probed. Always present (never
+   * `undefined`) so a caller can distinguish "not applicable to this mode"
+   * from "field not yet computed". Only a finite, positive value is ever
+   * eligible to drive a compact-real-duration timeline — the consumer
+   * (`computeCompactRealDurationPositions`) is the single place that
+   * validates this, never this resolver.
+   */
+  durationSeconds: number | null;
 };
 
 /** Minimal shape this module needs from a Shot row — decoupled from the full Drizzle `Shot` type so the pure functions below can be unit-tested with plain fixtures, no DB import required. */
@@ -105,6 +119,8 @@ export type ShotVideoRowForResolution = {
   createdAt: string;
   generationJobId: number | null;
   sourceCandidateId: number | null;
+  /** EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1 — mirrors `shot_videos.durationSeconds` verbatim (see `ResolvedShotSource.durationSeconds`'s own doc comment for why this is never guessed). */
+  durationSeconds: number | null;
 };
 
 /**
@@ -238,6 +254,11 @@ export function resolveApprovedOnlySources(
       shotId: shot.id,
       videoPath: shot.approvedVideoPath,
       provenance: shot.approvedVideoPath !== null ? { kind: "approved" } : null,
+      // "approved-only" never resolves a shot_videos row — there is no
+      // durable, probed duration to report. Compact-real-duration timing is
+      // exclusive to "latest-generation" (see the Product Decision this
+      // field exists for) and never applies here.
+      durationSeconds: null,
     });
   }
   return sources;
@@ -265,7 +286,7 @@ export function pickLatestGenerationSources(
   rows: readonly ShotVideoRowForResolution[]
 ): Map<number, ResolvedShotSource> {
   const sources = new Map<number, ResolvedShotSource>();
-  for (const shotId of shotIds) sources.set(shotId, { shotId, videoPath: null, provenance: null });
+  for (const shotId of shotIds) sources.set(shotId, { shotId, videoPath: null, provenance: null, durationSeconds: null });
 
   const sorted = [...rows].sort((a, b) => {
     if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
@@ -288,6 +309,7 @@ export function pickLatestGenerationSources(
         generationJobId: row.generationJobId,
         sourceCandidateId: row.sourceCandidateId,
       },
+      durationSeconds: row.durationSeconds,
     });
   }
 

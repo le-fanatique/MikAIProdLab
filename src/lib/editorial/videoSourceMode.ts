@@ -171,6 +171,65 @@ export async function resolveVideoSourcesForShotList(
   return new Map(verifiedEntries);
 }
 
+/**
+ * EDITORIAL.APPROVED.REAL.DURATIONS.1 — augments an ALREADY-RESOLVED
+ * "approved-only" sources map (`resolveApprovedOnlySources`, already
+ * confinement/existence-verified by `resolveVideoSourcesForShotList`) with
+ * each Shot's real, durable `durationSeconds`, but ONLY when
+ * `shots.approvedVideoPath` maps to THAT EXACT Shot's own `shot_videos` row
+ * (same `shotId` AND same `videoPath` — `shot_videos.videoPath` is globally
+ * unique, so a path match alone would already be exact; the `shotId` check
+ * is kept as an explicit belt-and-suspenders confinement guard, matching
+ * this module's existing owner-confinement conventions). The match key is a
+ * NESTED Map (`shotId -> videoPath -> durationSeconds`), never a
+ * concatenated string — Codex retake review found a delimiter-joined
+ * string key here had let literal NUL bytes slip into this file's source;
+ * a nested Map has no string-join step at all, so that class of bug is
+ * structurally impossible. Never falls back to the newest library entry,
+ * never estimates from planned timing or file size — a Shot whose
+ * approved path has no matching durable row (or whose row has no probed
+ * duration) keeps `durationSeconds: null`, byte-identical to before this
+ * ticket. Returns a NEW map — never mutates `approvedSources`, so a
+ * caller that must keep the original (badges, preview,
+ * `mediaUrl`/provenance overlay) is unaffected; this is used exclusively
+ * to feed `computeCompactRealDurationPositions` for an EXPLICIT
+ * `approved-only` export.
+ */
+export async function augmentApprovedSourcesWithDurableDuration(
+  shotList: Shot[],
+  approvedSources: ReadonlyMap<number, ResolvedShotSource>
+): Promise<Map<number, ResolvedShotSource>> {
+  const candidateShotIds = shotList.map((s) => s.id).filter((shotId) => approvedSources.get(shotId)?.videoPath != null);
+
+  if (candidateShotIds.length === 0) return new Map(approvedSources);
+
+  const rows = await db
+    .select({ shotId: shotVideos.shotId, videoPath: shotVideos.videoPath, durationSeconds: shotVideos.durationSeconds })
+    .from(shotVideos)
+    .where(inArray(shotVideos.shotId, candidateShotIds));
+
+  const durationByShotThenPath = new Map<number, Map<string, number | null>>();
+  for (const row of rows) {
+    let byPath = durationByShotThenPath.get(row.shotId);
+    if (!byPath) {
+      byPath = new Map<string, number | null>();
+      durationByShotThenPath.set(row.shotId, byPath);
+    }
+    byPath.set(row.videoPath, row.durationSeconds);
+  }
+
+  const augmented = new Map<number, ResolvedShotSource>();
+  for (const [shotId, source] of approvedSources) {
+    if (source.videoPath === null) {
+      augmented.set(shotId, source);
+      continue;
+    }
+    const durableDuration = durationByShotThenPath.get(shotId)?.get(source.videoPath) ?? null;
+    augmented.set(shotId, durableDuration === source.durationSeconds ? source : { ...source, durationSeconds: durableDuration });
+  }
+  return augmented;
+}
+
 async function resolveLatestGenerationRaw(shotList: Shot[]): Promise<Map<number, ResolvedShotSource>> {
   const shotIds = shotList.map((s) => s.id);
   if (shotIds.length === 0) return new Map();
@@ -184,6 +243,7 @@ async function resolveLatestGenerationRaw(shotList: Shot[]): Promise<Map<number,
       createdAt: shotVideos.createdAt,
       generationJobId: shotVideos.generationJobId,
       sourceCandidateId: shotVideos.sourceCandidateId,
+      durationSeconds: shotVideos.durationSeconds,
     })
     .from(shotVideos)
     .where(inArray(shotVideos.shotId, shotIds));

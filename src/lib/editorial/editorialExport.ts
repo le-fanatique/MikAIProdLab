@@ -20,6 +20,9 @@ import {
 } from "./editorialDocument";
 import { buildEditorialSnapshot, type EditorialSnapshot } from "./editorialSnapshot";
 import type { VideoSourceMode, SourceProvenance } from "./videoSourceModeShared";
+import type { CompactRealDurationResult } from "./compactRealDurationTiming";
+
+export const COMPACT_REAL_DURATION_TIMING_BASIS = "compact-real-duration" as const;
 
 export const MIKAI_EDITORIAL_EXPORT_SCHEMA_VERSION = "mikai-editorial-export-v1";
 
@@ -68,6 +71,33 @@ export type MikAIEditorialExportV1 = {
    * which has no real sequence-timeline structure to fingerprint.
    */
   editorialSnapshot?: EditorialSnapshot;
+  /**
+   * EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1 /
+   * EDITORIAL.APPROVED.REAL.DURATIONS.1 — additive: present ONLY when this
+   * export's `startSeconds`/`durationSeconds` are the real, compact,
+   * decodable-media timings computed by `computeCompactRealDurationPositions`
+   * — exclusive to an EXPLICITLY requested `videoSourceMode` (either
+   * `"latest-generation"` or `"approved-only"`) — rather than the planned
+   * production timeline. A consumer that doesn't understand this field can
+   * safely ignore it — but a write-back path (Validate/Apply Timing Patch,
+   * Push Duration, or any other action whose meaning depends on
+   * `startSeconds`/`durationSeconds` being production-accurate) MUST refuse
+   * to act on an export carrying this field rather than writing compact
+   * positions back as if they were production ones. Absent on every export
+   * that predates this field, on an IMPLICIT/absent `videoSourceMode`
+   * (including the legacy no-param export), and on any other mode — all
+   * stay byte-identical to before this ticket.
+   */
+  timingBasis?: typeof COMPACT_REAL_DURATION_TIMING_BASIS;
+  /**
+   * EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1 — additive, present only
+   * alongside `timingBasis`. One bounded, human-readable entry per shot
+   * item omitted from the compact timeline because its resolved source had
+   * no valid real media duration (see `computeCompactRealDurationPositions`).
+   * An empty array is a real, honest "no omissions" — never absent when
+   * `timingBasis` is present.
+   */
+  timingWarnings?: string[];
   tracks: Array<{
     trackIndex: number;
     items: Array<{
@@ -129,23 +159,38 @@ export function buildEditorialExport(args: {
   exportedAt?: string;
   videoSourceMode?: VideoSourceMode;
   resolvedMediaByShotId?: Map<number, { mediaUrl: string | null; provenance: SourceProvenance | null }>;
+  /**
+   * EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1 — additive and OPTIONAL.
+   * When given, every item's `startSeconds`/`durationSeconds` below are
+   * OVERRIDDEN with the compact, real-media positions it carries, an item
+   * with no computed position is OMITTED entirely from `tracks[].items`
+   * (never "stretched" to its planned slot), and the export carries
+   * `timingBasis`/`timingWarnings`. `document` itself — and therefore
+   * `editorialSnapshot`, built from `document` below exactly as before —
+   * is NEVER touched by this: the snapshot stays the planned/production
+   * fingerprint regardless of this option (Product Decision, contract 5).
+   * Omitted entirely, behavior is byte-identical to before this ticket.
+   */
+  compactTiming?: CompactRealDurationResult;
 }): MikAIEditorialExportV1 {
-  const { project, sequence, document, shotExtrasById, resolvedMediaByShotId } = args;
+  const { project, sequence, document, shotExtrasById, resolvedMediaByShotId, compactTiming } = args;
 
   const tracks = document.tracks.map((track) => {
     const items = track.items
       .filter((item) => item.sourceType === "shot" && item.shotId != null)
+      .filter((item) => !compactTiming || compactTiming.positions.has(item.id))
       .map((item) => {
         const extra = shotExtrasById.get(item.shotId!);
         const resolved = resolvedMediaByShotId?.get(item.shotId!);
+        const compactPosition = compactTiming?.positions.get(item.id);
         return {
           id: item.id,
           shotId: item.shotId!,
           shotCode: item.shotCode ?? null,
           title: item.title ?? null,
           status: item.status ?? "missing",
-          startSeconds: item.start,
-          durationSeconds: item.duration,
+          startSeconds: compactPosition ? compactPosition.startSeconds : item.start,
+          durationSeconds: compactPosition ? compactPosition.durationSeconds : item.duration,
           trimInSeconds: item.trimIn ?? null,
           trimOutSeconds: item.trimOut ?? null,
           approvedVideoPath: extra?.approvedVideoPath ?? null,
@@ -159,13 +204,25 @@ export function buildEditorialExport(args: {
     return { trackIndex: track.id, items };
   });
 
-  const emptySpaces = deriveEmptySpaces(document).map((space) => ({
-    trackIndex: space.trackIndex,
-    startSeconds: space.start,
-    durationSeconds: space.duration,
-    previousItemId: space.previousItemId,
-    nextItemId: space.nextItemId,
-  }));
+  // Compact positions are contiguous by construction (no gap ever survives
+  // compaction — see computeCompactRealDurationPositions) — the planned
+  // document's own empty spaces describe PRODUCTION gaps and would be
+  // meaningless (and misleading) against compact startSeconds values, so a
+  // compact export always reports zero empty spaces rather than borrowing
+  // the production document's.
+  const emptySpaces = compactTiming
+    ? []
+    : deriveEmptySpaces(document).map((space) => ({
+        trackIndex: space.trackIndex,
+        startSeconds: space.start,
+        durationSeconds: space.duration,
+        previousItemId: space.previousItemId,
+        nextItemId: space.nextItemId,
+      }));
+
+  const compactSequenceDurationSeconds = compactTiming
+    ? Math.max(0, ...[...compactTiming.trackDurationsSeconds.values()])
+    : undefined;
 
   return {
     schemaVersion: MIKAI_EDITORIAL_EXPORT_SCHEMA_VERSION,
@@ -174,9 +231,12 @@ export function buildEditorialExport(args: {
     sequence: {
       id: sequence.id,
       title: sequence.title,
-      durationSeconds: document.durationSeconds,
+      durationSeconds: compactSequenceDurationSeconds ?? document.durationSeconds,
     },
     ...(args.videoSourceMode ? { videoSourceMode: args.videoSourceMode } : {}),
+    ...(compactTiming
+      ? { timingBasis: COMPACT_REAL_DURATION_TIMING_BASIS, timingWarnings: compactTiming.warnings }
+      : {}),
     editorialSnapshot: buildEditorialSnapshot({ sequenceId: sequence.id, document }),
     tracks,
     emptySpaces,
