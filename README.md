@@ -198,6 +198,61 @@ Most runtime settings (LLM provider, ComfyUI URL, API keys) can be configured di
 - Migrations live in `drizzle/` and are committed to git.
 - The database file (`data/mikailab.db`) is local only and excluded from git.
 
+## One-command install (MikAI + OpenReel sidecar)
+
+`install`/`start`/`update` turn a normal clone of this repo into a
+reproducible local deployment paired with the OpenReel sidecar, without
+manually cloning/locating/syncing it yourself. All three exist as thin
+`.bat`/`.sh` wrappers around one shared orchestrator,
+`scripts/mikai-deploy.mjs`, so Windows and Linux behave identically.
+
+```bash
+# Windows
+install.bat
+start.bat
+update.bat
+
+# Linux / macOS
+./install.sh
+./start.sh
+./update.sh
+```
+
+- **`install`** — requires Git, Node 22, npm ≥10; acquires the pinned pnpm 9
+  toolchain via Corepack/`npx`. Clones the OpenReel sidecar next to this repo
+  (or reuses `MIKAI_OPENREEL_DIR` if set) at the exact commit pinned in
+  `config/openreel-sidecar-release.json` — never a branch tip. Preserves an
+  existing `.env.local` byte-for-byte; creates one from `.env.local.example`
+  only if absent. Installs both apps from their lockfiles, builds both, and
+  runs MikAI's migrations. If a database already exists, it is backed up
+  first (`npm run backup:create`) — a missing/fresh database needs no backup.
+  Idempotent: safe to re-run as a repair.
+- **`start`** — validates the sidecar checkout is exactly at the pinned
+  commit, then delegates to the existing `npm run prod:all` launcher (one
+  process manager, not two). Honors `MIKAI_HOST`/`MIKAI_PORT`/
+  `OPENREEL_HOST`/`OPENREEL_PORT` overrides; defaults to `localhost:3000` and
+  the pinned sidecar port (`5173`).
+- **`update`** — requires both MikAI and the sidecar to have a clean tracked
+  checkout and both listeners stopped. Backs up the database (same rule as
+  install), fast-forwards MikAI's `main` only (never rebase/merge/force —
+  refuses on a diverged history), re-reads the possibly-new release pin,
+  reinstalls/rebuilds, migrates, and moves the sidecar to exactly the newly
+  pinned commit. The sidecar is never updated independently of MikAI's own
+  committed pin.
+
+**CORS boundary**: the sidecar talks to MikAI's editorial routes
+cross-origin. The built-in allowlist only covers the local sidecar origin on
+port `5173` (`http://localhost:5173` / `http://127.0.0.1:5173`). A
+remote/custom sidecar origin must be added explicitly via
+`MIKAI_EDITOR_CORS_ORIGINS` in `.env.local` (comma-separated exact origins) —
+this tooling never adds a wildcard or exposes a network origin
+automatically.
+
+This setup is intentionally local-first and single-instance: no service
+manager, scheduled update, container, or multi-user behavior. Existing
+`setup-*`, `start-dev.*`, `doctor.*`, and `npm run dev:all`/`prod:all`
+remain the developer-focused tools and are unaffected.
+
 ## Dev scripts
 
 | Command | Description |
@@ -206,6 +261,9 @@ Most runtime settings (LLM provider, ComfyUI URL, API keys) can be configured di
 | `npm run dev:host` | Dev server on 0.0.0.0:3000 (network accessible) |
 | `npm run build` | Production build |
 | `npm run start` | Production server |
+| `npm run mikai:install` | Same as `install.bat`/`install.sh` |
+| `npm run mikai:start` | Same as `start.bat`/`start.sh` |
+| `npm run mikai:update` | Same as `update.bat`/`update.sh` |
 
 ## Features
 

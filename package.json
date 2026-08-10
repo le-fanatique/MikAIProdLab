@@ -24,7 +24,10 @@
     "backup:create": "node scripts/data-backup.mjs create",
     "backup:verify": "node scripts/data-backup.mjs verify",
     "backup:list": "node scripts/data-backup.mjs list",
-    "backup:restore": "node scripts/data-backup.mjs restore"
+    "backup:restore": "node scripts/data-backup.mjs restore",
+    "mikai:install": "node scripts/mikai-deploy.mjs install",
+    "mikai:update": "node scripts/mikai-deploy.mjs update",
+    "mikai:start": "node scripts/mikai-deploy.mjs start"
   },
   "engines": {
     "node": ">=22 <23",
