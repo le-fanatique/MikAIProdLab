@@ -43,6 +43,7 @@ import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runWorkflowGenerationFromForm, runShotStoryboardGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -730,7 +731,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
         meta={shotLabel}
       />
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 group/style">
 
         {/* ── Workflow ──────────────────────────────────────── */}
         <Card title="Workflow">
@@ -872,6 +873,10 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
         {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
         <Card>
+          {/* GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — checked by default on every mount. */}
+          <div className="mb-3">
+            <ProjectStyleAppendCheckbox formId="shot-generate-page-form" />
+          </div>
           <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
         </Card>
 
@@ -924,19 +929,27 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                   )}
                 {/* STYLE.1.E.SURFACES.1 — a resolver/corruption error disables
                     Generate entirely; the error itself is already visible
-                    above via ProjectStyleGenerationPreview. */}
+                    above via ProjectStyleGenerationPreview.
+                    GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — but never while the
+                    user has unchecked "Append Project Style", since no
+                    resolution is attempted for that job at all. */}
                 {!preparedStyle.ok && (
-                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2">
+                  <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 group-has-[#appendProjectStyle:not(:checked)]/style:hidden">
                     <p className="text-xs text-[#cf7b6b] leading-relaxed">
                       Generation is disabled: Project Style could not be resolved.
                     </p>
                   </div>
                 )}
-                {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
+                {!cloudPreflightBlocksGeneration && (
                 <PartnerNodeConfirmForm
+                  id="shot-generate-page-form"
                   action={isStoryboardContext ? runShotStoryboardGenerationFromForm : runWorkflowGenerationFromForm}
                   partnerNodeConfirmMessage={partnerNodeConfirmMessage}
-                  className="flex flex-col gap-4"
+                  className={
+                    preparedStyle.ok
+                      ? "flex flex-col gap-4"
+                      : "hidden group-has-[#appendProjectStyle:not(:checked)]/style:flex flex-col gap-4"
+                  }
                 >
                   <input type="hidden" name="projectId" value={String(pid)} />
                   <input type="hidden" name="sequenceId" value={String(sid)} />

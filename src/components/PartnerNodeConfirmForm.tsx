@@ -6,6 +6,8 @@ import { unstable_rethrow } from "next/navigation";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
+  /** GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — lets a control rendered outside this `<form>` (native `form="..."` attribute) still submit as part of it. */
+  id?: string;
   className?: string;
   children: ReactNode;
   /**
@@ -69,6 +71,7 @@ export function useGenerationFormState(): GenerationFormState {
  */
 export default function PartnerNodeConfirmForm({
   action,
+  id,
   className,
   children,
   partnerNodeConfirmMessage,
@@ -82,6 +85,7 @@ export default function PartnerNodeConfirmForm({
   return (
     <form
       ref={formRef}
+      id={id}
       action={action}
       className={className}
       onSubmit={(e) => {

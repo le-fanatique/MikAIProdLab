@@ -18,11 +18,14 @@ import "server-only";
 // The only callers are trusted server code that already decided the exact
 // Style policy before calling in:
 //   - src/actions/generation.ts's `submitShotGeneration` (normal Shot form,
-//     Storyboard form — passes "auto" or "shot-storyboard" respectively);
+//     Storyboard form — passes "auto" or "shot-storyboard" respectively, or
+//     "none" when the user unchecked "Append Project Style" —
+//     GEN.PROJECT_STYLE.APPEND.TOGGLE.1);
 //   - src/actions/generation.ts's `runWorkflowGeneration` (Camera Lab,
-//     passes "none");
+//     always passes "none" — no user-facing toggle exists for this path);
 //   - src/actions/generationJobs.ts's `retryGenerationJob` (passes the
-//     job's own preserved consumer, or "auto" for a legacy job).
+//     job's own preserved consumer, "none" to preserve an explicit prior
+//     opt-out, or "auto" for a legacy job).
 // None of these pass a value that ever crossed an untrusted boundary raw —
 // see each call site's own comment for where its literal comes from.
 // ---------------------------------------------------------------------------
@@ -76,12 +79,28 @@ export type ShotGenerationArgs = {
   confirmPartnerNodeCost?: boolean;
   /** CAMLAB.POLISH.1 — set only by the Camera Lab's Gaussian-to-image caller; recorded as-is on the job's payloadSnapshot, never inferred here. */
   cameraLabProvenance?: GenerationSnapshot["cameraLabProvenance"];
+  /**
+   * GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — the user's explicit Append Project
+   * Style form choice (or its exact preserved value on retry), recorded
+   * as-is on the job's `payloadSnapshot`; never inferred here. Only set by
+   * `submitShotGeneration` (fresh Shot generation) and `retryGenerationJob`
+   * (preserving the prior job's exact choice). Camera Lab's
+   * `runWorkflowGeneration` never sets it — its `styleIntent` is always
+   * `"none"` independent of any user-facing toggle, so no `appendProjectStyle`
+   * field is written to that job's snapshot at all.
+   */
+  appendProjectStyleRequested?: boolean;
 };
 
 /**
  * The one Style policy this module accepts:
- *   - "none"           — Camera Lab: never resolves or injects a Style,
- *                        byte-identical to pre-Style behavior;
+ *   - "none"           — never resolves or injects a Style, byte-identical
+ *                        to pre-Style behavior. Used by Camera Lab (always)
+ *                        and by a normal Shot generation whose user
+ *                        explicitly unchecked "Append Project Style"
+ *                        (GEN.PROJECT_STYLE.APPEND.TOGGLE.1) — both reuse
+ *                        this exact same escape hatch rather than a second
+ *                        one;
  *   - "auto"           — normal Shot generation: the trusted consumer
  *                        ("shot-image"/"shot-video") is derived from the
  *                        workflow's CURRENT persisted kind, inside this
@@ -438,6 +457,10 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       // actually injected into at least one queued text input; never a
       // provenance claim for an unused/empty Style contribution.
       ...(styleActuallyInjected && preparedStyleOk?.provenanceCandidate ? { styleProvenance: preparedStyleOk.provenanceCandidate } : {}),
+      // GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — see the field's own doc comment
+      // in generationSnapshot.ts for why this must be distinct from
+      // `styleProvenance`'s presence.
+      ...(args.appendProjectStyleRequested !== undefined ? { appendProjectStyle: args.appendProjectStyleRequested } : {}),
     };
     await db
       .update(generationJobs)

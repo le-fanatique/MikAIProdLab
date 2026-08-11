@@ -140,6 +140,20 @@ export type GenerationSnapshot = {
    * effective Style existed or its compiled segment was empty.
    */
   styleProvenance?: GenerationStyleProvenance;
+  /**
+   * GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — the user's explicit Append Project
+   * Style choice at queue time for this Shot job, independent of whether an
+   * effective Style actually existed to inject (that fact stays in
+   * `styleProvenance`, present only when a non-empty Style was actually
+   * queued). Present on every Shot job queued through `submitShotGeneration`
+   * or `retryGenerationJob` after this ticket; absent on legacy snapshots and
+   * on Camera Lab's unstyled `runWorkflowGeneration` path, which has no
+   * user-facing toggle to record. Retry reads this field, not merely the
+   * presence of `styleProvenance`, to tell an intentional opt-out apart from
+   * "Style was resolved but had no effective content" — see
+   * `retryGenerationJob` in src/actions/generationJobs.ts.
+   */
+  appendProjectStyle?: boolean;
 };
 
 export function serializeGenerationSnapshot(snapshot: GenerationSnapshot): string {

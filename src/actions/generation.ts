@@ -25,7 +25,8 @@ import {
 } from "@/lib/comfy/verifyWorkflowMutations";
 import { ensureVideoOutputSavedToLibrary } from "@/lib/shotVideoLibrary/ensureSaved";
 import { approveShotVideoPath } from "@/lib/shotVideoLibrary/approve";
-import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import { prepareGenerationStyleSource, type PreparedGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
+import { parseAppendProjectStyleFormValue } from "@/lib/projectStyle/appendProjectStyleFormField";
 import {
   checkCloudPreflightGate,
   findEditedStyleTextMismatch,
@@ -33,7 +34,7 @@ import {
   summarizeComfyNodeErrors,
   type RunWorkflowGenerationResult,
 } from "@/lib/comfy/generationActionHelpers";
-import { runShotGenerationCore, type ShotGenerationArgs } from "@/lib/comfy/runShotGeneration";
+import { runShotGenerationCore, type ShotGenerationArgs, type ShotStyleIntent } from "@/lib/comfy/runShotGeneration";
 
 export type { RunWorkflowGenerationResult } from "@/lib/comfy/generationActionHelpers";
 
@@ -64,7 +65,13 @@ export async function runWorkflowGeneration(args: ShotGenerationArgs): Promise<R
 // server") module — see its own header for why that matters.
 // ---------------------------------------------------------------------------
 
-async function submitShotGeneration(formData: FormData, styleIntent: "auto" | "shot-storyboard"): Promise<void> {
+async function submitShotGeneration(formData: FormData, normalStyleIntent: "auto" | "shot-storyboard"): Promise<void> {
+  // GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — fail-closed: only the checkbox's
+  // single explicit "1" value opts in; missing (unchecked), duplicated or
+  // invalid all opt out, reusing the existing "none" ShotStyleIntent escape
+  // hatch (see runShotGeneration.ts) rather than a second resolver path.
+  const appendProjectStyle = parseAppendProjectStyleFormValue(formData);
+  const styleIntent: ShotStyleIntent = appendProjectStyle ? normalStyleIntent : "none";
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
   const shotId = parseInt(formData.get("shotId") as string, 10);
@@ -176,6 +183,7 @@ async function submitShotGeneration(formData: FormData, styleIntent: "auto" | "s
       patchedJsonOverride,
       batchImagesByNodeId,
       confirmPartnerNodeCost,
+      appendProjectStyleRequested: appendProjectStyle,
     },
     styleIntent
   );
@@ -229,7 +237,14 @@ function appendSearchParam(url: string, key: string, value: string): string {
 // runAssetGeneration
 // ---------------------------------------------------------------------------
 
-export async function runAssetGeneration(input: {
+// GEN.PROJECT_STYLE.APPEND.TOGGLE.1 (retake Round 1) — not exported. This
+// file has "use server" at the top, so every exported async function is a
+// potential Server Action reference; an exported version accepting the raw
+// `appendProjectStyle` boolean would be a policy surface bypassing
+// `runAssetGenerationFromForm`'s fail-closed `parseAppendProjectStyleFormValue`
+// parsing. `runAssetGenerationFromForm` (below) is the only Asset entry point
+// this ticket exposes; it is the sole in-file caller.
+async function runAssetGeneration(input: {
   projectId: number;
   assetId: number;
   workflowId: number;
@@ -241,6 +256,8 @@ export async function runAssetGeneration(input: {
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
   /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
   confirmPartnerNodeCost?: boolean;
+  /** GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — the caller's already fail-closed-parsed form choice; never re-derived here. `false` skips `prepareGenerationStyleSource` entirely — no PROJECT STYLE segment is composed and no `styleProvenance` is ever written for this job. */
+  appendProjectStyle: boolean;
 }): Promise<RunWorkflowGenerationResult> {
   const { projectId, assetId, workflowId } = input;
 
@@ -313,16 +330,24 @@ export async function runAssetGeneration(input: {
     notes: asset.notes,
   });
 
-  // --- STYLE.1.E.SURFACES.1 — Asset consumer is always hard-coded "asset";
-  // no Camera Lab or unstyled path exists for Asset generation. ---
-  const preparedStyle = await prepareGenerationStyleSource("asset", { kind: "project", projectId }, assetPromptText);
-  if (!preparedStyle.ok) {
-    return { ok: false, error: preparedStyle.error };
+  // --- STYLE.1.E.SURFACES.1 — Asset consumer is always hard-coded "asset".
+  // GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — when the user opted out,
+  // prepareGenerationStyleSource is never called at all: no PROJECT STYLE
+  // segment can be composed and no styleProvenance can exist for this job. ---
+  let preparedStyleOk: Extract<PreparedGenerationStyleSource, { ok: true }> | null = null;
+  let effectiveSuggestedText = assetPromptText;
+  let effectiveTextOverrideByNodeId = input.textOverrideByNodeId;
+  if (input.appendProjectStyle) {
+    const preparedStyle = await prepareGenerationStyleSource("asset", { kind: "project", projectId }, assetPromptText);
+    if (!preparedStyle.ok) {
+      return { ok: false, error: preparedStyle.error };
+    }
+    preparedStyleOk = preparedStyle;
+    effectiveSuggestedText = preparedStyle.composedSuggestedPrompt.prompt;
+    effectiveTextOverrideByNodeId = input.textOverrideByNodeId
+      ? Object.fromEntries(Object.entries(input.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+      : input.textOverrideByNodeId;
   }
-  const effectiveSuggestedText = preparedStyle.composedSuggestedPrompt.prompt;
-  const effectiveTextOverrideByNodeId = input.textOverrideByNodeId
-    ? Object.fromEntries(Object.entries(input.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
-    : input.textOverrideByNodeId;
 
   // --- 9. Canonical payload (GEN.SEEDANCE.1 — expand -> filter -> patch, same
   //        function as the shot path, the panels and /map). ---
@@ -389,9 +414,9 @@ export async function runAssetGeneration(input: {
   // text-kind node), never merely from "an effective Style existed". See
   // the identical guard/rationale in runShotGeneration.ts. ---
   const assetTextPatches = built.patch.patches.filter((p) => p.kind === "text");
-  const assetStyleActuallyInjected = preparedStyle.hasEffectiveStyle && assetTextPatches.length > 0;
+  const assetStyleActuallyInjected = preparedStyleOk !== null && preparedStyleOk.hasEffectiveStyle && assetTextPatches.length > 0;
 
-  if (overrideUsed && preparedStyle.hasEffectiveStyle && assetTextPatches.length > 0) {
+  if (overrideUsed && preparedStyleOk !== null && preparedStyleOk.hasEffectiveStyle && assetTextPatches.length > 0) {
     const mismatch = findEditedStyleTextMismatch(assetTextPatches, finalPatchedJson);
     if (mismatch) return { ok: false, error: mismatch };
   }
@@ -499,7 +524,7 @@ export async function runAssetGeneration(input: {
       uploadedImages: prepared.uploadedImages,
       queuedWorkflow: prepared.workflow,
       // STYLE.1.E.SURFACES.1 — see the identical guard in runShotGeneration.ts.
-      ...(assetStyleActuallyInjected && preparedStyle.provenanceCandidate ? { styleProvenance: preparedStyle.provenanceCandidate } : {}),
+      ...(assetStyleActuallyInjected && preparedStyleOk?.provenanceCandidate ? { styleProvenance: preparedStyleOk.provenanceCandidate } : {}),
     };
     await db
       .update(generationJobs)
@@ -619,6 +644,10 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
   // charged, until that UI is built.
   const confirmPartnerNodeCost = (formData.get("confirmPartnerNodeCost") as string | null) === "1";
 
+  // GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — see the identical comment in
+  // submitShotGeneration.
+  const appendProjectStyle = parseAppendProjectStyleFormValue(formData);
+
   const result = await runAssetGeneration({
     projectId,
     assetId,
@@ -629,6 +658,7 @@ export async function runAssetGenerationFromForm(formData: FormData): Promise<vo
     patchedJsonOverride,
     batchImagesByNodeId: assetBatchImagesByNodeId,
     confirmPartnerNodeCost,
+    appendProjectStyle,
   });
 
   if (result.ok) {

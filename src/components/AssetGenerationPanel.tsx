@@ -24,6 +24,7 @@ import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch"
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { buildAssetFillSources } from "@/lib/assetFillSources";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
@@ -341,7 +342,7 @@ export default async function AssetGenerationPanel({
       </div>
 
       {/* Body */}
-      <div className="px-5 py-4 flex flex-col gap-5">
+      <div className="px-5 py-4 flex flex-col gap-5 group/style">
 
         {assetPromptText ? (
           <p className="text-xs text-[#4b5158]">
@@ -438,6 +439,9 @@ export default async function AssetGenerationPanel({
           </>
         )}
 
+        {/* GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — checked by default on every mount. */}
+        <ProjectStyleAppendCheckbox formId="asset-panel-generation-form" />
+
         {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
         <ProjectStyleGenerationPreview sourceLabel="Project Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
 
@@ -485,19 +489,26 @@ export default async function AssetGenerationPanel({
               )}
             {/* STYLE.1.E.SURFACES.1 — a resolver/corruption error disables
                 Generate entirely; already visible above via
-                ProjectStyleGenerationPreview. */}
+                ProjectStyleGenerationPreview. GEN.PROJECT_STYLE.APPEND.TOGGLE.1
+                — but never while the user has unchecked "Append Project
+                Style", since no resolution is attempted for that job at all. */}
             {!preparedStyle.ok && (
-              <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3">
+              <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3 group-has-[#appendProjectStyle:not(:checked)]/style:hidden">
                 <p className="text-xs text-[#cf7b6b] leading-relaxed">
                   Generation is disabled: Project Style could not be resolved.
                 </p>
               </div>
             )}
-            {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
+            {!cloudPreflightBlocksGeneration && (
             <PartnerNodeConfirmForm
+              id="asset-panel-generation-form"
               action={runAssetGenerationFromForm}
               partnerNodeConfirmMessage={partnerNodeConfirmMessage}
-              className="flex flex-col gap-4"
+              className={
+                preparedStyle.ok
+                  ? "flex flex-col gap-4"
+                  : "hidden group-has-[#appendProjectStyle:not(:checked)]/style:flex flex-col gap-4"
+              }
             >
               <input type="hidden" name="projectId" value={String(pid)} />
               <input type="hidden" name="assetId" value={String(aid)} />

@@ -45,6 +45,7 @@ import {
 } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
 import { saveVideoOutputToLibrary } from "@/actions/shotVideoLibrary";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
@@ -774,7 +775,7 @@ export default async function ShotGenerationPanel({
       </div>
 
       {/* Body */}
-      <div className="px-5 py-4 flex flex-col gap-5">
+      <div className="px-5 py-4 flex flex-col gap-5 group/style">
 
         {/* Shot Prompt */}
         <div className="flex flex-col gap-2">
@@ -913,6 +914,9 @@ export default async function ShotGenerationPanel({
           </>
         )}
 
+        {/* GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — checked by default on every mount. */}
+        <ProjectStyleAppendCheckbox formId="shot-panel-generation-form" />
+
         {/* STYLE.1.E.SURFACES.1 — inspectable Style source, before the payload preview. */}
         <ProjectStyleGenerationPreview sourceLabel="Resolved Sequence Style" prepared={preparedStyle} textInjectability={styleTextInjectability} />
 
@@ -962,19 +966,26 @@ export default async function ShotGenerationPanel({
             {/* STYLE.1.E.SURFACES.1 — a resolver/corruption error disables
                 Generate entirely rather than silently falling back to no
                 Style; the error itself is already visible above via
-                ProjectStyleGenerationPreview. */}
+                ProjectStyleGenerationPreview. GEN.PROJECT_STYLE.APPEND.TOGGLE.1
+                — but never while the user has unchecked "Append Project
+                Style", since no resolution is attempted for that job at all. */}
             {!preparedStyle.ok && (
-              <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3">
+              <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3 group-has-[#appendProjectStyle:not(:checked)]/style:hidden">
                 <p className="text-xs text-[#cf7b6b] leading-relaxed">
                   Generation is disabled: Project Style could not be resolved.
                 </p>
               </div>
             )}
-            {!cloudPreflightBlocksGeneration && preparedStyle.ok && (
+            {!cloudPreflightBlocksGeneration && (
             <PartnerNodeConfirmForm
+              id="shot-panel-generation-form"
               action={isStoryboardContext ? runShotStoryboardGenerationFromForm : runWorkflowGenerationFromForm}
               partnerNodeConfirmMessage={partnerNodeConfirmMessage}
-              className="flex flex-col gap-4"
+              className={
+                preparedStyle.ok
+                  ? "flex flex-col gap-4"
+                  : "hidden group-has-[#appendProjectStyle:not(:checked)]/style:flex flex-col gap-4"
+              }
             >
               <input type="hidden" name="projectId" value={String(pid)} />
               <input type="hidden" name="sequenceId" value={String(sid)} />

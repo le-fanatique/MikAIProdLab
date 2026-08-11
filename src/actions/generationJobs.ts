@@ -6,11 +6,9 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { generationJobs, shots, sequences } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { runShotGenerationCore, type ShotStyleIntent } from "@/lib/comfy/runShotGeneration";
+import { runShotGenerationCore } from "@/lib/comfy/runShotGeneration";
 import { parseGenerationSnapshot } from "@/lib/comfy/generationSnapshot";
-import { isGenerationConsumer } from "@/lib/projectStyle/generationStyleSource";
-
-const SHOT_STYLE_CONSUMERS = new Set(["shot-image", "shot-video", "shot-storyboard"]);
+import { deriveShotRetryStyleIntent } from "@/lib/comfy/deriveShotRetryStyleIntent";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,27 +89,17 @@ export async function retryGenerationJob(formData: FormData): Promise<void> {
     errRedirect("Sequence not found or does not belong to this project.");
   }
 
-  // STYLE.1.E.SURFACES.1 (retake) — retry must preserve the EXACT original
-  // Style consumer (shot-image, shot-video or shot-storyboard), never
-  // collapse it to a re-derived "normal" mode: if the library workflow's
-  // kind changed since the original job, that must be refused explicitly,
-  // not silently switched to a different consumer/applicability filter.
-  // Only a legacy job with no Style provenance at all derives image/video
-  // from the workflow's CURRENT persisted kind, same as a fresh Generate.
-  // A snapshot whose consumer is present but not one of the three Shot
-  // consumers (corrupt or a foreign consumer such as "asset") refuses the
-  // retry outright rather than silently treating it as normal.
+  // STYLE.1.E.SURFACES.1 (retake) / GEN.PROJECT_STYLE.APPEND.TOGGLE.1 — see
+  // deriveShotRetryStyleIntent's own doc comment for the full contract: retry
+  // preserves the EXACT original Style consumer or explicit opt-out, and
+  // refuses outright on a corrupt/foreign consumer, rather than silently
+  // treating it as normal.
   const priorSnapshot = parseGenerationSnapshot(job.payloadSnapshot);
-  const priorConsumer = priorSnapshot?.styleProvenance?.consumer;
-
-  let styleIntent: ShotStyleIntent;
-  if (priorConsumer === undefined) {
-    styleIntent = "auto";
-  } else if (isGenerationConsumer(priorConsumer) && SHOT_STYLE_CONSUMERS.has(priorConsumer)) {
-    styleIntent = priorConsumer as "shot-image" | "shot-video" | "shot-storyboard";
-  } else {
-    errRedirect("This job's Style provenance is corrupt or incompatible with Shot retry.");
+  const styleDecision = deriveShotRetryStyleIntent(priorSnapshot);
+  if (!styleDecision.ok) {
+    errRedirect(styleDecision.error);
   }
+  const { styleIntent, appendProjectStyleRequested } = styleDecision;
 
   // Run a new generation with current shot/workflow state. runShotGenerationCore
   // itself re-verifies that the workflow's CURRENT persisted kind is still
@@ -123,6 +111,7 @@ export async function retryGenerationJob(formData: FormData): Promise<void> {
       sequenceId,
       shotId,
       workflowId: job.workflowId,
+      appendProjectStyleRequested,
     },
     styleIntent
   );
