@@ -21,7 +21,7 @@ import { useRouter } from "next/navigation";
 export type ShotPanelVideoOption = {
   id: string;
   label: string;
-  source: "generation" | "sequence_split";
+  source: "generation" | "sequence_split" | "reference_copy";
   durationSeconds: number | null;
   isApproved: boolean;
 };
@@ -40,7 +40,7 @@ type Props = {
 };
 
 function optionLabel(v: ShotPanelVideoOption): string {
-  const provenance = v.source === "sequence_split" ? "Split" : "Generation";
+  const provenance = v.source === "sequence_split" ? "Split" : v.source === "reference_copy" ? "Video Reference Copy" : "Generation";
   const duration = v.durationSeconds !== null ? ` · ${v.durationSeconds.toFixed(2)}s` : "";
   const approved = v.isApproved ? " · Approved" : "";
   return `${v.label} · ${provenance}${duration}${approved}`;

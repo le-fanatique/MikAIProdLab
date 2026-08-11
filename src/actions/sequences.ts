@@ -1,14 +1,15 @@
 "use server";
 
 import { db } from "@/db";
-import { sequences } from "@/db/schema";
-import { eq, max, and } from "drizzle-orm";
+import { sequences, shots, shotReferenceVideos } from "@/db/schema";
+import { eq, max, and, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
 import { rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/legacyNavigationBackground";
+import { quarantineReferenceVideoFiles, restoreQuarantinedReferenceVideoFiles, finalizeQuarantinedReferenceVideoFiles, type ShotReferenceVideoFileRef } from "@/lib/shotReferenceVideos/fileCleanup";
 
 export async function createSequence(projectId: number, formData: FormData) {
   const title = formData.get("title") as string;
@@ -114,6 +115,24 @@ async function deleteSequenceRow(id: number, projectId: number): Promise<void> {
   if (!row || row.projectId !== projectId) {
     throw new Error(`deleteSequence(${id}): Sequence not found in Project ${projectId}.`);
   }
+
+  // SHOT.VIDEO.REFERENCES.1 — `shot_reference_videos.shotId` is `onDelete:
+  // "cascade"`, so deleting this Sequence's Shots (cascaded from
+  // `shots.sequenceId -> sequences.id`, also cascade) transitively cascades
+  // every Video Reference row this Sequence owns. The cascade removes ROWS
+  // only, never files — every such file is quarantined BEFORE the
+  // transaction and permanently unlinked only AFTER it commits, same
+  // discipline as `deleteProject`'s own quarantine lists.
+  const sequenceShotIds = (await db.select({ id: shots.id }).from(shots).where(eq(shots.sequenceId, id))).map((s) => s.id);
+  const referenceVideoRows: ShotReferenceVideoFileRef[] =
+    sequenceShotIds.length > 0
+      ? await db
+          .select({ id: shotReferenceVideos.id, shotId: shotReferenceVideos.shotId, videoPath: shotReferenceVideos.videoPath })
+          .from(shotReferenceVideos)
+          .where(inArray(shotReferenceVideos.shotId, sequenceShotIds))
+      : [];
+  const quarantinedRefVideos = await quarantineReferenceVideoFiles(referenceVideoRows, `deleteSequence(${id})`);
+
   const imagePath = row.rowBackgroundImagePath;
   // Retake Round 2 (Codex P1) — owner-aware: must be confined to THIS
   // Sequence's own `sequence-<id>` subfolder, not just somewhere under the
@@ -163,6 +182,12 @@ async function deleteSequenceRow(id: number, projectId: number): Promise<void> {
           `Sequence #${id}'s row background changed after file collection began (was ${JSON.stringify(imagePath)}, now ${JSON.stringify(current.rowBackgroundImagePath)}). Rollback — quarantine the new file and retry.`
         );
       }
+      // Anti-race for Video References — the same set of rows/paths
+      // collected above, re-verified inside this same transaction.
+      const currentRefVideos = sequenceShotIds.length > 0 ? tx.select({ id: shotReferenceVideos.id, videoPath: shotReferenceVideos.videoPath }).from(shotReferenceVideos).where(inArray(shotReferenceVideos.shotId, sequenceShotIds)).all() : [];
+      if (currentRefVideos.length !== referenceVideoRows.length || currentRefVideos.some((r) => referenceVideoRows.find((orig) => orig.id === r.id)?.videoPath !== r.videoPath)) {
+        throw new Error(`Sequence #${id}'s Video References changed after file collection began. Rollback — retry.`);
+      }
       const deleted = tx
         .delete(sequences)
         .where(and(eq(sequences.id, id), eq(sequences.projectId, projectId)))
@@ -172,6 +197,8 @@ async function deleteSequenceRow(id: number, projectId: number): Promise<void> {
       }
     });
   } catch (e) {
+    const refVideoRestored = await restoreQuarantinedReferenceVideoFiles(quarantinedRefVideos);
+    const refVideoSuffix = refVideoRestored ? "" : " Additionally, one or more Video Reference file(s) could not be automatically restored; please check this Sequence's Shots manually.";
     if (quarantined && quarantineAbsolute && absolute) {
       try {
         await rename(quarantineAbsolute, absolute);
@@ -179,11 +206,18 @@ async function deleteSequenceRow(id: number, projectId: number): Promise<void> {
         throw new Error(
           `deleteSequence(${id}): DB delete failed (${e instanceof Error ? e.message : String(e)}), and the row background could not be restored from quarantine ("${quarantineAbsolute}"): ${
             restoreErr instanceof Error ? restoreErr.message : String(restoreErr)
-          }.`
+          }.${refVideoSuffix}`
         );
       }
     }
-    throw new Error(`deleteSequence(${id}): DB delete failed — nothing was changed. ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`deleteSequence(${id}): DB delete failed — nothing was changed. ${e instanceof Error ? e.message : String(e)}${refVideoSuffix}`);
+  }
+
+  const refVideoAllRemoved = await finalizeQuarantinedReferenceVideoFiles(quarantinedRefVideos);
+  if (!refVideoAllRemoved) {
+    throw new Error(
+      `deleteSequence(${id}): the Sequence was deleted successfully, but one or more of its Shots' Video Reference files could not be fully removed from the server. This does not affect data integrity — retry removing them manually later.`
+    );
   }
 
   if (quarantined && quarantineAbsolute) {

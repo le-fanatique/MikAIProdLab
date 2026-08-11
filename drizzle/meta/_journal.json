@@ -344,6 +344,13 @@
       "when": 1785886216025,
       "tag": "0048_colossal_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1786408762292,
+      "tag": "0049_workable_vertigo",
+      "breakpoints": true
     }
   ]
 }

@@ -36,7 +36,9 @@ export async function loadRuntimeVideoOptionsForShot(shotId: number): Promise<Ru
     const provenanceLabel =
       row.source === "sequence_split"
         ? `Split Run #${candidate?.splitRunId ?? "?"}${candidate ? ` · Segment #${(orderIndexBySegmentId.get(candidate.splitSegmentId) ?? -1) + 1}` : ""}`
-        : "Generation Content";
+        : row.source === "reference_copy"
+          ? "Video Reference Copy"
+          : "Generation Content";
     return {
       id: row.id,
       videoPath: row.videoPath,

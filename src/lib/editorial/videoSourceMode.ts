@@ -248,5 +248,16 @@ async function resolveLatestGenerationRaw(shotList: Shot[]): Promise<Map<number,
     .from(shotVideos)
     .where(inArray(shotVideos.shotId, shotIds));
 
-  return pickLatestGenerationSources(shotIds, rows);
+  // SHOT.VIDEO.REFERENCES.1 — a "reference_copy" row (the explicit "Add to
+  // Shot Videos" bridge from a Video Reference) is a real, deletable,
+  // explicitly-approvable library entry, but it must NEVER win "Latest
+  // generation" — that mode's whole contract is "the newest durable
+  // GENERATION/SPLIT output", not an imported source a user merely copied
+  // in. Excluded here (before the pure picker even sees it) rather than by
+  // widening `ShotVideoRowForResolution`, so that type keeps meaning exactly
+  // "a row this picker may legitimately choose". "Approved-only" is
+  // unaffected: it never reads this table at all.
+  const eligibleRows = rows.filter((row): row is typeof row & { source: "generation" | "sequence_split" } => row.source !== "reference_copy");
+
+  return pickLatestGenerationSources(shotIds, eligibleRows);
 }

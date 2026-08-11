@@ -189,7 +189,11 @@ export async function approveLatestGenerationForSequence(
         .from(shotVideos)
         .where(inArray(shotVideos.shotId, snapshotShotIds))
         .all();
-      const freshWinners = pickLatestGenerationSources(snapshotShotIds, freshVideoRows);
+      // SHOT.VIDEO.REFERENCES.1 — same exclusion as videoSourceMode.ts's
+      // own `resolveLatestGenerationRaw`: a "reference_copy" row must never
+      // win "Latest generation", including in this atomic re-verification.
+      const freshEligibleVideoRows = freshVideoRows.filter((row): row is typeof row & { source: "generation" | "sequence_split" } => row.source !== "reference_copy");
+      const freshWinners = pickLatestGenerationSources(snapshotShotIds, freshEligibleVideoRows);
 
       for (const shotId of snapshotShotIds) {
         const freshWinner = freshWinners.get(shotId);

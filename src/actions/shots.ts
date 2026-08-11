@@ -1,13 +1,14 @@
 "use server";
 
 import { db } from "@/db";
-import { shots, sequences, sequenceEditorialItems, shotVideoCandidates, shotVideos } from "@/db/schema";
+import { shots, sequences, sequenceEditorialItems, shotVideoCandidates, shotVideos, shotReferenceVideos } from "@/db/schema";
 import { eq, max, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
+import { quarantineReferenceVideoFiles, restoreQuarantinedReferenceVideoFiles, finalizeQuarantinedReferenceVideoFiles } from "@/lib/shotReferenceVideos/fileCleanup";
 
 export async function createShot(
   sequenceId: number,
@@ -201,6 +202,25 @@ export async function deleteShot(
   // "sequence_split" row already implies a live candidate row that the
   // check below also catches, so this is a deliberately simple superset
   // rather than two narrower checks that must be kept in sync by hand.
+  // SHOT.VIDEO.REFERENCES.1 — `shot_reference_videos.shotId` is `onDelete:
+  // "cascade"` (mirrors `shot_reference_images`'s own convention, not
+  // `shot_videos`' RESTRICT — a Video Reference is never blocking, unlike a
+  // durable Shot Output). The FK cascade removes the ROWS; it can never
+  // touch the FILESYSTEM, so every Video Reference file this Shot owns is
+  // quarantined BEFORE the transaction and only permanently unlinked AFTER
+  // it commits — same discipline as `deleteProject`'s own quarantine lists.
+  const referenceVideoRows = await db
+    .select({ id: shotReferenceVideos.id, shotId: shotReferenceVideos.shotId, videoPath: shotReferenceVideos.videoPath })
+    .from(shotReferenceVideos)
+    .where(eq(shotReferenceVideos.shotId, id));
+
+  let quarantined;
+  try {
+    quarantined = await quarantineReferenceVideoFiles(referenceVideoRows, `deleteShot(${id})`);
+  } catch (e) {
+    redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent(e instanceof Error ? e.message : "Failed to prepare this Shot's Video References for deletion — nothing was changed. Please try again.")}`);
+  }
+
   let blockedByCandidates = false;
   let blockedByLibraryVideos = false;
   try {
@@ -215,16 +235,36 @@ export async function deleteShot(
         blockedByLibraryVideos = true;
         throw new Error("SHOT_HAS_LIBRARY_VIDEOS");
       }
+      // Anti-race: re-verify the exact set of reference-video rows/paths
+      // collected above is still current, inside the same transaction that
+      // is about to cascade-delete them — a Video Reference added or
+      // changed after collection began rolls the whole delete back rather
+      // than silently orphaning an unquarantined file.
+      const currentRefVideos = tx.select({ id: shotReferenceVideos.id, videoPath: shotReferenceVideos.videoPath }).from(shotReferenceVideos).where(eq(shotReferenceVideos.shotId, id)).all();
+      if (currentRefVideos.length !== referenceVideoRows.length || currentRefVideos.some((row) => referenceVideoRows.find((r) => r.id === row.id)?.videoPath !== row.videoPath)) {
+        throw new Error("SHOT_REFERENCE_VIDEOS_CHANGED");
+      }
       tx.delete(shots).where(eq(shots.id, id)).run();
     });
   } catch (e) {
+    const restored = await restoreQuarantinedReferenceVideoFiles(quarantined);
+    const restoreSuffix = restored ? "" : " Additionally, one or more Video Reference file(s) could not be automatically restored; please check this Shot manually.";
     if (blockedByCandidates) {
-      redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("This Shot has one or more Sequence Video Candidates. Delete them from Shot Detail before deleting the Shot.")}`);
+      redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent(`This Shot has one or more Sequence Video Candidates. Delete them from Shot Detail before deleting the Shot.${restoreSuffix}`)}`);
     }
     if (blockedByLibraryVideos) {
-      redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("This Shot has one or more Shot Videos in its library. Delete them from Shot Detail before deleting the Shot.")}`);
+      redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent(`This Shot has one or more Shot Videos in its library. Delete them from Shot Detail before deleting the Shot.${restoreSuffix}`)}`);
     }
-    redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent("Failed to delete this Shot — nothing was changed. Please try again.")}`);
+    redirect(`/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent(`Failed to delete this Shot — nothing was changed. Please try again.${restoreSuffix}`)}`);
+  }
+
+  const allRemoved = await finalizeQuarantinedReferenceVideoFiles(quarantined);
+  if (!allRemoved) {
+    redirect(
+      `/projects/${projectId}/sequences/${sequenceId}?deleteShotError=${encodeURIComponent(
+        "This Shot was deleted, but one or more of its Video Reference files could not be fully removed from the server. This does not affect data integrity — please retry cleanup later or contact support."
+      )}`
+    );
   }
   redirect(`/projects/${projectId}/sequences/${sequenceId}`);
 }

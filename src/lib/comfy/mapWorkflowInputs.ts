@@ -54,7 +54,13 @@ export type RuntimeAssignedAsset = {
 // must never be offered to an image input or vice versa (see
 // `mapWorkflowInputs`'s own kind-gated branches below). Scoped to the
 // current Shot's own durable library only — never cross-Shot.
-export type RuntimeVideoSource = "generation" | "sequence_split";
+// SHOT.VIDEO.REFERENCES.1 — "reference_copy" added: a `shot_videos` row can
+// now also be a physical copy explicitly added from a Video Reference. It
+// is a normal, selectable library entry here exactly like "generation"/
+// "sequence_split" — this picker's scope (which library entries can feed an
+// existing `videoNode_*` input) is unrelated to Editorial "Latest
+// generation" eligibility, which is where this source is actually excluded.
+export type RuntimeVideoSource = "generation" | "sequence_split" | "reference_copy";
 
 export type RuntimeVideoOption = {
   shotVideoId: number;

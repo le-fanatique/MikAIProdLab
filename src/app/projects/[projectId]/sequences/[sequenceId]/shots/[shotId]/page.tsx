@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { deriveMediaLabel } from "@/lib/media/mediaLabel";
-import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, shotVideos, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, shotVideos, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails, shotReferenceVideos } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -24,6 +24,10 @@ import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteShotReferenceImage, setShotStoryboardThumbnail } from "@/actions/shotReferenceImages";
+import { createShotReferenceVideo, deleteShotReferenceVideo } from "@/actions/shotReferenceVideos";
+import { addReferenceVideoToShotVideos } from "@/actions/shotVideoReferenceBridge";
+import { isEligibleShotTargetDuration } from "@/lib/shotReferenceVideos/videoValidation";
+import ShotReferenceVideosPanel, { type ShotReferenceVideoRow } from "@/components/shotReferenceVideos/ShotReferenceVideosPanel";
 import {
   deletePromptSegment,
   movePromptSegmentUp,
@@ -101,6 +105,11 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const thumbnailSet = sp("thumbnailSet");
   const referenceImageError = sp("error");
   const referenceImageDeleteWarning = sp("deleteWarning");
+  const refVideoError = sp("refVideoError");
+  const refVideoAdded = sp("refVideoAdded");
+  const refVideoDeleted = sp("refVideoDeleted");
+  const refVideoDuplicated = sp("refVideoDuplicated");
+  const libraryAddedFromReference = sp("libraryAddedFromReference");
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -601,6 +610,26 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       : [];
   const orderIndexBySegmentId = new Map(librarySegments.map((s) => [s.id, s.orderIndex]));
 
+  // ── Video References (SHOT.VIDEO.REFERENCES.1) — separate, durable,
+  // user-imported creative source collection, never `shot_videos`. ─────────
+  const referenceVideoRows = await db
+    .select()
+    .from(shotReferenceVideos)
+    .where(eq(shotReferenceVideos.shotId, shid))
+    .orderBy(asc(shotReferenceVideos.orderIndex), asc(shotReferenceVideos.id));
+
+  const referenceVideoEntries: ShotReferenceVideoRow[] = referenceVideoRows.map((row) => ({
+    id: row.id,
+    videoUrl: refImageUrl(row.videoPath),
+    sourceFilename: row.sourceFilename,
+    label: row.label,
+    notes: row.notes,
+    durationSeconds: row.durationSeconds,
+    width: row.width,
+    height: row.height,
+    targetDurationEligible: isEligibleShotTargetDuration(row.durationSeconds),
+  }));
+
   const shotDetailReturnTo = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const libraryEntryRows: ShotVideoLibraryRow[] = libraryRows.map((row) => {
     const candidate = row.sourceCandidateId !== null ? candidateById.get(row.sourceCandidateId) : undefined;
@@ -724,6 +753,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             {(candidateDeleted || libraryDeleted) && <p className="mb-3 text-xs text-[#6b9e72]">Video deleted.</p>}
             {librarySaved && <p className="mb-3 text-xs text-[#6b9e72]">Video saved to the Shot Video Library.</p>}
             {libraryAlreadySaved && <p className="mb-3 text-xs text-[#a4abb2]">This output was already saved to the Shot Video Library.</p>}
+            {libraryAddedFromReference === "duration" && <p className="mb-3 text-xs text-[#6b9e72]">Video Reference added to Shot Videos, and the Shot&apos;s target duration was updated.</p>}
+            {libraryAddedFromReference === "1" && <p className="mb-3 text-xs text-[#6b9e72]">Video Reference added to Shot Videos.</p>}
             <ShotVideoLibraryPanel
               entries={libraryEntryRows}
               shotId={shid}
@@ -957,6 +988,28 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               getMakeThumbnailAction={(imageId) =>
                 setShotStoryboardThumbnail.bind(null, imageId, shid, sid, pid)
               }
+            />
+          </Card>
+        </Collapsible>
+
+        <Collapsible
+          label={`Video References${referenceVideoEntries.length > 0 ? ` (${referenceVideoEntries.length})` : ""}`}
+          defaultOpen={referenceVideoEntries.length > 0 || Boolean(refVideoError)}
+        >
+          <Card title="Video References">
+            {refVideoError && <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{refVideoError}</p>}
+            {refVideoAdded && <p className="mb-3 text-xs text-[#6b9e72]">Video Reference added.</p>}
+            {refVideoDeleted && <p className="mb-3 text-xs text-[#6b9e72]">Video Reference deleted.</p>}
+            {refVideoDuplicated && <p className="mb-3 text-xs text-[#6b9e72]">Shot Video duplicated into Video References.</p>}
+            <ShotReferenceVideosPanel
+              entries={referenceVideoEntries}
+              shotId={shid}
+              sequenceId={sid}
+              projectId={pid}
+              returnTo={shotDetailReturnTo}
+              createAction={createShotReferenceVideo.bind(null, shid, sid, pid)}
+              deleteAction={deleteShotReferenceVideo}
+              addToShotVideosAction={addReferenceVideoToShotVideos}
             />
           </Card>
         </Collapsible>

@@ -18,13 +18,15 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import LockedActionForm from "@/components/LockedActionForm";
 import { approveShotVideo, deleteShotVideo } from "@/actions/shotVideoLibrary";
+import { duplicateShotVideoAsReference } from "@/actions/shotVideoReferenceBridge";
 import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 
 export type ShotVideoLibraryRow = {
   id: number;
   videoUrl: string;
-  source: "generation" | "sequence_split";
+  source: "generation" | "sequence_split" | "reference_copy";
   durationSeconds: number | null;
   /** Preformatted server-side with an explicit, fixed time zone — never computed client-side (SSR/hydration parity). */
   createdAtLabel: string;
@@ -37,6 +39,9 @@ export type ShotVideoLibraryRow = {
 function provenanceLabel(row: ShotVideoLibraryRow): string {
   if (row.source === "sequence_split") {
     return `Split Run #${row.splitRunId}${row.splitSegmentOrderIndex !== null ? ` · Segment #${row.splitSegmentOrderIndex + 1}` : ""}`;
+  }
+  if (row.source === "reference_copy") {
+    return "Video Reference Copy";
   }
   return "Generation Content";
 }
@@ -166,6 +171,11 @@ export default function ShotVideoLibraryPanel({
                     {row.isApproved && (
                       <span className="text-[9px] uppercase tracking-wider border rounded px-1.5 py-px text-[#6b9e72] border-[#2a3d2e]">Approved</span>
                     )}
+                    {row.source === "reference_copy" && (
+                      <span className="text-[9px] uppercase tracking-wider border rounded px-1.5 py-px text-[#a4abb2] border-[#3a4046]" title="Copied from a Video Reference — never selected by Editorial Latest generation, but can be approved like any other entry.">
+                        Reference Copy
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] text-[#6e767d] mt-0.5">{row.createdAtLabel}</div>
                 </div>
@@ -193,6 +203,23 @@ export default function ShotVideoLibraryPanel({
                     </ConfirmSubmitButton>
                   </form>
                 )}
+                <LockedActionForm
+                  action={duplicateShotVideoAsReference}
+                  confirmMessage="Duplicate this video into Video References? This copies the file — it does not affect this Shot Video entry."
+                >
+                  {({ pending }) => (
+                    <>
+                      <input type="hidden" name="shotVideoId" value={row.id} />
+                      <input type="hidden" name="shotId" value={shotId} />
+                      <input type="hidden" name="sequenceId" value={sequenceId} />
+                      <input type="hidden" name="projectId" value={projectId} />
+                      <input type="hidden" name="returnTo" value={returnTo} />
+                      <button type="submit" disabled={pending} className="text-[#a4abb2] hover:text-[#e7e9ec] transition-colors disabled:opacity-40">
+                        {pending ? "Duplicating…" : "Duplicate as Video Reference"}
+                      </button>
+                    </>
+                  )}
+                </LockedActionForm>
                 {!row.isApproved && (
                   <form action={deleteShotVideo}>
                     <input type="hidden" name="shotVideoId" value={row.id} />

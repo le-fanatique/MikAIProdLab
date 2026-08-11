@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { projects, sequences, projectStyleReferenceImages, lookTests, lookTestResults, generationJobs } from "@/db/schema";
+import { projects, sequences, shots, shotReferenceVideos, projectStyleReferenceImages, lookTests, lookTestResults, generationJobs } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { rename, unlink } from "node:fs/promises";
@@ -9,6 +9,7 @@ import path from "node:path";
 import { isConfinedReferenceImagePath } from "@/lib/projectStyle/uploadReferenceImage";
 import { isWithinLookDevelopmentRoot } from "@/lib/lookDevelopment/paths";
 import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/legacyNavigationBackground";
+import { assertConfinedOrThrow } from "@/lib/shotReferenceVideos/fileCleanup";
 
 export async function createProject(formData: FormData) {
   const name = formData.get("name") as string;
@@ -145,6 +146,27 @@ export async function deleteProject(id: number) {
     }
   }
 
+  // SHOT.VIDEO.REFERENCES.1 — `shot_reference_videos.shotId` is `onDelete:
+  // "cascade"`, so deleting this Project cascades every Shot (via each
+  // Sequence, also cascade), which transitively cascades every Video
+  // Reference row across the whole Project. Same confine -> quarantine ->
+  // delete -> unlink discipline as Style references / Look results /
+  // navigation backgrounds above, sharing the one combined
+  // `filesToQuarantine` list below rather than a second independent cleanup
+  // pass.
+  const projectShotIds = sequenceBackgrounds.length > 0 ? (await db.select({ id: shots.id }).from(shots).where(inArray(shots.sequenceId, sequenceBackgrounds.map((s) => s.id)))).map((s) => s.id) : [];
+  const referenceVideos =
+    projectShotIds.length > 0
+      ? await db
+          .select({ id: shotReferenceVideos.id, shotId: shotReferenceVideos.shotId, videoPath: shotReferenceVideos.videoPath })
+          .from(shotReferenceVideos)
+          .where(inArray(shotReferenceVideos.shotId, projectShotIds))
+      : [];
+  for (const ref of referenceVideos) {
+    assertConfinedOrThrow(ref, `deleteProject(${id})`);
+  }
+  const initialReferenceVideoPathById = new Map(referenceVideos.map((r) => [r.id, r.videoPath] as const));
+
   // STYLE.1.G.CORE.1 — Look Development results are file-backed exactly
   // like Project Style references, under their own dedicated confined
   // root (uploads/look-development/), and must leave zero orphaned file on
@@ -182,7 +204,7 @@ export async function deleteProject(id: number) {
   // mean a Sequence created after collection began.
   const initialSequenceBackgroundPathById = new Map(sequenceBackgrounds.map((s) => [s.id, s.imagePath] as const));
 
-  type QuarantineEntry = { source: "style-reference" | "look-result" | "navigation-background"; id: number; imagePath: string };
+  type QuarantineEntry = { source: "style-reference" | "look-result" | "navigation-background" | "shot-reference-video"; id: number; imagePath: string };
   const filesToQuarantine: QuarantineEntry[] = [
     ...styleReferences.map((ref): QuarantineEntry => ({ source: "style-reference", id: ref.id, imagePath: ref.imagePath })),
     ...lookResults.map((r): QuarantineEntry => ({ source: "look-result", id: r.id, imagePath: r.filePath })),
@@ -192,9 +214,10 @@ export async function deleteProject(id: number) {
     ...sequenceBackgrounds
       .filter((seq) => seq.imagePath)
       .map((seq): QuarantineEntry => ({ source: "navigation-background", id: seq.id, imagePath: seq.imagePath! })),
+    ...referenceVideos.map((ref): QuarantineEntry => ({ source: "shot-reference-video", id: ref.id, imagePath: ref.videoPath })),
   ];
 
-  const quarantined: { source: "style-reference" | "look-result" | "navigation-background"; id: number; originalAbsolute: string; quarantineAbsolute: string }[] = [];
+  const quarantined: { source: "style-reference" | "look-result" | "navigation-background" | "shot-reference-video"; id: number; originalAbsolute: string; quarantineAbsolute: string }[] = [];
 
   for (const ref of filesToQuarantine) {
     const originalAbsolute = path.join(publicRoot, ref.imagePath);
@@ -205,13 +228,14 @@ export async function deleteProject(id: number) {
     } catch (e) {
       if ((e as NodeJS.ErrnoException)?.code === "ENOENT") continue; // already gone — nothing to quarantine or restore
 
-      const quarantineRestoreResults: { original: string; quarantine: string; restored: boolean; error?: string }[] = [];
+      const quarantineRestoreResults: { source: QuarantineEntry["source"]; original: string; quarantine: string; restored: boolean; error?: string }[] = [];
       for (const q of quarantined) {
         try {
           await rename(q.quarantineAbsolute, q.originalAbsolute);
-          quarantineRestoreResults.push({ original: q.originalAbsolute, quarantine: q.quarantineAbsolute, restored: true });
+          quarantineRestoreResults.push({ source: q.source, original: q.originalAbsolute, quarantine: q.quarantineAbsolute, restored: true });
         } catch (restoreErr) {
           quarantineRestoreResults.push({
+            source: q.source,
             original: q.originalAbsolute,
             quarantine: q.quarantineAbsolute,
             restored: false,
@@ -222,11 +246,17 @@ export async function deleteProject(id: number) {
       const failedQRestores = quarantineRestoreResults.filter((r) => !r.restored);
       const baseMsg = `deleteProject(${id}): failed to prepare ${ref.source} file "${ref.imagePath}" for deletion — nothing was changed in the database: ${e instanceof Error ? e.message : String(e)}`;
       if (failedQRestores.length > 0) {
-        const details = failedQRestores
-          .map((r) => `"${r.quarantine}" → "${r.original}" (${r.error})`)
-          .join("; ");
+        // SHOT.VIDEO.REFERENCES.1 (Retake Round 1, Codex P2) — same
+        // source-based sanitization split as the two blocks below.
+        const refVideoFailed = failedQRestores.filter((r) => r.source === "shot-reference-video");
+        const otherFailed = failedQRestores.filter((r) => r.source !== "shot-reference-video");
+        if (refVideoFailed.length > 0) console.error(`deleteProject(${id}): failed to restore ${refVideoFailed.length} Video Reference file(s) from quarantine during rollback:`, refVideoFailed);
+        const detailParts = [
+          ...otherFailed.map((r) => `"${r.quarantine}" → "${r.original}" (${r.error})`),
+          ...(refVideoFailed.length > 0 ? [`${refVideoFailed.length} Video Reference file(s) could not be automatically restored (see server log)`] : []),
+        ];
         throw new Error(
-          `${baseMsg}. ${quarantineRestoreResults.length - failedQRestores.length} file(s) restored, ${failedQRestores.length} file(s) still under quarantine: ${details}`
+          `${baseMsg}. ${quarantineRestoreResults.length - failedQRestores.length} file(s) restored, ${failedQRestores.length} file(s) still under quarantine: ${detailParts.join("; ")}`
         );
       }
       throw new Error(`${baseMsg}. All ${quarantineRestoreResults.length} already-quarantined file(s) were restored.`);
@@ -319,6 +349,32 @@ export async function deleteProject(id: number) {
         }
       }
 
+      // SHOT.VIDEO.REFERENCES.1 — same anti-race recheck, against the
+      // INITIAL DB snapshot of Video Reference identities/paths
+      // (`initialReferenceVideoPathById`), for every Shot this Project
+      // still owns (re-derived here, inside the transaction, rather than
+      // trusted from `projectShotIds` collected earlier).
+      const currentProjectShotIds = tx
+        .select({ id: shots.id })
+        .from(shots)
+        .innerJoin(sequences, eq(shots.sequenceId, sequences.id))
+        .where(eq(sequences.projectId, id))
+        .all()
+        .map((r) => r.id);
+      const currentReferenceVideos =
+        currentProjectShotIds.length > 0
+          ? tx.select({ id: shotReferenceVideos.id, videoPath: shotReferenceVideos.videoPath }).from(shotReferenceVideos).where(inArray(shotReferenceVideos.shotId, currentProjectShotIds)).all()
+          : [];
+      for (const r of currentReferenceVideos) {
+        const initialPath = initialReferenceVideoPathById.get(r.id);
+        if (initialPath === undefined) {
+          throw new Error(`deleteProject(${id}): a new Video Reference (#${r.id}) was added after file collection began (videoPath: "${r.videoPath}"). Rollback — quarantine this file and retry.`);
+        }
+        if (initialPath !== r.videoPath) {
+          throw new Error(`deleteProject(${id}): Video Reference #${r.id}'s file path changed after file collection began (was "${initialPath}", now "${r.videoPath}"). Rollback — quarantine the new file and retry.`);
+        }
+      }
+
       const projectLookTestIds = tx
         .select({ id: lookTests.id })
         .from(lookTests)
@@ -336,13 +392,14 @@ export async function deleteProject(id: number) {
     // path (nothing was ever permanently deleted), so restoration is
     // deterministic: no ENOENT ambiguity, no "was this really restored"
     // question, because no unlink has happened yet at this point.
-    const restoreResults: { original: string; quarantine: string; restored: boolean; error?: string }[] = [];
+    const restoreResults: { source: QuarantineEntry["source"]; original: string; quarantine: string; restored: boolean; error?: string }[] = [];
     for (const q of quarantined) {
       try {
         await rename(q.quarantineAbsolute, q.originalAbsolute);
-        restoreResults.push({ original: q.originalAbsolute, quarantine: q.quarantineAbsolute, restored: true });
+        restoreResults.push({ source: q.source, original: q.originalAbsolute, quarantine: q.quarantineAbsolute, restored: true });
       } catch (restoreErr) {
         restoreResults.push({
+          source: q.source,
           original: q.originalAbsolute,
           quarantine: q.quarantineAbsolute,
           restored: false,
@@ -353,9 +410,19 @@ export async function deleteProject(id: number) {
     const failedRestores = restoreResults.filter((r) => !r.restored);
     const base = `deleteProject(${id}): DB delete failed — ${e instanceof Error ? e.message : String(e)}`;
     if (failedRestores.length > 0) {
-      const details = failedRestores.map((r) => `"${r.quarantine}" → "${r.original}" (${r.error})`).join("; ");
+      // SHOT.VIDEO.REFERENCES.1 (Retake Round 1, Codex P2) — Video Reference
+      // failures are reported sanitized (no absolute path); every other,
+      // pre-existing source keeps its exact established path-reporting
+      // format unchanged (own accepted precedent, out of this ticket's scope).
+      const refVideoFailed = failedRestores.filter((r) => r.source === "shot-reference-video");
+      const otherFailed = failedRestores.filter((r) => r.source !== "shot-reference-video");
+      if (refVideoFailed.length > 0) console.error(`deleteProject(${id}): failed to restore ${refVideoFailed.length} Video Reference file(s) from quarantine:`, refVideoFailed);
+      const detailParts = [
+        ...otherFailed.map((r) => `"${r.quarantine}" → "${r.original}" (${r.error})`),
+        ...(refVideoFailed.length > 0 ? [`${refVideoFailed.length} Video Reference file(s) could not be automatically restored (see server log)`] : []),
+      ];
       throw new Error(
-        `${base}. ${restoreResults.length - failedRestores.length} file(s) restored, ${failedRestores.length} file(s) still under quarantine: ${details}`
+        `${base}. ${restoreResults.length - failedRestores.length} file(s) restored, ${failedRestores.length} file(s) still under quarantine: ${detailParts.join("; ")}`
       );
     }
     throw new Error(`${base} — nothing was changed (all ${restoreResults.length} file(s) restored).`);
@@ -368,7 +435,7 @@ export async function deleteProject(id: number) {
   // row points to it anymore either way). A failure here is reported
   // honestly with the EXACT recoverable path — never a claim that some
   // separate durable record (a ledger) captured it, and never silence.
-  const finalCleanupFailures: { originalAbsolute: string; quarantineAbsolute: string; error: string }[] = [];
+  const finalCleanupFailures: { source: QuarantineEntry["source"]; originalAbsolute: string; quarantineAbsolute: string; error: string }[] = [];
   for (const q of quarantined) {
     let lastError: string | null = null;
     let removed = false;
@@ -387,15 +454,23 @@ export async function deleteProject(id: number) {
       }
     }
     if (!removed) {
-      finalCleanupFailures.push({ originalAbsolute: q.originalAbsolute, quarantineAbsolute: q.quarantineAbsolute, error: lastError ?? "unknown error" });
+      finalCleanupFailures.push({ source: q.source, originalAbsolute: q.originalAbsolute, quarantineAbsolute: q.quarantineAbsolute, error: lastError ?? "unknown error" });
     }
   }
 
   if (finalCleanupFailures.length > 0) {
     console.error(`deleteProject(${id}): Project and DB rows deleted successfully; ${finalCleanupFailures.length} leftover file(s) could not be removed after 3 attempts`, finalCleanupFailures);
-    const details = finalCleanupFailures.map((f) => `"${f.quarantineAbsolute}"`).join("; ");
+    // SHOT.VIDEO.REFERENCES.1 (Retake Round 1, Codex P2) — same source-based
+    // split as the rollback branch above: Video Reference failures never
+    // interpolate an absolute path into the thrown message.
+    const refVideoFailures = finalCleanupFailures.filter((f) => f.source === "shot-reference-video");
+    const otherFailures = finalCleanupFailures.filter((f) => f.source !== "shot-reference-video");
+    const detailParts = [
+      ...otherFailures.map((f) => `"${f.quarantineAbsolute}"`),
+      ...(refVideoFailures.length > 0 ? [`${refVideoFailures.length} Video Reference file(s) (see server log)`] : []),
+    ];
     throw new Error(
-      `deleteProject(${id}): the Project and its database rows were deleted successfully. ${finalCleanupFailures.length} leftover file(s) could not be removed after 3 attempts and remain, unreferenced by any data, at exactly these paths: ${details}. This does not affect data integrity — retry removing them manually or via a future cleanup pass.`
+      `deleteProject(${id}): the Project and its database rows were deleted successfully. ${finalCleanupFailures.length} leftover file(s) could not be removed after 3 attempts and remain, unreferenced by any data, at: ${detailParts.join("; ")}. This does not affect data integrity — retry removing them manually or via a future cleanup pass.`
     );
   }
 

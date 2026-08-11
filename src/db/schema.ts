@@ -345,6 +345,52 @@ export const shotReferenceImages = sqliteTable("shot_reference_images", {
 export type ShotReferenceImage = typeof shotReferenceImages.$inferSelect;
 export type NewShotReferenceImage = typeof shotReferenceImages.$inferInsert;
 
+// ---------------------------------------------------------------------------
+// Shot Video References (SHOT.VIDEO.REFERENCES.1) — a separate, durable,
+// user-uploaded creative-source collection per Shot, structurally mirroring
+// `shot_reference_images` above. Deliberately NOT `shot_videos`: this table
+// is never a Shot Output, never approvable directly, never read by Editorial
+// "Latest generation"/OpenReel/the current video-input generation contract.
+// `onDelete: "cascade"` mirrors `shot_reference_images.shotId`'s own
+// convention (not `shot_videos.shotId`'s RESTRICT) — a cascaded row delete
+// never implies a cascaded FILE delete (SQLite cannot do that), so every
+// Shot/Sequence/Project delete path that can cascade this table's rows must
+// explicitly quarantine/restore its files with the same discipline as any
+// other durable upload (see `src/lib/shotReferenceVideos/fileCleanup.ts`).
+// ---------------------------------------------------------------------------
+
+export const shotReferenceVideos = sqliteTable(
+  "shot_reference_videos",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    shotId: int("shot_id")
+      .notNull()
+      .references(() => shots.id, { onDelete: "cascade" }),
+    orderIndex: int("order_index").notNull().default(0),
+    videoPath: text("video_path").notNull(),
+    sourceFilename: text("source_filename"),
+    label: text("label"),
+    notes: text("notes"),
+    /** Probed from the actual uploaded/copied media at publish time — never guessed. */
+    durationSeconds: real("duration_seconds"),
+    width: int("width"),
+    height: int("height"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    unique("shot_reference_videos_video_path_unique").on(table.videoPath),
+    index("shot_reference_videos_shot_id_idx").on(table.shotId),
+  ]
+);
+
+export type ShotReferenceVideo = typeof shotReferenceVideos.$inferSelect;
+export type NewShotReferenceVideo = typeof shotReferenceVideos.$inferInsert;
+
 export const generationJobs = sqliteTable(
   "generation_jobs",
   {
@@ -753,7 +799,18 @@ export const shotVideos = sqliteTable(
     shotId: int("shot_id")
       .notNull()
       .references(() => shots.id),
-    source: text("source", { enum: ["generation", "sequence_split"] }).notNull(),
+    // SHOT.VIDEO.REFERENCES.1 — "reference_copy" added: a physical copy
+    // published into this library by the explicit "Add to Shot Videos"
+    // bridge from a Shot Video Reference (see `shot_reference_videos`
+    // above). It is a normal, deletable, explicitly-approvable library
+    // entry like any other row here — the ONLY special handling is that
+    // Editorial "Latest generation" (`pickLatestGenerationSources`'s only
+    // caller, `resolveLatestGenerationRaw` in
+    // src/lib/editorial/videoSourceMode.ts) excludes it before picking a
+    // winner. "Approved only" is unaffected: it only ever reads
+    // `shots.approvedVideoPath`, set generically by `approveShotVideoPath`
+    // regardless of source.
+    source: text("source", { enum: ["generation", "sequence_split", "reference_copy"] }).notNull(),
     videoPath: text("video_path").notNull(),
     /** Only ever set when actually probed (e.g. a Split segment's known exact boundaries) — never a guessed/derived value. Null is a legitimate, honestly-unknown state. */
     durationSeconds: real("duration_seconds"),
