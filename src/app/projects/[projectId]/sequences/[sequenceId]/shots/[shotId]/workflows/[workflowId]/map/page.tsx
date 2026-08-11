@@ -20,6 +20,7 @@ import Card from "@/components/Card";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
+import { resolveShotDurationScalarDefault } from "@/lib/comfy/resolveShotDurationScalarDefault";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
 import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
@@ -241,6 +242,13 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
   // Derived data
   const parsed = parseComfyWorkflow(workflow.workflowJson);
+  // SHOT.GENERATION.DURATION.DEFAULT.1 — see ShotGenerationPanel.tsx's
+  // identical comment; same shared pure helper, never a second heuristic.
+  const effectiveScalarValueByNodeId = resolveShotDurationScalarDefault(
+    parsed?.inputs ?? [],
+    shot.durationSeconds,
+    scalarValueByNodeId
+  );
   const compiledPrompt = compilePromptSegments(segmentList);
   const hasRealPromptSegments = segmentList.length > 0;
   const compiledShotPrompt = compileShotPrompt({
@@ -510,7 +518,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           selectedVideoByNodeId,
-          scalarOverrideByNodeId: scalarValueByNodeId,
+          scalarOverrideByNodeId: effectiveScalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
@@ -791,7 +799,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
           ) : (
             <WorkflowRuntimeMappingPanel
               mappings={mappings}
-              scalarValueByNodeId={scalarValueByNodeId}
+              scalarValueByNodeId={effectiveScalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
               currentSearchParams={currentSearchParams}
               basePath={basePath}
@@ -947,7 +955,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                   {Object.entries(selectedVideoByNodeId).map(([nodeId, videoId]) => (
                     <input key={`video-${nodeId}`} type="hidden" name={`videoNode_${nodeId}`} value={String(videoId)} />
                   ))}
-                  {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
+                  {Object.entries(effectiveScalarValueByNodeId).map(([nodeId, value]) => (
                     <input
                       key={`scalar-${nodeId}`}
                       type="hidden"

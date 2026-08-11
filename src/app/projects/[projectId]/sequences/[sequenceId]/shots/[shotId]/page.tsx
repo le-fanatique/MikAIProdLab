@@ -123,10 +123,19 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
   for (const [key, value] of Object.entries(resolvedSearchParams)) {
     const strValue = typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
+    if (strValue === undefined) continue;
+    // SHOT.GENERATION.DURATION.DEFAULT.1 — an explicit scalarNode_<id> must
+    // win over any auto-derived default even when empty/invalid, so its key
+    // presence alone (not truthiness) has to survive this parse; mirrors
+    // the /map page's identical scalar loop. imageNode_/videoNode_/textNode_
+    // keep their existing "drop empty" behavior, unrelated to this ticket.
+    if (key.startsWith("scalarNode_")) {
+      scalarValueByNodeId[key.slice("scalarNode_".length)] = strValue;
+      continue;
+    }
     if (!strValue) continue;
     if (key.startsWith("imageNode_")) selectedImageByNodeId[key.slice("imageNode_".length)] = strValue;
     else if (key.startsWith("videoNode_")) selectedVideoByNodeId[key.slice("videoNode_".length)] = strValue;
-    else if (key.startsWith("scalarNode_")) scalarValueByNodeId[key.slice("scalarNode_".length)] = strValue;
     else if (key.startsWith("textNode_")) textOverrideByNodeId[key.slice("textNode_".length)] = strValue;
   }
 

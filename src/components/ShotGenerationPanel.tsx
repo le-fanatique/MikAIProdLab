@@ -27,6 +27,7 @@ import ShotPanelVideoSelectionForm from "@/components/ShotPanelVideoSelectionFor
 import type { ShotPanelVideoNode } from "@/components/ShotPanelVideoSelectionForm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
+import { resolveShotDurationScalarDefault } from "@/lib/comfy/resolveShotDurationScalarDefault";
 import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
 import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
 import {
@@ -224,6 +225,16 @@ export default async function ShotGenerationPanel({
       : [];
 
   const parsed = parseComfyWorkflow(workflow.workflowJson);
+  // SHOT.GENERATION.DURATION.DEFAULT.1 — a valid Shot duration prefills the
+  // single compatible Duration scalar input when no explicit
+  // scalarNode_<nodeId> override already exists; used everywhere the raw
+  // scalarValueByNodeId would otherwise flow into the payload/preview/form,
+  // so those three can never disagree. Never written back into the URL.
+  const effectiveScalarValueByNodeId = resolveShotDurationScalarDefault(
+    parsed?.inputs ?? [],
+    shot.durationSeconds,
+    scalarValueByNodeId
+  );
   const compiledPrompt = compilePromptSegments(segmentList);
   const hasRealPromptSegments = segmentList.length > 0;
   const compiledShotPrompt = compileShotPrompt({
@@ -484,7 +495,7 @@ export default async function ShotGenerationPanel({
           textOverrideByNodeId: styledTextOverrideByNodeId,
           selectedImageByNodeId,
           selectedVideoByNodeId,
-          scalarOverrideByNodeId: scalarValueByNodeId,
+          scalarOverrideByNodeId: effectiveScalarValueByNodeId,
           batchSelectedImages: resolvedBatchImages,
         })
       : null;
@@ -822,7 +833,7 @@ export default async function ShotGenerationPanel({
               </p>
               <WorkflowRuntimeMappingPanel
                 mappings={mappings}
-                scalarValueByNodeId={scalarValueByNodeId}
+                scalarValueByNodeId={effectiveScalarValueByNodeId}
                 textOverrideByNodeId={textOverrideByNodeId}
                 currentSearchParams={currentSearchParams}
                 basePath={basePath}
@@ -982,7 +993,7 @@ export default async function ShotGenerationPanel({
               {Object.entries(selectedVideoByNodeId).map(([nodeId, videoId]) => (
                 <input key={`video-${nodeId}`} type="hidden" name={`videoNode_${nodeId}`} value={String(videoId)} />
               ))}
-              {Object.entries(scalarValueByNodeId).map(([nodeId, value]) => (
+              {Object.entries(effectiveScalarValueByNodeId).map(([nodeId, value]) => (
                 <input
                   key={`scalar-${nodeId}`}
                   type="hidden"
