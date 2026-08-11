@@ -61,6 +61,20 @@ type Props = {
    * it never intercepts clicks or covers the controls below the video.
    */
   mediaLabel?: string;
+  /**
+   * SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1 — optional, additive: when
+   * present, replaces the flat `captureDestinations` list with an explicit
+   * `Shots` / `Project Assets` scope picker. `shots` and `assets` must
+   * already be server-bounded/authorized (this Sequence's Shots only, this
+   * Project's Assets only) — the component never derives or widens them.
+   * Every existing caller omits this prop and renders exactly as before.
+   */
+  destinationScopes?: {
+    shots: CaptureDestination[];
+    assets: CaptureDestination[];
+    /** Asset ids cast into the current Sequence via `sequence_assets`. */
+    castAssetIds: number[];
+  };
 };
 
 /**
@@ -74,7 +88,7 @@ export type VideoFrameReviewPlayerHandle = {
 };
 
 const FPS_OPTIONS = [12, 24, 25, 30, 60];
-const DEST_GROUP_ORDER = ["Current Shot", "Other Shots", "Assets"];
+const DEST_GROUP_ORDER = ["Current Shot", "Other Shots", "Shots", "Assets"];
 
 function getFiniteVideoDuration(video: HTMLVideoElement): number {
   if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
@@ -162,6 +176,7 @@ function VideoFrameReviewPlayer(
     captureDestinations,
     onFrameChange,
     mediaLabel,
+    destinationScopes,
   }: Props,
   forwardedRef: React.ForwardedRef<VideoFrameReviewPlayerHandle>
 ) {
@@ -173,11 +188,28 @@ function VideoFrameReviewPlayer(
   const [isPlaying, setIsPlaying] = useState(false);
   const [jumpValue, setJumpValue] = useState("");
   const [jumpError, setJumpError] = useState<string | null>(null);
+  // SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1 — only meaningful when
+  // destinationScopes is present; "shots" is the default scope, and
+  // "Sequence casting only" starts checked every mount (per-ticket default),
+  // even though it only affects rendering/selection once the mode is
+  // switched to "assets".
+  const [destinationMode, setDestinationMode] = useState<"shots" | "assets">("shots");
+  const [sequenceCastingOnly, setSequenceCastingOnly] = useState(true);
+  // Tracks the last mode/filter/visible-ids combination the selection was
+  // reconciled against — see the render-phase adjustment below. Matches the
+  // initial mode ("shots") and filter (true) plus the initial visible ids,
+  // so mount never triggers a spurious extra reconciliation pass.
+  const [reconciledSelectionKey, setReconciledSelectionKey] = useState(() => {
+    const initial = destinationScopes ? destinationScopes.shots : [];
+    return `shots:true:${initial.map((d) => d.id).join(",")}`;
+  });
+
   const [selectedDestinationId, setSelectedDestinationId] = useState(() => {
+    const initial = destinationScopes ? destinationScopes.shots : captureDestinations;
     const d =
-      captureDestinations.find((d) => d.type === "shot" && d.isCurrent) ??
-      captureDestinations.find((d) => d.type === "shot" && d.shotId === shotId) ??
-      captureDestinations[0];
+      initial.find((d) => d.type === "shot" && d.isCurrent) ??
+      initial.find((d) => d.type === "shot" && d.shotId === shotId) ??
+      initial[0];
     return d?.id ?? "";
   });
   const [filterText, setFilterText] = useState("");
@@ -366,6 +398,43 @@ function VideoFrameReviewPlayer(
     onFrameChange({ frame: currentFrame, totalFrames, fps, currentTimeSeconds });
   }, [onFrameChange, currentFrame, totalFrames, fps, hasMetadata]);
 
+  // SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1 — the destination list actually
+  // shown/selectable: the scoped Shots/Project Assets picker when
+  // destinationScopes is present, else the legacy flat list unchanged.
+  const effectiveDestinations: CaptureDestination[] = destinationScopes
+    ? destinationMode === "shots"
+      ? destinationScopes.shots
+      : sequenceCastingOnly
+        ? destinationScopes.assets.filter(
+            (d) => d.type === "asset" && destinationScopes.castAssetIds.includes(d.assetId)
+          )
+        : destinationScopes.assets
+    : captureDestinations;
+
+  // Reconciles the selection whenever the mode, the casting filter, OR the
+  // server-supplied scope itself changes the visible list — never leaves a
+  // now-invisible destination selected; falls back to the first visible
+  // one, or to none if the list is empty. The signature includes the
+  // effectively visible ids (already-computed above, nothing re-derived)
+  // so a refreshed `destinationScopes` prop — e.g. a Shot/Asset removed
+  // elsewhere while this Player stays mounted — is caught even when mode
+  // and casting filter are unchanged (Retake Round 1, P1).
+  // Adjusted during render — React's documented alternative to an
+  // effect+setState round trip for "reset state when an input changes" — by
+  // tracking the last-seen key as state and updating the selection
+  // synchronously the moment it diverges, instead of inside a useEffect.
+  const destinationSelectionKey = `${destinationMode}:${sequenceCastingOnly}:${effectiveDestinations.map((d) => d.id).join(",")}`;
+  if (destinationScopes && destinationSelectionKey !== reconciledSelectionKey) {
+    setReconciledSelectionKey(destinationSelectionKey);
+    if (!effectiveDestinations.some((d) => d.id === selectedDestinationId)) {
+      const next =
+        effectiveDestinations.find((d) => d.type === "shot" && d.isCurrent) ??
+        effectiveDestinations.find((d) => d.type === "shot" && d.shotId === shotId) ??
+        effectiveDestinations[0];
+      setSelectedDestinationId(next?.id ?? "");
+    }
+  }
+
   function handleFpsChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const newFps = parseInt(e.target.value, 10);
     if (Number.isNaN(newFps) || newFps <= 0) return;
@@ -404,7 +473,7 @@ function VideoFrameReviewPlayer(
       return;
     }
 
-    const selected = captureDestinations.find((d) => d.id === selectedDestinationId);
+    const selected = effectiveDestinations.find((d) => d.id === selectedDestinationId);
     if (!selected) {
       setCaptureError("Select a capture destination.");
       return;
@@ -484,10 +553,10 @@ function VideoFrameReviewPlayer(
 
   const controlsReady = hasMetadata && totalFrames > 0;
   const maxFrame = Math.max(totalFrames - 1, 0);
-  const showFilter = captureDestinations.length > 12;
+  const showFilter = effectiveDestinations.length > 12;
 
   const filteredDestinations = filterText.trim()
-    ? captureDestinations.filter((d) => {
+    ? effectiveDestinations.filter((d) => {
         const q = filterText.toLowerCase();
         return (
           d.label.toLowerCase().includes(q) ||
@@ -495,10 +564,19 @@ function VideoFrameReviewPlayer(
           d.groupLabel.toLowerCase().includes(q)
         );
       })
-    : captureDestinations;
+    : effectiveDestinations;
 
   const destGroups = getDestGroups(filteredDestinations);
-  const selectedDest = captureDestinations.find((d) => d.id === selectedDestinationId);
+  const selectedDest = effectiveDestinations.find((d) => d.id === selectedDestinationId);
+
+  // Capture section renders whenever there is at least one destination
+  // scope/list to offer — the scoped picker itself (mode toggle) still
+  // renders even if the current mode/filter happens to be empty, so the
+  // user can switch to a mode that has destinations.
+  const hasAnyDestinationSection = destinationScopes
+    ? destinationScopes.shots.length > 0 || destinationScopes.assets.length > 0
+    : captureDestinations.length > 0;
+  const assetsCastCount = destinationScopes?.castAssetIds.length ?? 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -711,8 +789,55 @@ function VideoFrameReviewPlayer(
           passes an empty captureDestinations array). Existing callers
           (Shot Detail, Sequence Result) always pass at least one
           destination, so this is backward-compatible for them. */}
-      {captureDestinations.length > 0 && (
+      {hasAnyDestinationSection && (
         <div className="border-t border-[#1e2124] pt-3 flex flex-col gap-2">
+
+          {/* SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1 — Shots / Project Assets
+              scope picker. Only rendered when the caller opts in via
+              destinationScopes; legacy callers keep the flat select below
+              exactly as before. */}
+          {destinationScopes && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex gap-1.5" role="group" aria-label="Capture destination scope">
+                <button
+                  type="button"
+                  aria-pressed={destinationMode === "shots"}
+                  onClick={() => setDestinationMode("shots")}
+                  className={
+                    destinationMode === "shots"
+                      ? "rounded border border-[#3a4046] bg-[#141618] text-[#e7e9ec] px-3 py-1 text-xs"
+                      : "rounded border border-[#2c3035] text-[#6e767d] px-3 py-1 text-xs hover:text-[#a4abb2] transition-colors"
+                  }
+                >
+                  Shots
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={destinationMode === "assets"}
+                  onClick={() => setDestinationMode("assets")}
+                  className={
+                    destinationMode === "assets"
+                      ? "rounded border border-[#3a4046] bg-[#141618] text-[#e7e9ec] px-3 py-1 text-xs"
+                      : "rounded border border-[#2c3035] text-[#6e767d] px-3 py-1 text-xs hover:text-[#a4abb2] transition-colors"
+                  }
+                >
+                  Project Assets
+                </button>
+              </div>
+
+              {destinationMode === "assets" && (
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={sequenceCastingOnly}
+                    onChange={(e) => setSequenceCastingOnly(e.target.checked)}
+                    className="accent-[#5b93d6]"
+                  />
+                  <span className="text-xs text-[#a4abb2]">Sequence casting only</span>
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Destination selector */}
           <div className="flex flex-col gap-1.5">
@@ -730,8 +855,16 @@ function VideoFrameReviewPlayer(
               />
             )}
 
-            {destGroups.length === 0 && filterText.trim() ? (
-              <p className="text-xs text-[#4b5158]">No matching destination.</p>
+            {destGroups.length === 0 ? (
+              <p className="text-xs text-[#4b5158]">
+                {filterText.trim()
+                  ? "No matching destination."
+                  : destinationMode === "assets" && sequenceCastingOnly && assetsCastCount === 0
+                    ? "No Assets are cast in this Sequence yet. Uncheck “Sequence casting only” to capture to any Project Asset."
+                    : destinationMode === "assets"
+                      ? "This Project has no Assets yet."
+                      : "This Sequence has no Shots yet."}
+              </p>
             ) : (
               <select
                 value={selectedDestinationId}
@@ -772,9 +905,9 @@ function VideoFrameReviewPlayer(
           <button
             type="button"
             onClick={handleCapture}
-            disabled={isCaptureInProgress || !controlsReady}
+            disabled={isCaptureInProgress || !controlsReady || effectiveDestinations.length === 0}
             className={
-              isCaptureInProgress || !controlsReady
+              isCaptureInProgress || !controlsReady || effectiveDestinations.length === 0
                 ? "rounded border border-[#1e2124] text-[#4b5158] px-3 py-1.5 text-xs cursor-not-allowed"
                 : "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
             }

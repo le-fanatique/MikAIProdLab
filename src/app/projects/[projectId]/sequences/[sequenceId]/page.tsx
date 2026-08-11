@@ -268,44 +268,28 @@ export default async function SequencePage({ params, searchParams }: Props) {
   const previousResults = sequenceResults.filter((r) => r.id !== activeResult?.id);
   const activeResultWarnings = activeResult ? parseResultWarnings(activeResult.warnings) : [];
 
-  // ── Capture destinations for the active Sequence Result player (UX.POLISH.2) ──
-  // Mirrors Shot Detail's own capture-destination build exactly (same
-  // component, same project-wide shot/asset query) — a Sequence Result has
-  // no single "current shot", so this sequence's own shots are listed
-  // first inside "Other Shots" rather than faked as "Current Shot".
+  // ── Capture destinations for the active Sequence Result player
+  // (SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1) ────────────────────────────
+  // `Shots` is bounded to this Sequence's own ordered Shots only — a
+  // Sequence Result never offers another Sequence's Shot as a destination.
+  // `Project Assets` is every Asset in this Project; `castAssetIds` marks
+  // which of them are cast into this Sequence via `sequence_assets`, so the
+  // client-side "Sequence casting only" default filter never needs to
+  // re-derive that relationship itself.
   // sourceShotId/sourceSequenceId only need to be A valid shot owned by
   // this project for captureVideoFrame's ownership check — the real
-  // destination is always the one explicitly picked from the dropdown.
+  // destination is always the one explicitly picked from the picker.
   const resultVideoExt = activeResult?.videoPath?.split(".").pop()?.toLowerCase() ?? "";
   const resultVideoIsPlayable =
     activeResult?.videoPath != null && ["mp4", "webm", "mov"].includes(resultVideoExt);
 
-  const sequenceResultCaptureDestinations: CaptureDestination[] = [];
+  const sequenceResultShotDestinations: CaptureDestination[] = [];
+  const sequenceResultAssetDestinations: CaptureDestination[] = [];
+  let sequenceResultCastAssetIds: number[] = [];
   let sequenceResultSourceShotId: number | null = null;
 
   if (resultVideoIsPlayable && shotList.length > 0) {
     sequenceResultSourceShotId = shotList[0].id;
-
-    const otherSequences = await db
-      .select({ id: sequences.id, title: sequences.title })
-      .from(sequences)
-      .where(eq(sequences.projectId, pid))
-      .orderBy(asc(sequences.id));
-
-    const otherSequenceIds = otherSequences.filter((s) => s.id !== sid).map((s) => s.id);
-
-    const otherProjectShots = otherSequenceIds.length > 0
-      ? await db
-          .select({
-            id: shots.id,
-            sequenceId: shots.sequenceId,
-            title: shots.title,
-            description: shots.description,
-          })
-          .from(shots)
-          .where(inArray(shots.sequenceId, otherSequenceIds))
-          .orderBy(asc(shots.orderIndex))
-      : [];
 
     const allProjectAssets = await db
       .select({ id: assets.id, name: assets.name, type: assets.type })
@@ -313,36 +297,25 @@ export default async function SequencePage({ params, searchParams }: Props) {
       .where(eq(assets.projectId, pid))
       .orderBy(asc(assets.type), asc(assets.name));
 
-    // This sequence's own shots first
+    const castRows = await db
+      .select({ assetId: sequenceAssets.assetId })
+      .from(sequenceAssets)
+      .where(eq(sequenceAssets.sequenceId, sid));
+    sequenceResultCastAssetIds = castRows.map((r) => r.assetId);
+
     for (const s of shotList) {
-      sequenceResultCaptureDestinations.push({
+      sequenceResultShotDestinations.push({
         id: `shot:${s.id}`,
         type: "shot",
         shotId: s.id,
         sequenceId: sid,
         label: s.title,
-        subtitle: sequence.title,
-        groupLabel: "Other Shots",
+        groupLabel: "Shots",
       });
     }
 
-    // Then the rest of the project, grouped by sequence order
-    for (const seq of otherSequences) {
-      for (const s of otherProjectShots.filter((sh) => sh.sequenceId === seq.id)) {
-        sequenceResultCaptureDestinations.push({
-          id: `shot:${s.id}`,
-          type: "shot",
-          shotId: s.id,
-          sequenceId: seq.id,
-          label: `${seq.title} / ${s.title}`,
-          subtitle: s.description?.slice(0, 80) ?? undefined,
-          groupLabel: "Other Shots",
-        });
-      }
-    }
-
     for (const asset of allProjectAssets) {
-      sequenceResultCaptureDestinations.push({
+      sequenceResultAssetDestinations.push({
         id: `asset:${asset.id}`,
         type: "asset",
         assetId: asset.id,
@@ -457,7 +430,12 @@ npx -y pnpm@9.0.0 dev`}
                   shotId={sequenceResultSourceShotId}
                   mediaLabel={deriveMediaLabel(sequence.title, activeResult.videoPath)}
                   defaultFps={24}
-                  captureDestinations={sequenceResultCaptureDestinations}
+                  captureDestinations={sequenceResultShotDestinations}
+                  destinationScopes={{
+                    shots: sequenceResultShotDestinations,
+                    assets: sequenceResultAssetDestinations,
+                    castAssetIds: sequenceResultCastAssetIds,
+                  }}
                 />
               ) : (
                 <video

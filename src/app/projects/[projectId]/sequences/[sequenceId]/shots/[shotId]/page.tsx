@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { deriveMediaLabel } from "@/lib/media/mediaLabel";
-import { projects, sequences, shots, assets, shotAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, shotVideos, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails, shotReferenceVideos } from "@/db/schema";
+import { projects, sequences, shots, assets, shotAssets, sequenceAssets, promptSegments, shotReferenceImages, assetReferenceImages, comfyWorkflows, generationJobs, shotVideoCandidates, shotVideos, sequenceVideoSplitRuns, sequenceVideoSplitSegments, shotStoryboardThumbnails, shotReferenceVideos } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -507,29 +507,21 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     shot.approvedVideoPath !== null &&
     ["mp4", "webm", "mov"].includes(approvedVideoExt);
 
-  let captureDestinations: CaptureDestination[] = [];
+  // SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1 — `Shots` is bounded to this
+  // Shot's own Sequence only (current Shot first, then the rest of the
+  // Sequence in order); `Project Assets` is every Asset in this Project,
+  // with `castAssetIds` marking which are cast into this Shot's Sequence
+  // via `sequence_assets` for the client-side default filter.
+  const captureShotDestinations: CaptureDestination[] = [];
+  const captureAssetDestinations: CaptureDestination[] = [];
+  let captureCastAssetIds: number[] = [];
 
   if (approvedVideoIsPlayable) {
-    const allProjectSequences = await db
-      .select({ id: sequences.id, title: sequences.title })
-      .from(sequences)
-      .where(eq(sequences.projectId, pid))
-      .orderBy(asc(sequences.id));
-
-    const allSequenceIds = allProjectSequences.map((s) => s.id);
-
-    const allProjectShots = allSequenceIds.length > 0
-      ? await db
-          .select({
-            id: shots.id,
-            sequenceId: shots.sequenceId,
-            title: shots.title,
-            description: shots.description,
-          })
-          .from(shots)
-          .where(inArray(shots.sequenceId, allSequenceIds))
-          .orderBy(asc(shots.orderIndex))
-      : [];
+    const sequenceShots = await db
+      .select({ id: shots.id, title: shots.title, description: shots.description })
+      .from(shots)
+      .where(eq(shots.sequenceId, sid))
+      .orderBy(asc(shots.orderIndex));
 
     const allProjectAssets = await db
       .select({ id: assets.id, name: assets.name, type: assets.type })
@@ -537,8 +529,14 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       .where(eq(assets.projectId, pid))
       .orderBy(asc(assets.type), asc(assets.name));
 
+    const castRows = await db
+      .select({ assetId: sequenceAssets.assetId })
+      .from(sequenceAssets)
+      .where(eq(sequenceAssets.sequenceId, sid));
+    captureCastAssetIds = castRows.map((r) => r.assetId);
+
     // Current shot first
-    captureDestinations.push({
+    captureShotDestinations.push({
       id: `shot:${shid}`,
       type: "shot",
       shotId: shid,
@@ -549,26 +547,21 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       isCurrent: true,
     });
 
-    // Other shots, grouped by sequence order
-    for (const seq of allProjectSequences) {
-      for (const s of allProjectShots.filter(
-        (sh) => sh.sequenceId === seq.id && sh.id !== shid
-      )) {
-        captureDestinations.push({
-          id: `shot:${s.id}`,
-          type: "shot",
-          shotId: s.id,
-          sequenceId: seq.id,
-          label: `${seq.title} / ${s.title}`,
-          subtitle: s.description?.slice(0, 80) ?? undefined,
-          groupLabel: "Other Shots",
-        });
-      }
+    // Rest of this Shot's Sequence, in order
+    for (const s of sequenceShots.filter((s) => s.id !== shid)) {
+      captureShotDestinations.push({
+        id: `shot:${s.id}`,
+        type: "shot",
+        shotId: s.id,
+        sequenceId: sid,
+        label: s.title,
+        subtitle: s.description?.slice(0, 80) ?? undefined,
+        groupLabel: "Other Shots",
+      });
     }
 
-    // Assets
     for (const asset of allProjectAssets) {
-      captureDestinations.push({
+      captureAssetDestinations.push({
         id: `asset:${asset.id}`,
         type: "asset",
         assetId: asset.id,
@@ -713,7 +706,12 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                     shot.approvedVideoPath
                   )}
                   defaultFps={24}
-                  captureDestinations={captureDestinations}
+                  captureDestinations={captureShotDestinations}
+                  destinationScopes={{
+                    shots: captureShotDestinations,
+                    assets: captureAssetDestinations,
+                    castAssetIds: captureCastAssetIds,
+                  }}
                 />
               ) : (
                 <video
