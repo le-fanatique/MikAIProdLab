@@ -19,8 +19,15 @@
 - No `git add .`.
 - No runtime files committed.
 
+## Incremental Debt Budget
+- Existing contracts/helpers to inspect and reuse:
+- Replaced paths that must be removed:
+- Compatibility paths intentionally retained and why:
+- New files/exports/dependencies authorized:
+
 ## Expected Validation
 - `npx tsc --noEmit`
+- targeted ESLint for changed TypeScript/JavaScript files
 - `npm run build`
 - Manual validation if needed.
 

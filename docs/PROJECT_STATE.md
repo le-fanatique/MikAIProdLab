@@ -4,6 +4,96 @@ Last updated: 2026-08-02
 
 ## Repository Heads
 
+## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
+
+`install.bat`/`.sh`, `start.bat`/`.sh`, `update.bat`/`.sh` added at repo root
+as thin wrappers around one new Node ESM orchestrator,
+`scripts/mikai-deploy.mjs`. It reads `config/openreel-sidecar-release.json`
+through a closed, runtime-validated schema (unknown keys, wrong types, a
+non-40-hex commit/upstreamCommit, an out-of-range port, or any repository
+other than the exact pinned GitHub identity are all refused before any
+side effect); resolves the sidecar directory from `MIKAI_OPENREEL_DIR` or
+the default sibling path with symlink-safety checks; preserves an existing
+`.env.local` byte-for-byte; creates only the known runtime directories when
+absent; requires a real `npm run backup:create` success before migrating an
+existing DB (a fresh/missing DB needs none, and a `DB_PATH` outside the
+supported `<repo>/data/` contract refuses outright rather than claiming
+protection it can't provide); clones/moves the sidecar to exactly the
+pinned commit (never a branch tip), refusing on tracked changes or an
+origin mismatch on an existing checkout; and, for `update`, fast-forwards
+MikAI's own `main` only (refuses on a diverged history) before re-reading
+the possibly-new pin. `start` validates the sidecar `HEAD` against the pin
+and delegates to the existing `npm run prod:all` launcher — no second
+process manager. Every side-effecting command runs through one injectable
+runner, used by the required command-order proof.
+
+All five required proofs were run for real against disposable fixtures
+(temporary git repos/clones/worktrees, isolated ports, cleaned up
+afterward) and passed: pin validation matrix (33/33), command-order safety
+with a fake runner (26/26), a genuine end-to-end fresh install against a
+local git remote fixture pinned at an exact tag/commit (15/15, real `npm
+ci`, real `pnpm install`, real `next build`, real migration), a genuine
+end-to-end update including fast-forward, backup-before-migration, the
+sidecar moving to a new pin, and dirty/mismatched-pin refusals with zero
+mutation (19/19), and an isolated `start` on non-default ports with a CORS
+check confirming MikAI's editorial-export route grants
+`Access-Control-Allow-Origin` only to the explicitly configured sidecar
+origin, never an unlisted one (8/8). Two real bugs were found and fixed by
+these proofs, not just theorized: Windows `shell:true` was silently
+stripping `^` from git revision arguments like `<tag>^{}` (cmd.exe's own
+escape character), and `next build` was running BEFORE migrations, which
+fails outright on a schema-less fresh DB because some routes prerender
+against it — migration now runs first. See `.agents/claude_report.md` for
+full evidence.
+
+## OPENREEL.SIDECAR.PROMOTION.1 - Audited and prepared, awaiting Codex review (2026-08-10, retake)
+
+Upstream-based sidecar candidate `mikai/upstream-8459024`
+(`f80853ce3de432751847eb1bab3d03a669267c37`) was audited against legacy
+sidecar `main` (`33f917a253bef632f65da7ef5175aa4130785fc0`): no supported
+MikAI integration contract was lost, and the legacy native-playback patches
+(`bace876`, `492dd01`, `33f917a`) are confirmed absent from the candidate's
+history and source tree. Candidate typecheck, full test suite, lint, and
+production build pass in an isolated worktree (2 pre-existing flaky tests in
+`video-engine-export-effects.test.ts`, unrelated to MikAI, reproduced
+independently unchanged). Two isolated browser smoke sessions (own ports,
+mock export server, local disposable fixture media, no live `5173` use)
+confirmed import, continuous multi-clip playback across two clip boundaries,
+pause/seek/reload, and full MikAI Bridge visibility with no new console
+errors — one against a normal export, one against an explicit
+`videoSourceMode`/`timingBasis: "compact-real-duration"` export, which
+correctly disabled Validate/Apply, Insert Shot, and Push Duration (each with
+an explicit reason) while leaving Publish Advanced available. Grouped-drag +
+undo/redo was reattempted with a properly frame-timed synthetic pointer
+sequence (delays between `mousedown`/`mousemove` so React's listener-attach
+effects flush) and conclusively demonstrated: two selected clips moved by an
+identical delta, a single Undo reverted both, a single Redo reapplied both,
+no console errors. `MIKAI_SIDECAR.md` now carries an explicit maintenance
+contract (upstream base, deterministic release-pin sequencing, retired-patch
+note, update/rollback procedure). The MikAIProdLab release pin
+(`config/openreel-sidecar-release.json`) is deliberately **not created yet**
+— its `commit` value must be the actual sidecar-doc commit once
+`MIKAI_SIDECAR.md` is committed on `mikai/upstream-8459024`, which has not
+happened; creating it now with the pre-documentation candidate SHA would be
+stale the moment that commit lands. It is created in the closing sub-pass,
+right after that commit, per the deterministic sequence documented in
+`MIKAI_SIDECAR.md`. No git remote state (tags, branches, `main`) was changed
+in this pass — promotion (`--force-with-lease` after verifying `origin/main`
+is still `33f917a`) is deferred to a Codex-approved follow-up. See
+`.agents/claude_report.md` for full evidence.
+
+## DB.HEALTH.REPAIR.1 - Completed Live Maintenance (2026-08-10)
+
+The live SQLite database was repaired during an explicit maintenance window.
+Four corrupt Project Style indexes were rebuilt, and the user-authorized,
+fully detached Project Style Research rows plus one orphan Working Draft were
+removed only after a coherent SQLite backup and a successful disposable-copy
+proof. The live database now reports `PRAGMA integrity_check = ok` and zero
+rows from `PRAGMA foreign_key_check`; Project 18 and the remaining valid
+Projects were verified unchanged. Two timestamped pre-repair SQLite-aware
+backups exist under `data/backups/`. The next operational priority is
+`OPS.DATA.BACKUP.RESTORE.1`, including media as well as SQLite.
+
 - MikAI: `72f9d89 - feat(style): add Reference Board analysis UI`
 - OpenReel sidecar: `4078de7 - Shot video library bridge support`
 

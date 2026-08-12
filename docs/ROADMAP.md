@@ -17,13 +17,118 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 -> Generations -> Montage -> Film final
 ```
 
+## Maintenant - Generation sans Project Style (MVP)
+
+`GEN.PROJECT_STYLE.APPEND.TOGGLE.1` - **clos a `05b647e`**.
+Dans les quatre surfaces Asset/Shot de **Generate Content**, ajouter une case
+`Append Project Style`, active par defaut. L'opt-out doit retirer seulement
+l'injection automatique de Style du payload reel et de sa provenance, sans
+modifier le consumer cote client ni reinjecter le Style lors d'un retry.
+
+## Termine - Capture depuis Sequence Result (MVP)
+
+`SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1` - **clos a `8997c89`**.
+Depuis les players de Sequence Result **et** de Shot Approved Output, permettre
+de choisir explicitement la destination de la frame capturee : les Shots de la
+Sequence courante, ou les Assets du Project. Dans le mode Assets, la case
+`Sequence casting only` est active par defaut et ne montre que les Assets lies
+a la Sequence ; elle peut etre decochee pour retrouver tous les Assets du
+Project. Ce ticket reutilise la capture et la persistance Asset Reference
+existantes, sans schema, route, generation ou changement de provenance.
+
+## Priorite absolue - Consolidation DB, sidecar et deploiement (10 aout 2026)
+
+Avant tout nouveau chantier produit ou deploiement sur une autre machine, le
+couple MikAI/OpenReel et ses donnees locales doivent devenir reproductibles et
+verifiables. La cible reste volontairement simple : une instance MikAI, une
+instance OpenReel sidecar, une SQLite sur disque local persistant et les
+medias sur le meme volume persistant. Ce n'est pas encore une architecture
+multi-instance ou multi-tenant.
+
+1. `DB.HEALTH.REPAIR.1` - **termine le 2026-08-10**. Apres backup SQLite-aware,
+   preuve sur copie et fenetre de maintenance explicite, les quatre index
+   Project Style corrompus ont ete reconstruits et le graphe Research orphelin
+   autorise par le user a ete retire. La DB live retourne maintenant
+   `integrity_check = ok` et `foreign_key_check = 0`; le Projet 18 et les six
+   autres projets valides sont restes inchanges. `DB.HEALTH.AUDIT.1` est
+   absorbe comme phase obligatoire de ce ticket.
+2. `OPS.DATA.BACKUP.RESTORE.1` - **clos, commite a `263d6f6`**. Backup et
+   restauration de l'ensemble durable : SQLite (WAL compris) **et**
+   `public/uploads`, `public/outputs`, `storage/uploads`, `storage/outputs`,
+   avec verification de restauration sur copie et retention lisible.
+3. `OPENREEL.SIDECAR.PROMOTION.1` - **clos**. Le sidecar upstream est
+   promu a `476ad9f3d75c05cab5297b26af535dc9663f3fb4` sur `main`, tagge
+   `mikai-sidecar-v1.0.0`; l'ancien `33f917a` reste disponible via le tag et
+   la branche legacy. MikAI `748c12e` epingle exactement cette release dans
+   `config/openreel-sidecar-release.json`.
+4. `DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1` - **clos, commite a `92ac8a2`**.
+   `install.bat`/`.sh`, `start.bat`/`.sh`, `update.bat`/`.sh` sont des
+   wrappers minces autour d'un orchestrateur Node unique
+   (`scripts/mikai-deploy.mjs`) qui consomme
+   `config/openreel-sidecar-release.json` avec un schema strict ferme
+   (jamais de repli sur `upstream/main` ou une branche). Preserve
+   `.env.local`/DB/medias, sauvegarde (`npm run backup:create`) avant toute
+   migration existante, cree/deplace le sidecar exactement au commit
+   epingle (jamais un merge/rebase pour MikAI - fast-forward seulement).
+   Preuves disposables reelles (clone git local, worktrees jetables,
+   ports isoles, nettoyage complet) : matrice de validation du pin (33/33),
+   ordre des commandes avec faux runner (26/26), install disposable de bout
+   en bout (15/15), update disposable de bout en bout incluant refus
+   sale/pin incompatible (19/19), demarrage isole + verification CORS
+   scopee (8/8). Deux bugs reels trouves et corriges pendant les preuves :
+   `shell:true` sur Windows corrompait `^{}` dans les arguments git, et
+   `next build` doit s'executer apres la migration (pas avant) car il
+   pre-rend des routes qui interrogent la DB. Le retake impose aussi le refus
+   avant migration si un listener est actif, et le refus d'une origine sidecar
+   erronee avant tout fast-forward MikAI.
+5. `OPENREEL.SHOT.TARGET.DURATION.1` - **CLOS : approuve, commite et pousse**
+   (`FB-20260810-003`). Apres un changement de vitesse explicite, envoyer la
+   duree effective d'un clip MikAI vers la cible de production de son Shot.
+   Le montage compact reste bloque pour les autres write-backs; aucun item
+   editorial ni resultat existant n'est modifie. Sidecar: commite
+   `d4a24bcab30e4b089c341d6fb4969e34960bd5ba`, tague `mikai-sidecar-v1.1.0`,
+   `main` promu (fast-forward depuis `476ad9f`). MikAI: route existante
+   inchangee (contrat deja suffisant, prouve par une base SQLite jetable) ;
+   pin `config/openreel-sidecar-release.json` mis a jour et pousse
+   (`72e1b9a3bbc6cdc6b51212c91395fb1be75bdbed`).
+6. `DEVOPS.MIKAI.SERVICE.OPTIONAL.1` - **optionnel, apres le bootstrap**.
+   Ajouter uniquement si utile des exemples de service persistant (systemd et
+   equivalent Windows) pour redemarrage apres reboot/crash. Ce ticket ne bloque
+   ni l'installation ni le lancement manuel par les scripts precedents.
+
+Les mises a jour OpenReel suivent ensuite la meme discipline : branche depuis
+un commit upstream precis, reapplication de la petite couche MikAI, tests du
+bridge et smoke test navigateur, puis nouvelle paire de releases MikAI +
+sidecar. Aucun update automatique ne suit `upstream/main` sans validation.
+
 ## Priorites autoritatives apres cloture de STYLE.1 - 2 aout 2026
 
 L'epic `STYLE.1` (A a G) est `RESOLVED` : ses fonctions sont livrees, leurs
 parcours visibles ont ete valides, et le gate transversal
 `STYLE.1.ACCEPTANCE.1` est `ACCEPTED` (preuves techniques completes sur deux
 retakes bornes, confirmation manuelle utilisateur recue le 2026-08-02). Le
-prochain ordre de developpement recommande est:
+prochain ordre de developpement recommande est temporairement precede par la
+priorite utilisateur suivante:
+
+- `UX.SETTINGS.CHAT.1` - remplace les ancres Settings par de vrais onglets,
+  reserve le panneau droit au LLM Chat et borne ce Chat a la hauteur du
+  viewport avec scroll interne. Regroupe `FB-20260715-001`,
+  `FB-20260715-003` et `FB-20260715-004`. Implemente par Claude Code / Sonnet
+  et pousse a `c0cf81e` (2026-08-03), `TO VALIDATE` en attente de confirmation
+  manuelle utilisateur.
+- `UX.VISUAL.CONSISTENCY.1` - ticket Claude Code / Sonnet regroupant huit
+  retakes bornes: identite LLM Chat en Text Primary, typographie Custom
+  Appearance bornee (taille/poids/style pour Display et Body/UI), contraste
+  New Project, champs Edit alignes sur API Key, boutons LLM Apply unifies et
+  label Camera Lab. Couvre `FB-20260715-002`, `FB-20260715-005`,
+  `FB-20260715-006`, `FB-20260715-007`, `FB-20260716-032`,
+  `FB-20260716-034`, `FB-20260716-037` et `FB-20260723-002`. Implemente par
+  Claude Code / Sonnet (2026-08-03), preuves pures et navigateur en
+  environnement isole (port 3100, DB jetable) completes, `TO VALIDATE` en
+  attente de confirmation manuelle utilisateur et d'un nouveau verdict Codex
+  avant commit/push.
+
+Apres cette priorite UX, l'ordre recommande reste:
 
 1. `SEQGEN.VIDEO.CUT.CORE.1` - contrat frame-exact, FFmpeg, nouvelle version
    durable, provenance parent/cut et source immuable;
@@ -464,6 +569,12 @@ Decisions de backlog:
 
 ### Maintenant
 
+0. `UX.PRODUCTIVITY.POLISH.1` - implemente par Sonnet, `READY_FOR_CODEX_REVIEW` :
+   presets ComfyUI locaux, persistance serveur des presets Custom Appearance,
+   Enhance Description et Notes independants, CTA Sequence Video visible et
+   Sequence Generation Package replie (`FB-20260715-014`, `FB-20260721-001`,
+   `FB-20260716-038`, `FB-20260717-044`, `FB-20260722-006`); en attente de
+   review Codex et de validation utilisateur avant commit/push;
 1. `SEQGEN.VIDEO.CUT.CORE.1` - decoupe/concat frame-exacte, version durable et
    provenance, sans ecraser la source;
 2. `SEQGEN.VIDEO.CUT.UI.1` - editeur In/Out en frames, preview et publication

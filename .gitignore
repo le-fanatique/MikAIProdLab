@@ -70,3 +70,15 @@ next-env.d.ts
 .agents/codex_verdict.json
 .agents/claude_followup.md
 .agents/user_arbitration.md
+
+# .agents/ live ticket state (Opus supervision protocol) — per-ticket scratch
+# state, durable only via .agents/SUPERVISION_PROTOCOL.md, not tracked.
+.agents/supervised_task.md
+.agents/executor_report.md
+.agents/supervisor_review.md
+.agents/supervisor_verdict.json
+
+# local backup-executor configuration (Cline / OpenRouter), machine-specific
+.vscode/
+.cline/
+.clineignore
