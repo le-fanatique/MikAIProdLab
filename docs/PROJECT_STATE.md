@@ -34,6 +34,55 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
+## LLM Workspace Phase B — B0 to B3 COMPLETE (2026-08-13)
+
+Delivered, committed, pushed, and validated manually by the user on the real
+application after each production switch.
+
+| Item | Commit | Result |
+| --- | --- | --- |
+| B0 — write coverage | `9ffd15f` | 38 tests, first **database-backed** test capability: a disposable migrated SQLite per test file |
+| B0b — the two writes B0 missed | `e2f21ff` | `applyGeneratedStory`, `applyGeneratedOutline`; unblocked `src/actions/llm/` under vitest with a `server-only` stub |
+| B1a — the frozen contract | `ceb24dd` | descriptor format, closed variable registry, `userAdjustable` settled per variable |
+| B1b — the eight descriptors | `3da4134`, `7cff4ab` | thirteen variables; the three Asset operations share one declared context |
+| B1c — descriptors carry their prompt | `907604c` | strict `toBe` equality against every builder; caught three drifted system prompts |
+| B2 — the runner | `5415c66`, `fbc632f` | one §2.1 pipeline, 8 operations, **the runner names no operation** |
+| B3 — the switch | `5f11464`, `0b40a74` | the 8 actions became thin adapters; ~1150 lines of replaced code deleted |
+
+The suite went from 100 tests to 226. No A2 snapshot moved in any of these
+tickets, and no exported signature or user-visible message changed.
+
+**What the phase produced beyond the code.** Seven gaps in the descriptor
+format were found and closed *before* anything was wired to production, each
+because the executor stopped and reported instead of working around it:
+`intent` composability, the closed mode with preconditions, per-variable
+adjustability, the JSON key mapping and per-operation parse contracts, the
+per-operation refusal messages, multi-field preconditions, and silent
+truncation. A format that had been guessed would have failed at the switch.
+
+**Deliberate retention, not debt.** The prompt builders under
+`src/lib/prompts/` no longer have a production caller. They are kept as the
+frozen oracle: the A2 snapshots pin them, and the descriptor proofs assert
+byte-for-byte equality against them. Retiring them needs a ticket that first
+re-anchors those snapshots on the runner's own output.
+
+**Known environment instability.** `vitest` intermittently fails *every* file
+at once with `Vitest failed to find the runner`, reported as "53 failed" or
+"no tests". It has hit files untouched for weeks, so no repository code is
+implicated; one captured occurrence showed a lowercase drive letter in the run
+header. It always fails loudly and has never produced a false green. **Read the
+log before rerunning** — a real failure names a file and an assertion. Prefer
+redirecting vitest output to a file over piping it.
+
+**What B4 inherits.** Four behaviours measured in B0 and frozen by tests, not
+fixed: the batch asset-description write is not atomic and applies partially;
+it answers `ok: true` having applied nothing when every item is refused;
+`updateAssetDetailsInline` is a full replacement that nulls omitted fields; and
+ownership check and mutation are not transactional on any of the five. Plus
+`applyGeneratedStory` and `applyGeneratedOutline`, which never check that the
+Project exists. Each must appear in its registry entry, or the registry will
+describe an action it has mis-modelled.
+
 **Phase B is not authorised by this**, but nothing in §10 blocks it either.
 Migration order is settled, `userAdjustable` is deferred to the
 descriptor-format work, Auto Casting is off the critical path, and the
