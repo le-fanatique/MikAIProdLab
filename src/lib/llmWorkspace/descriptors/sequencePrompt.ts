@@ -118,7 +118,8 @@ export const sequencePromptAssistDescriptor: OperationDescriptor = {
   // `if (mode !== "generate" && !sequence.sequencePrompt?.trim())` guard.
   preconditions: [
     {
-      field: "sequencePrompt",
+      fields: ["sequencePrompt"],
+      require: "all",
       modes: ["enhance", "rewrite", "shorten", "expand"],
       message: "A Sequence Prompt is required for this assist mode.",
     },

@@ -476,9 +476,14 @@ type OperationDescriptor = {
     chainNotFound: Partial<Record<EntityKind, string>>;  // per level of the chain
   };
 
+  // `fields` + `require` rather than a single field, reported by B2b:
+  // `generateAssetBibleDraft` refuses unless Description **or** Notes is
+  // non-empty. Two single-field gates would refuse when either one is empty,
+  // which is not the rule and would change observable behaviour in B3.
   preconditions?: Array<{
-    field: FieldRef;      // on the anchor entity
-    modes?: string[];     // absent = every mode
+    fields: FieldRef[];        // on the anchor entity
+    require: "all" | "any";    // every field non-empty, or at least one
+    modes?: string[];          // absent = every mode
     message: string;
   }>;
 

@@ -194,11 +194,11 @@ async function resolveVariables(
 
 /**
  * Flattens every resolved variable's plain-object data into one record, so
- * `preconditions` (naming a field on the anchor entity, e.g. `"pitch"` or
- * `"sequencePrompt"`) can look it up without knowing which declared variable
- * happens to carry it. Array-shaped variable data (`SHOT.CAST`,
- * `SHOT.REFERENCES`, the `ASSET.*_APPEARANCES` variables) is skipped — no
- * current precondition names a field living on one of those.
+ * `preconditions` (naming fields on the anchor entity, e.g. `"pitch"` or
+ * `["description", "notes"]`) can look them up without knowing which
+ * declared variable happens to carry them. Array-shaped variable data
+ * (`SHOT.CAST`, `SHOT.REFERENCES`, the `ASSET.*_APPEARANCES` variables) is
+ * skipped — no current precondition names a field living on one of those.
  */
 function mergeAnchorFields(resolved: Partial<Record<VariableId, unknown>>): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
@@ -215,6 +215,11 @@ function mergeAnchorFields(resolved: Partial<Record<VariableId, unknown>>): Reco
 // before assembly, using the anchor fields resolution already produced.
 // ---------------------------------------------------------------------------
 
+function isFieldNonEmpty(mergedAnchorFields: Record<string, unknown>, field: string): boolean {
+  const value = mergedAnchorFields[field];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function checkPreconditions(
   preconditions: OperationDescriptor["preconditions"],
   mergedAnchorFields: Record<string, unknown>,
@@ -224,9 +229,16 @@ function checkPreconditions(
     if (precondition.modes && (selectedMode == null || !precondition.modes.includes(selectedMode))) {
       continue;
     }
-    const value = mergedAnchorFields[precondition.field];
-    const nonEmpty = typeof value === "string" && value.trim().length > 0;
-    if (!nonEmpty) {
+    // `require` mirrors `output.require`'s own vocabulary (§4.1 correction
+    // 5): every declared field non-empty, or at least one. A single-field
+    // entry behaves identically under either value, which is why migrating
+    // every existing precondition to `require: "all"` changes nothing
+    // observable.
+    const satisfied =
+      precondition.require === "all"
+        ? precondition.fields.every((field) => isFieldNonEmpty(mergedAnchorFields, field))
+        : precondition.fields.some((field) => isFieldNonEmpty(mergedAnchorFields, field));
+    if (!satisfied) {
       return { ok: false, error: precondition.message };
     }
   }

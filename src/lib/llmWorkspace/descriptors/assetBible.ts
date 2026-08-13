@@ -97,18 +97,28 @@ No markdown. No explanation. Only the JSON object.`,
   // found."` / `"Asset not found."`. Not proven by a runner-level equality
   // test in this ticket — see `shotPrompt.ts`'s identical note.
   //
-  // No `preconditions` here: `resolveAssetBibleContext` also refuses with
-  // "Add a Description or Notes to this asset before generating an Asset
-  // Bible draft." when *both* `description` and `notes` are empty — an
-  // "at least one of two fields" gate `preconditions`'s single `field:
-  // FieldRef` cannot express. Left undeclared rather than approximated;
-  // flagged, not fixed, since this descriptor is outside this ticket's
-  // proof scope.
   messages: {
     invalidRequest: "Invalid request.",
     notConfigured: "LLM is not configured. Go to Settings to set up Ollama.",
     chainNotFound: { project: "Project not found.", asset: "Asset not found." },
   },
+
+  // `resolveAssetBibleContext` (`src/lib/prompts/assetBibleContext.ts`)
+  // refuses with "Add a Description or Notes to this asset before
+  // generating an Asset Bible draft." only when *both* `description` and
+  // `notes` are empty — an "at least one of two fields" gate. B2b widened
+  // `preconditions` from a single `field: FieldRef` to `fields: FieldRef[]`
+  // plus `require: "all" | "any"` specifically to express this: two
+  // single-field entries would each wrongly refuse whenever *their own*
+  // field alone is empty, which is not the real rule (a non-empty
+  // `description` with empty `notes` must not be refused).
+  preconditions: [
+    {
+      fields: ["description", "notes"],
+      require: "any",
+      message: "Add a Description or Notes to this asset before generating an Asset Bible draft.",
+    },
+  ],
 
   // Correction 5 (§4.1), read verbatim from `parseAssetBibleDraft`
   // (`src/lib/prompts/assetBibleDraft.ts`): three keys, all optional, at

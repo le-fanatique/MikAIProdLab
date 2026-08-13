@@ -82,8 +82,10 @@ No markdown. No explanation. Only the JSON object.`,
 
   // `generateStory` refuses with "Add a pitch first." on an empty
   // `project.pitch`, verbatim, unconditionally (no `intent.mode` on this
-  // operation, so no `modes` restriction).
-  preconditions: [{ field: "pitch", message: "Add a pitch first." }],
+  // operation, so no `modes` restriction). Single field, so `require: "all"`
+  // and `require: "any"` are equivalent — `"all"` chosen per B2b's migration
+  // note in `types.ts`.
+  preconditions: [{ fields: ["pitch"], require: "all", message: "Add a pitch first." }],
 
   // Correction 5 (§4.1), read verbatim from `parseStoryResult`
   // (`src/actions/llm/story.ts`): one key, tolerant of extra keys (no

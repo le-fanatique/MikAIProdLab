@@ -174,11 +174,24 @@ export type OperationDescriptor = {
   // `preconditions` replaces `intent.mode.modes[].requiresNonEmpty`, which
   // carried no message and could not express a gate that is not mode-driven:
   // `generateStory` refuses with "Add a pitch first." on an empty pitch, in
-  // every mode (it has no `intent.mode` at all). One concept: a named field
-  // on the anchor entity that must be non-empty, optionally restricted to
-  // some modes, with its own message.
+  // every mode (it has no `intent.mode` at all). One concept: named fields
+  // on the anchor entity that must satisfy a `require` rule, optionally
+  // restricted to some modes, with its own message.
+  //
+  // Widened from a single `field: FieldRef` to `fields: FieldRef[]` plus
+  // `require: "all" | "any"` — found insufficient by `LLMW.RUNNER.1b` (B2b)
+  // against `assetBible.generate`: `resolveAssetBibleContext`
+  // (`src/lib/prompts/assetBibleContext.ts`) refuses only when *both*
+  // `description` and `notes` are empty, an "at least one of two" gate two
+  // single-field entries cannot express without each wrongly refusing
+  // whenever *its own* field alone is empty. `require` mirrors `output`'s own
+  // field-satisfaction vocabulary (§4.1 correction 5) rather than inventing a
+  // second one. Every existing single-field precondition migrates to
+  // `fields: [x], require: "all"` — identical to `"any"` when there is only
+  // one field, so no observable behaviour changes.
   preconditions?: Array<{
-    field: FieldRef; // on the anchor entity
+    fields: FieldRef[]; // on the anchor entity
+    require: "all" | "any"; // every declared field non-empty, or at least one
     modes?: string[]; // absent = every mode
     message: string;
   }>;

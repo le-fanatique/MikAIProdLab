@@ -139,7 +139,8 @@ describe("sequencePrompt.assist descriptor — context equality", () => {
     // the four transform modes via `modes`.
     expect(sequencePromptAssistDescriptor.preconditions).toEqual([
       {
-        field: "sequencePrompt",
+        fields: ["sequencePrompt"],
+        require: "all",
         modes: ["enhance", "rewrite", "shorten", "expand"],
         message: "A Sequence Prompt is required for this assist mode.",
       },

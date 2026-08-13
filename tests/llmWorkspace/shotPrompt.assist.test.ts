@@ -232,7 +232,8 @@ describe("shotPrompt.assist descriptor — context equality", () => {
     // the four transform modes via `modes`.
     expect(shotPromptAssistDescriptor.preconditions).toEqual([
       {
-        field: "shotPrompt",
+        fields: ["shotPrompt"],
+        require: "all",
         modes: ["enhance", "rewrite", "shorten", "expand"],
         message: "A Shot Prompt is required for this assist mode.",
       },
