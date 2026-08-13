@@ -22,6 +22,42 @@ instruction not to fold them into the action table.
 Total exports in `src/actions/llm/`: `grep -rn "^export" src/actions/llm/*.ts`
 returns 32 lines (27 async functions + 5 types).
 
+## Scope limitation — read this before treating the table as exhaustive
+
+The table covers `src/actions/llm/` only, as the ticket scoped it. That
+directory is **not** the whole LLM surface, in two directions.
+
+**Writes happen elsewhere.** Most LLM actions return a draft and write
+nothing — the `Champs écrits: aucun (draft only)` rows are accurate, but they
+describe only half the pipeline. The Approve half lives in generic write
+actions outside `src/actions/llm/`, which the assist panel calls directly
+once the user accepts the proposal. Six assist panels reach five such
+actions:
+
+| Write action | Module | Called by |
+| --- | --- | --- |
+| `updateAssetDetailsInline` | `@/actions/assets` | `AssetBibleEnhancePanel` |
+| `updateAssetDescriptionFieldInline` | `@/actions/assets` | `AssetDescriptionEnhancePanel`, `BatchAssetDescriptionEnhancePanel` |
+| `applyBatchAssetDescriptionDraftsInline` | `@/actions/assets` | `BatchAssetDescriptionEnhancePanel` |
+| `updateShotPrompt` | `@/actions/shots` | `ShotPromptLLMAssistPanel`, `PromptCompilerPanel` |
+| `updateSequencePrompt` | `@/actions/sequences` | `SequencePromptLLMAssistPanel` |
+
+(`PromptComposerPanel` also calls `updateShotPrompt`; it was not checked
+against the assist-panel definition used here, so it is named but not
+counted.)
+
+These five are what the action registry of §3.2 must actually describe. A
+registry built by scanning `src/actions/llm/` would find the readers and miss
+every writer.
+
+**Prompt building happens elsewhere too.** `translateTextField` builds its
+messages via `src/lib/llm/translationPrompt.ts`, outside `src/lib/prompts/`.
+Same failure mode, mirrored: a variable registry built by scanning
+`src/lib/prompts/` would miss it.
+
+The consequence for Phase B is one sentence: **neither registry can be built
+by directory discovery.** Both need an explicit declaration per operation.
+
 ## Column definitions actually used
 
 - **Action** — export name and declaring file.
