@@ -198,7 +198,7 @@ kinds it supports and whether the user may adjust it per run.
 
 ```
 PROJECT.IDENTITY       name, pitch, story,
-                       description                   anchors: project, sequence, shot, asset
+                       description, outline          anchors: project, sequence, shot, asset
 PROJECT.STYLE          world/visual/rules segments   anchors: project, sequence, shot, asset
 SEQ.CONTEXT            title, summary, description,
                        mood, locationHint            anchors: sequence, shot
@@ -216,7 +216,29 @@ ASSET.CORE             name, type, description,
                        notes                         anchors: asset
 ASSET.BIBLE            visualIdentity, usageRules,
                        forbiddenVariations           anchors: asset
+ASSET.SEQ_APPEARANCES  Sequences featuring the Asset
+                       -> title, summary, mood,
+                       locationHint,
+                       narrativePurpose  (max 5)     anchors: asset
+ASSET.SHOT_APPEARANCES Shots featuring the Asset
+                       -> shotCode, title,
+                       description, actionPitch,
+                       cameraPitch       (max 10)    anchors: asset
+ASSET.REFERENCES       reference images -> label,
+                       role, source filename (max 5) anchors: asset
 ```
+
+Thirteen, not the ten first written: the three `ASSET.*_APPEARANCES` /
+`ASSET.REFERENCES` entries were missing, and `PROJECT.IDENTITY` was missing
+`outline`. Found by reading what `fetchAssetContextInput`
+(`src/actions/llm/assetDescription.ts`) actually loads before B1b-2 was
+written, rather than by blocking that ticket.
+
+**A variable owns its ordering and its limit.** `ASSET.SHOT_APPEARANCES` is
+`orderBy(shots.orderIndex).limit(10)`, its sequence counterpart `limit(5)`,
+`ASSET.REFERENCES` `limit(5)`. Those bounds are part of the variable's
+contract, not of the caller's: the runner must not be able to widen them, or
+two operations sharing a variable would stop sharing a prompt.
 
 `PROJECT.STYLE` is in the registry because `generateAssetBibleDraft` and the
 asset-description actions already inject Project Style segments. A registry
@@ -356,7 +378,14 @@ type OperationDescriptor = {
   id: string;
   name: string;
 
-  anchor: { kind: "entity" | "insertionPoint"; entity: EntityKind };
+  // Correction 3. `entitySet` exists because generateBatchAssetDescriptionDrafts
+  // anchors on a bounded set of Assets, not on one: it reads `assetIds` and
+  // refuses beyond BATCH_LIMIT. Modelling it as a single entity would have
+  // forced the runner to invent a loop the descriptor never declared.
+  anchor:
+    | { kind: "entity"; entity: EntityKind }
+    | { kind: "insertionPoint"; entity: EntityKind }
+    | { kind: "entitySet"; entity: EntityKind; maxSize: number };
 
   context: {
     variables: Array<{
