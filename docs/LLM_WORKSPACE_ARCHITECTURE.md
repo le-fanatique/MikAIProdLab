@@ -167,6 +167,61 @@ ASSET.SHOT_APPEARANCES   Shots featuring the Asset -> description + actionPitch
 PROJECT.STORY            project story
 ```
 
+#### Resolver contract (settled in B1a)
+
+A variable is **one named unit of context with exactly one resolver**. The
+resolver is `async`, reads the database, and receives the already-verified
+anchor — it never re-checks ownership and never widens the chain the runner
+resolved. It returns typed data, never a formatted string: formatting belongs
+to the template, which is what makes a variable reusable across operations
+that phrase it differently.
+
+The pattern is not invented here. `resolveAssetBibleContext(projectId, assetId)`
+and `resolveAssetStyleContext(projectId)` already do exactly this, and
+`generateAssetBibleDraft` already consumes them. The registry generalises an
+existing shape rather than introducing one.
+
+**`buildPromptCompilationContext.ts` is not the resolution layer**, and B1
+must not turn it into one. It is a pure normaliser of data the caller already
+selected — no database, no network, no clock. What it contributes is the
+*naming*: its five boolean source flags (`casting`, `references`,
+`assetBibles`, `sequenceContext`, `projectContext`) are the first five named
+variables, and its purity contract survives untouched because resolvers are a
+separate layer above it. It also serves the Prompt Compiler, not the eight
+flat-JSON actions, which pass flat scalar props straight to their builders.
+Conflating the two layers would destroy a contract Phase A paid for.
+
+#### The closed registry for Phase B
+
+Ten variables cover the eight flat-JSON operations. Each declares the anchor
+kinds it supports and whether the user may adjust it per run.
+
+```
+PROJECT.IDENTITY       name, pitch, story            anchors: project, sequence, shot, asset
+PROJECT.STYLE          world/visual/rules segments   anchors: project, sequence, shot, asset
+SEQ.CONTEXT            title, summary, description,
+                       mood, locationHint            anchors: sequence, shot
+SEQ.CURRENT_PROMPT     sequencePrompt                anchors: sequence
+SHOT.CORE              title, code, description,
+                       actionPitch, cameraPitch,
+                       framing, cameraMovement,
+                       durationSeconds               anchors: shot
+SHOT.CURRENT_PROMPT    shotPrompt                    anchors: shot
+SHOT.CAST              cast Assets -> name, type,
+                       description, notes            anchors: shot
+SHOT.REFERENCES        reference images -> label,
+                       role, source filename         anchors: shot
+ASSET.CORE             name, type, description,
+                       notes                         anchors: asset
+ASSET.BIBLE            visualIdentity, usageRules,
+                       forbiddenVariations           anchors: asset
+```
+
+`PROJECT.STYLE` is in the registry because `generateAssetBibleDraft` and the
+asset-description actions already inject Project Style segments. A registry
+that omitted it could not reproduce their prompts byte-for-byte, which is B2's
+whole acceptance criterion.
+
 `ASSET.SHOT_APPEARANCES` demonstrates why flags are insufficient and paths are
 unnecessary: the `shotAssets -> shots` join and the two-field projection live
 inside the resolver, typed and reviewable, while the template references one
@@ -195,6 +250,13 @@ shots.insertBetween
 shots.patchFields
 assets.patchFields
 ```
+
+Each entry declares the action's real semantics, not an idealised one. B0
+measured the five Approve-side writes and found three that a generic
+description would misrepresent: a batch that applies partially, a batch that
+answers `ok: true` having applied nothing, and a "patch" that is in fact a full
+replacement nulling every field the caller omits. See "B0 — outcome, and what
+B4 inherits" in section 11.2.
 
 ### 3.3 Knowledge document registry
 
@@ -251,6 +313,70 @@ dependency. Selective retrieval is deferred until measured need.
 
 UC2 and UC3 are the same object with different values and a `commit` reduced
 to `patchFields`.
+
+#### Two corrections the eight flat-JSON actions force (settled in B1a)
+
+The sketch above was written against UC1-UC3. Measured against the eight
+actions actually migrating first, it loses two things — and "without loss" is
+B1's acceptance criterion.
+
+**1. `context.userAdjustable` is per variable, not per template.** Deferred in
+section 10.2, decided here as that section required. Phase A's evidence holds:
+`asset-description-from-context.ts` serves three actions through three
+builders over different subsets of one context, so adjustability varies
+*within* a shared context, not across templates. A per-template boolean cannot
+express "the user may drop the cast list but not the anchored Shot itself".
+
+**2. `intent` needs a closed mode, and a mode may carry a precondition.** Five
+of the eight take an `assistMode` — `generate | enhance | rewrite | shorten |
+expand` — and four of those five modes are illegal when the target field is
+empty: `generateShotPromptDraft` refuses with "A Shot Prompt is required for
+this assist mode." That refusal happens *before* the LLM call and is part of
+the operation's contract, not of its prompt. `intent: { kind: "freeText" }`
+cannot express it, so the runner would either lose the guard or hard-code it.
+
+```ts
+type OperationDescriptor = {
+  id: string;
+  name: string;
+
+  anchor: { kind: "entity" | "insertionPoint"; entity: EntityKind };
+
+  context: {
+    variables: Array<{
+      id: VariableId;            // closed registry, section 3.1
+      userAdjustable: boolean;   // per variable — correction 1
+    }>;
+  };
+
+  expertise: {
+    role: string;
+    systemPrompt: string;
+    knowledge: KnowledgeId[];
+  };
+
+  intent:
+    | { kind: "freeText"; label: string }
+    | { kind: "none" }
+    | {
+        kind: "mode";                       // correction 2
+        modes: Array<{
+          id: string;
+          requiresNonEmpty?: FieldRef;      // precondition, checked pre-call
+        }>;
+        defaultMode: string;
+      };
+
+  output: { target: { entity: EntityKind }; fields: string[] };
+
+  commit: ActionId[];                       // section 3.2
+
+  executor: "inProcess" | "n8n";
+  variation?: { seed: boolean };
+};
+```
+
+Everything else in the sketch survives contact with the eight unchanged.
 
 ### 4.2 Storage
 
@@ -522,7 +648,12 @@ Approve-side writes, which live outside `src/actions/llm/` and have no test
 coverage. Those writes are the real migration risk and need their own
 verification in the Phase B ticket.
 
-### 2. `context.userAdjustable` per template or per variable — **DEFERRED**
+### 2. `context.userAdjustable` per template or per variable — **SETTLED: per variable**
+
+Decided in B1a, where this section said it should be: against the descriptor
+format, with the eight real operations in hand. See section 4.1, "Two
+corrections the eight flat-JSON actions force". The original reasoning below
+is kept because it is what the decision rests on.
 
 Not blocking, and answering it now would be guessing. It is a property of the
 descriptor format, so it should be decided while writing §4.1, against real
@@ -626,6 +757,38 @@ inventory attributes to it and no others; it refuses a cross-project or
 cross-owner chain; ownership check, mutation and publication stay atomic under
 a mid-transaction failure (`.claude/rules/database.md`).
 
+#### B0 — outcome, and what B4 inherits
+
+Delivered in `9ffd15f`: 38 tests under `tests/actions/`, each file migrating
+its own disposable SQLite database. The unknown resolved in the executor's
+favour — a `"use server"` module imports cleanly under vitest, none of the five
+actions calls `revalidatePath`, so no `next/cache` stub was needed and no
+business logic had to be extracted. That conclusion covers these five actions
+only: an Approve-side action that did call `revalidatePath` remains untested.
+
+Four behaviours were found and deliberately left unfixed. They are contracts
+B4's action registry inherits, not bugs of the tests:
+
+1. **`applyBatchAssetDescriptionDraftsInline` is not atomic.** One independent
+   `UPDATE` per item, no enclosing transaction, so a mixed batch commits its
+   valid items and reports the rest. Partial application is the real contract.
+2. **The same action answers `ok: true` with `applied: []`** when every item is
+   refused. A caller testing only `result.ok` concludes success.
+3. **`updateAssetDetailsInline` is a full replacement.** All five text fields
+   are written on every call and a blank field becomes `null`, so a caller
+   changing one field must resend the other four.
+4. **Ownership check and mutation are not transactional**, on all five actions:
+   a `SELECT` for ownership then a separate `UPDATE`. A real TOCTOU gap against
+   `.claude/rules/database.md`, low impact under single-process SQLite but not
+   a conformance.
+
+Points 1 and 2 need an arbitration **before** B4, not during it: either the
+batch moves under `db.transaction`, or partial application is declared the
+contract and the registry describes it. A registry that describes an action it
+has mis-modelled is worse than no registry. Point 3 must appear explicitly in
+that action's registry entry — a generic "patch fields" description of it would
+be false.
+
 ### B1 — `LLMW.DESCRIPTOR.FORMAT.1`
 
 The §4.1 descriptor as a TypeScript type, plus the §3.1 closed variable
@@ -646,6 +809,35 @@ different subsets of one context.
 
 Proof: for each of the 8, the descriptor's resolved context equals what the
 current action assembles today. Same data, declared instead of coded.
+
+**Split into B1a and B1b**, per the arbitration rule in
+`.agents/SUPERVISION_PROTOCOL.md`, "Arbitration — who implements". The two
+halves have opposite risk profiles.
+
+*B1a — supervisor.* The descriptor type, the closed variable registry, and
+`userAdjustable`. No production path changes, so **no check can fail if these
+are wrong**: the error would surface in B2 as a prompt that cannot be
+reproduced, or in B4 as a registry describing an action it mis-modelled. Small
+in tokens, expensive to get wrong. Delivered: section 3.1 "Resolver contract"
+and "The closed registry for Phase B", section 4.1 "Two corrections the eight
+flat-JSON actions force", section 10.2 settled.
+
+*B1b — executor.* The eight per-action descriptors, written against the frozen
+format. High volume — eight actions plus their builders — repetitive, and
+provable: each descriptor's resolved context must equal what its action
+assembles today. An error fails a check the same day.
+
+**Scope correction for B3 and B4, found while writing B1a.** The inventory's
+"five Approve-side write actions" was scoped to assist panels and is not the
+whole write surface. Four more live *inside* `src/actions/llm/`:
+`applyGeneratedStory`, `applyGeneratedOutline`,
+`applySelectedCastingSuggestions`, `saveLLMChatImageAsReference`. The first two
+belong to operations in the eight, so B3 cannot migrate `generateStory` and
+`generateOutlineDraft` without touching writes that **B0 did not cover**.
+Either B3 carries coverage for those two, or a B0b extends it first. Neither
+performs an ownership check, which is defensible only because a Project is the
+root of its own chain — it stops being defensible the moment either is reached
+through a registry.
 
 ### B2 — `LLMW.RUNNER.1`
 
