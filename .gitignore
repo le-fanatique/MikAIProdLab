@@ -78,6 +78,19 @@ next-env.d.ts
 .agents/supervisor_review.md
 .agents/supervisor_verdict.json
 
+# .agents/ local working material — handoffs, one-off agent prompts, design
+# references and per-executor skills. Same category as the live workflow files
+# above: useful in a working copy, not part of the committed contract. Durable
+# knowledge belongs in docs/, not here.
+.agents/codex_handoff.md
+.agents/deepseek_developer_prompt.md
+.agents/opencv_storyboard_extraction_handoff.md
+.agents/project_style_retake_buffer.md
+.agents/style_1_c_architecture_context.md
+.agents/style_1_c_architecture_prompt.md
+.agents/design-references/
+.agents/skills/
+
 # local backup-executor configuration (Cline / OpenRouter), machine-specific
 .vscode/
 .cline/
