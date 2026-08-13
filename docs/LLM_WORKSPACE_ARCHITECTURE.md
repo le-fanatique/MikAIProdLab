@@ -1,7 +1,9 @@
 # LLM Workspace — Architecture Proposal
 
-Status: proposal, not approved. Prepared for Codex ticket breakdown.
-Date: 2026-08-12.
+Status: Phase A delivered (§9). Phase B is broken down into seven tickets
+(§11) but none is authorized yet — a prepared ticket file is still required
+before any implementation.
+Date: 2026-08-12, updated 2026-08-13.
 Scope: architecture and product contract for LLM-assisted operations across
 MikAI. No implementation is authorized by this document.
 
@@ -558,3 +560,155 @@ answered when that surface is designed — not a prerequisite.
 A feature question about something not yet built, not a workspace design
 question. It belongs to that feature's own ticket and does not gate Phase B.
 Left open deliberately.
+
+---
+
+## 11. Phase B — Ticket Breakdown
+
+Prepared 2026-08-13, after §9's three independent items closed. Phase B is
+seven tickets. The order below is not a preference: each ticket's proof
+depends on the previous one existing.
+
+### 11.1 Two sequencing arbitrations
+
+Both change what the tickets are, so they are settled here rather than inside
+a ticket.
+
+**Descriptors live in TypeScript before they live in a table.** §4.2 specifies
+one table storing templates as JSON, on the `comfy_workflows` precedent. That
+remains the destination, but it must not be the starting point. A table forces
+a migration, an authoring UI and a validation layer before a single line of
+the format has been proven against a real operation. A code-side registry
+proves the format against the 8 flat-JSON actions at zero migration risk, and
+the format that survives that contact is the one worth storing. Storage and
+the bench therefore arrive in B6, after the runner has already replaced
+production code paths.
+
+**The write-side test harness comes first.** §10.1 named the real migration
+risk: the A2 snapshots cover prompt construction only, and the five
+Approve-side write actions have no coverage at all. Building the runner on top
+of untested writes means the first thing that breaks breaks silently, in the
+one place with no snapshot to catch it. B0 exists to remove that condition and
+is a prerequisite for B4, not a nice-to-have.
+
+### 11.2 The tickets
+
+| # | Ticket | Depends on | What it proves |
+| --- | --- | --- | --- |
+| B0 | `LLMW.WRITE.COVERAGE.1` | — | the 5 Approve-side write actions behave, against a real disposable database |
+| B1 | `LLMW.DESCRIPTOR.FORMAT.1` | — | the descriptor + variable registry describe the 8 flat-JSON operations without loss |
+| B2 | `LLMW.RUNNER.1` | B1 | one runner reproduces the 8 actions' prompts byte-for-byte |
+| B3 | `LLMW.MIGRATE.FLATJSON.1` | B0, B2 | the 8 actions can be deleted in favour of the runner, snapshots unmoved |
+| B4 | `LLMW.ACTION.REGISTRY.1` | B0, B3 | commits go through named, declared actions |
+| B5 | `LLMW.PROPOSAL.COMPONENT.1` | B3 | one component replaces the single-entity assist panels |
+| B6 | `LLMW.STORAGE.BENCH.1` | B1-B5 | templates as data, plus the three-pane bench |
+
+### B0 — `LLMW.WRITE.COVERAGE.1`
+
+Coverage for `updateAssetDetailsInline`, `updateAssetDescriptionFieldInline`,
+`applyBatchAssetDescriptionDraftsInline`, `updateShotPrompt`,
+`updateSequencePrompt` (inventory, "Approve-side writes").
+
+`src/db/index.ts` binds one `better-sqlite3` handle at module load from
+`DB_PATH`, so a test can point that variable at a temporary file before
+importing anything, then replay the 50 migrations in `drizzle/` and seed a
+minimal Project -> Sequence -> Shot / Asset chain. This gives the repository
+its first real database test capability, which outlives Phase B.
+
+**Unknown to resolve first:** whether a `"use server"` module can be imported
+under vitest at all, and what `next/cache` requires as a stub. If it cannot be
+imported cleanly, the ticket extracts the write logic behind a testable
+boundary — it does **not** mock the database. A test that mocks the database
+proves nothing about a write action, and A2 already refused that trade.
+
+Each action must be proven on three axes: it writes exactly the columns the
+inventory attributes to it and no others; it refuses a cross-project or
+cross-owner chain; ownership check, mutation and publication stay atomic under
+a mid-transaction failure (`.claude/rules/database.md`).
+
+### B1 — `LLMW.DESCRIPTOR.FORMAT.1`
+
+The §4.1 descriptor as a TypeScript type, plus the §3.1 closed variable
+registry, plus descriptors for the 8 flat-JSON single-entity actions. No
+production path changes: nothing calls this yet.
+
+`buildPromptCompilationContext.ts` is the starting point and must keep its
+purity contract while moving from boolean source flags to named variables.
+Both registries declare each entry explicitly — directory discovery is
+excluded by §9's constraint and by `docs/ARCHITECTURE_DECISIONS.md`, "Prompt
+Builder Location Carries No Contract".
+
+This ticket owns the deferred `context.userAdjustable` decision (§10.2). It
+was deferred precisely so it would be answered here, against real descriptors.
+Phase A's evidence points to **per variable**:
+`asset-description-from-context.ts` serves 3 actions through 3 builders over
+different subsets of one context.
+
+Proof: for each of the 8, the descriptor's resolved context equals what the
+current action assembles today. Same data, declared instead of coded.
+
+### B2 — `LLMW.RUNNER.1`
+
+The §2.1 invariant pipeline as one function: validate IDs, check LLM config,
+load and verify ownership, resolve context from the registry, build system and
+user prompt, `callLLMJson`, strip fence and parse, map error. §1.3 measured
+this as ~90 of the 145 lines of `shotPrompt.ts`, with the fence-stripping
+duplicated verbatim in three files.
+
+Proof: driven by each of the 8 descriptors, the runner produces prompts
+identical to the existing builders' A2 snapshots. Byte-for-byte, or the format
+is not proven. Existing actions stay in place and untouched — this ticket adds
+a second path and compares it, it does not switch anything over.
+
+### B3 — `LLMW.MIGRATE.FLATJSON.1`
+
+Switch the 8 actions to the runner and delete the replaced code, in the same
+diff, per the Definition of Done. The A2 snapshots must not move: a changed
+snapshot here is a defect, not an update — the opposite of the punctuation fix
+in `da48cbf`, where moving one snapshot was the point.
+
+B0's coverage is what makes this safe on the Approve side, which is why it is
+a dependency rather than a parallel track.
+
+### B4 — `LLMW.ACTION.REGISTRY.1`
+
+The §3.2 write registry: commits invoke existing, named, reviewed Server
+Actions rather than a generic write primitive. The five actions from B0 are
+its first entries, and B0's tests are what protect the indirection.
+
+No template ever receives a "create entity" or "write row" primitive. That
+would bypass renumbering, Shot codes, ownership checks and foreign-key
+integrity exactly as a direct database writer would.
+
+### B5 — `LLMW.PROPOSAL.COMPONENT.1`
+
+One proposal component with Approve / Redo / Cancel, replacing the assist
+panels for the migrated single-entity operations. §9 established the
+constraint the original §6 missed: 6 of the 16 LLM-calling actions do not fit
+a single JSON-object component — 4 return array-wrapped lists, 2 return free
+text. **This ticket delivers object mode only.** List mode and text mode
+follow with their own migrations; pretending one component covers all three
+now is how the component ends up with three modes bolted on badly.
+
+### B6 — `LLMW.STORAGE.BENCH.1`
+
+Templates become data (§4.2) and the workspace appears (§5): the
+`src/app/settings/llm-workflows/` routes, the three-pane bench, the variable
+library, the entity picker.
+
+**Requires explicit schema and migration authorisation in its own ticket** —
+nullable `projectId`, template JSON, import/export. That authorisation is not
+granted by this breakdown.
+
+This is where `FB-20260715-013` (every prompt in one place) and
+`FB-20260716-035` (the effective prompt stops being a black box) are actually
+answered — by the list and the centre pane respectively, as a by-product of
+the workspace existing rather than as features of their own.
+
+### 11.3 After B6
+
+Per §10.1's settled order: the 4 array-wrapped list actions, then the 2 free
+text ones, then chat and image generation — which may never belong in the
+registry at all, being conversational rather than anchored. Each needs its
+mode in the proposal component before its migration. Phase C (§9) starts once
+those are done.
