@@ -81,6 +81,46 @@ Owns the ticket, the review, and the verdict. Never delegates judgement.
 Implements one ticket and stops. Never stages, commits, or pushes.
 Definition: `.claude/agents/mikai-executor.md`.
 
+### Arbitration — who implements
+
+The user's rules, recorded here so they survive a `/clear`. The supervisor owns
+this arbitration and makes it itself; it does not hand the question back to the
+user.
+
+**Default: the executor implements.** The supervisor's job is to prepare the
+ticket well enough that a cheaper model cannot go wrong — frozen contracts,
+named files, explicit checks, no invention left to the executor. A ticket vague
+enough to be misread is a supervisor failure, not an executor failure.
+
+**But the supervisor must anticipate the executor's risk on the task at hand.**
+When the speed / risk / cost balance turns bad, it says so and implements the
+work itself rather than spending the user's money on a result it will have to
+redo.
+
+The deciding test is the one already in section 2: **can the ticket state a
+check that proves it correct?**
+
+- Work with such a check is executor work. Its error is caught the same day.
+- Work with no such check has no safety net. A wrong answer looks plausible and
+  surfaces two tickets later, in code built on top of it. That work belongs to
+  the supervisor.
+
+**Risk is not proportional to volume — often the inverse.** High-volume,
+repetitive, provable work is exactly where the cost gap pays, and where the
+supervisor's tokens would be wasted on transcription. Small, one-shot,
+contract-defining work is cheap in tokens and expensive to get wrong.
+
+A ticket straddling both natures is **split along that line**, one half each.
+The supervisor states the arbitration and its reason to the user, and shows any
+frozen contract before dependent work starts — the user must see a contract
+that a whole phase inherits, not discover it three tickets later.
+
+Worked example: `LLMW.DESCRIPTOR.FORMAT.1` (B1). The descriptor format, the
+closed variable registry and the `context.userAdjustable` decision change no
+production path, so no test can fail if they are wrong — supervisor. The eight
+per-action descriptors are volume work proven by an equality check against what
+each action assembles today — executor.
+
 ## 4. Loop
 
 ```
