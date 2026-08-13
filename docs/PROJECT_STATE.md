@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B3 COMPLETE (2026-08-13)
+## LLM Workspace Phase B — B0 to B4 COMPLETE (2026-08-13)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -48,9 +48,32 @@ application after each production switch.
 | B1c — descriptors carry their prompt | `907604c` | strict `toBe` equality against every builder; caught three drifted system prompts |
 | B2 — the runner | `5415c66`, `fbc632f` | one §2.1 pipeline, 8 operations, **the runner names no operation** |
 | B3 — the switch | `5f11464`, `0b40a74` | the 8 actions became thin adapters; ~1150 lines of replaced code deleted |
+| B4a — the declaration | `33a289f` | seven declared entries, `ActionId` closed into a union, each entry's `columns.written` verified against a real full-row diff |
+| B4b — the resolution | `89768f7` | `actions/bindings.ts`: `ActionId` resolves to the real Server Action; the 7 Approve-side callers switched |
 
-The suite went from 100 tests to 226. No A2 snapshot moved in any of these
+The suite went from 100 tests to 263. No A2 snapshot moved in any of these
 tickets, and no exported signature or user-visible message changed.
+
+**What B4b decided by refusing to decide.** A uniform commit call —
+`commitOperation(descriptorId, ids, values)` — was deliberately not built. The
+seven actions' conventions are not reducible to a descriptor's output values:
+`replace|append` mode, `returnTo`, the two fields `updateAssetDetailsInline`
+replaces without generating, the batch's item list. A uniform shape would have
+meant inventing an options bag with no consumer to constrain it. **That call
+shape is B5's to define**, from what the proposal component actually needs.
+
+The refusal is also what kept the switch free of visible change. `updateShotPrompt`
+and `updateSequencePrompt` are consumed as `<form action={...}>`; the binding
+holds the Server Action reference itself, so form identity, no-JS submission and
+the server-side redirect are structurally unchanged. A client-side wrapper would
+have destroyed all three. Consequently the entire non-regression claim reduces to
+reference identity (`toBe` against each module's own export) — no behavioural
+re-proof of the seven actions was needed, they already have their own files under
+`tests/actions/`.
+
+Known limit, carried into B5: no test in this repository exercises the compiled
+browser path of those two forms. `npm run build` proves they bundle, not that they
+submit. The user validated all seven Approve paths manually on 2026-08-13.
 
 **What the phase produced beyond the code.** Seven gaps in the descriptor
 format were found and closed *before* anything was wired to production, each
@@ -74,8 +97,9 @@ header. It always fails loudly and has never produced a false green. **Read the
 log before rerunning** — a real failure names a file and an assertion. Prefer
 redirecting vitest output to a file over piping it.
 
-**What B4 inherits.** Four behaviours measured in B0 and frozen by tests, not
-fixed: the batch asset-description write is not atomic and applies partially;
+**What B4 inherited, and declared rather than fixed.** Four behaviours measured
+in B0 and frozen by tests, not fixed — each now appears in its B4a registry
+entry as the contract, arbitrated by the user on 2026-08-13: the batch asset-description write is not atomic and applies partially;
 it answers `ok: true` having applied nothing when every item is refused;
 `updateAssetDetailsInline` is a full replacement that nulls omitted fields; and
 ownership check and mutation are not transactional on any of the five. Plus
