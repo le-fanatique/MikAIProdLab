@@ -60,7 +60,11 @@ export function findTextInputKey(
   inputs: Record<string, unknown>,
   classType: string
 ): string | null {
-  if (classType === "PrimitiveStringMultiline" && "value" in inputs) return "value";
+  // ComfyUI's PrimitiveString and PrimitiveStringMultiline both carry their
+  // editable text in `inputs.value`. The workflow marker `(Input)` identifies
+  // the node as exposed; this write-time rule must accept the actual field of
+  // both primitives (e.g. Gemini_PropSheet's "Prop Subject").
+  if ((classType === "PrimitiveString" || classType === "PrimitiveStringMultiline") && "value" in inputs) return "value";
   if ("text" in inputs) return "text";
   if ("prompt" in inputs) return "prompt";
   if ("string" in inputs) return "string";
