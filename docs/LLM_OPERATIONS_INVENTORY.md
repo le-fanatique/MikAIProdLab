@@ -11,8 +11,8 @@ does not propose a design. It is a design **input** for `docs/LLM_WORKSPACE_ARCH
 
 ## Scope and line unit
 
-`src/actions/llm/` contains 15 files but **27 exported async functions**
-(server actions, each file starts with `"use server"`). Every one of the 27
+`src/actions/llm/` contains 15 files but **26 exported async functions**
+(server actions, each file starts with `"use server"`). Every one of the 26
 is tabulated below as one row — none are folded into another row and none
 are silently merged by file. The directory also exports **5 TypeScript
 types** (not callable actions); those are listed separately in
@@ -20,7 +20,13 @@ types** (not callable actions); those are listed separately in
 instruction not to fold them into the action table.
 
 Total exports in `src/actions/llm/`: `grep -rn "^export" src/actions/llm/*.ts`
-returns 32 lines (27 async functions + 5 types).
+returns 31 lines (26 async functions + 5 types).
+
+The first version of this document had 27 rows. `generateAssetDescriptionDraft`
+was removed afterwards: it was a confirmed orphan, superseded in `9b3d437`
+when `AssetDescriptionEnhancePanel` switched to the two single-field actions
+and the combined one was left behind. Its shared helper `generateForAsset`
+stays — the batch action still calls it.
 
 ## Scope limitation — read this before treating the table as exhaustive
 
@@ -78,14 +84,13 @@ by directory discovery.** Both need an explicit declaration per operation.
   from the model's raw response. `n/a (pas d'appel LLM)` for actions that
   never call the model.
 
-## Action table (27 rows)
+## Action table (26 rows)
 
 | Action (file) | Constructeurs de prompt | Composant d'assist | Entité d'ancrage | Champs écrits | Cardinalité | Format de sortie |
 | --- | --- | --- | --- | --- | --- | --- |
 | `generateAssetBibleDraft` (`assetBible.ts`) | `asset-bible-from-context.ts` (prompt), `assetBibleContext.ts` (ownership/read resolver, not a prompt builder), `assetBibleDraft.ts` (response parser) | `AssetBibleEnhancePanel.tsx` | Asset | aucun (draft only) | une entité | JSON flat object `{visual_identity, usage_rules, forbidden_variations}` |
 | `generateAssetDescriptionOnlyDraft` (`assetDescription.ts`) | `asset-description-from-context.ts` (`buildAssetDescriptionOnlyPrompt`) | `AssetDescriptionEnhancePanel.tsx` | Asset | aucun (draft only) | une entité | JSON single-key object `{description_draft}`, strictly validated (exactly one key, string, ≤4000 chars) |
 | `generateAssetNotesOnlyDraft` (`assetDescription.ts`) | `asset-description-from-context.ts` (`buildAssetNotesOnlyPrompt`) | `AssetDescriptionEnhancePanel.tsx` | Asset | aucun (draft only) | une entité | JSON single-key object `{notes_draft}`, same strict validation |
-| `generateAssetDescriptionDraft` (`assetDescription.ts`) | `asset-description-from-context.ts` (`buildAssetDescriptionFromContextPrompt`) | **aucun** — no caller found anywhere in `src/` (see anomalies) | Asset | aucun (draft only) | une entité | JSON flat object `{description_draft, notes_draft}` |
 | `generateBatchAssetDescriptionDrafts` (`assetDescription.ts`) | `asset-description-from-context.ts` (`buildAssetDescriptionFromContextPrompt`, one call per asset, sequential) | `BatchAssetDescriptionEnhancePanel.tsx` | Asset (lot, jusqu'à 10 par appel — `BATCH_LIMIT`) | aucun (draft only) | plusieurs | per-item JSON flat object `{description_draft, notes_draft}`; action wraps results in `{results: BatchAssetDraftResult[], errors: BatchAssetDraftError[]}` |
 | `generateAssetCandidatesDraft` (`assetExtraction.ts`) | `assets-from-project.ts` | `AssetsLLMExtractPanel.tsx` | Project | aucun (draft only) | plusieurs | JSON array-wrapped `{assets: [{name, assetType, description, notes, sourceLevel, sourceExcerpt, duplicateWarning}]}` |
 | `createSelectedAssets` (`assetExtraction.ts`) | aucun (persists already-generated candidates; no LLM call) | `AssetsLLMExtractPanel.tsx` | Project | `assets`: `name`, `type`, `description`, `notes`, `orderIndex`, `projectId` | plusieurs | n/a (pas d'appel LLM) |
@@ -130,15 +135,15 @@ sense against the full directory, not the subset actually reachable from
 
 Among the 16 files reachable from `src/actions/llm/`, only **one is shared
 by more than one action**: `asset-description-from-context.ts`, called by
-4 actions (`generateAssetDescriptionOnlyDraft`, `generateAssetNotesOnlyDraft`,
-`generateAssetDescriptionDraft`, `generateBatchAssetDescriptionDrafts`) via
-3 different exported builder functions in that one file. Every other
+3 actions (`generateAssetDescriptionOnlyDraft`, `generateAssetNotesOnlyDraft`,
+`generateBatchAssetDescriptionDrafts`) via its
+3 exported builder functions. Every other
 constructor reachable from `src/actions/llm/` is used by exactly one action.
 Real sharing rate today: 1 shared file out of 16 (6%).
 
 ### 2. Actions écrivant les mêmes champs de la même table
 
-Seven of the 27 actions write to the database, spread over 7 files
+Seven of the 26 actions write to the database, spread over 7 files
 (`assetExtraction.ts`, `castingSuggestions.ts`, `chatImageReferences.ts`,
 `outlineGeneration.ts`, `sequenceGeneration.ts`, `sequenceShots.ts`,
 `story.ts`). Note that 10 actions make no LLM call, but 3 of those
@@ -156,13 +161,13 @@ set no other action in this inventory touches.
 
 ### 3. Formats de sortie qui s'écartent de la forme dominante
 
-Of the 17 actions that call the model at all (10 of the 27 never call an
+Of the 16 actions that call the model at all (10 of the 26 never call an
 LLM — see the `n/a (pas d'appel LLM)` rows above):
 
 - **Dominant form** — flat JSON object with one or more string keys, no
-  array wrapper: 9 actions (`generateAssetBibleDraft`,
+  array wrapper: 8 actions (`generateAssetBibleDraft`,
   `generateAssetDescriptionOnlyDraft`, `generateAssetNotesOnlyDraft`,
-  `generateAssetDescriptionDraft`, `generateBatchAssetDescriptionDrafts`
+  `generateBatchAssetDescriptionDrafts`
   per item, `generateOutlineDraft`, `generateSequencePromptDraft`,
   `generateShotPromptDraft`, `generateStory`).
 - **Array-wrapped list** — `{<key>: [...]}`: 4 actions
@@ -193,12 +198,14 @@ to fold non-action exports into the action table.
 
 ## Anomalies observed, not corrected (out of this ticket's scope)
 
-- `generateAssetDescriptionDraft` (`src/actions/llm/assetDescription.ts`)
-  has **zero callers** anywhere in `src/` (repository-wide search for the
-  export name returns only its own declaration). It is a second orphan
-  candidate, distinct from the one this ticket was authorized to delete.
-  Not removed — the ticket authorizes deleting only
-  `src/lib/prompts/sequences-from-story.ts`.
+- ~~`generateAssetDescriptionDraft` has zero callers.~~ **Resolved** — removed
+  in a follow-up. The cause, found in the history rather than by search: it
+  was superseded in `9b3d437` (UX.PRODUCTIVITY.POLISH.1 lot C), when
+  `AssetDescriptionEnhancePanel` moved from the combined action to the two
+  single-field ones. A replaced execution path left in place. Worth keeping
+  on record: a `grep` proved the action was dead, but only `git log -S` said
+  why, and only that told us deleting it was safe rather than merely
+  unreferenced.
 - `translateTextField` (`src/actions/llm/translation.ts`) builds its LLM
   message via `buildTranslationMessages` in `src/lib/llm/translationPrompt.ts`
   — a prompt constructor that lives outside `src/lib/prompts/`, breaking the

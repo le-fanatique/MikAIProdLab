@@ -264,47 +264,6 @@ export async function generateAssetNotesOnlyDraft(
   return generateSingleField(formData, "notes");
 }
 
-// ── Single-asset action ──────────────────────────────────────────────────────
-
-export async function generateAssetDescriptionDraft(
-  formData: FormData
-): Promise<{ ok: true; draft: GeneratedAssetDescriptionDraft } | { ok: false; error: string }> {
-  try {
-    const projectId = parseInt(formData.get("projectId") as string, 10);
-    const assetId = parseInt(formData.get("assetId") as string, 10);
-
-    if (
-      !Number.isInteger(projectId) || projectId <= 0 ||
-      !Number.isInteger(assetId) || assetId <= 0
-    ) {
-      return { ok: false, error: "Invalid request." };
-    }
-
-    const config = await getLLMConfig();
-    if (!config) {
-      return { ok: false, error: "LLM is not configured. Go to Settings to set up Ollama." };
-    }
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) return { ok: false, error: "Project not found." };
-
-    const style = await resolveDescriptionStyleSegments(projectId);
-
-    const draft = await generateForAsset(
-      { id: project.id, name: project.name, pitch: project.pitch ?? null, story: project.story ?? null, outline: project.outline ?? null },
-      assetId,
-      config,
-      style
-    );
-
-    return { ok: true, draft };
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unexpected error. Please try again.";
-    return { ok: false, error: message };
-  }
-}
-
 // ── Batch action ─────────────────────────────────────────────────────────────
 
 export type BatchAssetDraftResult = {
