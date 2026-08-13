@@ -74,3 +74,8 @@ export async function readShot({ db, schema }: TempDb, shotId: number) {
   const [row] = await db.select().from(schema.shots).where(eq(schema.shots.id, shotId));
   return row;
 }
+
+export async function readProject({ db, schema }: TempDb, projectId: number) {
+  const [row] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
+  return row;
+}

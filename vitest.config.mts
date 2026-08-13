@@ -11,6 +11,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Next.js aliases "server-only" at build time; Vitest runs under plain
+      // Node and has no such package installed, so stub it for tests only.
+      "server-only": fileURLToPath(
+        new URL("./tests/helpers/serverOnlyStub.ts", import.meta.url)
+      ),
     },
   },
 });
