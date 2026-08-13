@@ -954,6 +954,18 @@ B4's action registry inherits, not bugs of the tests:
    `.claude/rules/database.md`, low impact under single-process SQLite but not
    a conformance.
 
+**Arbitrated by the user on 2026-08-13: partial application is the contract.**
+A batch keeps every item it applied when a sibling item fails. An LLM draft is
+expensive to reproduce, and discarding four accepted drafts because a fifth
+failed would punish the user for the failure. The batch therefore does **not**
+move under `db.transaction`, and B4's registry entry must state the partial
+behaviour rather than describe the action as a plain field patch.
+
+Point 2 is not a user-facing lie: `BatchAssetDescriptionEnhancePanel` renders
+"N assets. M failed.", so a fully refused batch reads "0 assets. 3 failed."
+The content is honest and only the styling is that of a success. That is a
+small interface ticket, not an arbitration.
+
 Points 1 and 2 need an arbitration **before** B4, not during it: either the
 batch moves under `db.transaction`, or partial application is declared the
 contract and the registry describes it. A registry that describes an action it

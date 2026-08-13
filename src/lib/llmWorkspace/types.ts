@@ -82,10 +82,22 @@ export type KnowledgeId = string;
 
 /**
  * Identifier of an existing, named, reviewed Server Action invoked at
- * Approve (§3.2, e.g. `shots.insertBetween`). Opaque for now — the action
- * registry is B4's ticket (`LLMW.ACTION.REGISTRY.1`), not this one.
+ * Approve (§3.2). Closed by `LLMW.ACTION.REGISTRY.1a` (B4a): the seven
+ * Approve-side write actions the eight flat-JSON descriptors' `commit`
+ * arrays reference, declared and proven against a real database in
+ * `actions/registry.ts`. A `commit` entry naming anything else no longer
+ * compiles — `actions/registry.ts`'s `ACTION_REGISTRY` is `satisfies
+ * Record<ActionId, ActionRegistryEntry>`, so the two are kept in lockstep by
+ * the compiler in both directions.
  */
-export type ActionId = string;
+export type ActionId =
+  | "updateAssetDetailsInline"
+  | "updateAssetDescriptionFieldInline"
+  | "applyBatchAssetDescriptionDraftsInline"
+  | "updateShotPrompt"
+  | "updateSequencePrompt"
+  | "applyGeneratedStory"
+  | "applyGeneratedOutline";
 
 /**
  * Names a field on the operation's anchor entity, for a `preconditions`
