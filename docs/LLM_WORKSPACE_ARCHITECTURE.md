@@ -197,7 +197,8 @@ Ten variables cover the eight flat-JSON operations. Each declares the anchor
 kinds it supports and whether the user may adjust it per run.
 
 ```
-PROJECT.IDENTITY       name, pitch, story            anchors: project, sequence, shot, asset
+PROJECT.IDENTITY       name, pitch, story,
+                       description                   anchors: project, sequence, shot, asset
 PROJECT.STYLE          world/visual/rules segments   anchors: project, sequence, shot, asset
 SEQ.CONTEXT            title, summary, description,
                        mood, locationHint            anchors: sequence, shot
@@ -221,6 +222,12 @@ ASSET.BIBLE            visualIdentity, usageRules,
 asset-description actions already inject Project Style segments. A registry
 that omitted it could not reproduce their prompts byte-for-byte, which is B2's
 whole acceptance criterion.
+
+`PROJECT.IDENTITY` carries `description` alongside `name`, `pitch` and `story`
+because `generateStory` passes `project.description` and `generateOutlineDraft`
+passes `project.story` — the same variable serves both only if it holds the
+union. A template uses the subset it needs; a variable is not narrowed to one
+caller.
 
 `ASSET.SHOT_APPEARANCES` demonstrates why flags are insufficient and paths are
 unnecessary: the `shotAssets -> shots` join and the two-field projection live
@@ -327,13 +334,22 @@ builders over different subsets of one context, so adjustability varies
 *within* a shared context, not across templates. A per-template boolean cannot
 express "the user may drop the cast list but not the anchored Shot itself".
 
-**2. `intent` needs a closed mode, and a mode may carry a precondition.** Five
-of the eight take an `assistMode` — `generate | enhance | rewrite | shorten |
-expand` — and four of those five modes are illegal when the target field is
-empty: `generateShotPromptDraft` refuses with "A Shot Prompt is required for
-this assist mode." That refusal happens *before* the LLM call and is part of
-the operation's contract, not of its prompt. `intent: { kind: "freeText" }`
-cannot express it, so the runner would either lose the guard or hard-code it.
+**2. `intent` is composable, carries closed modes, and a mode may carry a
+precondition.** Five of the eight take an `assistMode` — `generate | enhance |
+rewrite | shorten | expand` — and four of those five modes are illegal when the
+target field is empty: `generateShotPromptDraft` refuses with "A Shot Prompt is
+required for this assist mode." That refusal happens *before* the LLM call and
+is part of the operation's contract, not of its prompt.
+`intent: { kind: "freeText" }` cannot express it, so the runner would either
+lose the guard or hard-code it.
+
+A tagged union was the first attempt and it did not survive B1b-1:
+`generateOutlineDraft` takes `targetSections`, an integer the user supplies,
+which is neither free text nor a mode. A union also forbids an operation from
+having a mode *and* a parameter, for no reason other than the shape of the
+type — the same exclusivity mistake as a per-template `userAdjustable`. `intent`
+is therefore an object with optional parts, and an empty object means the user
+steers nothing.
 
 ```ts
 type OperationDescriptor = {
@@ -355,17 +371,26 @@ type OperationDescriptor = {
     knowledge: KnowledgeId[];
   };
 
-  intent:
-    | { kind: "freeText"; label: string }
-    | { kind: "none" }
-    | {
-        kind: "mode";                       // correction 2
-        modes: Array<{
-          id: string;
-          requiresNonEmpty?: FieldRef;      // precondition, checked pre-call
-        }>;
-        defaultMode: string;
-      };
+  // Correction 2. Composable, not a tagged union: an operation may take a
+  // mode AND a parameter. An empty object means "the user steers nothing".
+  intent: {
+    freeText?: { label: string };
+    mode?: {
+      modes: Array<{
+        id: string;
+        requiresNonEmpty?: FieldRef;        // precondition, checked pre-call
+      }>;
+      defaultMode: string;
+    };
+    parameters?: Array<{
+      id: string;
+      type: "integer" | "string";
+      label: string;
+      default?: number | string;
+      min?: number;
+      max?: number;
+    }>;
+  };
 
   output: { target: { entity: EntityKind }; fields: string[] };
 

@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
+    // Points DB_PATH at a throwaway file before any test module loads, so a
+    // mis-ordered import can never reach the development database.
+    setupFiles: ["./tests/setup/dbGuard.ts"],
   },
   resolve: {
     alias: {
