@@ -410,7 +410,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
         <Collapsible label="Show OpenReel start command">
           <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
 {`cd F:/AI/mikai-openreel-sidecar
-npx -y pnpm@9.0.0 dev`}
+npx -y pnpm@11.7.0 dev`}
           </pre>
         </Collapsible>
       </Card>
