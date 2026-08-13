@@ -107,7 +107,15 @@ describe("assetDescription.batch descriptor — context equality", () => {
     expect(assetDescriptionBatchDescriptor.intent).toEqual({});
     expect(assetDescriptionBatchDescriptor.output).toEqual({
       target: { entity: "asset" },
-      fields: ["description", "notes"],
+      fields: [
+        { field: "description", jsonKey: "description_draft" },
+        { field: "notes", jsonKey: "notes_draft" },
+      ],
+      require: "any",
+      errors: {
+        unparsable: "The model returned an unexpected format. Try again.",
+        empty: "The model returned an empty draft. Try again.",
+      },
     });
     expect(assetDescriptionBatchDescriptor.commit).toEqual(["applyBatchAssetDescriptionDraftsInline"]);
   });

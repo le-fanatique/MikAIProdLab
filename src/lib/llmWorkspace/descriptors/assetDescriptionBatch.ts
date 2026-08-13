@@ -90,7 +90,50 @@ No markdown. No explanation. Only the JSON object.`,
 
   intent: {},
 
-  output: { target: { entity: "asset" }, fields: ["description", "notes"] },
+  // Correction 6 (§4.1), read verbatim from `generateBatchAssetDescriptionDrafts`
+  // (`src/actions/llm/assetDescription.ts`): `"Invalid request."` on a
+  // malformed `projectId`, and `"LLM is not configured. Go to Settings to
+  // set up Ollama."` (same wording as the other two Asset-context
+  // operations). `messages.invalidRequest` is a partial fit here, not a full
+  // one: the action also refuses with `"No assets selected."` and
+  // `` `Select up to ${BATCH_LIMIT} assets at a time.` `` for the
+  // `assetIds` list, neither representable by one `invalidRequest: string`
+  // — the same `entitySet`-anchor topology gap already named in `output`'s
+  // comment below (an array-wrapped batch this format was not built to
+  // describe). `chainNotFound.project` is the one level this action checks
+  // before entering its per-Asset loop; per-Asset "not found" errors are
+  // collected into `BatchAssetDraftError[]`, a different mechanism entirely,
+  // out of scope. Not proven by a runner-level equality test in this
+  // ticket.
+  messages: {
+    invalidRequest: "Invalid request.",
+    notConfigured: "LLM is not configured. Go to Settings to set up Ollama.",
+    chainNotFound: { project: "Project not found." },
+  },
+
+  // Correction 5 (§4.1), read verbatim from `parseDraft`
+  // (`src/actions/llm/assetDescription.ts`): two keys, both optional, at
+  // least one non-empty (`require: "any"`) — unlike the strict single-field
+  // parsers, this one applies no `exactKeysOnly` and no length cap. Not
+  // proven by a runner-level equality test in this ticket — see
+  // `shotPrompt.ts`'s identical note. Also unmigrated regardless of this
+  // ticket's output correction: `generateBatchAssetDescriptionDrafts`
+  // returns one `{descriptionDraft, notesDraft}` per Asset in the batch, an
+  // array-wrapped list this `output.target` (single entity) cannot describe
+  // — the batch action is one of §9's "4 return array-wrapped lists",
+  // deferred until the proposal component gets a list mode (§10.1).
+  output: {
+    target: { entity: "asset" },
+    fields: [
+      { field: "description", jsonKey: "description_draft" },
+      { field: "notes", jsonKey: "notes_draft" },
+    ],
+    require: "any",
+    errors: {
+      unparsable: "The model returned an unexpected format. Try again.",
+      empty: "The model returned an empty draft. Try again.",
+    },
+  },
 
   commit: ["applyBatchAssetDescriptionDraftsInline"],
 

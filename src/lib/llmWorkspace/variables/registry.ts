@@ -128,6 +128,25 @@ export function renderProjectIdentityOutlineContextLines(data: ProjectIdentityDa
   return lines.join("\n");
 }
 
+/**
+ * `outline.generate`'s `{parameter: "targetSections", render}` block (§4.1
+ * correction 4). Not a `VariableId` — `targetSections` is an
+ * `intent.parameters` entry, not a context variable — but moved here from
+ * `descriptors/outline.ts` per §3.1's correction: "the runner imports no
+ * operation's module", found by B2a and fixed here. Render functions live
+ * beside the resolvers, in `PARAMETER_RENDER_FORMS` /
+ * `MODE_RENDER_FORMS` below, exactly like `VARIABLE_RENDER_FORMS` — never
+ * inside a descriptor module, so a descriptor stays pure data (§4.2 stores
+ * it as JSON).
+ */
+export function renderOutlineTargetSectionsBullet(targetSections: number | null | undefined): string {
+  const sectionInstruction =
+    targetSections != null
+      ? `Write exactly ${targetSections} sections.`
+      : "Choose a natural number of sections based on the story structure (typically 4 to 8).";
+  return `- ${sectionInstruction}`;
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT.STYLE — anchors: project, sequence, shot, asset. World / Visual /
 // Rules segments of the Project's active published Style, wrapping
@@ -954,6 +973,36 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "sequencePrompt.transformBlock": renderSeqCurrentPromptTransformBlock,
   "shotPrompt.generateContextLines": renderShotPromptGenerateContextLines,
   "shotPrompt.transformBlock": renderShotCurrentPromptTransformBlock,
+} as const;
+
+/**
+ * Render forms referenced by `{parameter: id, render}` blocks — an
+ * `intent.parameters` entry's render form, keyed by its `render` string
+ * alone, on the same model as `MULTI_VARIABLE_RENDER_FORMS`. Moved here from
+ * `descriptors/outline.ts` (§3.1's correction, reported by B2a): a
+ * descriptor stays pure data, so its module exports no function — the
+ * runner resolves every `render` string through a registry table, never
+ * through a per-operation import.
+ */
+export const PARAMETER_RENDER_FORMS = {
+  "outline.sectionInstructionBullet": renderOutlineTargetSectionsBullet,
+} as const;
+
+/**
+ * Render forms referenced by `{mode: true, render}` blocks — the
+ * operation's selected `intent.mode`, keyed by its `render` string alone,
+ * same model as `PARAMETER_RENDER_FORMS` above. All six entries already
+ * lived in this module before this ticket (`sequencePrompt.assist` /
+ * `shotPrompt.assist`'s mode-conditional system-message bodies and closing
+ * lines) — only the table cataloguing them by name is new.
+ */
+export const MODE_RENDER_FORMS = {
+  "sequencePrompt.generateSystemBody": renderSequencePromptGenerateSystemBody,
+  "sequencePrompt.transformSystemBody": renderSequencePromptTransformSystemBody,
+  "sequencePrompt.closingLine": renderSequencePromptClosingLine,
+  "shotPrompt.generateSystemBody": renderShotPromptGenerateSystemBody,
+  "shotPrompt.transformSystemBody": renderShotPromptTransformSystemBody,
+  "shotPrompt.closingLine": renderShotPromptClosingLine,
 } as const;
 
 export const VARIABLE_REGISTRY = {

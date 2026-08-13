@@ -35,19 +35,13 @@
 
 import type { OperationDescriptor } from "../types";
 
-/**
- * `targetSections`'s render form (§4.1 correction 4's parameter block).
- * Not a `VariableId`, so it lives beside this descriptor rather than in
- * `variables/registry.ts` — `targetSections` is an `intent.parameters`
- * entry, not a context variable.
- */
-export function renderOutlineTargetSectionsBullet(targetSections: number | null | undefined): string {
-  const sectionInstruction =
-    targetSections != null
-      ? `Write exactly ${targetSections} sections.`
-      : "Choose a natural number of sections based on the story structure (typically 4 to 8).";
-  return `- ${sectionInstruction}`;
-}
+// `targetSections`'s render form (§4.1 correction 4's parameter block) is
+// `renderOutlineTargetSectionsBullet`, in `variables/registry.ts`'s
+// `PARAMETER_RENDER_FORMS` table — not here. A descriptor module exports no
+// function: §3.1's correction (reported by B2a) requires every render form
+// reachable from one registry, beside the resolvers, so the runner never
+// imports an operation's module and a descriptor stays pure data (§4.2
+// stores it as JSON).
 
 export const outlineGenerateDescriptor: OperationDescriptor = {
   id: "outline.generate",
@@ -107,7 +101,35 @@ No markdown outside the JSON string. No explanation. No text before or after. On
     ],
   },
 
-  output: { target: { entity: "project" }, fields: ["outline"] },
+  // Correction 6 (§4.1), read verbatim from `generateOutlineDraft`
+  // (`src/actions/llm/outlineGeneration.ts`): `"Invalid request."` on a
+  // malformed `projectId`, `"LLM provider not configured. Go to Settings to
+  // configure Ollama."` — the same wording `generateStory` uses, both
+  // written the same way in the same file family — and `"Project not
+  // found."` for the single-level chain.
+  messages: {
+    invalidRequest: "Invalid request.",
+    notConfigured: "LLM provider not configured. Go to Settings to configure Ollama.",
+    chainNotFound: { project: "Project not found." },
+  },
+
+  // Same precondition as `story.generate`, verbatim identical text —
+  // `generateOutlineDraft` runs the exact same `!project.pitch?.trim()`
+  // check with the exact same message, unconditionally.
+  preconditions: [{ field: "pitch", message: "Add a pitch first." }],
+
+  // Correction 5 (§4.1), read verbatim from `parseOutlineResult`
+  // (`src/actions/llm/outlineGeneration.ts`): one key, tolerant of extra
+  // keys, non-empty after `.trim()`.
+  output: {
+    target: { entity: "project" },
+    fields: [{ field: "outline", jsonKey: "outline" }],
+    require: "all",
+    errors: {
+      unparsable: "The model returned an unexpected format. Try again or use a different model.",
+      empty: "The model returned an empty or invalid outline. Try again.",
+    },
+  },
 
   commit: ["applyGeneratedOutline"],
 

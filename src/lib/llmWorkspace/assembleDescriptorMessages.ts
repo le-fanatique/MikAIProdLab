@@ -1,21 +1,26 @@
-import type { Block, VariableId } from "@/lib/llmWorkspace/types";
+import type { Block, VariableId } from "./types";
 
 // ---------------------------------------------------------------------------
-// tests/llmWorkspace/helpers/assembleDescriptor.ts — LLMW.DESCRIPTOR.RENDER.1
+// assembleDescriptorMessages.ts — LLMW.RUNNER.1a (B2a)
 //
-// Test-only assembler: `blocks.filter(Boolean).join(separator)`, exactly as
-// settled by `LLMW.RENDER.SPIKE.1` and frozen in §4.1 correction 4. Not
-// wired into any production path — B2 (`LLMW.RUNNER.1`) is the runner that
-// will own this logic for real. This copy exists solely so the eight
-// equality tests can assemble `{system, user}` from a descriptor's blocks
-// without inventing a production dependency this ticket does not authorize.
+// `blocks.filter(Boolean).join(separator)`, exactly as settled by
+// `LLMW.RENDER.SPIKE.1` and frozen in §4.1 correction 4
+// (`docs/LLM_WORKSPACE_ARCHITECTURE.md`). Moved here from
+// `tests/llmWorkspace/helpers/assembleDescriptor.ts`
+// (`LLMW.DESCRIPTOR.RENDER.1`, B1c) — that file was a test-only stand-in
+// for the runner's own block assembly, explicitly deferred to this ticket
+// ("This copy exists solely so the eight equality tests can assemble
+// {system, user}... B2 is the runner that will own this logic for real").
+// The eight render tests under `tests/llmWorkspace/` now import this module
+// directly; the test-only copy is deleted, so there is exactly one
+// implementation.
 //
-// Five dispatchers, one per `Block` variant (2026-08-13 widening: `variables`
-// and `mode` added beside `variable` / `parameter`). Each is supplied per
-// test: a small dispatcher over the render forms the test's own handcrafted
-// input requires, matching the block's own shape. An unmatched pair throws,
-// so a descriptor referencing a render form the test does not know about
-// fails loudly instead of silently rendering `undefined`.
+// Five dispatchers, one per `Block` variant (`text`, `variable`,
+// `variables`, `parameter`, `mode`). Each caller supplies a small dispatcher
+// over the render forms its own descriptor's blocks reference — an
+// unmatched pair throws, so a descriptor referencing a render form the
+// caller does not know about fails loudly instead of silently rendering
+// `undefined`.
 // ---------------------------------------------------------------------------
 
 export type RenderVariable = (variableId: string, render: string) => string;

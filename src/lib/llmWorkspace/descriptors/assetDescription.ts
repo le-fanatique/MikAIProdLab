@@ -106,7 +106,37 @@ No markdown. No explanation. Only the JSON object.`,
 
   intent: {},
 
-  output: { target: { entity: "asset" }, fields: ["description"] },
+  // Correction 6 (§4.1), read verbatim from `generateSingleField`
+  // (`src/actions/llm/assetDescription.ts`, shared by both single-field
+  // actions): `"Invalid request."`, `"LLM is not configured. Go to Settings
+  // to set up Ollama."` (same wording as `assetBible.generate`, both in
+  // asset-focused action files), and the two-level chain `"Project not
+  // found."` / `"Asset not found."` (the latter thrown inside
+  // `fetchAssetContextInput`). No `preconditions`: `generateSingleField`
+  // runs no pre-call non-empty check. Not proven by a runner-level equality
+  // test in this ticket — see `shotPrompt.ts`'s identical note.
+  messages: {
+    invalidRequest: "Invalid request.",
+    notConfigured: "LLM is not configured. Go to Settings to set up Ollama.",
+    chainNotFound: { project: "Project not found.", asset: "Asset not found." },
+  },
+
+  // Correction 5 (§4.1), read verbatim from `parseSingleFieldDraft`
+  // (`src/actions/llm/assetDescription.ts`): strict — exactly one key
+  // (`exactKeysOnly: true`, rejects a stray `notes_draft`), non-empty,
+  // capped at `SINGLE_FIELD_DRAFT_MAX_LENGTH` (4000). Not proven by a
+  // runner-level equality test in this ticket — see `shotPrompt.ts`'s
+  // identical note.
+  output: {
+    target: { entity: "asset" },
+    fields: [{ field: "description", jsonKey: "description_draft", maxLength: 4000 }],
+    require: "all",
+    exactKeysOnly: true,
+    errors: {
+      unparsable: "The model returned an unexpected format. Try again.",
+      empty: "The model returned an empty or invalid draft. Try again.",
+    },
+  },
 
   commit: ["updateAssetDescriptionFieldInline"],
 

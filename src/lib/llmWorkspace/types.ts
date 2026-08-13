@@ -23,8 +23,28 @@
 // correction 4. Both messages are a list of blocks joined by a separator; a
 // block that renders empty is dropped before joining.
 //
-// This module is not wired into any production path. B2 is the runner that
-// will consume it.
+// LLMW.RUNNER.1a (B2a) replaces `output.fields: string[]` with the
+// corrected §4.1 "correction 5" shape (`fields: [{field, jsonKey,
+// maxLength?}]`, `require`, `exactKeysOnly?`, `errors`), read verbatim off
+// the seven existing parsers rather than assumed — see
+// `docs/LLM_WORKSPACE_ARCHITECTURE.md` §4.1. All eight descriptors' `output`
+// are updated to the new shape for type coherence (this module's `output`
+// type is shared by all eight through `descriptors/index.ts`'s `satisfies
+// Record<string, OperationDescriptor>`), but only `story.generate`,
+// `outline.generate` and `sequencePrompt.assist` carry runner-level proof in
+// this ticket.
+//
+// Correction 6, added mid-ticket after B2a reported the pipeline had no
+// field for its own pre-call refusal messages: `messages` (invalid
+// identifiers / LLM not configured / chain-not-found, per level) and
+// `preconditions` (replacing `intent.mode.modes[].requiresNonEmpty`, which
+// carried no message and could not express a mode-independent gate such as
+// `generateStory`'s "Add a pitch first."). All eight descriptors carry
+// `messages`; only `sequencePrompt.ts` and `shotPrompt.ts` used
+// `requiresNonEmpty` and are migrated to `preconditions`.
+//
+// `runner.ts` is the pipeline that consumes this module. It is not wired
+// into any production path.
 // ---------------------------------------------------------------------------
 
 /**
@@ -68,9 +88,10 @@ export type KnowledgeId = string;
 export type ActionId = string;
 
 /**
- * Names a field on the operation's anchor entity, for an `intent.mode`
- * precondition (§4.1, correction 2). The entity is already known from
- * `anchor.entity`, so the reference only needs to name the field.
+ * Names a field on the operation's anchor entity, for a `preconditions`
+ * entry (§4.1, correction 6) or a `messages.chainNotFound` level. The entity
+ * is already known from `anchor.entity`, so the reference only needs to name
+ * the field.
  */
 export type FieldRef = string;
 
@@ -107,13 +128,13 @@ export type OperationDescriptor = {
 
   // Correction 2. Composable, not a tagged union: an operation may take a
   // mode AND a parameter. An empty object means "the user steers nothing".
+  // `mode.modes[].requiresNonEmpty` (originally sketched here) is removed by
+  // correction 6 — it carried no message and could not describe a gate that
+  // applies in every mode; `preconditions` below replaces it.
   intent: {
     freeText?: { label: string };
     mode?: {
-      modes: Array<{
-        id: string;
-        requiresNonEmpty?: FieldRef; // precondition, checked pre-call
-      }>;
+      modes: Array<{ id: string }>;
       defaultMode: string;
     };
     parameters?: Array<{
@@ -128,7 +149,61 @@ export type OperationDescriptor = {
 
   template: { blocks: Block[]; separator: string };
 
-  output: { target: { entity: EntityKind }; fields: string[] };
+  // Correction 6, reported by B2a: the pipeline refuses in several places
+  // before it ever calls the model, and every refusal message differs per
+  // operation — `generateStory` says "LLM provider not configured. Go to
+  // Settings to configure Ollama."; `generateSequencePromptDraft` says "LLM
+  // not configured. Go to Settings to set up Ollama." No generic runner text
+  // can stand in for either without changing what the user reads, and B3 is
+  // forbidden from changing observable behaviour
+  // (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §4.1).
+  //
+  // Second round, same ticket: `invalidRequest` is optional —
+  // `generateStory(projectId: number)` takes a typed positional argument and
+  // never validates it, so there is no verbatim source text to carry; an
+  // absent message is honest, an invented one is not. `invalidMode` is new:
+  // "Invalid assist mode." is a real pre-call refusal on the five
+  // mode-driven operations and needs a declared home or B3 loses it.
+  messages: {
+    invalidRequest?: string; // absent when the action has no id validation to reproduce
+    invalidMode?: string; // "Invalid assist mode." — the five mode-driven operations
+    notConfigured: string;
+    chainNotFound: Partial<Record<EntityKind, string>>; // per level of the chain
+  };
+
+  // `preconditions` replaces `intent.mode.modes[].requiresNonEmpty`, which
+  // carried no message and could not express a gate that is not mode-driven:
+  // `generateStory` refuses with "Add a pitch first." on an empty pitch, in
+  // every mode (it has no `intent.mode` at all). One concept: a named field
+  // on the anchor entity that must be non-empty, optionally restricted to
+  // some modes, with its own message.
+  preconditions?: Array<{
+    field: FieldRef; // on the anchor entity
+    modes?: string[]; // absent = every mode
+    message: string;
+  }>;
+
+  // Correction 5, read off the seven existing parsers rather than assumed.
+  // `fields` named entity fields only, but the model answers in snake_case
+  // and each operation validates differently. A runner cannot guess the key
+  // mapping, the strictness, or the error text — and B3 must not change one
+  // observable message (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §4.1).
+  output: {
+    target: { entity: EntityKind };
+    fields: Array<{
+      field: string; // entity field, e.g. "shotPrompt"
+      jsonKey: string; // model key,   e.g. "shot_prompt"
+      maxLength?: number; // 4000 on the single-field asset parsers
+    }>;
+    require: "all" | "any"; // every declared field non-empty, or at least one
+    exactKeysOnly?: boolean; // reject any key not declared — the strict
+    // single-field asset parsers, which refuse a stray draft for the other
+    // field
+    errors: {
+      unparsable: string; // JSON.parse failed, or the shape is wrong
+      empty: string; // the `require` rule was not satisfied
+    };
+  };
 
   commit: ActionId[]; // section 3.2
 

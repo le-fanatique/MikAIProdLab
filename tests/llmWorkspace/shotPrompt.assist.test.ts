@@ -226,14 +226,17 @@ describe("shotPrompt.assist descriptor — context equality", () => {
     expect(actionArg.assistMode).toBe("enhance");
   });
 
-  it("the four transform modes carry the requiresNonEmpty precondition generateShotPromptDraft enforces pre-call", async () => {
-    const modes = shotPromptAssistDescriptor.intent.mode?.modes ?? [];
-    const byId = new Map(modes.map((m) => [m.id, m]));
-
-    expect(byId.get("generate")?.requiresNonEmpty).toBeUndefined();
-    for (const modeId of ["enhance", "rewrite", "shorten", "expand"]) {
-      expect(byId.get(modeId)?.requiresNonEmpty).toBe("shotPrompt");
-    }
+  it("the four transform modes carry the preconditions entry generateShotPromptDraft enforces pre-call", async () => {
+    // Migrated off `intent.mode.modes[].requiresNonEmpty` (§4.1 correction
+    // 6): the precondition is now a `preconditions` entry, restricted to
+    // the four transform modes via `modes`.
+    expect(shotPromptAssistDescriptor.preconditions).toEqual([
+      {
+        field: "shotPrompt",
+        modes: ["enhance", "rewrite", "shorten", "expand"],
+        message: "A Shot Prompt is required for this assist mode.",
+      },
+    ]);
 
     // Cross-check against the action's real guard: a transform mode against
     // an empty shotPrompt is refused before the LLM call.

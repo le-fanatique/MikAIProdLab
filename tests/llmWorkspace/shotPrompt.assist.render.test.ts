@@ -18,7 +18,7 @@ import {
   buildShotPromptFromContextPrompt,
   type BuildShotPromptFromContextInput,
 } from "@/lib/prompts/shot-prompt-from-context";
-import { assembleDescriptorMessages } from "./helpers/assembleDescriptor";
+import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket: assembling {system, user} from

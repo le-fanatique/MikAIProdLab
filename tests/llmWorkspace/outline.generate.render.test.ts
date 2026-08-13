@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { outlineGenerateDescriptor, renderOutlineTargetSectionsBullet } from "@/lib/llmWorkspace/descriptors/outline";
-import { renderProjectIdentityOutlineContextLines, type ProjectIdentityData } from "@/lib/llmWorkspace/variables/registry";
+import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
+import {
+  renderOutlineTargetSectionsBullet,
+  renderProjectIdentityOutlineContextLines,
+  type ProjectIdentityData,
+} from "@/lib/llmWorkspace/variables/registry";
 import { buildOutlineFromStoryPrompt } from "@/lib/prompts/outline-from-story";
-import { assembleDescriptorMessages } from "./helpers/assembleDescriptor";
+import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket: assembling {system, user} from

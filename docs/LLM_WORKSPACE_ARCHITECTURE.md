@@ -234,6 +234,16 @@ Thirteen, not the ten first written: the three `ASSET.*_APPEARANCES` /
 (`src/actions/llm/assetDescription.ts`) actually loads before B1b-2 was
 written, rather than by blocking that ticket.
 
+**Every render form is reachable by name from one lookup surface, and the
+runner imports no operation's module.** Variable forms already had a registry;
+mode and parameter forms did not, so B2a had to catalogue them in two tables
+inside the runner and import one function straight from a descriptor module.
+That works for three operations and rots at eight: the runner would grow a
+line per operation, which is precisely what a declarative descriptor exists to
+avoid. Render functions therefore live beside the resolvers, never inside a
+descriptor module — descriptors stay data, because §4.2 stores them as JSON —
+and the runner resolves `render` strings through the registry alone.
+
 **A variable owns named render forms beside its resolver** (settled by
 `LLMW.RENDER.SPIKE.1`). The resolver returns typed data; a render form turns
 that data into a text block. A variable may expose several forms — the spike
@@ -429,10 +439,7 @@ type OperationDescriptor = {
   intent: {
     freeText?: { label: string };
     mode?: {
-      modes: Array<{
-        id: string;
-        requiresNonEmpty?: FieldRef;        // precondition, checked pre-call
-      }>;
+      modes: Array<{ id: string }>;
       defaultMode: string;
     };
     parameters?: Array<{
@@ -445,7 +452,57 @@ type OperationDescriptor = {
     }>;
   };
 
-  output: { target: { entity: EntityKind }; fields: string[] };
+  // Correction 6, reported by B2a: the pipeline refuses in several places
+  // before it ever calls the model, and **every refusal message differs per
+  // operation**. `generateStory` says "LLM provider not configured. Go to
+  // Settings to configure Ollama."; `generateSequencePromptDraft` says "LLM
+  // not configured. Go to Settings to set up Ollama." No generic runner text
+  // can stand in for either without changing what the user reads, and B3 is
+  // forbidden from changing observable behaviour.
+  //
+  // `preconditions` also absorbs what `intent.mode.requiresNonEmpty` used to
+  // express, which carried no message and could not describe a gate that is
+  // not mode-driven: `generateStory` refuses with "Add a pitch first." on an
+  // empty pitch, in every mode. One concept — a named field that must be
+  // non-empty, optionally restricted to some modes, with its own message.
+  messages: {
+    invalidRequest?: string;   // absent when the action has no id validation
+                               // to reproduce — `generateStory` takes a
+                               // number, not a FormData field. An absent
+                               // message is honest; an invented one is not.
+    invalidMode?: string;      // "Invalid assist mode." — a real refusal path
+                               // on the five mode-driven operations
+    notConfigured: string;
+    chainNotFound: Partial<Record<EntityKind, string>>;  // per level of the chain
+  };
+
+  preconditions?: Array<{
+    field: FieldRef;      // on the anchor entity
+    modes?: string[];     // absent = every mode
+    message: string;
+  }>;
+
+  // Correction 5, read off the seven existing parsers rather than assumed.
+  // `fields` named entity fields only, but the model answers in snake_case
+  // and each operation validates differently. A runner cannot guess the key
+  // mapping, the strictness, or the error text — and B3 must not change one
+  // observable message.
+  output: {
+    target: { entity: EntityKind };
+    fields: Array<{
+      field: string;          // entity field, e.g. "shotPrompt"
+      jsonKey: string;        // model key,   e.g. "shot_prompt"
+      maxLength?: number;     // 4000 on the single-field asset parsers
+    }>;
+    require: "all" | "any";   // every declared field non-empty, or at least one
+    exactKeysOnly?: boolean;  // reject any key not declared — the strict
+                              // single-field asset parsers, which refuse a
+                              // stray draft for the other field
+    errors: {
+      unparsable: string;     // JSON.parse failed, or the shape is wrong
+      empty: string;          // the `require` rule was not satisfied
+    };
+  };
 
   commit: ActionId[];                       // section 3.2
 

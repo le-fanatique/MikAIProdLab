@@ -1,0 +1,480 @@
+// ---------------------------------------------------------------------------
+// runner.ts — LLMW.RUNNER.1a (B2a)
+//
+// The §2.1 invariant pipeline as one function, driven by an
+// `OperationDescriptor` (`docs/LLM_WORKSPACE_ARCHITECTURE.md`):
+//
+//   1. validate anchor identifiers
+//   2. getLLMConfig(), refuse if absent
+//   3. load the anchor and verify the ownership chain
+//   4. resolve variables declared via the registry
+//   5. assemble {system, user} from blocks
+//   6. callLLMJson
+//   7. strip the code fence and parse per `output`
+//   8. map the error
+//
+// Proven, byte-for-byte, against `story.generate`, `outline.generate` and
+// `sequencePrompt.assist` (`tests/llmWorkspace/*.runner.test.ts`). The other
+// five descriptors already carry a corrected `output`/`messages` shape for
+// type coherence, but are not exercised by this ticket's proof — see
+// `.agents/executor_report.md`.
+//
+// No `@/db` import at module scope (the B1c / B1b discipline this file must
+// not regress): `@/db`, `@/db/schema`, `drizzle-orm`, and `@/lib/settings`
+// (which itself imports `@/db` at its own module top) are all imported
+// dynamically, inside function bodies, exactly like `variables/registry.ts`.
+// `@/lib/llm` (`callLLMJson`) is imported dynamically for the same reason —
+// it transitively reaches `@/lib/vramManager.ts`, which imports `@/db` at
+// module scope.
+// ---------------------------------------------------------------------------
+
+import type { EntityKind, OperationDescriptor, VariableId } from "./types";
+import {
+  assembleDescriptorMessages,
+  type RenderMode,
+  type RenderParameter,
+  type RenderVariable,
+  type RenderVariables,
+} from "./assembleDescriptorMessages";
+import {
+  MODE_RENDER_FORMS,
+  MULTI_VARIABLE_RENDER_FORMS,
+  PARAMETER_RENDER_FORMS,
+  VARIABLE_REGISTRY,
+  VARIABLE_RENDER_FORMS,
+} from "./variables/registry";
+import type { LLMConfig, LLMPrompt } from "@/types/llm";
+
+// ---------------------------------------------------------------------------
+// Public input/output shapes
+// ---------------------------------------------------------------------------
+
+/**
+ * The runner's own identifier input — one uniform shape regardless of the
+ * original action's calling convention (`generateStory(projectId: number)`
+ * vs. the `FormData`-based actions). Which keys are required depends on
+ * `descriptor.anchor.entity` (see `requiredIdKeys`).
+ */
+export type AnchorIds = {
+  projectId?: number;
+  sequenceId?: number;
+  shotId?: number;
+  assetId?: number;
+};
+
+export type OperationIntentInput = {
+  freeText?: string;
+  mode?: string;
+  parameters?: Record<string, number | string>;
+};
+
+export type PromptResolutionResult =
+  | { ok: true; prompt: LLMPrompt }
+  | { ok: false; error: string };
+
+export type RunOperationResult =
+  | { ok: true; values: Record<string, string> }
+  | { ok: false; error: string };
+
+// ---------------------------------------------------------------------------
+// Step 1 — validate anchor identifiers
+// ---------------------------------------------------------------------------
+
+function requiredIdKeys(entity: EntityKind): Array<keyof AnchorIds> {
+  switch (entity) {
+    case "project":
+      return ["projectId"];
+    case "sequence":
+      return ["projectId", "sequenceId"];
+    case "shot":
+      return ["projectId", "sequenceId", "shotId"];
+    case "asset":
+      return ["projectId", "assetId"];
+  }
+}
+
+function validateAnchorIds(entity: EntityKind, ids: AnchorIds): boolean {
+  return requiredIdKeys(entity).every((key) => {
+    const value = ids[key];
+    return typeof value === "number" && Number.isInteger(value) && value > 0;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Step 3 — load the anchor and verify the ownership chain. Dynamic imports
+// throughout, per this module's own module-scope-`@/db` ban.
+// ---------------------------------------------------------------------------
+
+async function loadAndVerifyChain(
+  entity: EntityKind,
+  ids: AnchorIds,
+  chainNotFound: OperationDescriptor["messages"]["chainNotFound"]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { db } = await import("@/db");
+  const { projects, sequences, shots, assets } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+
+  const [project] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, ids.projectId as number));
+  if (!project) return { ok: false, error: chainNotFound.project ?? "Project not found." };
+  if (entity === "project") return { ok: true };
+
+  if (entity === "sequence" || entity === "shot") {
+    const [sequence] = await db
+      .select({ id: sequences.id, projectId: sequences.projectId })
+      .from(sequences)
+      .where(eq(sequences.id, ids.sequenceId as number));
+    if (!sequence || sequence.projectId !== ids.projectId) {
+      return { ok: false, error: chainNotFound.sequence ?? "Sequence not found." };
+    }
+    if (entity === "sequence") return { ok: true };
+
+    const [shot] = await db
+      .select({ id: shots.id, sequenceId: shots.sequenceId })
+      .from(shots)
+      .where(eq(shots.id, ids.shotId as number));
+    if (!shot || shot.sequenceId !== ids.sequenceId) {
+      return { ok: false, error: chainNotFound.shot ?? "Shot not found." };
+    }
+    return { ok: true };
+  }
+
+  // entity === "asset"
+  const [asset] = await db
+    .select({ id: assets.id, projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, ids.assetId as number));
+  if (!asset || asset.projectId !== ids.projectId) {
+    return { ok: false, error: chainNotFound.asset ?? "Asset not found." };
+  }
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Step 4 — resolve declared variables via the registry.
+// ---------------------------------------------------------------------------
+
+/**
+ * A `VariableId`'s anchor id is derived from its own namespace prefix
+ * (`PROJECT.*` -> `projectId`, `SEQ.*` -> `sequenceId`, `SHOT.*` ->
+ * `shotId`, `ASSET.*` -> `assetId`) rather than from `descriptor.anchor`:
+ * `sequencePrompt.assist` anchors on `sequence` but still declares
+ * `PROJECT.IDENTITY`, resolved against `projectId`, not `sequenceId`.
+ */
+function anchorIdForVariable(variableId: VariableId, ids: AnchorIds): number {
+  const prefix = variableId.split(".")[0];
+  const value =
+    prefix === "PROJECT"
+      ? ids.projectId
+      : prefix === "SEQ"
+        ? ids.sequenceId
+        : prefix === "SHOT"
+          ? ids.shotId
+          : prefix === "ASSET"
+            ? ids.assetId
+            : undefined;
+  if (value == null) {
+    throw new Error(`anchorIdForVariable: no id available for variable ${variableId}`);
+  }
+  return value;
+}
+
+async function resolveVariables(
+  descriptor: OperationDescriptor,
+  ids: AnchorIds
+): Promise<Partial<Record<VariableId, unknown>>> {
+  const entries = await Promise.all(
+    descriptor.context.variables.map(async (declared) => {
+      const resolver = VARIABLE_REGISTRY[declared.id];
+      const data = await resolver(anchorIdForVariable(declared.id, ids));
+      return [declared.id, data] as const;
+    })
+  );
+  return Object.fromEntries(entries);
+}
+
+/**
+ * Flattens every resolved variable's plain-object data into one record, so
+ * `preconditions` (naming a field on the anchor entity, e.g. `"pitch"` or
+ * `"sequencePrompt"`) can look it up without knowing which declared variable
+ * happens to carry it. Array-shaped variable data (`SHOT.CAST`,
+ * `SHOT.REFERENCES`, the `ASSET.*_APPEARANCES` variables) is skipped — no
+ * current precondition names a field living on one of those.
+ */
+function mergeAnchorFields(resolved: Partial<Record<VariableId, unknown>>): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const data of Object.values(resolved)) {
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      Object.assign(merged, data as Record<string, unknown>);
+    }
+  }
+  return merged;
+}
+
+// ---------------------------------------------------------------------------
+// `preconditions` (§4.1 correction 6) — checked after variable resolution,
+// before assembly, using the anchor fields resolution already produced.
+// ---------------------------------------------------------------------------
+
+function checkPreconditions(
+  preconditions: OperationDescriptor["preconditions"],
+  mergedAnchorFields: Record<string, unknown>,
+  selectedMode: string | undefined
+): { ok: true } | { ok: false; error: string } {
+  for (const precondition of preconditions ?? []) {
+    if (precondition.modes && (selectedMode == null || !precondition.modes.includes(selectedMode))) {
+      continue;
+    }
+    const value = mergedAnchorFields[precondition.field];
+    const nonEmpty = typeof value === "string" && value.trim().length > 0;
+    if (!nonEmpty) {
+      return { ok: false, error: precondition.message };
+    }
+  }
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// `intent.mode` resolution. §3.1's second-round correction adds
+// `messages.invalidMode` (optional): an unrecognised, explicitly-requested
+// `mode` is now refused with that message when the descriptor declares one
+// — `generateSequencePromptDraft` / `generateShotPromptDraft`'s own
+// "Invalid assist mode.". A descriptor without `invalidMode` declared falls
+// back to `defaultMode` rather than inventing a visible message for a path
+// it never named. No requested mode at all (`requestedMode == null`) is not
+// an invalid mode — it is the normal "use the default" case and is never
+// refused.
+// ---------------------------------------------------------------------------
+
+function resolveSelectedMode(
+  descriptor: OperationDescriptor,
+  requestedMode: string | undefined
+): { ok: true; mode: string | undefined } | { ok: false; error: string } {
+  if (!descriptor.intent.mode) return { ok: true, mode: undefined };
+  if (requestedMode == null) return { ok: true, mode: descriptor.intent.mode.defaultMode };
+
+  const isKnown = descriptor.intent.mode.modes.some((m) => m.id === requestedMode);
+  if (isKnown) return { ok: true, mode: requestedMode };
+
+  if (descriptor.messages.invalidMode) {
+    return { ok: false, error: descriptor.messages.invalidMode };
+  }
+  return { ok: true, mode: descriptor.intent.mode.defaultMode };
+}
+
+// ---------------------------------------------------------------------------
+// Step 5 — assemble {system, user}. `assembleDescriptorMessages` (moved to
+// production by the previous round) takes four render dispatchers; this
+// section builds them generically from the resolved variable data plus
+// `variables/registry.ts`'s four render-form tables
+// (`VARIABLE_RENDER_FORMS`, `MULTI_VARIABLE_RENDER_FORMS`,
+// `PARAMETER_RENDER_FORMS`, `MODE_RENDER_FORMS`) — the runner imports no
+// operation's module and holds no local table of its own (§3.1's
+// correction, reported by the previous round and fixed here: mode and
+// parameter render forms now live beside the resolvers, on the same model
+// as the two variable tables that already did).
+// ---------------------------------------------------------------------------
+
+/**
+ * The evidenced calling convention for `{variable}` / `{variables}` render
+ * forms: every declared variable's resolved data, in the block's own order,
+ * followed by the descriptor's selected mode when `intent.mode` exists.
+ * Read off every render-form signature that currently exists, not assumed —
+ * `renderProjectIdentitySequencePromptGenerateLines(data, mode)`,
+ * `renderSeqCurrentPromptTransformBlock(currentPromptData, contextData,
+ * mode)`, `renderShotPromptGenerateContextLines(...six data args, mode)` —
+ * every one of them matches "declared variables, then mode", with no
+ * counter-example among the render forms this codebase actually has. A
+ * render form that does not need the trailing argument ignores it, per
+ * ordinary JS call semantics (`renderProjectIdentityStoryContextLines`,
+ * `renderOutlineTargetSectionsBullet`'s sibling variable forms, etc.).
+ */
+function buildVariableDispatchers(
+  resolved: Partial<Record<VariableId, unknown>>,
+  selectedMode: string | undefined
+): { renderVariable: RenderVariable; renderVariables: RenderVariables } {
+  const renderVariable: RenderVariable = (variableId, render) => {
+    const table = VARIABLE_RENDER_FORMS as unknown as Record<string, Record<string, (...args: unknown[]) => string>>;
+    const fn = table[variableId]?.[render];
+    if (!fn) throw new Error(`runner: no variable render form ${variableId}::${render}`);
+    return fn(resolved[variableId as VariableId], selectedMode);
+  };
+
+  const renderVariables: RenderVariables = (variableIds, render) => {
+    const table = MULTI_VARIABLE_RENDER_FORMS as unknown as Record<string, (...args: unknown[]) => string>;
+    const fn = table[render];
+    if (!fn) throw new Error(`runner: no multi-variable render form ${render}`);
+    const args = variableIds.map((id) => resolved[id]);
+    return fn(...args, selectedMode);
+  };
+
+  return { renderVariable, renderVariables };
+}
+
+function buildIntentDispatchers(
+  parameters: Record<string, number | string> | undefined,
+  selectedMode: string | undefined
+): { renderParameter: RenderParameter; renderMode: RenderMode } {
+  const renderParameter: RenderParameter = (parameterId, render) => {
+    const table = PARAMETER_RENDER_FORMS as unknown as Record<string, (value: unknown) => string>;
+    const fn = table[render];
+    if (!fn) throw new Error(`runner: no parameter render form ${render}`);
+    return fn(parameters?.[parameterId]);
+  };
+
+  const renderMode: RenderMode = (render) => {
+    const table = MODE_RENDER_FORMS as unknown as Record<string, (mode: string) => string>;
+    const fn = table[render];
+    if (!fn) throw new Error(`runner: no mode render form ${render}`);
+    if (selectedMode == null) throw new Error(`runner: mode render form ${render} requires a selected mode`);
+    return fn(selectedMode);
+  };
+
+  return { renderParameter, renderMode };
+}
+
+// ---------------------------------------------------------------------------
+// Steps 7-8 — strip the code fence, parse per `output`, map the error.
+// `extractCodeFence` reproduced verbatim from the three copies in
+// `src/actions/llm/{story,sequencePrompt,shotPrompt}.ts` (identical
+// regex in all seven parsers read for this ticket) — this is the runner's
+// one implementation, per the ticket; the three existing copies are left in
+// place, to be removed by B3 with their actions.
+// ---------------------------------------------------------------------------
+
+function extractCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
+  return fence ? fence[1].trim() : trimmed;
+}
+
+function parseOutput(
+  raw: string,
+  output: OperationDescriptor["output"]
+): { ok: true; values: Record<string, string> } | { ok: false; error: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractCodeFence(raw));
+  } catch {
+    return { ok: false, error: output.errors.unparsable };
+  }
+
+  if (output.exactKeysOnly) {
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return { ok: false, error: output.errors.unparsable };
+    }
+    const declaredKeys = output.fields.map((f) => f.jsonKey);
+    const actualKeys = Object.keys(parsed as Record<string, unknown>);
+    if (actualKeys.length !== declaredKeys.length || !declaredKeys.every((k) => actualKeys.includes(k))) {
+      return { ok: false, error: output.errors.unparsable };
+    }
+  }
+
+  const obj: Record<string, unknown> =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+
+  const values: Record<string, string> = {};
+  for (const field of output.fields) {
+    const rawValue = obj[field.jsonKey];
+    const value = typeof rawValue === "string" ? rawValue.trim() : "";
+    if (field.maxLength != null && value.length > field.maxLength) {
+      return { ok: false, error: output.errors.empty };
+    }
+    values[field.field] = value;
+  }
+
+  const nonEmptyCount = Object.values(values).filter((v) => v.length > 0).length;
+  const satisfied = output.require === "all" ? nonEmptyCount === output.fields.length : nonEmptyCount > 0;
+  if (!satisfied) {
+    return { ok: false, error: output.errors.empty };
+  }
+
+  return { ok: true, values };
+}
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+
+async function resolvePromptInternal(
+  descriptor: OperationDescriptor,
+  ids: AnchorIds,
+  intent: OperationIntentInput
+): Promise<{ ok: true; prompt: LLMPrompt; config: LLMConfig } | { ok: false; error: string }> {
+  // Step 1 — validate anchor identifiers. `messages.invalidRequest` is
+  // optional (§3.1's second-round correction): `story.generate` has no
+  // verbatim source for it (`generateStory(projectId: number)` never
+  // validates its argument), so an undeclared message is not replaced by an
+  // invented one — the ids simply flow through to step 3, where a
+  // missing/malformed anchor naturally produces `messages.chainNotFound`'s
+  // own declared message, matching what the action itself actually
+  // produces for a bad id (its `db.select()` just finds no row).
+  if (!validateAnchorIds(descriptor.anchor.entity, ids) && descriptor.messages.invalidRequest) {
+    return { ok: false, error: descriptor.messages.invalidRequest };
+  }
+
+  // Step 2 — getLLMConfig(), refuse if absent. Dynamic import: `@/lib/settings`
+  // imports `@/db` at its own module top.
+  const { getLLMConfig } = await import("@/lib/settings");
+  const config = await getLLMConfig();
+  if (!config) {
+    return { ok: false, error: descriptor.messages.notConfigured };
+  }
+
+  // Step 3 — load the anchor and verify the ownership chain.
+  const chain = await loadAndVerifyChain(descriptor.anchor.entity, ids, descriptor.messages.chainNotFound);
+  if (!chain.ok) return chain;
+
+  const selectedModeResult = resolveSelectedMode(descriptor, intent.mode);
+  if (!selectedModeResult.ok) return selectedModeResult;
+  const selectedMode = selectedModeResult.mode;
+
+  // Step 4 — resolve variables declared via the registry.
+  const resolved = await resolveVariables(descriptor, ids);
+
+  const precondition = checkPreconditions(descriptor.preconditions, mergeAnchorFields(resolved), selectedMode);
+  if (!precondition.ok) return precondition;
+
+  // Step 5 — assemble {system, user} from blocks.
+  const { renderVariable, renderVariables } = buildVariableDispatchers(resolved, selectedMode);
+  const { renderParameter, renderMode } = buildIntentDispatchers(intent.parameters, selectedMode);
+  const prompt = assembleDescriptorMessages(descriptor, renderVariable, renderParameter, renderMode, renderVariables);
+
+  return { ok: true, prompt, config };
+}
+
+/**
+ * Steps 1-5 only — the dry, read-only part of the pipeline. Used directly by
+ * the prompt-equality and chain-refusal proofs, and internally by
+ * `runOperation`.
+ */
+export async function resolveOperationPrompt(
+  descriptor: OperationDescriptor,
+  ids: AnchorIds,
+  intent: OperationIntentInput = {}
+): Promise<PromptResolutionResult> {
+  const result = await resolvePromptInternal(descriptor, ids, intent);
+  if (!result.ok) return result;
+  return { ok: true, prompt: result.prompt };
+}
+
+/**
+ * The full pipeline, steps 1-8: resolves the prompt, calls the model, parses
+ * its response per `descriptor.output`, and maps any failure to the
+ * matching error message. Nothing here is wired into a production path.
+ */
+export async function runOperation(
+  descriptor: OperationDescriptor,
+  ids: AnchorIds,
+  intent: OperationIntentInput = {}
+): Promise<RunOperationResult> {
+  const resolved = await resolvePromptInternal(descriptor, ids, intent);
+  if (!resolved.ok) return resolved;
+
+  // Step 6 — callLLMJson. Dynamic import: `@/lib/llm` transitively imports
+  // `@/db` via `@/lib/vramManager.ts`.
+  const { callLLMJson } = await import("@/lib/llm");
+  const raw = await callLLMJson(resolved.prompt, resolved.config);
+
+  // Steps 7-8 — strip the fence, parse, map the error.
+  return parseOutput(raw, descriptor.output);
+}

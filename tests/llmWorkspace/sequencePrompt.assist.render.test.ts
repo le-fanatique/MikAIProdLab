@@ -16,7 +16,7 @@ import {
   buildSequencePromptFromContextPrompt,
   type BuildSequencePromptFromContextInput,
 } from "@/lib/prompts/sequence-prompt-from-context";
-import { assembleDescriptorMessages } from "./helpers/assembleDescriptor";
+import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket: assembling {system, user} from

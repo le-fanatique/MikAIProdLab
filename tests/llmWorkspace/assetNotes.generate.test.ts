@@ -72,7 +72,16 @@ describe("assetNotes.generate descriptor — context equality", () => {
     );
     expect(assetNotesGenerateDescriptor.anchor).toEqual({ kind: "entity", entity: "asset" });
     expect(assetNotesGenerateDescriptor.intent).toEqual({});
-    expect(assetNotesGenerateDescriptor.output).toEqual({ target: { entity: "asset" }, fields: ["notes"] });
+    expect(assetNotesGenerateDescriptor.output).toEqual({
+      target: { entity: "asset" },
+      fields: [{ field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
+      require: "all",
+      exactKeysOnly: true,
+      errors: {
+        unparsable: "The model returned an unexpected format. Try again.",
+        empty: "The model returned an empty or invalid draft. Try again.",
+      },
+    });
     expect(assetNotesGenerateDescriptor.commit).toEqual(["updateAssetDescriptionFieldInline"]);
   });
 

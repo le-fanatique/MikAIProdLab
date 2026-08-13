@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
 import { renderProjectIdentityStoryContextLines, type ProjectIdentityData } from "@/lib/llmWorkspace/variables/registry";
 import { buildStoryFromPitchPrompt } from "@/lib/prompts/story-from-pitch";
-import { assembleDescriptorMessages } from "./helpers/assembleDescriptor";
+import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's single obligation: assembling {system,

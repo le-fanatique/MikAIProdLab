@@ -14,10 +14,13 @@
 // be non-empty, checked *before* the LLM call:
 //   `if (mode !== "generate" && !shot.shotPrompt?.trim())
 //      return { ok: false, error: "A Shot Prompt is required for this assist mode." };`
-// carried on each of those four mode entries via
-// `requiresNonEmpty: "shotPrompt"`, naming the field on this operation's
-// anchor entity (`shot`) — mirroring `sequencePrompt.assist`'s
-// `requiresNonEmpty: "sequencePrompt"` exactly, one entity kind over.
+// carried as a `preconditions` entry (§4.1, correction 6, migrated from
+// `intent.mode.modes[].requiresNonEmpty` — see `descriptors/sequencePrompt.ts`'s
+// header for why), restricted to those four modes, naming `shotPrompt` on
+// this operation's anchor entity (`shot`) — mirroring
+// `sequencePrompt.assist`'s equivalent precondition exactly, one entity kind
+// over. Not proven by a runner-level equality test in this ticket — see
+// `output`'s note below for the same scoping.
 //
 // Context: the action reads `project.{name, pitch, story}` (a
 // `PROJECT.IDENTITY` subset — no `description`, no `outline`),
@@ -96,16 +99,57 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
     mode: {
       modes: [
         { id: "generate" },
-        { id: "enhance", requiresNonEmpty: "shotPrompt" },
-        { id: "rewrite", requiresNonEmpty: "shotPrompt" },
-        { id: "shorten", requiresNonEmpty: "shotPrompt" },
-        { id: "expand", requiresNonEmpty: "shotPrompt" },
+        { id: "enhance" },
+        { id: "rewrite" },
+        { id: "shorten" },
+        { id: "expand" },
       ],
       defaultMode: "generate",
     },
   },
 
-  output: { target: { entity: "shot" }, fields: ["shotPrompt"] },
+  // Correction 6 (§4.1), read verbatim from `generateShotPromptDraft`
+  // (`src/actions/llm/shotPrompt.ts`): `"Invalid request."`,
+  // `"LLM not configured. Go to Settings to set up Ollama."` (identical
+  // wording to `sequencePrompt.assist`), and the three-level chain
+  // `"Project not found."` / `"Sequence not found."` / `"Shot not found."`.
+  // Not proven by a runner-level equality test in this ticket — see
+  // `output`'s note below for the same scoping.
+  messages: {
+    invalidRequest: "Invalid request.",
+    notConfigured: "LLM not configured. Go to Settings to set up Ollama.",
+    chainNotFound: {
+      project: "Project not found.",
+      sequence: "Sequence not found.",
+      shot: "Shot not found.",
+    },
+  },
+
+  preconditions: [
+    {
+      field: "shotPrompt",
+      modes: ["enhance", "rewrite", "shorten", "expand"],
+      message: "A Shot Prompt is required for this assist mode.",
+    },
+  ],
+
+  // Correction 5 (§4.1), read verbatim from `parseDraft`
+  // (`src/actions/llm/shotPrompt.ts`): one key `shot_prompt`, tolerant of
+  // extra keys, non-empty after `.trim()`. Not proven by a runner-level
+  // equality test in this ticket (`LLMW.RUNNER.1a` scopes proof to
+  // `story.generate`, `outline.generate`, `sequencePrompt.assist`) — updated
+  // here only so `descriptors/index.ts`'s `satisfies
+  // Record<string, OperationDescriptor>` still type-checks against the
+  // corrected `output` shape.
+  output: {
+    target: { entity: "shot" },
+    fields: [{ field: "shotPrompt", jsonKey: "shot_prompt" }],
+    require: "all",
+    errors: {
+      unparsable: "The model returned an unexpected format. Try again.",
+      empty: "The model returned an empty prompt. Try again.",
+    },
+  },
 
   commit: ["updateShotPrompt"],
 

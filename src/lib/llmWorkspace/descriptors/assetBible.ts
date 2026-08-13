@@ -88,9 +88,51 @@ No markdown. No explanation. Only the JSON object.`,
 
   intent: {},
 
+  // Correction 6 (§4.1), read verbatim from `generateAssetBibleDraft`
+  // (`src/actions/llm/assetBible.ts`) and `resolveAssetBibleContext`
+  // (`src/lib/prompts/assetBibleContext.ts`): `"Invalid request."`,
+  // `"LLM is not configured. Go to Settings to set up Ollama."` — a third
+  // wording, distinct from both `story.generate`'s and
+  // `sequencePrompt.assist`'s — and the two-level chain `"Project not
+  // found."` / `"Asset not found."`. Not proven by a runner-level equality
+  // test in this ticket — see `shotPrompt.ts`'s identical note.
+  //
+  // No `preconditions` here: `resolveAssetBibleContext` also refuses with
+  // "Add a Description or Notes to this asset before generating an Asset
+  // Bible draft." when *both* `description` and `notes` are empty — an
+  // "at least one of two fields" gate `preconditions`'s single `field:
+  // FieldRef` cannot express. Left undeclared rather than approximated;
+  // flagged, not fixed, since this descriptor is outside this ticket's
+  // proof scope.
+  messages: {
+    invalidRequest: "Invalid request.",
+    notConfigured: "LLM is not configured. Go to Settings to set up Ollama.",
+    chainNotFound: { project: "Project not found.", asset: "Asset not found." },
+  },
+
+  // Correction 5 (§4.1), read verbatim from `parseAssetBibleDraft`
+  // (`src/lib/prompts/assetBibleDraft.ts`): three keys, all optional, at
+  // least one non-empty (`require: "any"`). `maxLength` is deliberately
+  // omitted here: `parseAssetBibleDraft` silently truncates
+  // (`.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH)`) rather than rejecting an
+  // oversized value the way the strict single-field asset parsers do
+  // (`description.ts` / `assetNotes.ts`, which reject above 4000) — the
+  // `maxLength` field's contract (§4.1) is a rejection bound, and reusing it
+  // for a silent-truncation bound would misrepresent this parser's real
+  // behaviour. Not proven by a runner-level equality test in this ticket —
+  // see `shotPrompt.ts`'s identical note.
   output: {
     target: { entity: "asset" },
-    fields: ["visualIdentity", "usageRules", "forbiddenVariations"],
+    fields: [
+      { field: "visualIdentity", jsonKey: "visual_identity" },
+      { field: "usageRules", jsonKey: "usage_rules" },
+      { field: "forbiddenVariations", jsonKey: "forbidden_variations" },
+    ],
+    require: "any",
+    errors: {
+      unparsable: "The model returned an unexpected format. Try again.",
+      empty: "The model returned an empty draft. Try again.",
+    },
   },
 
   commit: ["updateAssetDetailsInline"],

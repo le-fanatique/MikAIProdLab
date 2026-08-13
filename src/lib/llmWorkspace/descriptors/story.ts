@@ -65,7 +65,38 @@ No markdown. No explanation. Only the JSON object.`,
 
   intent: {},
 
-  output: { target: { entity: "project" }, fields: ["story"] },
+  // Correction 6 (§4.1), second round. `generateStory(projectId: number)`
+  // takes a typed positional argument, not `FormData` — it never runs an
+  // "Invalid request." check the way `outline.generate` /
+  // `sequencePrompt.assist` do, so `invalidRequest` is left undeclared
+  // rather than borrowed from a sibling: an absent message is honest, an
+  // invented (or copied) one is not. The runner treats an undeclared
+  // `invalidRequest` by letting the id flow through to the chain check,
+  // which produces `chainNotFound.project` for a missing/malformed
+  // `projectId` — the same outcome `generateStory` itself produces (its
+  // `db.select()` simply finds no row).
+  messages: {
+    notConfigured: "LLM provider not configured. Go to Settings to configure Ollama.",
+    chainNotFound: { project: "Project not found." },
+  },
+
+  // `generateStory` refuses with "Add a pitch first." on an empty
+  // `project.pitch`, verbatim, unconditionally (no `intent.mode` on this
+  // operation, so no `modes` restriction).
+  preconditions: [{ field: "pitch", message: "Add a pitch first." }],
+
+  // Correction 5 (§4.1), read verbatim from `parseStoryResult`
+  // (`src/actions/llm/story.ts`): one key, tolerant of extra keys (no
+  // `exactKeysOnly`), non-empty after `.trim()`.
+  output: {
+    target: { entity: "project" },
+    fields: [{ field: "story", jsonKey: "story" }],
+    require: "all",
+    errors: {
+      unparsable: "The model returned an unexpected format. Try again or use a different model.",
+      empty: "The model returned an empty or invalid story. Try again.",
+    },
+  },
 
   commit: ["applyGeneratedStory"],
 

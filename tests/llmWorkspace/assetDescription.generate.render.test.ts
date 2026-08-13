@@ -17,7 +17,7 @@ import {
   type ProjectStyleData,
 } from "@/lib/llmWorkspace/variables/registry";
 import { buildAssetDescriptionOnlyPrompt, type AssetDescriptionFromContextInput } from "@/lib/prompts/asset-description-from-context";
-import { assembleDescriptorMessages } from "./helpers/assembleDescriptor";
+import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket: assembling {system, user} from
