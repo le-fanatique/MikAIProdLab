@@ -30,6 +30,24 @@
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
+import { PROMPT_ASSIST_SYSTEM_INTRO_SHOT, SHOT_PROMPT_SYSTEM_TAIL } from "../variables/registry";
+
+// ---------------------------------------------------------------------------
+// LLMW.DESCRIPTOR.RENDER.1 (B1c), widened 2026-08-13 — `expertise.system`
+// and `template` in blocks, mirroring `sequencePrompt.assist`'s
+// mode-conditional decomposition one entity kind over (`shot` instead of
+// `sequence`), with one further combination in the generate branch:
+// `buildGenerateContextLines` (`src/lib/prompts/shot-prompt-from-context.ts`)
+// pushes `PROJECT.IDENTITY`, `SEQ.CONTEXT`, `SHOT.CORE`, `SHOT.CAST`,
+// `SHOT.REFERENCES` and `SHOT.CURRENT_PROMPT` into one flat array with no
+// group boundary a block could split on — unlike the Asset-context family,
+// whose groups are separated by a leading `"\n"` per group. Declared as one
+// `{variables: [...], render}` block naming all six, and the transform
+// branch's own two-variable pairing likewise — see `variables/registry.ts`,
+// "`sequencePrompt.assist` / `shotPrompt.assist` render forms", for the full
+// rationale. Proven by
+// `tests/llmWorkspace/shotPrompt.assist.render.test.ts`.
+// ---------------------------------------------------------------------------
 
 export const shotPromptAssistDescriptor: OperationDescriptor = {
   id: "shotPrompt.assist",
@@ -50,12 +68,28 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
 
   expertise: {
     role: "shotPromptWriter",
-    systemPrompt: `You are an expert at writing visual generation prompts for AI image and video diffusion models.
-Write a clean, dense, cinematic visual prompt for the given shot context.
-Focus on: visible action, subject, composition, camera angle, lighting, atmosphere, environment, and cinematic style.
-Do not mention project names, sequence names, or shot codes explicitly in the prompt.
-Do not include labels, headers, explanations, bullet points, or markdown.`,
+    system: {
+      blocks: [
+        { text: PROMPT_ASSIST_SYSTEM_INTRO_SHOT },
+        { mode: true, render: "shotPrompt.generateSystemBody" },
+        { mode: true, render: "shotPrompt.transformSystemBody" },
+        { text: SHOT_PROMPT_SYSTEM_TAIL },
+      ],
+      separator: "\n",
+    },
     knowledge: [],
+  },
+
+  template: {
+    blocks: [
+      {
+        variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT", "SHOT.CORE", "SHOT.CAST", "SHOT.REFERENCES", "SHOT.CURRENT_PROMPT"],
+        render: "shotPrompt.generateContextLines",
+      },
+      { variables: ["SHOT.CURRENT_PROMPT", "SHOT.CORE", "SEQ.CONTEXT"], render: "shotPrompt.transformBlock" },
+      { mode: true, render: "shotPrompt.closingLine" },
+    ],
+    separator: "\n",
   },
 
   intent: {

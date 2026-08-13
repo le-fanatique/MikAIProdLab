@@ -39,15 +39,22 @@ export const ASSET_DESCRIPTION_CONTEXT_VARIABLES: OperationDescriptor["context"]
   { id: "PROJECT.STYLE", userAdjustable: false },
 ];
 
-const ASSET_DESCRIPTION_SYSTEM_PROMPT = `You are a production asset supervisor for a film or animation project.
-Your task is to write or enrich ONLY the visual/production description for a specific asset.
-Use only the provided context. Do not invent story facts not present in the input.
-description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
-If the asset already has a description, improve and complete it — do not discard useful existing content.
-Do not write narrative role, usage context or design constraints — that belongs to Notes, which is not requested here.
-Always respond with a valid JSON object matching exactly this schema:
-{ "description_draft": "<visual and production description>" }
-No markdown. No explanation. Only the JSON object.`;
+// ---------------------------------------------------------------------------
+// LLMW.DESCRIPTOR.RENDER.1 (B1c) — `expertise.system` and `template` in
+// blocks, replacing the flat `ASSET_DESCRIPTION_SYSTEM_PROMPT` string above,
+// which had drifted from `buildAssetDescriptionOnlyPrompt`'s real text (no
+// "Rules:" header, flattened bullets, one missing clause, no conditional
+// style rule — the defect the ticket names). The block decomposition below
+// is mechanically correct by construction: each bullet is either static
+// text or a named render form proven equal to the builder byte-for-byte by
+// `tests/llmWorkspace/assetDescription.generate.render.test.ts`.
+//
+// `template` reuses the six render forms shared with `assetNotes.generate`
+// and `assetDescription.batch` (`variables/registry.ts`, "Shared
+// Asset-context render forms") — one declaration instead of three hard-coded
+// assemblies, only the closing line and the system message differ per
+// operation.
+// ---------------------------------------------------------------------------
 
 export const assetDescriptionGenerateDescriptor: OperationDescriptor = {
   id: "assetDescription.generate",
@@ -59,8 +66,42 @@ export const assetDescriptionGenerateDescriptor: OperationDescriptor = {
 
   expertise: {
     role: "assetSupervisor",
-    systemPrompt: ASSET_DESCRIPTION_SYSTEM_PROMPT,
+    system: {
+      blocks: [
+        {
+          text: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich ONLY the visual/production description for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
+- If the asset already has a description, improve and complete it — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.`,
+        },
+        { variable: "PROJECT.STYLE", render: "assetDescription.finalRuleLine" },
+        {
+          text: `Always respond with a valid JSON object matching exactly this schema:
+{ "description_draft": "<visual and production description>" }
+No markdown. No explanation. Only the JSON object.`,
+        },
+      ],
+      separator: "\n",
+    },
     knowledge: [],
+  },
+
+  template: {
+    blocks: [
+      { variable: "PROJECT.IDENTITY", render: "assetContext.identityLines" },
+      { variable: "ASSET.CORE", render: "assetContext.coreLines" },
+      { variable: "ASSET.SEQ_APPEARANCES", render: "assetContext.seqAppearancesLines" },
+      { variable: "ASSET.SHOT_APPEARANCES", render: "assetContext.shotAppearancesLines" },
+      { variable: "ASSET.REFERENCES", render: "assetContext.referencesLine" },
+      { variable: "PROJECT.STYLE", render: "assetContext.worldRulesBlock" },
+      { variable: "ASSET.CORE", render: "assetDescription.closingLine" },
+    ],
+    separator: "\n",
   },
 
   intent: {},

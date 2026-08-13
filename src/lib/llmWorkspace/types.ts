@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// types.ts — LLMW.DESCRIPTOR.FORMAT.1a (B1b-1) / 1b (B1b-2)
+// types.ts — LLMW.DESCRIPTOR.FORMAT.1a (B1b-1) / 1b (B1b-2) / RENDER.1 (B1c)
 //
 // Transcription of the frozen `OperationDescriptor` contract from
 // `docs/LLM_WORKSPACE_ARCHITECTURE.md` §4.1 ("Two corrections the eight
@@ -15,6 +15,13 @@
 // `generateBatchAssetDescriptionDrafts`'s bounded `assetIds`) — the
 // remaining five flat-JSON operations exercise all of it. Nothing here is
 // invented beyond that: every shape is copied from the frozen sketch.
+//
+// B1c (`LLMW.DESCRIPTOR.RENDER.1`) adds the `Block` type and replaces
+// `expertise.systemPrompt: string` with `expertise.system: { blocks;
+// separator }`, plus the new top-level `template: { blocks; separator }`
+// field — both settled by `LLMW.RENDER.SPIKE.1` and frozen in §4.1
+// correction 4. Both messages are a list of blocks joined by a separator; a
+// block that renders empty is dropped before joining.
 //
 // This module is not wired into any production path. B2 is the runner that
 // will consume it.
@@ -94,7 +101,7 @@ export type OperationDescriptor = {
 
   expertise: {
     role: string;
-    systemPrompt: string;
+    system: { blocks: Block[]; separator: string };
     knowledge: KnowledgeId[];
   };
 
@@ -119,6 +126,8 @@ export type OperationDescriptor = {
     }>;
   };
 
+  template: { blocks: Block[]; separator: string };
+
   output: { target: { entity: EntityKind }; fields: string[] };
 
   commit: ActionId[]; // section 3.2
@@ -126,3 +135,25 @@ export type OperationDescriptor = {
   executor: "inProcess" | "n8n";
   variation?: { seed: boolean };
 };
+
+/**
+ * A block of a message (`expertise.system` or `template`). Static text, a
+ * named render form of one variable, a named render form declaring every
+ * variable it reads (when a source builder concatenates two variables'
+ * fragments with no separator — see `sequencePrompt.assist` /
+ * `shotPrompt.assist`), a named render form of an intent parameter, or a
+ * named render form of the operation's selected `intent.mode`. A block that
+ * renders empty is dropped before the list is joined by its separator
+ * (§4.1 correction 4, widened 2026-08-13 with the `variables` and `mode`
+ * forms after `LLMW.DESCRIPTOR.RENDER.1`'s proof found two shapes the
+ * original three variants could not declare honestly: a mode-conditional
+ * fragment referenced as if it were an `intent.parameters` entry, and a
+ * multi-variable render form that named only one of the variables it
+ * actually read).
+ */
+export type Block =
+  | { text: string }
+  | { variable: VariableId; render: string }
+  | { variables: VariableId[]; render: string } // a render form that reads more than one variable — declares all of them
+  | { parameter: string; render: string } // an intent parameter, e.g. targetSections
+  | { mode: true; render: string }; // the operation's selected intent.mode

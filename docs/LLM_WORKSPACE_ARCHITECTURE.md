@@ -234,6 +234,14 @@ Thirteen, not the ten first written: the three `ASSET.*_APPEARANCES` /
 (`src/actions/llm/assetDescription.ts`) actually loads before B1b-2 was
 written, rather than by blocking that ticket.
 
+**A variable owns named render forms beside its resolver** (settled by
+`LLMW.RENDER.SPIKE.1`). The resolver returns typed data; a render form turns
+that data into a text block. A variable may expose several forms — the spike
+found `PROJECT.STYLE` needs two, a multi-line context block and a one-line
+conditional rule appended to the system message — and a template references a
+form by name. This keeps formatting in reviewed TypeScript instead of a
+template expression language, which §3.1 refuses.
+
 **A variable owns its ordering and its limit.** `ASSET.SHOT_APPEARANCES` is
 `orderBy(shots.orderIndex).limit(10)`, its sequence counterpart `limit(5)`,
 `ASSET.REFERENCES` `limit(5)`. Those bounds are part of the variable's
@@ -394,11 +402,27 @@ type OperationDescriptor = {
     }>;
   };
 
+  // Correction 4, measured by LLMW.RENDER.SPIKE.1 rather than guessed, then
+  // widened by reading `outline-from-story.ts`.
+  //
+  // Both messages are a list of blocks joined by a separator. A block is
+  // static text, or a named render form of a variable, or a named render
+  // form of an intent parameter. A block that renders empty is dropped —
+  // `blocks.filter(Boolean).join(separator)` reproduced all three
+  // asset-description builders byte-for-byte, and nothing more was needed.
+  //
+  // The system message needs blocks too, and not only appended ones:
+  // `buildOutlineFromStoryPrompt` interpolates its section instruction from
+  // the `targetSections` intent parameter, in the *middle* of its rules. A
+  // fragment list appended at the end could not express that; a block list
+  // can, and without an expression language, per section 3.1.
   expertise: {
     role: string;
-    systemPrompt: string;
+    system: { blocks: Block[]; separator: string };
     knowledge: KnowledgeId[];
   };
+
+  template: { blocks: Block[]; separator: string };
 
   // Correction 2. Composable, not a tagged union: an operation may take a
   // mode AND a parameter. An empty object means "the user steers nothing".
@@ -428,6 +452,29 @@ type OperationDescriptor = {
   executor: "inProcess" | "n8n";
   variation?: { seed: boolean };
 };
+
+type Block =
+  | { text: string }
+  | { variable: VariableId; render: string }
+  | { variables: VariableId[]; render: string }  // see "a block may consume two"
+  | { parameter: string; render: string }        // an intent parameter, e.g. targetSections
+  | { mode: true; render: string };              // the selected intent.mode
+
+// Two forms added after B1c reported them, rather than left to a reading of
+// the type's examples.
+//
+// `{ mode: true }` because the assist operations branch on the mode selected
+// through `intent.mode`, which is not an `intent.parameters` entry. Writing it
+// as `{ parameter: "assistMode" }` would send a reader looking for a declared
+// parameter that does not exist.
+//
+// **A block may consume two variables.** The transform branches of
+// `shot-prompt-from-context.ts` and `sequence-prompt-from-context.ts`
+// concatenate the current prompt with a subset of the sequence context using
+// no separator at all. Splitting that into two blocks would insert the
+// uniform block separator the builder never emits. The block therefore
+// declares every variable it reads: a runner must never have to guess that a
+// block needs more data than it names.
 ```
 
 Everything else in the sketch survives contact with the eight unchanged.

@@ -17,18 +17,37 @@
 // which is a behavioural fallback, not a default *value* this field could
 // state.
 //
-// `expertise.systemPrompt` is NOT copied verbatim from the builder: unlike
-// `story.generate`, `buildOutlineFromStoryPrompt`'s system message
-// interpolates `sectionInstruction`, which depends on `targetSections` at
-// call time — so there is no single static string that is "the" system
-// prompt. The text below describes the fixed part of that system prompt
-// (format rules, output schema); reproducing it byte-for-byte against a
-// given `targetSections` value is B2's concern (`LLMW.RUNNER.1`), which
-// this ticket's proof does not require — §11.2 requires the *resolved
-// context* to match, not the assembled prompt.
+// `expertise.system` interpolates `sectionInstruction` in the *middle* of
+// its rules, exactly the case §4.1 correction 4 names
+// `buildOutlineFromStoryPrompt` for. Modelled as three blocks: the fixed
+// rules up to (not including) the section-count bullet, a `{parameter,
+// render}` block for `targetSections` producing that one bullet line, and
+// the fixed OUTPUT RULES tail — joined by a single `"\n"` separator
+// throughout. The parameter block's own text carries the leading `"\n"`
+// that reopens the blank line before `OUTPUT RULES:`, the same
+// leading-newline device `story.generate`'s closing line uses.
+//
+// `template` (user message): one `{variable, render}` block for
+// `PROJECT.IDENTITY`'s `name`/`pitch`/`story` (a subset — no `description`,
+// no `outline`, matching `generateOutlineDraft`'s call) plus the static
+// closing instruction. LLMW.DESCRIPTOR.RENDER.1 (B1c).
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
+
+/**
+ * `targetSections`'s render form (§4.1 correction 4's parameter block).
+ * Not a `VariableId`, so it lives beside this descriptor rather than in
+ * `variables/registry.ts` — `targetSections` is an `intent.parameters`
+ * entry, not a context variable.
+ */
+export function renderOutlineTargetSectionsBullet(targetSections: number | null | undefined): string {
+  const sectionInstruction =
+    targetSections != null
+      ? `Write exactly ${targetSections} sections.`
+      : "Choose a natural number of sections based on the story structure (typically 4 to 8).";
+  return `- ${sectionInstruction}`;
+}
 
 export const outlineGenerateDescriptor: OperationDescriptor = {
   id: "outline.generate",
@@ -42,20 +61,38 @@ export const outlineGenerateDescriptor: OperationDescriptor = {
 
   expertise: {
     role: "productionSupervisor",
-    systemPrompt: `You are a professional film production supervisor and narrative consultant.
+    system: {
+      blocks: [
+        {
+          text: `You are a professional film production supervisor and narrative consultant.
 Your task is to write a Project Outline: a structured narrative blueprint for a short film or video project.
 
 FORMAT RULES — follow exactly:
 - Each section must start with "## " followed by a short title (e.g. "## Opening — The Arrival").
 - Under each section header, write 2 to 4 sentences describing: narrative content, mood, setting or location, dramatic function, and production relevance where useful.
 - Do not use any other markdown syntax (no bold, no lists, no sub-headers).
-- Sections should map naturally to future production sequences (distinct locations, narrative phases, or dramatic beats).
-
+- Sections should map naturally to future production sequences (distinct locations, narrative phases, or dramatic beats).`,
+        },
+        { parameter: "targetSections", render: "outline.sectionInstructionBullet" },
+        {
+          text: `
 OUTPUT RULES:
 Always respond with a valid JSON object matching exactly this schema:
 { "outline": "<full outline as a single markdown string with ## headers and paragraph text>" }
 No markdown outside the JSON string. No explanation. No text before or after. Only the JSON object.`,
+        },
+      ],
+      separator: "\n",
+    },
     knowledge: [],
+  },
+
+  template: {
+    blocks: [
+      { variable: "PROJECT.IDENTITY", render: "outline.projectContextLines" },
+      { text: "\nWrite a Project Outline for this project. Each section should clearly define its narrative role and production context." },
+    ],
+    separator: "\n",
   },
 
   intent: {

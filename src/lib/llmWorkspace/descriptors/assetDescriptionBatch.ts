@@ -30,15 +30,15 @@ import { ASSET_DESCRIPTION_CONTEXT_VARIABLES } from "./assetDescription";
 
 const ASSET_DESCRIPTION_BATCH_MAX_SIZE = 10;
 
-const ASSET_DESCRIPTION_BATCH_SYSTEM_PROMPT = `You are a production asset supervisor for a film or animation project.
-Your task is to write or enrich the description and notes for a specific asset.
-Use only the provided context. Do not invent story facts not present in the input.
-description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
-notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
-If the asset already has a description or notes, improve and complete them — do not discard useful existing content.
-Always respond with a valid JSON object matching exactly this schema:
-{ "description_draft": "<...>", "notes_draft": "<...>" }
-No markdown. No explanation. Only the JSON object.`;
+// ---------------------------------------------------------------------------
+// LLMW.DESCRIPTOR.RENDER.1 (B1c) — `expertise.system` and `template` in
+// blocks, replacing the flat `ASSET_DESCRIPTION_BATCH_SYSTEM_PROMPT` string
+// above, which had drifted from `buildAssetDescriptionFromContextPrompt`'s
+// real text the same way `assetDescription.generate`'s did (no "Rules:"
+// header, flattened bullets, no conditional style rule) — a second instance
+// of the divergence the ticket names, found while decomposing this
+// descriptor, not spotted by inspection beforehand.
+// ---------------------------------------------------------------------------
 
 export const assetDescriptionBatchDescriptor: OperationDescriptor = {
   id: "assetDescription.batch",
@@ -50,8 +50,42 @@ export const assetDescriptionBatchDescriptor: OperationDescriptor = {
 
   expertise: {
     role: "assetSupervisor",
-    systemPrompt: ASSET_DESCRIPTION_BATCH_SYSTEM_PROMPT,
+    system: {
+      blocks: [
+        {
+          text: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the description and notes for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
+- notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
+- If the asset already has a description or notes, improve and complete them — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.`,
+        },
+        { variable: "PROJECT.STYLE", render: "assetDescriptionBatch.finalRuleLine" },
+        {
+          text: `Always respond with a valid JSON object matching exactly this schema:
+{ "description_draft": "<visual and production description>", "notes_draft": "<narrative role, usage context, design constraints>" }
+No markdown. No explanation. Only the JSON object.`,
+        },
+      ],
+      separator: "\n",
+    },
     knowledge: [],
+  },
+
+  template: {
+    blocks: [
+      { variable: "PROJECT.IDENTITY", render: "assetContext.identityLines" },
+      { variable: "ASSET.CORE", render: "assetContext.coreLines" },
+      { variable: "ASSET.SEQ_APPEARANCES", render: "assetContext.seqAppearancesLines" },
+      { variable: "ASSET.SHOT_APPEARANCES", render: "assetContext.shotAppearancesLines" },
+      { variable: "ASSET.REFERENCES", render: "assetContext.referencesLine" },
+      { variable: "PROJECT.STYLE", render: "assetContext.worldRulesBlock" },
+      { variable: "ASSET.CORE", render: "assetDescriptionBatch.closingLine" },
+    ],
+    separator: "\n",
   },
 
   intent: {},
