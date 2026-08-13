@@ -169,10 +169,6 @@ export const PROMPT_COMPILER_PRESETS: Record<PromptCompilerPresetId, PromptCompi
   },
 };
 
-export function getPromptCompilerPreset(id: PromptCompilerPresetId): PromptCompilerPreset {
-  return PROMPT_COMPILER_PRESETS[id];
-}
-
 /** Default checkbox state for a preset before any user interaction. */
 export function getDefaultSourceFlags(
   preset: PromptCompilerPreset
