@@ -30,9 +30,13 @@ passing silently.
 `docs/LLM_WORKSPACE_ARCHITECTURE.md` §9: `composeShotPrompt` emits double
 punctuation, and `getPromptCompilerPreset` is a third confirmed orphan.
 
-**Phase B is not authorised by this.** One §10 question is settled (migration
-order), one deferred, and one — the Settings section naming for
-`FB-20260715-013` — still requires a user decision.
+**Phase B is not authorised by this**, but nothing in §10 blocks it either.
+Migration order is settled, `userAdjustable` is deferred to the
+descriptor-format work, Auto Casting is off the critical path, and the
+Settings-naming question dissolved: `FB-20260715-013` is an unpromoted
+`USER_FEEDBACK` observation, and the workspace's bench and variable library
+likely supersede it. Phase B now needs a prepared ticket, not another
+decision.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 

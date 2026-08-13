@@ -2475,13 +2475,19 @@ cross-cutting UI/display view.
   their prompt builders, assist components, anchor entities, written fields
   and output shapes. Status stays `OPEN`: the inventory unblocks ticket
   preparation, it does not deliver the Settings category.
-  Two constraints it establishes matter for this observation. First, prompt
-  builders are **not** all under `src/lib/prompts/` — `translationPrompt.ts`
-  lives in `src/lib/llm/` — so a Settings screen listing prompts by directory
-  scan would silently omit one. Second, the naming asked for here
-  (`System Prompts`) is narrower than what the LLM Workspace covers; that
-  wording conflict is recorded as open question 3 of
-  `docs/LLM_WORKSPACE_ARCHITECTURE.md` §10 and needs the user's decision.
+  One constraint it establishes matters here: prompt builders are **not** all
+  under `src/lib/prompts/` — `translationPrompt.ts` lives in `src/lib/llm/` —
+  so any screen listing prompts by directory scan would silently omit one.
+- 2026-08-13: **Likely to be superseded by the LLM Workspace.** This entry has
+  never been promoted to `docs/ROADMAP.md`, so it commits nothing and gates
+  nothing. More to the point, what it asks for — one place to see and tune the
+  prompts of every LLM process — is what the workspace's three-pane bench and
+  variable library provide as a by-product
+  (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §5.1, §5.2). Building a separate
+  `System Prompts` Settings category now would duplicate that.
+  **Do not prepare a Settings-category ticket.** Re-evaluate this observation
+  once the workspace exists, against what it actually delivers. Status stays
+  `OPEN` — the need is real and unmet; only the intended solution has moved.
 - 2026-07-15: This observation does not authorize a schema, migration,
   generation-runtime, or dependency change without a dedicated ticket and
   architecture decision.

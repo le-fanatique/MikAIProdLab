@@ -521,15 +521,26 @@ same context. That is evidence for **per variable**, since adjustability
 varies within one shared context, not across templates. Recorded as evidence,
 not as the decision.
 
-### 3. Settings section naming — **USER DECISION REQUIRED**
+### 3. Settings section naming — **DISSOLVED, NOT BLOCKING**
 
-`FB-20260715-013` asks in the user's own words for a `System Prompts`
-category. The workspace is broader than system prompts — it covers templates,
-variables and the bench — so honouring the literal request may misname the
-feature, while renaming it may fail to answer the observation.
+Initially arbitrated as a user decision gating Phase B. That was wrong on two
+counts, corrected the same day.
 
-This is a product-vocabulary call and it is not the supervisor's to make.
-Blocking only for the Settings-surface ticket, not for the registry work.
+First, `FB-20260715-013` is an `OPEN` entry in `docs/USER_FEEDBACK.md` that
+has **not been promoted to the roadmap**. An unpromoted observation is not a
+commitment and cannot gate anything.
+
+Second, and more decisive: the workspace probably makes the request moot. The
+observation asked for one place to see and tune the prompts of every LLM
+process. That is what §5.1's three-pane bench, §5.2's variable library and the
+§3 registries provide, as a by-product of existing. Designing a separate
+Settings category now would build the thing the workspace is about to
+supersede.
+
+**Decision: do not design a Settings section.** Re-evaluate
+`FB-20260715-013` once the workspace exists, against what it actually
+delivers. Naming is then a question about the workspace's own surface, to be
+answered when that surface is designed — not a prerequisite.
 
 ### 4. Shot-level Auto Casting (`FB-20260811-004`) — **OUT OF THE CRITICAL PATH**
 
