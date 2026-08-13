@@ -41,7 +41,7 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
   const sequenceId = hasSeq ? parseInt(segs[3]) : null;
 
   // EDITORIAL.SHORTCUT.1: the same Project-level navigation (Overview,
-  // Story, Assets, Editorial, Project Style) is now shown at every level
+  // Story, Project Style, Assets, Storyboard, Editorial) is now shown at every level
   // — Project, Sequence, Shot and Shot Workflows — so `Editorial` stays
   // reachable without a route change breaking the active-tab logic below.
   // The Shot-level sibling-shot list and the `Workflows` tab are gone
@@ -86,16 +86,14 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
       active: pathname.startsWith(`/projects/${pid}/story`),
     },
     {
+      label: "Project Style",
+      href: `/projects/${pid}/style`,
+      active: pathname === `/projects/${pid}/style`,
+    },
+    {
       label: "Assets",
       href: `/projects/${pid}/assets`,
       active: pathname.startsWith(`/projects/${pid}/assets`),
-    },
-    {
-      label: "Editorial",
-      href: editorialHref,
-      active: !editorialDisabled && pathname === editorialHref,
-      disabled: editorialDisabled,
-      title: editorialDisabled ? "Create a Sequence to use Editorial." : undefined,
     },
     {
       label: "Storyboard",
@@ -105,9 +103,11 @@ function buildTabs(pathname: string, tree: SidebarProject[]): Tab[] | null {
       title: storyboardDisabled ? "Create a Sequence to use Storyboard." : undefined,
     },
     {
-      label: "Project Style",
-      href: `/projects/${pid}/style`,
-      active: pathname === `/projects/${pid}/style`,
+      label: "Editorial",
+      href: editorialHref,
+      active: !editorialDisabled && pathname === editorialHref,
+      disabled: editorialDisabled,
+      title: editorialDisabled ? "Create a Sequence to use Editorial." : undefined,
     },
   ];
 }

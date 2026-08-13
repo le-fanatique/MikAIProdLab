@@ -197,12 +197,12 @@ export default async function SequenceEditorialPage({ params, searchParams }: Pr
       )}
 
       {/* EDITORIAL.POLISH.1: Publish/Export/OpenReel are also available on
-          this page now (Editorial Actions, below the timeline) — the
+          this page now (Editorial Actions, above the timeline) — the
           Sequence page keeps its own copy for the Story/Production
           workflow, this one is scoped to montage. */}
       <p className="text-xs text-[#4b5158] mb-4">
         Frame-aware preview, gap-aware trim and fallback controls, plus{" "}
-        Publish/Export/OpenReel Advanced below the timeline. The{" "}
+        Publish/Export/OpenReel Advanced above the timeline. The{" "}
         <Link href={`/projects/${pid}/sequences/${sid}`} className="text-[#5b93d6] hover:text-[#8fbbe8]">
           Sequence page
         </Link>{" "}
@@ -256,6 +256,38 @@ export default async function SequenceEditorialPage({ params, searchParams }: Pr
         totalCount={videoSourceSummary.total}
       />
 
+      <SectionLabel label="Editorial Actions" />
+      <Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <PublishBasicSequenceResultButton projectId={pid} sequenceId={sid} videoSourceMode={videoSourceMode} />
+          <Link
+            href={editorialExportHref}
+            target="_blank"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            title="Always Approved only, regardless of the mode selected above"
+          >
+            Export Editorial JSON
+          </Link>
+          <Link
+            href={advancedEditorHref}
+            target="_blank"
+            className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+            title={`Opens the OpenReel sidecar editor in a new tab and loads this sequence using "${videoSourceModeLabel(videoSourceMode)}" sources`}
+          >
+            Open in Advanced Editor
+          </Link>
+        </div>
+        <p className="text-xs text-[#4b5158] mt-3">
+          OpenReel must be running at {sidecarOrigin}. Export Editorial JSON is always Approved only; Open in Advanced Editor uses the mode selected above.
+        </p>
+        <Collapsible label="Show OpenReel start command">
+          <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
+{`cd F:/AI/mikai-openreel-sidecar
+npx -y pnpm@11.7.0 dev`}
+          </pre>
+        </Collapsible>
+      </Card>
+
       {/* ── Timeline + Sequence Preview (shared selection) ───────── */}
       {/* EDITORIAL.SEQUENCE.RESULT.SOURCES.1 — `key={videoSourceMode}` forces
           a remount on mode switch. Without it, App Router's soft navigation
@@ -287,44 +319,6 @@ export default async function SequenceEditorialPage({ params, searchParams }: Pr
         editorialItems={editorialItems}
         videoSourceMode={videoSourceMode}
       />
-
-      {/* ── Editorial Actions — below the timeline (EDITORIAL.CLEANUP.1) ──
-          Same helpers/contract as Sequence Detail's own Editorial Actions
-          card: PublishBasicSequenceResultButton, editorialExportHrefFor,
-          buildAdvancedEditorHref. OpenReel Advanced is visually emphasized
-          (accent border) as the Advanced mode, Publish/Export stay neutral
-          and distinct. */}
-      <SectionLabel label="Editorial Actions" />
-      <Card>
-        <div className="flex flex-wrap items-center gap-2">
-          <PublishBasicSequenceResultButton projectId={pid} sequenceId={sid} videoSourceMode={videoSourceMode} />
-          <Link
-            href={editorialExportHref}
-            target="_blank"
-            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-            title="Always Approved only, regardless of the mode selected above"
-          >
-            Export Editorial JSON
-          </Link>
-          <Link
-            href={advancedEditorHref}
-            target="_blank"
-            className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
-            title={`Opens the OpenReel sidecar editor in a new tab and loads this sequence using "${videoSourceModeLabel(videoSourceMode)}" sources`}
-          >
-            Open in Advanced Editor
-          </Link>
-        </div>
-        <p className="text-xs text-[#4b5158] mt-3">
-          OpenReel must be running at {sidecarOrigin}. Export Editorial JSON is always Approved only; Open in Advanced Editor uses the mode selected above.
-        </p>
-        <Collapsible label="Show OpenReel start command">
-          <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
-{`cd F:/AI/mikai-openreel-sidecar
-npx -y pnpm@9.0.0 dev`}
-          </pre>
-        </Collapsible>
-      </Card>
     </div>
   );
 }
