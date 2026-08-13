@@ -3,80 +3,34 @@
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { callLLMJson } from "@/lib/llm";
-import { buildOutlineFromStoryPrompt } from "@/lib/prompts/outline-from-story";
-import { getLLMConfig } from "@/lib/settings";
-import type { GenerateOutlineResult } from "@/types/llm";
+import { runOperation } from "@/lib/llmWorkspace/runner";
+import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
 
-function extractJson(raw: string): string {
-  const trimmed = raw.trim();
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-  return fence ? fence[1].trim() : trimmed;
-}
-
-function parseOutlineResult(raw: string): GenerateOutlineResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractJson(raw));
-  } catch {
-    throw new Error(
-      "The model returned an unexpected format. Try again or use a different model."
-    );
-  }
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    typeof (parsed as Record<string, unknown>).outline !== "string" ||
-    !(parsed as { outline: string }).outline.trim()
-  ) {
-    throw new Error("The model returned an empty or invalid outline. Try again.");
-  }
-  return { outline: (parsed as { outline: string }).outline.trim() };
-}
-
+/**
+ * Thin adapter over `runOperation(outlineGenerateDescriptor, ...)`
+ * (LLMW.MIGRATE.FLATJSON.1a, B3a): translates `FormData` into `AnchorIds` +
+ * `OperationIntentInput`, then translates `values` back to the exact
+ * `{ok:true, outline}` return shape `OutlineGenerationPanel` depends on.
+ */
 export async function generateOutlineDraft(
   formData: FormData
 ): Promise<{ ok: true; outline: string } | { ok: false; error: string }> {
   try {
     const projectId = parseInt(formData.get("projectId") as string, 10);
-    if (!Number.isInteger(projectId) || projectId <= 0) {
-      return { ok: false, error: "Invalid request." };
-    }
 
     const rawSections = parseInt(formData.get("targetSections") as string, 10);
     const targetSections =
       Number.isInteger(rawSections) && rawSections >= 2 && rawSections <= 20
         ? rawSections
-        : null;
+        : undefined;
 
-    const config = await getLLMConfig();
-    if (!config) {
-      return {
-        ok: false,
-        error: "LLM provider not configured. Go to Settings to configure Ollama.",
-      };
-    }
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) {
-      return { ok: false, error: "Project not found." };
-    }
-
-    if (!project.pitch?.trim()) {
-      return { ok: false, error: "Add a pitch first." };
-    }
-
-    const prompt = buildOutlineFromStoryPrompt({
-      name: project.name,
-      pitch: project.pitch,
-      story: project.story,
-      targetSections,
-    });
-
-    const raw = await callLLMJson(prompt, config);
-    const result = parseOutlineResult(raw);
-
-    return { ok: true, outline: result.outline };
+    const result = await runOperation(
+      outlineGenerateDescriptor,
+      { projectId },
+      targetSections != null ? { parameters: { targetSections } } : {}
+    );
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, outline: result.values.outline };
   } catch (err) {
     const message =
       err instanceof Error

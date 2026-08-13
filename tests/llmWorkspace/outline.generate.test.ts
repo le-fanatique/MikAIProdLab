@@ -1,29 +1,29 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject } from "../actions/helpers/fixtures";
+import { insertProject, readProject } from "../actions/helpers/fixtures";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
 
 // ---------------------------------------------------------------------------
 // Proof required by §11.2: the context resolved by `outline.generate`'s
-// `PROJECT.IDENTITY` variable equals what `generateOutlineDraft` passes to
-// `buildOutlineFromStoryPrompt` today, restricted to the *context* fields
-// (`name`, `pitch`, `story`) — `targetSections` is intent (an
-// `intent.parameters` entry on this descriptor, see
+// `PROJECT.IDENTITY` variable equals the context fields the frozen oracle
+// (`buildOutlineFromStoryPrompt`) expects for the same row, restricted to
+// the *context* fields (`name`, `pitch`, `story`) — `targetSections` is
+// intent (an `intent.parameters` entry on this descriptor, see
 // `descriptors/outline.ts`), not context, and is asserted separately below,
 // not folded into the context-equality comparison.
 //
-// Same two mocks, same real seeded database, same dynamic-import discipline
-// as `story.generate.test.ts` — see that file's header for the full
-// rationale, not repeated here.
+// Re-pointed at the B3a switch (LLMW.MIGRATE.FLATJSON.1a): `generateOutlineDraft`
+// no longer calls `buildOutlineFromStoryPrompt`, so a mocked capture of the
+// action's own call would capture nothing. The comparison now reads the same
+// seeded row directly instead.
+//
+// One mock, same real seeded database, same dynamic-import discipline as
+// `story.generate.test.ts` — see that file's header for the full rationale,
+// not repeated here.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ outline: "## A section\nBody." })),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/outline-from-story", () => ({
-  buildOutlineFromStoryPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -56,39 +56,34 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("outline.generate descriptor — context equality", () => {
-  it("resolving PROJECT.IDENTITY against the same anchor equals the context fields generateOutlineDraft passes to its builder", async () => {
+  it("resolving PROJECT.IDENTITY against the same anchor equals the row generateOutlineDraft reads (name, pitch, story)", async () => {
     const result = await generateOutlineDraft(
       form({ projectId: String(projectId), targetSections: "6" })
     );
     expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
 
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
-      name: string;
-      pitch: string | null;
-      story: string | null;
-      targetSections: number | null;
-    };
-
     expect(outlineGenerateDescriptor.context.variables.map((v) => v.id)).toEqual(["PROJECT.IDENTITY"]);
 
-    const resolved = await resolveProjectIdentity(projectId);
+    const [resolved, row] = await Promise.all([resolveProjectIdentity(projectId), readProject(ctx, projectId)]);
 
     // Context comparison: only the fields the descriptor's variable
     // declares (`name`, `pitch`, `story` — a subset of PROJECT.IDENTITY's
     // full `{name, pitch, story, description}`, matching what
-    // `generateOutlineDraft` actually reads).
+    // `generateOutlineDraft`'s builder actually reads).
     expect({ name: resolved.name, pitch: resolved.pitch, story: resolved.story }).toEqual({
-      name: actionArg.name,
-      pitch: actionArg.pitch,
-      story: actionArg.story,
+      name: row.name,
+      pitch: row.pitch,
+      story: row.story,
     });
 
     // Intent comparison, kept separate from context per the ticket's own
     // instruction that `targetSections` "ne vient pas d'une variable et ne
     // doit pas en sortir": the descriptor declares it as an
-    // `intent.parameters` entry, not a context variable, and its shape
-    // (bounded integer 2-20) matches the value the action actually read.
+    // `intent.parameters` entry, not a context variable — its shape (bounded
+    // integer 2-20) is asserted here; the value 6 sent above (`"6"` in the
+    // form) is exercised end-to-end by `outline.generate.runner.test.ts`'s
+    // own proof (test 1), not re-captured here since the action no longer
+    // exposes it via a mocked builder call.
     expect(outlineGenerateDescriptor.intent.parameters).toEqual([
       {
         id: "targetSections",
@@ -98,6 +93,5 @@ describe("outline.generate descriptor — context equality", () => {
         max: 20,
       },
     ]);
-    expect(actionArg.targetSections).toBe(6);
   });
 });

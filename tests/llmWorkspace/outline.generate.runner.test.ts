@@ -1,30 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject } from "../actions/helpers/fixtures";
+import { insertProject, readProject } from "../actions/helpers/fixtures";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
+import { buildOutlineFromStoryPrompt } from "@/lib/prompts/outline-from-story";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for `outline.generate`
 // — same structure as `story.generate.runner.test.ts`, see that file's header
-// for the full rationale. `targetSections` (an `intent.parameters` entry, not
-// a context variable) is threaded through `resolveOperationPrompt`'s `intent`
-// argument.
+// for the full rationale (re-pointed at the B3a switch: `generateOutlineDraft`
+// no longer calls `buildOutlineFromStoryPrompt`, so the proof now calls it
+// directly with the same seeded row instead of capturing the action's call).
+// `targetSections` (an `intent.parameters` entry, not a context variable) is
+// threaded through `resolveOperationPrompt`'s `intent` argument.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ outline: "## A section\nBody." })),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/outline-from-story", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/outline-from-story")>();
-  return {
-    buildOutlineFromStoryPrompt: (ctx: Parameters<typeof actual.buildOutlineFromStoryPrompt>[0]) => {
-      capturedPrompt = actual.buildOutlineFromStoryPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateOutlineDraft: typeof import("@/actions/llm/outlineGeneration").generateOutlineDraft;
@@ -59,10 +51,17 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("outline.generate — runner proof (LLMW.RUNNER.1a)", () => {
-  it("1. the runner's {system, user} equals what generateOutlineDraft passes to its builder, byte-for-byte", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateOutlineDraft(form({ projectId: String(projectId), targetSections: "6" }));
     expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
-    expect(capturedPrompt).toBeDefined();
+
+    const project = await readProject(ctx, projectId);
+    const expectedPrompt = buildOutlineFromStoryPrompt({
+      name: project.name,
+      pitch: project.pitch,
+      story: project.story,
+      targetSections: 6,
+    });
 
     const runnerResult = await resolveOperationPrompt(
       outlineGenerateDescriptor,
@@ -72,21 +71,28 @@ describe("outline.generate — runner proof (LLMW.RUNNER.1a)", () => {
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expectedPrompt.system);
+    expect(runnerResult.prompt.user).toBe(expectedPrompt.user);
   });
 
   it("1b. matches without targetSections too (the mid-system parameter block's other branch)", async () => {
     const result = await generateOutlineDraft(form({ projectId: String(projectId) }));
     expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
-    expect(capturedPrompt).toBeDefined();
+
+    const project = await readProject(ctx, projectId);
+    const expectedPrompt = buildOutlineFromStoryPrompt({
+      name: project.name,
+      pitch: project.pitch,
+      story: project.story,
+      targetSections: null,
+    });
 
     const runnerResult = await resolveOperationPrompt(outlineGenerateDescriptor, { projectId });
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expectedPrompt.system);
+    expect(runnerResult.prompt.user).toBe(expectedPrompt.user);
   });
 
   it("2. refuses a project that does not exist, with the same message generateOutlineDraft produces", async () => {

@@ -1,28 +1,27 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, insertSequence } from "../actions/helpers/fixtures";
+import { insertProject, insertSequence, readProject, readSequence } from "../actions/helpers/fixtures";
 import { sequencePromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/sequencePrompt";
 
 // ---------------------------------------------------------------------------
 // Proof required by §11.2: the context resolved by `sequencePrompt.assist`'s
 // three variables (`PROJECT.IDENTITY`, `SEQ.CONTEXT`, `SEQ.CURRENT_PROMPT`)
-// equals what `generateSequencePromptDraft` passes to
-// `buildSequencePromptFromContextPrompt` today, field by field, restricted
-// to the context fields the action actually reads (it does not read
-// `project.description` — see the comparison below).
+// equals the context fields the frozen oracle
+// (`buildSequencePromptFromContextPrompt`) expects for the same rows, field
+// by field, restricted to the context fields the operation actually reads
+// (it does not read `project.description` — see the comparison below).
 //
-// Same two mocks, same real seeded database, same dynamic-import discipline
-// as `story.generate.test.ts` — see that file's header for the full
-// rationale.
+// Re-pointed at the B3a switch (LLMW.MIGRATE.FLATJSON.1a): `generateSequencePromptDraft`
+// no longer calls `buildSequencePromptFromContextPrompt`, so a mocked
+// capture of the action's own call would capture nothing. The comparison
+// now reads the same seeded rows directly instead.
+//
+// One mock, same real seeded database, same dynamic-import discipline as
+// `story.generate.test.ts` — see that file's header for the full rationale.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ sequence_prompt: "A generated sequence prompt." })),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/sequence-prompt-from-context", () => ({
-  buildSequencePromptFromContextPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -69,25 +68,11 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("sequencePrompt.assist descriptor — context equality", () => {
-  it("resolving the three declared variables equals the context fields generateSequencePromptDraft passes to its builder", async () => {
+  it("resolving the three declared variables equals the rows generateSequencePromptDraft's builder reads", async () => {
     const result = await generateSequencePromptDraft(
       form({ projectId: String(projectId), sequenceId: String(sequenceId), mode: "enhance" })
     );
     expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
-
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
-      assistMode: string;
-      projectName: string;
-      projectPitch: string | null;
-      projectStory: string | null;
-      sequenceTitle: string;
-      sequenceSummary: string | null;
-      sequenceDescription: string | null;
-      sequenceMood: string | null;
-      sequenceLocationHint: string | null;
-      currentSequencePrompt: string | null;
-    };
 
     expect(sequencePromptAssistDescriptor.context.variables.map((v) => v.id)).toEqual([
       "PROJECT.IDENTITY",
@@ -95,34 +80,38 @@ describe("sequencePrompt.assist descriptor — context equality", () => {
       "SEQ.CURRENT_PROMPT",
     ]);
 
-    const [identity, seqContext, currentPrompt] = await Promise.all([
+    const [identity, seqContext, currentPrompt, project, sequence] = await Promise.all([
       resolveProjectIdentity(projectId),
       resolveSeqContext(sequenceId),
       resolveSeqCurrentPrompt(sequenceId),
+      readProject(ctx, projectId),
+      readSequence(ctx, sequenceId),
     ]);
 
-    // PROJECT.IDENTITY: the action reads name/pitch/story, not description.
+    // PROJECT.IDENTITY: the builder reads name/pitch/story, not description.
     expect({ name: identity.name, pitch: identity.pitch, story: identity.story }).toEqual({
-      name: actionArg.projectName,
-      pitch: actionArg.projectPitch,
-      story: actionArg.projectStory,
+      name: project.name,
+      pitch: project.pitch,
+      story: project.story,
     });
 
     // SEQ.CONTEXT: all five fields.
     expect(seqContext).toEqual({
-      title: actionArg.sequenceTitle,
-      summary: actionArg.sequenceSummary,
-      description: actionArg.sequenceDescription,
-      mood: actionArg.sequenceMood,
-      locationHint: actionArg.sequenceLocationHint,
+      title: sequence.title,
+      summary: sequence.summary,
+      description: sequence.description,
+      mood: sequence.mood,
+      locationHint: sequence.locationHint,
     });
 
     // SEQ.CURRENT_PROMPT.
-    expect(currentPrompt).toEqual({ sequencePrompt: actionArg.currentSequencePrompt });
+    expect(currentPrompt).toEqual({ sequencePrompt: sequence.sequencePrompt });
 
     // Intent: mode is carried on the descriptor's `intent.mode`, not on a
-    // context variable, and the value the action actually used matches one
-    // of the descriptor's declared modes.
+    // context variable — the value "enhance" sent above is exercised
+    // end-to-end by `sequencePrompt.assist.runner.test.ts`'s own proof (test
+    // 1), not re-captured here since the action no longer exposes it via a
+    // mocked builder call.
     expect(sequencePromptAssistDescriptor.intent.mode?.modes.map((m) => m.id)).toEqual([
       "generate",
       "enhance",
@@ -130,7 +119,6 @@ describe("sequencePrompt.assist descriptor — context equality", () => {
       "shorten",
       "expand",
     ]);
-    expect(actionArg.assistMode).toBe("enhance");
   });
 
   it("the four transform modes carry the preconditions entry generateSequencePromptDraft enforces pre-call", async () => {

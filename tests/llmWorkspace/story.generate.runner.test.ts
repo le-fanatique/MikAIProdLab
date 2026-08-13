@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject } from "../actions/helpers/fixtures";
+import { insertProject, readProject } from "../actions/helpers/fixtures";
 import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
+import { buildStoryFromPitchPrompt } from "@/lib/prompts/story-from-pitch";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for `story.generate`:
 //
 //   1. Prompt equality (§11.2's byte-for-byte criterion, `toBe`): the runner's
-//      {system, user}, resolved against a real seeded database, equals what
-//      `generateStory` actually passes to `buildStoryFromPitchPrompt` for the
+//      {system, user}, resolved against a real seeded database, equals the
+//      frozen oracle `buildStoryFromPitchPrompt` called directly with the
 //      same row.
 //   2. Chain refusal: an anchor that does not exist is refused with the same
 //      message the action produces ("Project not found." — story.generate's
@@ -16,28 +17,19 @@ import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
 //   3. Parsing: a valid response yields the expected value; an unparsable
 //      response and an empty one yield `output.errors`' exact messages.
 //
-// The prompt builder is mocked as a pass-through: `vi.importActual` keeps the
-// real, pure implementation running (so the captured value is the real
-// prompt, not a stand-in), while the wrapper records the argument the action
-// passed in — same technique the context-equality tests already use for
-// argument capture, extended here to also keep the real return value.
+// Re-pointed at the B3a switch (LLMW.MIGRATE.FLATJSON.1a): `generateStory`
+// no longer calls `buildStoryFromPitchPrompt` — it goes through
+// `runOperation` instead — so capturing what the *action* passes to the
+// builder would capture nothing (a dead mock, never invoked). The proof now
+// calls the builder directly, with the same seeded row, and compares its
+// output to the runner's own prompt: same claim ("the runner reproduces the
+// frozen oracle byte-for-byte"), without the action in the middle.
 // `@/lib/llm` is the only network-boundary mock, per the ticket.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ story: "A generated story." })),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/story-from-pitch", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/story-from-pitch")>();
-  return {
-    buildStoryFromPitchPrompt: (ctx: Parameters<typeof actual.buildStoryFromPitchPrompt>[0]) => {
-      capturedPrompt = actual.buildStoryFromPitchPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateStory: typeof import("@/actions/llm/story").generateStory;
@@ -66,17 +58,23 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("story.generate — runner proof (LLMW.RUNNER.1a)", () => {
-  it("1. the runner's {system, user} equals what generateStory passes to its builder, byte-for-byte", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateStory(projectId);
     expect(result).toEqual({ ok: true, story: "A generated story." });
-    expect(capturedPrompt).toBeDefined();
+
+    const project = await readProject(ctx, projectId);
+    const expectedPrompt = buildStoryFromPitchPrompt({
+      name: project.name,
+      pitch: project.pitch,
+      description: project.description,
+    });
 
     const runnerResult = await resolveOperationPrompt(storyGenerateDescriptor, { projectId });
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expectedPrompt.system);
+    expect(runnerResult.prompt.user).toBe(expectedPrompt.user);
   });
 
   it("2. refuses a project that does not exist, with the same message generateStory produces", async () => {

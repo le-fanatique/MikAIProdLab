@@ -1,32 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, insertSequence } from "../actions/helpers/fixtures";
+import { insertProject, insertSequence, readProject, readSequence } from "../actions/helpers/fixtures";
 import { sequencePromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/sequencePrompt";
+import { buildSequencePromptFromContextPrompt } from "@/lib/prompts/sequence-prompt-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
 // `sequencePrompt.assist` — same structure as `story.generate.runner.test.ts`
-// (see that file's header), plus the fourth obligation specific to this
-// operation: a transform mode against an empty `sequencePrompt` is refused
-// *before* the LLM call, with the exact `preconditions` message.
+// (see that file's header, re-pointed at the B3a switch the same way: the
+// oracle is called directly, not captured from an action call that no longer
+// happens), plus the fourth obligation specific to this operation: a
+// transform mode against an empty `sequencePrompt` is refused *before* the
+// LLM call, with the exact `preconditions` message.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ sequence_prompt: "A generated sequence prompt." })),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/sequence-prompt-from-context", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/sequence-prompt-from-context")>();
-  return {
-    buildSequencePromptFromContextPrompt: (
-      ctx: Parameters<typeof actual.buildSequencePromptFromContextPrompt>[0]
-    ) => {
-      capturedPrompt = actual.buildSequencePromptFromContextPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateSequencePromptDraft: typeof import("@/actions/llm/sequencePrompt").generateSequencePromptDraft;
@@ -72,13 +62,30 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
+async function expectedPrompt(mode: "generate" | "enhance" | "rewrite" | "shorten" | "expand") {
+  const [project, sequence] = await Promise.all([readProject(ctx, projectId), readSequence(ctx, sequenceId)]);
+  return buildSequencePromptFromContextPrompt({
+    assistMode: mode,
+    projectName: project.name,
+    projectPitch: project.pitch,
+    projectStory: project.story,
+    sequenceTitle: sequence.title,
+    sequenceSummary: sequence.summary,
+    sequenceDescription: sequence.description,
+    sequenceMood: sequence.mood,
+    sequenceLocationHint: sequence.locationHint,
+    currentSequencePrompt: sequence.sequencePrompt,
+  });
+}
+
 describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
-  it("1. the runner's {system, user} equals what generateSequencePromptDraft passes to its builder, byte-for-byte (enhance mode)", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte (enhance mode)", async () => {
     const result = await generateSequencePromptDraft(
       form({ projectId: String(projectId), sequenceId: String(sequenceId), mode: "enhance" })
     );
     expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = await expectedPrompt("enhance");
 
     const runnerResult = await resolveOperationPrompt(
       sequencePromptAssistDescriptor,
@@ -88,8 +95,8 @@ describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("1b. matches for generate mode too (the branch that never reads SEQ.CURRENT_PROMPT)", async () => {
@@ -97,7 +104,8 @@ describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
       form({ projectId: String(projectId), sequenceId: String(sequenceId), mode: "generate" })
     );
     expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = await expectedPrompt("generate");
 
     const runnerResult = await resolveOperationPrompt(
       sequencePromptAssistDescriptor,
@@ -107,8 +115,8 @@ describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("2. refuses a Sequence belonging to a different Project, with the same message generateSequencePromptDraft produces", async () => {

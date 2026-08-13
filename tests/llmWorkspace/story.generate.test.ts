@@ -1,25 +1,29 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject } from "../actions/helpers/fixtures";
+import { insertProject, readProject } from "../actions/helpers/fixtures";
 import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
 
 // ---------------------------------------------------------------------------
 // Proof required by §11.2 / the ticket's "Obligations de preuve": the
 // context resolved by the `story.generate` descriptor's `PROJECT.IDENTITY`
-// variable equals what `generateStory` actually passes to
-// `buildStoryFromPitchPrompt` today. Same data, declared instead of coded.
+// variable equals the fields `buildStoryFromPitchPrompt` (the frozen oracle)
+// expects for the same row. Same data, declared instead of coded.
 //
-// Two mocks only, per the ticket:
-//   - `@/lib/llm`, so `callLLMJson` returns a valid JSON string instead of
-//     calling the network;
-//   - `@/lib/prompts/story-from-pitch`, to intercept the builder's single
-//     argument.
-// The database is real (`setupTempDb()`), never mocked. `app_settings` is
-// seeded with a minimal `llm_ollama_model` row, per the 2026-08-13
-// amendment: `getLLMConfig()` returns `null` on a genuinely empty database
-// (`PROVIDER_DEFAULTS.ollama.model` is `""`), so a real row is required for
-// `generateStory` to reach its builder at all. Seeding a real table is not
-// mocking the database.
+// Re-pointed at the B3a switch (LLMW.MIGRATE.FLATJSON.1a): `generateStory`
+// no longer calls `buildStoryFromPitchPrompt` — capturing what the *action*
+// passed to a mocked builder would capture nothing, since the action never
+// calls it anymore. The comparison now reads the same seeded row directly
+// (`readProject`) and compares its `{name, pitch, description}` fields
+// against `resolveProjectIdentity`'s own resolution, without an action call
+// in the middle.
+//
+// One mock only, per the ticket: `@/lib/llm`, so `callLLMJson` returns a
+// valid JSON string instead of calling the network. The database is real
+// (`setupTempDb()`), never mocked. `app_settings` is seeded with a minimal
+// `llm_ollama_model` row, per the 2026-08-13 amendment: `getLLMConfig()`
+// returns `null` on a genuinely empty database (`PROVIDER_DEFAULTS.ollama.model`
+// is `""`), so a real row is required for `generateStory` to reach the LLM
+// call at all. Seeding a real table is not mocking the database.
 //
 // Every import that reaches `@/db` (directly or via `@/actions/llm/story` /
 // `@/lib/llmWorkspace/variables/registry`) is dynamic, inside `beforeAll`,
@@ -29,11 +33,6 @@ import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ story: "A generated story." })),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/story-from-pitch", () => ({
-  buildStoryFromPitchPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -63,28 +62,24 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("story.generate descriptor — context equality", () => {
-  it("resolving PROJECT.IDENTITY against the same anchor equals what generateStory passes to its builder", async () => {
+  it("resolving PROJECT.IDENTITY against the same anchor equals the row generateStory reads (name, pitch, description)", async () => {
     const result = await generateStory(projectId);
     expect(result).toEqual({ ok: true, story: "A generated story." });
-
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
-      name: string;
-      pitch: string | null;
-      description: string | null;
-    };
 
     // The descriptor declares exactly the one variable this operation uses.
     expect(storyGenerateDescriptor.context.variables.map((v) => v.id)).toEqual(["PROJECT.IDENTITY"]);
 
-    const resolved = await resolveProjectIdentity(projectId);
+    const [resolved, row] = await Promise.all([resolveProjectIdentity(projectId), readProject(ctx, projectId)]);
 
-    // `generateStory` passes {name, pitch, description} — `story` is not
-    // part of its builder argument, so the comparison is scoped to the
-    // fields the action actually sends, per the ticket's "trois faits
+    // `generateStory` (via `story.generate`'s builder,
+    // `buildStoryFromPitchPrompt`) reads {name, pitch, description} —
+    // `story` is not part of that context, so the comparison is scoped to
+    // the fields the operation actually sends, per the ticket's "trois faits
     // vérifiés" describing generateStory's argument shape.
-    expect({ name: resolved.name, pitch: resolved.pitch, description: resolved.description }).toEqual(
-      actionArg
-    );
+    expect({ name: resolved.name, pitch: resolved.pitch, description: resolved.description }).toEqual({
+      name: row.name,
+      pitch: row.pitch,
+      description: row.description,
+    });
   });
 });

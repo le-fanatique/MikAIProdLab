@@ -1017,6 +1017,30 @@ a second path and compares it, it does not switch anything over.
 
 ### B3 — `LLMW.MIGRATE.FLATJSON.1`
 
+**What B3 deletes, and what it deliberately keeps.** The replaced code is each
+action's inline pipeline — id validation, config check, ownership loads,
+context assembly, builder call, fence stripping, parse — plus the three
+verbatim copies of `extractCodeFence`. The action itself survives as a thin
+adapter: its exported signature and its return shape are a contract its
+components depend on, and B3 changes neither.
+
+The prompt builders under `src/lib/prompts/` are **kept on purpose**, and this
+is a declared retention rather than leftover debt. They are the frozen oracle:
+the A2 snapshots pin them, and the `*.render.test.ts` proofs assert that a
+descriptor's blocks reproduce them byte-for-byte. Deleting them in B3 would
+remove the only independent evidence that the runner still emits the same
+prompt. They lose their production caller and keep their oracle role. Retiring
+them belongs to a later ticket, and only once the snapshots are re-anchored on
+the runner's own output.
+
+**One proof dies at the moment of the switch, and must be replaced.** The
+`*.runner.test.ts` files prove prompt equality by mocking the builder module
+and capturing what the *action* passes it. Once the action calls the runner, it
+never calls the builder, so that capture is empty and the assertion becomes
+vacuous. The comparison must be re-pointed: call the builder directly with the
+same seeded data and compare it to the runner's prompt. Same claim, without the
+action in the middle — which is the honest form of it after the switch.
+
 Switch the 8 actions to the runner and delete the replaced code, in the same
 diff, per the Definition of Done. The A2 snapshots must not move: a changed
 snapshot here is a defect, not an update — the opposite of the punctuation fix
