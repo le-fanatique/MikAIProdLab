@@ -26,9 +26,13 @@ supervision loop and validated manually by the user before commit.
 `cfc8745`. Any change to a prompt builder now fails a snapshot instead of
 passing silently.
 
-**Two defects are frozen, not fixed**, deliberately and on record in
-`docs/LLM_WORKSPACE_ARCHITECTURE.md` §9: `composeShotPrompt` emits double
-punctuation, and `getPromptCompilerPreset` is a third confirmed orphan.
+**The two frozen defects are now fixed (2026-08-13)**, together with the third
+independent item, in the follow-up pass on
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §9 "Independent": `composeShotPrompt` no
+longer emits double punctuation (its frozen snapshot was updated deliberately,
+the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
+and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
+location carries no contract. The suite is 100 tests.
 
 **Phase B is not authorised by this**, but nothing in §10 blocks it either.
 Migration order is settled, `userAdjustable` is deferred to the

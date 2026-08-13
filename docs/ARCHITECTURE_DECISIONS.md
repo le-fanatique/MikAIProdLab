@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-Last updated: 2026-07-26
+Last updated: 2026-08-13
 
 ## Codex Migration Arbitration
 
@@ -374,3 +374,26 @@ explicitement toute cle API du JSON serialise. Les themes Custom Appearance
 legacy qui n'existaient qu'en `localStorage` sont importes une seule fois,
 de maniere idempotente, vers le serveur - un id ou un nom deja present
 cote serveur n'est jamais ecrase.
+
+## Prompt Builder Location Carries No Contract
+
+A prompt builder's directory is not part of any contract. `src/lib/prompts/` is
+a convention, not a boundary: `src/lib/llm/translationPrompt.ts` lives outside
+it and stays there. Moving it would be import churn with no behavioural or
+architectural gain.
+
+The reason is a constraint established by LLM Workspace Phase A: **neither the
+prompt registry nor the operation registry can be built by directory
+discovery.** Prompt building already escapes `src/lib/prompts/`, and the
+Approve-side writes live entirely outside `src/actions/llm/` — six assist
+panels reach five write actions in `@/actions/assets`, `/shots`, `/sequences`.
+Every operation must therefore declare itself explicitly in the Phase B
+registry.
+
+Once registration is explicit, location is inert. A future ticket may relocate
+a builder for readability, but no ticket may make a builder's directory
+load-bearing — that would reintroduce the discovery assumption Phase A
+disproved.
+
+See `docs/LLM_WORKSPACE_ARCHITECTURE.md` §9 and the "Scope limitation" section
+of `docs/LLM_OPERATIONS_INVENTORY.md`.

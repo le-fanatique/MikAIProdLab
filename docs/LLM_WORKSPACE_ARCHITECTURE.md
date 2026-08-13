@@ -461,22 +461,33 @@ No interaction with the workspace.
 - Large storyboard and editorial page files
 
 Three items surfaced by Phase A itself, recorded here because the supervision
-files that found them are not tracked:
+files that found them are not tracked. **All three are closed (2026-08-13).**
 
-- **Delete `getPromptCompilerPreset`** (`src/lib/prompts/promptCompilerPresets.ts:172`)
-  — third confirmed orphan, zero callers. Deliberately left untested by A2:
-  snapshotting dead code makes it harder to remove. Use the same evidence
-  standard as the first two, including the `git log -S` step — a `grep` proves
-  an export is unreferenced, only the history proves removing it is safe.
-- **Fix the double punctuation in `composeShotPrompt`** — it joins sentences
-  without checking whether a field already ends in terminal punctuation,
-  producing `"Mara looks up., in a rooftop. Short summary text.. Handheld."`
-  A2 froze the defect in a snapshot rather than fixing it, so the fix ticket
-  must update that snapshot deliberately.
-- **Decide where `src/lib/llm/translationPrompt.ts` belongs.** It is the only
-  prompt builder outside `src/lib/prompts/`. Moving it is cosmetic; the real
-  decision is whether the Phase B registry tolerates builders anywhere, which
-  it must, per the discovery constraint above.
+- **Delete `getPromptCompilerPreset`** — **DONE**. Third confirmed orphan,
+  removed from `src/lib/prompts/promptCompilerPresets.ts`. Evidence met the
+  standard set by the first two: `grep` returned only the definition itself
+  plus two doc mentions, and `git log -S getPromptCompilerPreset` returned only
+  the commit that introduced it (`7a54808`) — it never had a caller at any
+  point in its history. Deliberately left untested by A2, since snapshotting
+  dead code makes it harder to remove.
+- **Fix the double punctuation in `composeShotPrompt`** — **DONE**. The builder
+  appended `"."` to every composed sentence without checking whether a field
+  already ended in terminal punctuation, producing
+  `"Mara looks up., in a rooftop. Short summary text.. Handheld."` One
+  `joinSentence` helper now strips terminal punctuation from every fragment but
+  the last, and terminates the result only when it is not already terminated —
+  so an existing `!` or `?` survives instead of becoming `"!."`. The A2
+  snapshot that froze the defect was updated deliberately; the other two
+  `composeShotPrompt` snapshots are unchanged, which is the evidence that the
+  fix is confined to the defective path. A regression test asserts the output
+  never contains two adjacent terminators.
+- **Decide where `src/lib/llm/translationPrompt.ts` belongs** — **DECIDED: it
+  stays.** It remains the only prompt builder outside `src/lib/prompts/`. The
+  registry must be explicit rather than directory-derived regardless, per the
+  discovery constraint above, so location carries no contract and moving the
+  file would be import churn for no gain. Recorded durably in
+  `docs/ARCHITECTURE_DECISIONS.md`, "Prompt Builder Location Carries No
+  Contract".
 
 ---
 
