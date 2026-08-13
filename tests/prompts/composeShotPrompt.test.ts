@@ -84,4 +84,34 @@ describe("composeShotPrompt", () => {
     });
     expect(result).toMatchSnapshot();
   });
+
+  it("never doubles terminal punctuation, and preserves an existing terminator", () => {
+    const result = composeShotPrompt({
+      project: { name: "Neon Harvest", pitch: null },
+      sequence: {
+        title: "The Standoff",
+        mood: "everything is on fire!",
+        locationHint: "a rooftop",
+        summary: null,
+        narrativePurpose: null,
+      },
+      shot: {
+        shotCode: null,
+        title: "Punctuated Shot",
+        durationSeconds: null,
+        description: "Mara grips her weapon.",
+        actionPitch: "does she fire?",
+        cameraPitch: "shot handheld, pushing in.",
+        framing: null,
+        cameraMovement: null,
+      },
+      castAssets: [],
+      shotRefImages: [],
+      castAssetRefImages: [],
+    });
+
+    expect(result.proposalText).not.toMatch(/[.!?…][.!?…]/);
+    expect(result.proposalText).toContain("Everything is on fire!");
+    expect(result).toMatchSnapshot();
+  });
 });

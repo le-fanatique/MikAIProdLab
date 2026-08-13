@@ -17,6 +17,13 @@ exports[`composeShotPrompt > composes with no cast and no optional fields (desc/
 exports[`composeShotPrompt > falls back to sequence summary for the mood sentence when mood is absent 1`] = `
 {
   "hasContent": true,
-  "proposalText": "Mara looks up., in a rooftop. Short summary text.. Handheld.",
+  "proposalText": "Mara looks up, in a rooftop. Short summary text. Handheld.",
+}
+`;
+
+exports[`composeShotPrompt > never doubles terminal punctuation, and preserves an existing terminator 1`] = `
+{
+  "hasContent": true,
+  "proposalText": "Mara grips her weapon, does she fire, in a rooftop. Everything is on fire! Shot handheld, pushing in.",
 }
 `;

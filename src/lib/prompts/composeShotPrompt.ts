@@ -72,6 +72,33 @@ function low(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
+const TERMINAL_PUNCTUATION = /[.!?…]+$/;
+
+/**
+ * Joins sentence fragments and terminates the result with exactly one
+ * sentence terminator.
+ *
+ * Every fragment but the last is stripped of its own terminal punctuation:
+ * a Description that already ends in "." must not produce
+ * "Mara looks up., in a rooftop." The last fragment keeps an existing
+ * terminator, so "Tense!" stays "Tense!" instead of becoming "Tense!.",
+ * and a field already ending in "." is not doubled.
+ */
+function joinSentence(parts: string[], sep = ", "): string {
+  const cleaned = parts.map((p) => p.trim()).filter((p) => p.length > 0);
+  if (cleaned.length === 0) return "";
+
+  const body = cleaned
+    .map((p, i) =>
+      i === cleaned.length - 1 ? p : p.replace(TERMINAL_PUNCTUATION, "").trimEnd()
+    )
+    .filter((p) => p.length > 0)
+    .join(sep);
+
+  if (body.length === 0) return "";
+  return TERMINAL_PUNCTUATION.test(body) ? body : `${body}.`;
+}
+
 function buildCastDetails(asset: ShotComposerCastAsset): string {
   const desc = notEmpty(asset.description);
   const notes = notEmpty(asset.notes);
@@ -110,38 +137,38 @@ export function composeShotPrompt(input: ShotComposerInput): ComposedShotPrompt 
     if (primaryAction) subjectParts.push(low(primaryAction));
     if (location) subjectParts.push(`in ${location}`);
 
-    sentences.push(subjectParts.join(", ") + ".");
+    sentences.push(joinSentence(subjectParts));
   } else {
     const subject = desc ?? action;
     if (subject) {
       const parts: string[] = [cap(subject)];
       if (desc && action) parts.push(low(action));
       if (location) parts.push(`in ${location}`);
-      sentences.push(parts.join(", ") + ".");
+      sentences.push(joinSentence(parts));
     } else if (location) {
-      sentences.push(`Shot in ${location}.`);
+      sentences.push(joinSentence([`Shot in ${location}`]));
     }
   }
 
   // Sentence 2: mood / atmosphere context
   if (mood) {
-    sentences.push(cap(mood) + ".");
+    sentences.push(cap(joinSentence([mood])));
   } else if (summary && summary.length < 100) {
-    sentences.push(cap(low(summary)) + ".");
+    sentences.push(cap(low(joinSentence([summary]))));
   } else if (pitch && pitch.length < 80) {
-    sentences.push(cap(low(pitch)) + ".");
+    sentences.push(cap(low(joinSentence([pitch]))));
   }
 
   // Sentence 3: camera
   if (camPitch) {
-    sentences.push(cap(camPitch) + ".");
+    sentences.push(cap(joinSentence([camPitch])));
   } else {
     const camParts: string[] = [];
     if (movement) camParts.push(movement);
     // Include framing in camera sentence only when cast didn't already use it
     if (framing && !hasCast) camParts.push(framing);
     if (camParts.length > 0) {
-      sentences.push(cap(camParts.join(", ")) + ".");
+      sentences.push(cap(joinSentence(camParts)));
     }
   }
 
