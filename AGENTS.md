@@ -6,6 +6,27 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # MikAI Production Lab — permanent Codex rules
 
+## Status — Codex supervision is dormant
+
+The user has switched supervision to the **Opus protocol**
+(`.agents/SUPERVISION_PROTOCOL.md`, section 0; `CLAUDE.md`, section
+`Active Supervision Protocol`). Codex currently holds **no active role**: it
+prepares no ticket, writes no review, and issues no verdict. Nothing below is
+deleted, because the user may switch back; it is simply not in force.
+
+While this status holds:
+
+- the ticket lives in `.agents/supervised_task.md`, not `current_task.md`;
+- the commit gate is an explicit user go, not `.agents/codex_verdict.json`;
+- everything else in this file — scope discipline, staging rules, forbidden
+  areas, language split, zero-debt review — still applies to **every**
+  implementation agent, whichever protocol is running.
+
+Switching back is the user's decision, and requires updating this section,
+`CLAUDE.md`, and section 0 of `.agents/SUPERVISION_PROTOCOL.md` together.
+
+## Context policy
+
 Codex uses supervisor-oriented progressive context:
 
 - always read `.agents/codex_handoff.md` when present;

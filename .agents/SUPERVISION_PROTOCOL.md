@@ -5,6 +5,19 @@ Code session: **Opus supervises, Sonnet executes.**
 
 Date: 2026-08-13.
 
+## 0. Status — active
+
+This protocol is **the one in force**, by the user's decision. `CLAUDE.md` says
+the same, in its `Active Supervision Protocol` section, and that is the copy
+loaded automatically at the start of every session — including after a
+`/clear`. Both must be edited together if the user switches protocols.
+
+Consequence, stated once because it was ambiguous after a reset: the ticket
+lives in `.agents/supervised_task.md`, the `mikai-executor` subagent
+implements, and the main thread supervises without implementing. A ticket found
+in `.agents/current_task.md` while this section says `active` is a mismatch to
+raise with the user, not to implement.
+
 ## 1. Boundary With The Codex Protocol
 
 This protocol **does not replace** the Codex protocol defined in `AGENTS.md`.
