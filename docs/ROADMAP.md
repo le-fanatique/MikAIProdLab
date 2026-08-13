@@ -569,12 +569,18 @@ Decisions de backlog:
 
 ### Maintenant
 
-0. `UX.PRODUCTIVITY.POLISH.1` - implemente par Sonnet, `READY_FOR_CODEX_REVIEW` :
-   presets ComfyUI locaux, persistance serveur des presets Custom Appearance,
-   Enhance Description et Notes independants, CTA Sequence Video visible et
-   Sequence Generation Package replie (`FB-20260715-014`, `FB-20260721-001`,
-   `FB-20260716-038`, `FB-20260717-044`, `FB-20260722-006`); en attente de
-   review Codex et de validation utilisateur avant commit/push;
+0. **LLM Workspace Phase A - TERMINEE (2026-08-13).** A1 a A4 livres, commites
+   et pousses (`0074f2e`, `6a730b6`, `f31416a`, `ba41bb3`, `cfc8745`). Detail
+   dans `docs/PROJECT_STATE.md` et `docs/LLM_WORKSPACE_ARCHITECTURE.md` §9.
+   Le depot dispose desormais de `npm test` - 22 constructeurs de prompt,
+   99 tests, 86 instantanes. La Phase B n'est pas autorisee pour autant :
+   le nommage de la section Settings (`FB-20260715-013`) reste une decision
+   utilisateur, cf. §10.
+0bis. `UX.PRODUCTIVITY.POLISH.1` - **commite et pousse** (`9b3d437`). L'entree
+   precedente le donnait encore en attente de review et de commit ; corrige
+   ici sur preuve directe de l'historique git. Le reste de cette section
+   n'a pas ete reconcilie - la roadmap date de la periode 2026-08-02 et une
+   reconciliation complete depasse ce que cette mise a jour a verifie.
 1. `SEQGEN.VIDEO.CUT.CORE.1` - decoupe/concat frame-exacte, version durable et
    provenance, sans ecraser la source;
 2. `SEQGEN.VIDEO.CUT.UI.1` - editeur In/Out en frames, preview et publication

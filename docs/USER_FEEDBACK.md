@@ -2469,6 +2469,19 @@ cross-cutting UI/display view.
   defaults, validation, reset behavior, versioning, and fallback behavior for
   invalid edits. Existing LLM Chat system-prompt controls do not by themselves
   satisfy this application-wide request.
+- 2026-08-13: **The inventory prerequisite above is now satisfied.**
+  `docs/LLM_OPERATIONS_INVENTORY.md` (ticket `PROMPTS.INVENTORY.CLEANUP.1`,
+  commits `6a730b6` / `f31416a`) tabulates all 26 exported LLM actions with
+  their prompt builders, assist components, anchor entities, written fields
+  and output shapes. Status stays `OPEN`: the inventory unblocks ticket
+  preparation, it does not deliver the Settings category.
+  Two constraints it establishes matter for this observation. First, prompt
+  builders are **not** all under `src/lib/prompts/` — `translationPrompt.ts`
+  lives in `src/lib/llm/` — so a Settings screen listing prompts by directory
+  scan would silently omit one. Second, the naming asked for here
+  (`System Prompts`) is narrower than what the LLM Workspace covers; that
+  wording conflict is recorded as open question 3 of
+  `docs/LLM_WORKSPACE_ARCHITECTURE.md` §10 and needs the user's decision.
 - 2026-07-15: This observation does not authorize a schema, migration,
   generation-runtime, or dependency change without a dedicated ticket and
   architecture decision.

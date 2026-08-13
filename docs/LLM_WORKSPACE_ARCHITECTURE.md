@@ -405,16 +405,35 @@ n8n` candidate. It should be revisited after the workspace exists.
 
 ## 9. Sequencing
 
-### Phase A — before the workspace
+### Phase A — before the workspace — **COMPLETE (2026-08-13)**
 
 Only work that will not be redone.
 
-| # | Item | Rationale |
+| # | Item | Delivered |
 | --- | --- | --- |
-| A1 | Split `src/db/schema.ts` (2 333 lines, 60 tables) into `src/db/schema/` with a re-export barrel | The workspace adds tables; the barrel keeps all 137 importers unchanged |
-| A2 | Snapshot tests over the 25 prompt builders | Pure deterministic functions; the only safety net for migrating 15 actions. Requires an explicitly authorised test-runner dependency |
-| A3 | Delete `src/lib/prompts/sequences-from-story.ts` | Confirmed orphan; do not migrate dead code |
-| A4 | Inventory table: 15 actions x prompt builders x panels | Design input for the registry, not code |
+| A1 | Split `src/db/schema.ts` into `src/db/schema/` with a re-export barrel | `0074f2e` — 13 domain modules, 59 tables (not 60), barrel keeps all importers unchanged, `db:generate` reports no schema change |
+| A2 | Snapshot tests over the prompt builders | `cfc8745` — 22 pure builders, 99 tests, 86 snapshots, `vitest` authorised in `devDependencies` |
+| A3 | Delete confirmed orphans | `6a730b6` (`sequences-from-story.ts`), `ba41bb3` (`generateAssetDescriptionDraft`) |
+| A4 | Inventory of LLM operations | `6a730b6`, `f31416a` — `docs/LLM_OPERATIONS_INVENTORY.md` |
+
+Three figures in the original plan were wrong and are corrected above: 59
+tables not 60, 26 actions not 15 (15 *files*, one row per exported action),
+and 22 testable builders not 25.
+
+What Phase A actually established, beyond the deliverables:
+
+- **Neither registry can be built by directory discovery.** Prompt building
+  escapes `src/lib/prompts/` (`translationPrompt.ts`) and the Approve-side
+  writes live entirely outside `src/actions/llm/` — six assist panels reach
+  five write actions in `@/actions/assets`, `/shots`, `/sequences`. Each
+  operation must declare itself explicitly. See the inventory's "Scope
+  limitation" section.
+- **Sharing between prompt builders is far lower than assumed** — 1 shared
+  file out of the 16 reachable from `src/actions/llm/`. A shared-resolver
+  layer has less to consolidate than §3.1 anticipated.
+- **Six of the sixteen LLM-calling actions do not fit a single JSON-object
+  proposal component**: 4 return array-wrapped lists, 2 return free text.
+  §6's "one proposal component" needs at least a list mode and a text mode.
 
 ### Phase B — the workspace
 
@@ -441,14 +460,79 @@ No interaction with the workspace.
 - `src/actions/sequenceVideoSplit.ts` — 1 828 lines
 - Large storyboard and editorial page files
 
+Three items surfaced by Phase A itself, recorded here because the supervision
+files that found them are not tracked:
+
+- **Delete `getPromptCompilerPreset`** (`src/lib/prompts/promptCompilerPresets.ts:172`)
+  — third confirmed orphan, zero callers. Deliberately left untested by A2:
+  snapshotting dead code makes it harder to remove. Use the same evidence
+  standard as the first two, including the `git log -S` step — a `grep` proves
+  an export is unreferenced, only the history proves removing it is safe.
+- **Fix the double punctuation in `composeShotPrompt`** — it joins sentences
+  without checking whether a field already ends in terminal punctuation,
+  producing `"Mara looks up., in a rooftop. Short summary text.. Handheld."`
+  A2 froze the defect in a snapshot rather than fixing it, so the fix ticket
+  must update that snapshot deliberately.
+- **Decide where `src/lib/llm/translationPrompt.ts` belongs.** It is the only
+  prompt builder outside `src/lib/prompts/`. Moving it is cosmetic; the real
+  decision is whether the Phase B registry tolerates builders anywhere, which
+  it must, per the discovery constraint above.
+
 ---
 
 ## 10. Open Questions For Ticket Preparation
 
-1. Which existing operations migrate first, and does any of them change
-   observable behaviour? A2 snapshots must prove they do not.
-2. Should `context.userAdjustable` be per template or per variable?
-3. Naming for the Settings section: "LLM Workflows", "Assists", or
-   "System Prompts" as requested in `FB-20260715-013`.
-4. Does the Shot-level Auto Casting of `FB-20260811-004` reuse the Sequence
-   scoring rules, and how many candidates does it return?
+Arbitrated 2026-08-13 after Phase A. Two are settled, one is deferred with a
+reason, one remains the user's.
+
+### 1. Migration order — **SETTLED**
+
+Migrate the **8 flat-JSON single-entity draft actions first**:
+`generateAssetBibleDraft`, `generateAssetDescriptionOnlyDraft`,
+`generateAssetNotesOnlyDraft`, `generateBatchAssetDescriptionDrafts`,
+`generateOutlineDraft`, `generateSequencePromptDraft`,
+`generateShotPromptDraft`, `generateStory`.
+
+They are the homogeneous core: same output shape, same anchor-to-draft
+pattern, and every one of their builders is covered by an A2 snapshot. If the
+runner reproduces these eight byte-for-byte, the format is proven before
+anything harder is attempted.
+
+Defer in this order: the 4 array-wrapped list actions (need a list mode in
+the proposal component), then the 2 free-text ones, then chat/image — which
+may never belong in the registry at all, being conversational rather than
+anchored.
+
+Does any of them change observable behaviour? The A2 snapshots answer that
+per builder, but only for **prompt construction**. They say nothing about the
+Approve-side writes, which live outside `src/actions/llm/` and have no test
+coverage. Those writes are the real migration risk and need their own
+verification in the Phase B ticket.
+
+### 2. `context.userAdjustable` per template or per variable — **DEFERRED**
+
+Not blocking, and answering it now would be guessing. It is a property of the
+descriptor format, so it should be decided while writing §4.1, against real
+descriptors rather than in the abstract.
+
+One input from Phase A: `asset-description-from-context.ts` serves 3 actions
+through 3 different exported builders, each using a different subset of the
+same context. That is evidence for **per variable**, since adjustability
+varies within one shared context, not across templates. Recorded as evidence,
+not as the decision.
+
+### 3. Settings section naming — **USER DECISION REQUIRED**
+
+`FB-20260715-013` asks in the user's own words for a `System Prompts`
+category. The workspace is broader than system prompts — it covers templates,
+variables and the bench — so honouring the literal request may misname the
+feature, while renaming it may fail to answer the observation.
+
+This is a product-vocabulary call and it is not the supervisor's to make.
+Blocking only for the Settings-surface ticket, not for the registry work.
+
+### 4. Shot-level Auto Casting (`FB-20260811-004`) — **OUT OF THE CRITICAL PATH**
+
+A feature question about something not yet built, not a workspace design
+question. It belongs to that feature's own ticket and does not gate Phase B.
+Left open deliberately.

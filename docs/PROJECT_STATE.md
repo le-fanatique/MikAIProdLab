@@ -1,8 +1,38 @@
 # MikAI Project State
 
-Last updated: 2026-08-02
+Last updated: 2026-08-13
 
 ## Repository Heads
+
+## LLM Workspace Phase A — COMPLETE (2026-08-13)
+
+Phase A of `docs/LLM_WORKSPACE_ARCHITECTURE.md` §9 is delivered, committed and
+pushed. It was the "work that will not be redone" gate before the workspace.
+
+| Item | Commit | Result |
+| --- | --- | --- |
+| A1 — schema split | `0074f2e` | `src/db/schema.ts` → 13 domain modules + barrel; `db:generate` reports no schema change |
+| A4 — LLM operations inventory | `6a730b6`, `f31416a` | `docs/LLM_OPERATIONS_INVENTORY.md`, 26 rows |
+| A3 — orphan deletions | `6a730b6`, `ba41bb3` | `sequences-from-story.ts`, `generateAssetDescriptionDraft` |
+| A2 — snapshot tests | `cfc8745` | **first test suite in the repository**: 22 builders, 99 tests, 86 snapshots |
+
+Also pushed in the same window: `82428bd` (ignore local `.agents/` material),
+`22208b8` (ComfyUI `PrimitiveString` write fix), `0949d48` (pnpm 11.7.0 in the
+OpenReel start command), `6bf2abd` (project tab order, Editorial Actions above
+the timeline). The last three were authored directly by Codex outside the
+supervision loop and validated manually by the user before commit.
+
+**New durable capability:** `npm test`. The repository had no tests before
+`cfc8745`. Any change to a prompt builder now fails a snapshot instead of
+passing silently.
+
+**Two defects are frozen, not fixed**, deliberately and on record in
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §9: `composeShotPrompt` emits double
+punctuation, and `getPromptCompilerPreset` is a third confirmed orphan.
+
+**Phase B is not authorised by this.** One §10 question is settled (migration
+order), one deferred, and one — the Settings section naming for
+`FB-20260715-013` — still requires a user decision.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 
