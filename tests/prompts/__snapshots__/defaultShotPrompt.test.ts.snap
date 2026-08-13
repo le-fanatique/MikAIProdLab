@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildDefaultShotPromptProposal > joins all provided fields 1`] = `
+"Mara stands on the rooftop.
+She raises her weapon.
+Low angle, wide lens."
+`;
+
+exports[`buildDefaultShotPromptProposal > returns an empty string when all fields are absent/null/empty 1`] = `""`;
+
+exports[`resolveShotPromptWithDefault > falls back to the built proposal when shotPrompt is absent/empty 1`] = `"Mara stands on the rooftop."`;
+
+exports[`resolveShotPromptWithDefault > returns null when the shot prompt and every optional field are absent 1`] = `null`;
+
+exports[`resolveShotPromptWithDefault > returns the existing shot prompt when present, ignoring the other fields 1`] = `"Existing prompt."`;

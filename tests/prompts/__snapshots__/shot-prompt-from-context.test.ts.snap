@@ -1,0 +1,91 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildShotPromptFromContextPrompt > builds a transform-mode prompt (enhance) with context present 1`] = `
+{
+  "system": "You are an expert at writing visual generation prompts for AI image and video diffusion models.
+Enhance the existing visual prompt by adding detail: camera angle precision, lighting nuances, atmospheric quality, compositional elements. Preserve the original intent and action. Do not change the core subject or scene dramatically.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one paragraph.
+Always respond with a valid JSON object matching exactly this schema:
+{ "shot_prompt": "<your visual prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Current prompt:
+Existing draft prompt to enhance.
+
+Shot context (background only):
+Shot: Mara grips her weapon.
+Mood: tense
+Location: Rooftop, dawn
+
+Transform the prompt as instructed.",
+}
+`;
+
+exports[`buildShotPromptFromContextPrompt > builds a transform-mode prompt (shorten) with no background context and no current prompt 1`] = `
+{
+  "system": "You are an expert at writing visual generation prompts for AI image and video diffusion models.
+Compress the existing visual prompt into a shorter, more focused version. Keep the most essential visual elements: subject, action, key composition, mood. Remove redundancy and secondary details.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one paragraph.
+Always respond with a valid JSON object matching exactly this schema:
+{ "shot_prompt": "<your visual prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Current prompt:
+
+
+Transform the prompt as instructed.",
+}
+`;
+
+exports[`buildShotPromptFromContextPrompt > builds the 'generate' prompt with all optional fields present 1`] = `
+{
+  "system": "You are an expert at writing visual generation prompts for AI image and video diffusion models.
+Write a clean, dense, cinematic visual prompt for the given shot context.
+Focus on: visible action, subject, composition, camera angle, lighting, atmosphere, environment, and cinematic style.
+Do not mention project names, sequence names, or shot codes explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one paragraph.
+Always respond with a valid JSON object matching exactly this schema:
+{ "shot_prompt": "<your visual prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Project: Neon Harvest
+Pitch: A cyberpunk farmer defends her last crop.
+Story: Long story text describing the world.
+Sequence: The Standoff
+Sequence summary: Tense confrontation at dawn.
+Sequence description: Wide rooftop location.
+Mood: tense
+Location: Rooftop, dawn
+Shot: SH010 — Close on Mara
+Duration: 5s
+Description: Mara grips her weapon.
+Action: She raises her weapon slowly.
+Camera intent: Low angle, wide lens.
+Framing: CU
+Camera movement: static
+Cast: Mara, Drone
+References: ref-1, ref-2
+Existing prompt draft: Existing draft prompt.
+
+Write a visual generation prompt for this shot.",
+}
+`;
+
+exports[`buildShotPromptFromContextPrompt > builds the 'generate' prompt with optional fields absent/null/empty 1`] = `
+{
+  "system": "You are an expert at writing visual generation prompts for AI image and video diffusion models.
+Write a clean, dense, cinematic visual prompt for the given shot context.
+Focus on: visible action, subject, composition, camera angle, lighting, atmosphere, environment, and cinematic style.
+Do not mention project names, sequence names, or shot codes explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one paragraph.
+Always respond with a valid JSON object matching exactly this schema:
+{ "shot_prompt": "<your visual prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Project: Neon Harvest
+Sequence: The Standoff
+Shot: Close on Mara
+
+Write a visual generation prompt for this shot.",
+}
+`;

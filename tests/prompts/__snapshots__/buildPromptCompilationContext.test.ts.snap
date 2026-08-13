@@ -1,0 +1,278 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildPromptCompilationContext > builds the context with every source disabled and only required shot fields 1`] = `
+{
+  "assetBibles": [],
+  "castAssets": [],
+  "imageMap": {},
+  "projectContext": null,
+  "references": [],
+  "sequenceContext": null,
+  "shot": {
+    "actionPitch": null,
+    "cameraPitch": null,
+    "compiledPromptSegments": null,
+    "description": null,
+    "durationSeconds": null,
+    "hasMissingTiming": false,
+    "hasPromptSegments": false,
+    "shotPrompt": null,
+    "title": null,
+  },
+  "sourcesExcluded": [
+    "casting",
+    "references",
+    "assetBibles",
+    "sequenceContext",
+    "projectContext",
+  ],
+  "sourcesIncluded": [
+    "shot",
+  ],
+  "warnings": [],
+}
+`;
+
+exports[`buildPromptCompilationContext > builds the context with every source enabled and full data 1`] = `
+{
+  "assetBibles": [
+    {
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": "character",
+      "forbiddenVariations": "Never smiling.",
+      "usageRules": "Always framed with her tools.",
+      "visualIdentity": "Tall, weathered coat.",
+    },
+  ],
+  "castAssets": [
+    {
+      "assetBible": {
+        "assetId": 1,
+        "assetName": "Mara",
+        "assetType": "character",
+        "forbiddenVariations": "Never smiling.",
+        "usageRules": "Always framed with her tools.",
+        "visualIdentity": "Tall, weathered coat.",
+      },
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": "character",
+      "description": "cyberpunk farmer",
+      "notes": "protagonist",
+    },
+  ],
+  "imageMap": {
+    "@Image1": {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": "Rooftop wide",
+      "refId": "shot-1",
+      "role": "establishing",
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": "use for wide framing",
+      "variantState": "day",
+    },
+    "@Image2": {
+      "approvedForGeneration": true,
+      "assetId": 1,
+      "assetName": "Mara",
+      "label": "Mara identity",
+      "refId": "asset-1-2",
+      "role": "identity",
+      "source": "asset",
+      "tag": "@Image2",
+      "usageNotes": null,
+      "variantState": "default",
+    },
+  },
+  "projectContext": {
+    "name": "Neon Harvest",
+    "pitch": "A cyberpunk farmer.",
+    "story": "Full story.",
+  },
+  "references": [
+    {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": "Rooftop wide",
+      "refId": "shot-1",
+      "role": "establishing",
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": "use for wide framing",
+      "variantState": "day",
+    },
+    {
+      "approvedForGeneration": true,
+      "assetId": 1,
+      "assetName": "Mara",
+      "label": "Mara identity",
+      "refId": "asset-1-2",
+      "role": "identity",
+      "source": "asset",
+      "tag": "@Image2",
+      "usageNotes": null,
+      "variantState": "default",
+    },
+  ],
+  "sequenceContext": {
+    "locationHint": "Rooftop",
+    "mood": "tense",
+    "narrativePurpose": "Climax",
+    "summary": "Tense confrontation.",
+    "title": "The Standoff",
+  },
+  "shot": {
+    "actionPitch": "She raises her weapon.",
+    "cameraPitch": "Low angle, wide lens.",
+    "compiledPromptSegments": "0-2s: static shot",
+    "description": "Mara grips her weapon.",
+    "durationSeconds": 5,
+    "hasMissingTiming": false,
+    "hasPromptSegments": true,
+    "shotPrompt": "Mara stands on the rooftop.",
+    "title": "Close on Mara",
+  },
+  "sourcesExcluded": [],
+  "sourcesIncluded": [
+    "shot",
+    "casting",
+    "references",
+    "assetBibles",
+    "sequenceContext",
+    "projectContext",
+  ],
+  "warnings": [],
+}
+`;
+
+exports[`buildPromptCompilationContext > deduplicates references, cast assets and asset bibles that share the same id 1`] = `
+{
+  "assetBibles": [
+    {
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": null,
+      "forbiddenVariations": null,
+      "usageRules": null,
+      "visualIdentity": null,
+    },
+  ],
+  "castAssets": [
+    {
+      "assetBible": {
+        "assetId": 1,
+        "assetName": "Mara",
+        "assetType": null,
+        "forbiddenVariations": null,
+        "usageRules": null,
+        "visualIdentity": null,
+      },
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": null,
+      "description": null,
+      "notes": null,
+    },
+  ],
+  "imageMap": {
+    "@Image1": {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": null,
+      "refId": "shot-1",
+      "role": null,
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": null,
+      "variantState": null,
+    },
+  },
+  "projectContext": null,
+  "references": [
+    {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": null,
+      "refId": "shot-1",
+      "role": null,
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": null,
+      "variantState": null,
+    },
+  ],
+  "sequenceContext": null,
+  "shot": {
+    "actionPitch": null,
+    "cameraPitch": null,
+    "compiledPromptSegments": null,
+    "description": null,
+    "durationSeconds": null,
+    "hasMissingTiming": false,
+    "hasPromptSegments": false,
+    "shotPrompt": null,
+    "title": "Close on Mara",
+  },
+  "sourcesExcluded": [
+    "sequenceContext",
+    "projectContext",
+  ],
+  "sourcesIncluded": [
+    "shot",
+    "casting",
+    "references",
+    "assetBibles",
+  ],
+  "warnings": [
+    "Duplicate Asset Bible removed: asset 1",
+    "Duplicate cast asset removed: asset 1",
+    "Reference image has no role, variant/state or usage notes.",
+    "Duplicate reference removed: shot-1",
+  ],
+}
+`;
+
+exports[`buildPromptCompilationContext > emits 'produced no content' warnings when sources are enabled but their inputs are empty 1`] = `
+{
+  "assetBibles": [],
+  "castAssets": [],
+  "imageMap": {},
+  "projectContext": null,
+  "references": [],
+  "sequenceContext": null,
+  "shot": {
+    "actionPitch": null,
+    "cameraPitch": null,
+    "compiledPromptSegments": null,
+    "description": null,
+    "durationSeconds": null,
+    "hasMissingTiming": false,
+    "hasPromptSegments": false,
+    "shotPrompt": null,
+    "title": "Close on Mara",
+  },
+  "sourcesExcluded": [],
+  "sourcesIncluded": [
+    "shot",
+    "casting",
+    "references",
+    "assetBibles",
+    "sequenceContext",
+    "projectContext",
+  ],
+  "warnings": [
+    "Asset Bibles source was requested but produced no content.",
+    "Casting source was requested but produced no content.",
+    "References source was requested but produced no content.",
+    "Sequence context source was requested but produced no content.",
+    "Project context source was requested but produced no content.",
+  ],
+}
+`;

@@ -1,0 +1,109 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildCastingFromSequencePrompt > builds the prompt with sequence-level casting excluded and optional context absent 1`] = `
+{
+  "system": "You are a casting director and production supervisor for the project "Neon Harvest".
+
+Your task is to suggest which assets from the project's asset library should be cast into the provided shots.
+
+CASTING RULES:
+- Use ONLY the asset IDs and shot IDs provided below. Never invent IDs or names.
+- Prioritize: characters visible or implied in the action; environments matching the location; props, vehicles, or crowds clearly present or useful.
+- Do not cast every asset into every shot. Be selective and production-relevant.
+- Do not suggest castings that are already assigned (listed under "Already assigned").
+- Make suggestions that will help the shot generation pipeline: cast assets that will appear in the visual output.
+- confidence must be "high", "medium", or "low".
+- reason must be one short sentence or null.
+- Maximum 60 suggestions total.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "suggestions": [
+    {
+      "targetType": "shot",
+      "targetId": <number — exact ID from the provided lists>,
+      "targetLabel": "string — shot code + title, or sequence title",
+      "assetId": <number — exact ID from the provided asset list>,
+      "assetName": "string — asset name",
+      "assetType": "character | environment | prop | vehicle | crowd | other",
+      "reason": "string or null — one sentence explaining why this asset fits this shot",
+      "confidence": "high | medium | low"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.
+Maximum 60 suggestions total.",
+  "user": "Project: Neon Harvest
+
+SEQUENCE [ID: 12]: The Standoff
+
+ASSET LIBRARY:
+[ASSET ID: 1] Mara — character
+
+SHOTS:
+[SHOT ID: 34] Close on Mara
+
+Suggest which assets should be cast into each shot. Use only the exact IDs provided above. Do not invent IDs, asset names, or shot names.",
+}
+`;
+
+exports[`buildCastingFromSequencePrompt > builds the prompt with sequence-level casting included and full optional context 1`] = `
+{
+  "system": "You are a casting director and production supervisor for the project "Neon Harvest".
+
+Your task is to suggest which assets from the project's asset library should be cast into the provided shots and optionally into the sequence itself.
+
+CASTING RULES:
+- Use ONLY the asset IDs and shot IDs provided below. Never invent IDs or names.
+- Prioritize: characters visible or implied in the action; environments matching the location; props, vehicles, or crowds clearly present or useful.
+- Do not cast every asset into every shot. Be selective and production-relevant.
+- Do not suggest castings that are already assigned (listed under "Already assigned").
+- Make suggestions that will help the shot generation pipeline: cast assets that will appear in the visual output.
+- Sequence-level casting: use targetType="sequence" and targetId=12 only for assets that are thematically relevant to the full sequence (e.g., the main character or primary location).
+- confidence must be "high", "medium", or "low".
+- reason must be one short sentence or null.
+- Maximum 60 suggestions total.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "suggestions": [
+    {
+      "targetType": "shot | sequence",
+      "targetId": <number — exact ID from the provided lists>,
+      "targetLabel": "string — shot code + title, or sequence title",
+      "assetId": <number — exact ID from the provided asset list>,
+      "assetName": "string — asset name",
+      "assetType": "character | environment | prop | vehicle | crowd | other",
+      "reason": "string or null — one sentence explaining why this asset fits this shot",
+      "confidence": "high | medium | low"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.
+Maximum 60 suggestions total.",
+  "user": "Project: Neon Harvest
+Pitch: A cyberpunk farmer defends her last crop.
+Story (background): Full narrative synopsis.
+Outline (background): ## Opening
+Mara arrives.
+
+SEQUENCE [ID: 12]: The Standoff
+Summary: Tense confrontation.
+Description: Rooftop location.
+Purpose: Climax
+Mood: tense
+Location: Rooftop
+
+ASSET LIBRARY:
+[ASSET ID: 1] Mara — character — cyberpunk farmer | protagonist
+
+SHOTS:
+[SHOT ID: 34] SH010 — Close on Mara — Mara grips her weapon. | Action: She raises her weapon. | In: Calm | Out: Alert
+
+ALREADY ASSIGNED (do not suggest these again):
+Shot 99 ← Asset 2
+Sequence 12 ← Asset 3
+
+Suggest which assets should be cast into each shot. You may also suggest sequence-level castings (targetType="sequence", targetId=12) for assets that are central to the whole sequence. Use only the exact IDs provided above. Do not invent IDs, asset names, or shot names.",
+}
+`;

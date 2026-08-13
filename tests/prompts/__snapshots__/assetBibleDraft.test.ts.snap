@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`extractAssetBibleCodeFence > returns the trimmed text unchanged when there is no fence 1`] = `"{"visual_identity":"x"}"`;
+
+exports[`extractAssetBibleCodeFence > strips a \`\`\`json fenced block 1`] = `"{"visual_identity":"x"}"`;
+
+exports[`parseAssetBibleDraft > defaults missing/absent fields to empty strings when at least one field is present 1`] = `
+{
+  "forbiddenVariations": "",
+  "usageRules": "",
+  "visualIdentity": "Tall, weathered coat.",
+}
+`;
+
+exports[`parseAssetBibleDraft > parses a valid JSON draft with all three fields present 1`] = `
+{
+  "forbiddenVariations": "Never smiling.",
+  "usageRules": "Always framed with her tools.",
+  "visualIdentity": "Tall, weathered coat.",
+}
+`;

@@ -1,0 +1,150 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildSequencesFromOutlinePrompt > Path A (outline present): builds the prompt from parsed outlineSections, with sectionCount and no pitch/story 1`] = `
+{
+  "system": "You are a professional film production designer and story structure expert.
+Your task is to convert a Project Outline into a list of production sequences.
+
+RULES:
+- Each "## " section maps to exactly one sequence (unless targetCount requires grouping or splitting).
+- \`title\` = the section header text, verbatim, without the "## " prefix.
+- \`summary\` = the section body text, verbatim. Do not summarize, paraphrase, or shorten it.
+- \`description\` = enriched production narrative, inferred from the section content.
+- \`narrative_purpose\`, \`mood\`, \`location_hint\` = inferred from the section content.
+- Do not invent characters, locations, or events not present in the outline.
+- Do not use pitch or story to override outline content.
+- The outline contains 2 sections. Generate exactly 2 sequences, one per "## " section. Do not merge or split sections.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "sequences": [
+    {
+      "title": "string — the section header text, verbatim (without the ## prefix)",
+      "summary": "string or null — the section body text, verbatim. Do not paraphrase or shorten.",
+      "description": "string or null — enriched production narrative inferred from the section",
+      "narrative_purpose": "string or null — dramatic function in the arc (e.g. Opening, Inciting incident, Climax, Resolution)",
+      "mood": "string or null — emotional tone (e.g. tense, melancholic, frenetic, serene)",
+      "location_hint": "string or null — setting or location useful for production (e.g. Exterior rooftop / night)",
+      "order_index": number (starting at 0)
+    }
+  ]
+}
+No markdown. No explanation. No text before or after. Only the JSON object.",
+  "user": "Project: Neon Harvest
+
+Outline sections (primary source):
+
+Section 01
+Title (copy verbatim into "title"): Opening — The Arrival
+Body (copy verbatim into "summary"): Mara arrives at the rooftop farm.
+
+Section 02
+Title (copy verbatim into "title"): Climax
+Body (copy verbatim into "summary"): (empty)
+
+For each section: set \`title\` = the Title above, set \`summary\` = the Body above verbatim. Infer \`description\`, \`narrative_purpose\`, \`mood\`, and \`location_hint\` from the section body. Do not paraphrase the summary.",
+}
+`;
+
+exports[`buildSequencesFromOutlinePrompt > Path A (outline present): builds the prompt from the raw outline text, no sectionCount/outlineSections 1`] = `
+{
+  "system": "You are a professional film production designer and story structure expert.
+Your task is to convert a Project Outline into a list of production sequences.
+
+RULES:
+- Each "## " section maps to exactly one sequence (unless targetCount requires grouping or splitting).
+- \`title\` = the section header text, verbatim, without the "## " prefix.
+- \`summary\` = the section body text, verbatim. Do not summarize, paraphrase, or shorten it.
+- \`description\` = enriched production narrative, inferred from the section content.
+- \`narrative_purpose\`, \`mood\`, \`location_hint\` = inferred from the section content.
+- Do not invent characters, locations, or events not present in the outline.
+- Do not use pitch or story to override outline content.
+- Produce one sequence per ## section in the outline. Do not merge or split sections.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "sequences": [
+    {
+      "title": "string — the section header text, verbatim (without the ## prefix)",
+      "summary": "string or null — the section body text, verbatim. Do not paraphrase or shorten.",
+      "description": "string or null — enriched production narrative inferred from the section",
+      "narrative_purpose": "string or null — dramatic function in the arc (e.g. Opening, Inciting incident, Climax, Resolution)",
+      "mood": "string or null — emotional tone (e.g. tense, melancholic, frenetic, serene)",
+      "location_hint": "string or null — setting or location useful for production (e.g. Exterior rooftop / night)",
+      "order_index": number (starting at 0)
+    }
+  ]
+}
+No markdown. No explanation. No text before or after. Only the JSON object.",
+  "user": "Project: Neon Harvest
+
+Background context (do not override the outline):
+Pitch: A cyberpunk farmer defends her last crop.
+Story (background only): Full narrative synopsis.
+
+Project Outline (primary source — map this into sequences):
+## Opening — The Arrival
+Mara arrives at the rooftop farm.
+
+## Climax
+The standoff.
+
+For each "## " section: set \`title\` = the header text without "## ", set \`summary\` = the section body verbatim. Do not paraphrase the summary.",
+}
+`;
+
+exports[`buildSequencesFromOutlinePrompt > Path B (outline absent): builds the fallback prompt with every optional field absent 1`] = `
+{
+  "system": "You are a professional film production designer and story structure expert.
+The project outline is not yet available. Generate production sequences from the project pitch and story instead.
+Choose a natural number of sequences based on the story structure (typically 4 to 8).
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "sequences": [
+    {
+      "title": "string — the section header text, verbatim (without the ## prefix)",
+      "summary": "string or null — the section body text, verbatim. Do not paraphrase or shorten.",
+      "description": "string or null — enriched production narrative inferred from the section",
+      "narrative_purpose": "string or null — dramatic function in the arc (e.g. Opening, Inciting incident, Climax, Resolution)",
+      "mood": "string or null — emotional tone (e.g. tense, melancholic, frenetic, serene)",
+      "location_hint": "string or null — setting or location useful for production (e.g. Exterior rooftop / night)",
+      "order_index": number (starting at 0)
+    }
+  ]
+}
+No markdown. No explanation. No text before or after. Only the JSON object.",
+  "user": "Project: Neon Harvest
+
+Break this project into production sequences.",
+}
+`;
+
+exports[`buildSequencesFromOutlinePrompt > Path B (outline absent): builds the fallback prompt with pitch/story and targetCount present 1`] = `
+{
+  "system": "You are a professional film production designer and story structure expert.
+The project outline is not yet available. Generate production sequences from the project pitch and story instead.
+Produce exactly 4 sequences.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "sequences": [
+    {
+      "title": "string — the section header text, verbatim (without the ## prefix)",
+      "summary": "string or null — the section body text, verbatim. Do not paraphrase or shorten.",
+      "description": "string or null — enriched production narrative inferred from the section",
+      "narrative_purpose": "string or null — dramatic function in the arc (e.g. Opening, Inciting incident, Climax, Resolution)",
+      "mood": "string or null — emotional tone (e.g. tense, melancholic, frenetic, serene)",
+      "location_hint": "string or null — setting or location useful for production (e.g. Exterior rooftop / night)",
+      "order_index": number (starting at 0)
+    }
+  ]
+}
+No markdown. No explanation. No text before or after. Only the JSON object.",
+  "user": "Project: Neon Harvest
+Pitch: A cyberpunk farmer defends her last crop.
+Story: Full narrative synopsis of the project.
+
+Break this project into production sequences.",
+}
+`;

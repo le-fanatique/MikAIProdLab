@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildStoryFromPitchPrompt > builds the prompt with all fields present 1`] = `
+{
+  "system": "You are a professional screenwriter and narrative consultant.
+Your task is to write a concise story synopsis from a project pitch.
+The story should be 200 to 400 words, written in a cinematic style suitable for production use.
+Always respond with a valid JSON object matching exactly this schema:
+{ "story": "<narrative text>" }
+No markdown. No explanation. Only the JSON object.",
+  "user": "Project title: Neon Harvest
+Pitch: A cyberpunk farmer defends her last crop from a mega-corp.
+Additional notes: Tone: gritty, hopeful ending.
+
+Write a story synopsis for this project.",
+}
+`;
+
+exports[`buildStoryFromPitchPrompt > builds the prompt with optional fields absent (null) 1`] = `
+{
+  "system": "You are a professional screenwriter and narrative consultant.
+Your task is to write a concise story synopsis from a project pitch.
+The story should be 200 to 400 words, written in a cinematic style suitable for production use.
+Always respond with a valid JSON object matching exactly this schema:
+{ "story": "<narrative text>" }
+No markdown. No explanation. Only the JSON object.",
+  "user": "Project title: Neon Harvest
+Pitch: Not provided
+Additional notes: None
+
+Write a story synopsis for this project.",
+}
+`;

@@ -1,0 +1,22 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`composeShotPrompt > composes a full sentence set with cast, framing, camera pitch and mood 1`] = `
+{
+  "hasContent": true,
+  "proposalText": "Close-up of Mara (cyberpunk farmer; protagonist), she raises her weapon slowly, in a rain-soaked rooftop. Tense and electric. Shot on a low angle with a wide lens.",
+}
+`;
+
+exports[`composeShotPrompt > composes with no cast and no optional fields (desc/action/camera fallbacks) 1`] = `
+{
+  "hasContent": false,
+  "proposalText": "",
+}
+`;
+
+exports[`composeShotPrompt > falls back to sequence summary for the mood sentence when mood is absent 1`] = `
+{
+  "hasContent": true,
+  "proposalText": "Mara looks up., in a rooftop. Short summary text.. Handheld.",
+}
+`;

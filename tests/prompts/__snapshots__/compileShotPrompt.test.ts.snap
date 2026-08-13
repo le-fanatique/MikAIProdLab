@@ -1,0 +1,95 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`compileShotPrompt > image kind: shotPrompt present, Prompt Segments exist but are informational-only 1`] = `
+{
+  "hasPromptSegments": true,
+  "hasShotPrompt": true,
+  "kind": "image",
+  "sections": [
+    {
+      "id": "shotPrompt",
+      "label": "Shot Prompt",
+      "text": "Mara stands on the rooftop.",
+    },
+  ],
+  "sourcesUsed": [
+    "shotPrompt",
+  ],
+  "text": "Mara stands on the rooftop.",
+  "usedTimeline": false,
+  "warnings": [
+    "This shot has Prompt Segments, but they are not used for image workflows.",
+  ],
+}
+`;
+
+exports[`compileShotPrompt > video kind: Prompt Segments exist but produced no compiled text, with missing timing 1`] = `
+{
+  "hasPromptSegments": true,
+  "hasShotPrompt": true,
+  "kind": "video",
+  "sections": [
+    {
+      "id": "shotPrompt",
+      "label": "Shot Prompt",
+      "text": "Mara stands on the rooftop.",
+    },
+  ],
+  "sourcesUsed": [
+    "shotPrompt",
+  ],
+  "text": "Mara stands on the rooftop.",
+  "usedTimeline": false,
+  "warnings": [
+    "Prompt Segments exist but produced no compiled text.",
+  ],
+}
+`;
+
+exports[`compileShotPrompt > video kind: every optional field absent/empty (empty Shot Prompt, no Prompt Segments) 1`] = `
+{
+  "hasPromptSegments": false,
+  "hasShotPrompt": false,
+  "kind": "video",
+  "sections": [],
+  "sourcesUsed": [],
+  "text": "",
+  "usedTimeline": false,
+  "warnings": [
+    "Shot Prompt is empty.",
+    "No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+  ],
+}
+`;
+
+exports[`compileShotPrompt > video kind: shotPrompt + Prompt Segments present, no missing timing 1`] = `
+{
+  "hasPromptSegments": true,
+  "hasShotPrompt": true,
+  "kind": "video",
+  "sections": [
+    {
+      "id": "shotPrompt",
+      "label": "Shot Prompt",
+      "text": "Mara stands on the rooftop.",
+    },
+    {
+      "id": "timeline",
+      "label": "Timeline",
+      "text": "0-2s: static shot
+2-5s: she raises her weapon",
+    },
+  ],
+  "sourcesUsed": [
+    "shotPrompt",
+    "promptSegments",
+  ],
+  "text": "Mara stands on the rooftop.
+
+Timeline:
+0-2s: static shot
+2-5s: she raises her weapon",
+  "usedTimeline": true,
+  "warnings": [],
+}
+`;

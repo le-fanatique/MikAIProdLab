@@ -1,0 +1,80 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildSequencePromptFromContextPrompt > builds a transform-mode prompt (expand) with no background context and no current prompt 1`] = `
+{
+  "system": "You are an expert at writing visual and narrative direction prompts for film sequences.
+Expand the existing sequence prompt by adding useful visual and narrative details: environment texture, lighting setup, emotional arc, camera style, transitions between moments. Stay grounded in what the sequence is about.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Current prompt:
+
+
+Transform the prompt as instructed.",
+}
+`;
+
+exports[`buildSequencePromptFromContextPrompt > builds a transform-mode prompt (rewrite) with background context present 1`] = `
+{
+  "system": "You are an expert at writing visual and narrative direction prompts for film sequences.
+Rewrite the existing sequence prompt to be cleaner, more cinematic, and more evocative. Preserve the meaning and intent. Remove awkward phrasing. Make it flow naturally as a visual and narrative description.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Current prompt:
+Existing draft to rewrite.
+
+Sequence context (background only):
+Mood: tense
+Location: Rooftop, dawn
+Summary: Tense confrontation at dawn.
+
+Transform the prompt as instructed.",
+}
+`;
+
+exports[`buildSequencePromptFromContextPrompt > builds the 'generate' prompt with all optional fields present 1`] = `
+{
+  "system": "You are an expert at writing visual and narrative direction prompts for film sequences.
+Write a Sequence Prompt that describes the visual atmosphere, dramatic arc, camera approach, lighting, setting, and mood of the sequence.
+Focus on: what is felt and seen across the sequence as a whole. Do not list individual shots.
+Do not mention project names or sequence names explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Project: Neon Harvest
+Pitch: A cyberpunk farmer defends her last crop.
+Story: Long story text describing the world.
+Sequence: The Standoff
+Summary: Tense confrontation at dawn.
+Description: Wide rooftop location.
+Mood: tense
+Location: Rooftop, dawn
+
+Write a sequence prompt for this sequence.",
+}
+`;
+
+exports[`buildSequencePromptFromContextPrompt > builds the 'generate' prompt with optional fields absent/null 1`] = `
+{
+  "system": "You are an expert at writing visual and narrative direction prompts for film sequences.
+Write a Sequence Prompt that describes the visual atmosphere, dramatic arc, camera approach, lighting, setting, and mood of the sequence.
+Focus on: what is felt and seen across the sequence as a whole. Do not list individual shots.
+Do not mention project names or sequence names explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.",
+  "user": "Project: Neon Harvest
+Sequence: The Standoff
+
+Write a sequence prompt for this sequence.",
+}
+`;

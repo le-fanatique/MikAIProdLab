@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildAssetBibleFromContextPrompt > builds the prompt with an existing bible and an active Project Style 1`] = `
+{
+  "system": "You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
+
+Rules:
+- Use only the provided Description and Notes as your source of truth. Do not invent story facts, events, or canon not present in the input.
+- If an existing Asset Bible value is provided, treat it as context to improve or complete — never discard useful existing content without reason, and never contradict it without a clear basis in Description/Notes.
+- visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
+- usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
+- forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+- A Project Style is provided below. Respect its World & Design Language, Visual Treatment and any listed rules; never contradict them.
+Always respond with a valid JSON object matching exactly this schema:
+{ "visual_identity": "<defining silhouette, colors, materials, proportions>", "usage_rules": "<how this asset should behave or be framed/used across shots>", "forbidden_variations": "<colors, props, poses or traits that must never appear>" }
+No markdown. No explanation. Only the JSON object.",
+  "user": "Asset: Mara
+Type: character
+Description: A cyberpunk farmer.
+Notes: Protagonist.
+
+Existing Asset Bible (improve/complete, do not contradict without reason):
+Current Visual Identity: Tall, weathered coat.
+Current Usage Rules: Always framed with her tools.
+Current Forbidden Variations: Never smiling.
+
+Project Style:
+Neon-lit dystopia.
+
+High contrast, teal and orange.
+
+Never depict corporate logos.
+
+Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "Mara".",
+}
+`;
+
+exports[`buildAssetBibleFromContextPrompt > builds the prompt with an existing bible but no active Project Style 1`] = `
+{
+  "system": "You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
+
+Rules:
+- Use only the provided Description and Notes as your source of truth. Do not invent story facts, events, or canon not present in the input.
+- If an existing Asset Bible value is provided, treat it as context to improve or complete — never discard useful existing content without reason, and never contradict it without a clear basis in Description/Notes.
+- visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
+- usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
+- forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+Always respond with a valid JSON object matching exactly this schema:
+{ "visual_identity": "<defining silhouette, colors, materials, proportions>", "usage_rules": "<how this asset should behave or be framed/used across shots>", "forbidden_variations": "<colors, props, poses or traits that must never appear>" }
+No markdown. No explanation. Only the JSON object.",
+  "user": "Asset: Mara
+Type: character
+Description: A cyberpunk farmer.
+Notes: (none)
+
+Existing Asset Bible (improve/complete, do not contradict without reason):
+Current Visual Identity: Tall, weathered coat.
+
+Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "Mara".",
+}
+`;
+
+exports[`buildAssetBibleFromContextPrompt > builds the prompt with no existing bible and no Project Style (byte-identical to pre-Style output) 1`] = `
+{
+  "system": "You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
+
+Rules:
+- Use only the provided Description and Notes as your source of truth. Do not invent story facts, events, or canon not present in the input.
+- If an existing Asset Bible value is provided, treat it as context to improve or complete — never discard useful existing content without reason, and never contradict it without a clear basis in Description/Notes.
+- visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
+- usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
+- forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+Always respond with a valid JSON object matching exactly this schema:
+{ "visual_identity": "<defining silhouette, colors, materials, proportions>", "usage_rules": "<how this asset should behave or be framed/used across shots>", "forbidden_variations": "<colors, props, poses or traits that must never appear>" }
+No markdown. No explanation. Only the JSON object.",
+  "user": "Asset: Mara
+Type: character
+Description: (none)
+Notes: (none)
+
+Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "Mara".",
+}
+`;

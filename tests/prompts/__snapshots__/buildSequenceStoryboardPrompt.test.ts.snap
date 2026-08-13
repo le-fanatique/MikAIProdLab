@@ -1,0 +1,81 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildSequenceStoryboardPrompt > builds the prompt with approved references and sequence title/code present 1`] = `
+{
+  "imageMappings": [
+    {
+      "approvedForGeneration": true,
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": "character",
+      "imageLabel": "@Image1",
+      "refId": "asset-1-2",
+      "roleLabel": "Identity",
+      "variantState": "default",
+    },
+  ],
+  "text": "Sequence Storyboard Prompt
+Project 1 / Sequence 2 (SEQ010) — The Standoff
+
+Goal: produce a single contact-sheet storyboard image containing exactly 3 thumbnails, one per Shot, arranged in Sequence order (left to right, top to bottom). Each thumbnail must depict that Shot's framing, composition, staging and continuity as described in the Sequence Generation Package below. Do not merge, skip, duplicate or reorder Shots.
+
+Casting References:
+@Image1 — Mara (character)
+
+=== Sequence Generation Package ===
+=== Shot 1/3 ===
+Mara stands.
+=== End Sequence Generation Package ===",
+  "warnings": [],
+}
+`;
+
+exports[`buildSequenceStoryboardPrompt > dedupes a duplicated refId and warns about an unapproved reference 1`] = `
+{
+  "imageMappings": [
+    {
+      "approvedForGeneration": false,
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": "character",
+      "imageLabel": "@Image1",
+      "refId": "asset-1-2",
+      "roleLabel": "Identity",
+      "variantState": null,
+    },
+  ],
+  "text": "Sequence Storyboard Prompt
+Project 1 / Sequence 2 (SEQ010) — The Standoff
+
+Goal: produce a single contact-sheet storyboard image containing exactly 2 thumbnails, one per Shot, arranged in Sequence order (left to right, top to bottom). Each thumbnail must depict that Shot's framing, composition, staging and continuity as described in the Sequence Generation Package below. Do not merge, skip, duplicate or reorder Shots.
+
+Casting References:
+@Image1 — Mara (character)
+
+=== Sequence Generation Package ===
+=== Shot 1/2 ===
+Mara stands.
+=== End Sequence Generation Package ===",
+  "warnings": [
+    "1 selected reference is not approved for generation.",
+  ],
+}
+`;
+
+exports[`buildSequenceStoryboardPrompt > warns about no references selected and zero shots, with sequence title/code absent 1`] = `
+{
+  "imageMappings": [],
+  "text": "Sequence Storyboard Prompt
+Project 1 / Sequence 2
+
+Goal: produce a single contact-sheet storyboard image containing exactly 0 thumbnails, one per Shot, arranged in Sequence order (left to right, top to bottom). Each thumbnail must depict that Shot's framing, composition, staging and continuity as described in the Sequence Generation Package below. Do not merge, skip, duplicate or reorder Shots.
+
+=== Sequence Generation Package ===
+
+=== End Sequence Generation Package ===",
+  "warnings": [
+    "No casting references selected in Storyboard Assets.",
+    "This Sequence has no Shots yet.",
+  ],
+}
+`;

@@ -1,0 +1,84 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildSequenceVideoPrompt > drops references and warns when the workflow does not support multiple images, with sequence title/code absent 1`] = `
+{
+  "imageMappings": [
+    {
+      "imageLabel": "@Image1",
+      "kind": "board",
+      "refId": "board",
+    },
+  ],
+  "text": "Sequence Video Prompt
+Project 1 / Sequence 2
+
+Goal: produce ONE continuous video realizing this Sequence's 3 Shots in order, following the framing, action, camera and continuity described in the Sequence Generation Package below. @Image1 is the Sequence Storyboard board — use it as the visual PLAN for staging, framing and Shot order, never as a mosaic to reproduce frame-for-frame across the whole video. Include a clear transition or cut between each Shot's segment so the result can later be split back into individual Shot clips. Do not merge, skip, duplicate or reorder Shots.
+
+=== Sequence Generation Package ===
+=== Shot 1/3 ===
+Mara stands.
+=== End Sequence Generation Package ===",
+  "warnings": [
+    "1 selected casting reference is not sent — this workflow accepts a single image (the Sequence Storyboard board only).",
+  ],
+}
+`;
+
+exports[`buildSequenceVideoPrompt > includes approved casting references when the workflow supports multiple images 1`] = `
+{
+  "imageMappings": [
+    {
+      "imageLabel": "@Image1",
+      "kind": "board",
+      "refId": "board",
+    },
+    {
+      "approvedForGeneration": true,
+      "assetId": 1,
+      "assetName": "Mara",
+      "assetType": "character",
+      "imageLabel": "@Image2",
+      "kind": "reference",
+      "refId": "asset-1-2",
+      "roleLabel": "Identity",
+      "variantState": "default",
+    },
+  ],
+  "text": "Sequence Video Prompt
+Project 1 / Sequence 2 (SEQ010) — The Standoff
+
+Goal: produce ONE continuous video realizing this Sequence's 3 Shots in order, following the framing, action, camera and continuity described in the Sequence Generation Package below. @Image1 is the Sequence Storyboard board — use it as the visual PLAN for staging, framing and Shot order, never as a mosaic to reproduce frame-for-frame across the whole video. Include a clear transition or cut between each Shot's segment so the result can later be split back into individual Shot clips. Do not merge, skip, duplicate or reorder Shots.
+
+Casting References:
+@Image2 — Mara (character) · Identity · default
+
+=== Sequence Generation Package ===
+=== Shot 1/3 ===
+Mara stands.
+=== End Sequence Generation Package ===",
+  "warnings": [],
+}
+`;
+
+exports[`buildSequenceVideoPrompt > warns about an unapproved reference and zero shots with no references selected 1`] = `
+{
+  "imageMappings": [
+    {
+      "imageLabel": "@Image1",
+      "kind": "board",
+      "refId": "board",
+    },
+  ],
+  "text": "Sequence Video Prompt
+Project 1 / Sequence 2 (SEQ010) — The Standoff
+
+Goal: produce ONE continuous video realizing this Sequence's 0 Shots in order, following the framing, action, camera and continuity described in the Sequence Generation Package below. @Image1 is the Sequence Storyboard board — use it as the visual PLAN for staging, framing and Shot order, never as a mosaic to reproduce frame-for-frame across the whole video. Include a clear transition or cut between each Shot's segment so the result can later be split back into individual Shot clips. Do not merge, skip, duplicate or reorder Shots.
+
+=== Sequence Generation Package ===
+
+=== End Sequence Generation Package ===",
+  "warnings": [
+    "This Sequence has no Shots yet.",
+  ],
+}
+`;

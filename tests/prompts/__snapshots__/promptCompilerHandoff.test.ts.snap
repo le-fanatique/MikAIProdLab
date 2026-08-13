@@ -1,0 +1,149 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildPromptCompilerHandoff > builds an empty handoff when references and availableReferenceRefIds are empty arrays 1`] = `
+{
+  "availableReferenceRefIds": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "draftText": "",
+  "fingerprint": "fp-empty",
+  "presetId": "text-to-video",
+  "references": [],
+  "shotId": 1,
+  "sourceFlags": {
+    "assetBibles": false,
+    "casting": false,
+    "projectContext": false,
+    "references": false,
+    "sequenceContext": false,
+  },
+}
+`;
+
+exports[`buildPromptCompilerHandoff > trims/bounds the draft text and copies every collection (nominal case with references) 1`] = `
+{
+  "availableReferenceRefIds": [
+    "shot-1",
+  ],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "draftText": "Mara stands on the rooftop.",
+  "fingerprint": "fp-1",
+  "presetId": "text-to-video",
+  "references": [
+    {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": "Rooftop wide",
+      "refId": "shot-1",
+      "role": "establishing",
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": "wide framing",
+      "variantState": "day",
+    },
+  ],
+  "shotId": 1,
+  "sourceFlags": {
+    "assetBibles": true,
+    "casting": true,
+    "projectContext": false,
+    "references": false,
+    "sequenceContext": true,
+  },
+}
+`;
+
+exports[`evaluatePromptCompilerHandoff > is stale when a referenced image is no longer available 1`] = `
+[
+  "A reference used in the Compiled Prompt Draft is no longer available for this shot.",
+  "The set of available reference images for this shot has changed since this draft was generated.",
+  "The Shot's context (references, casting, Asset Bibles, or sources) has changed since this draft was generated.",
+]
+`;
+
+exports[`resolvePromptCompilerTextNode > fails when more than one generic candidate is present 1`] = `
+{
+  "ok": false,
+  "reason": "Multiple possible Text Prompt (Input) fields were detected on this workflow. Choose the field manually — the Compiled Prompt Draft was not applied automatically.",
+}
+`;
+
+exports[`resolvePromptCompilerTextNode > fails when zero generic candidates are present 1`] = `
+{
+  "ok": false,
+  "reason": "No Text Prompt (Input) field was detected on this workflow. The Compiled Prompt Draft cannot be applied automatically.",
+}
+`;
+
+exports[`resolvePromptCompilerTextNode > resolves the single generic candidate 1`] = `
+{
+  "nodeId": "5",
+  "ok": true,
+}
+`;
+
+exports[`sanitizePromptCompilerHandoff > normalizes a reference entry whose optional fields are absent to null 1`] = `
+{
+  "availableReferenceRefIds": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "draftText": "Mara stands.",
+  "fingerprint": "fp-1",
+  "presetId": "text-to-video",
+  "references": [
+    {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": null,
+      "refId": "shot-1",
+      "role": null,
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": null,
+      "variantState": null,
+    },
+  ],
+  "shotId": 1,
+  "sourceFlags": {
+    "assetBibles": false,
+    "casting": false,
+    "projectContext": false,
+    "references": false,
+    "sequenceContext": false,
+  },
+}
+`;
+
+exports[`sanitizePromptCompilerHandoff > parses a structurally valid raw object 1`] = `
+{
+  "availableReferenceRefIds": [
+    "shot-1",
+  ],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "draftText": "Mara stands on the rooftop.",
+  "fingerprint": "fp-1",
+  "presetId": "text-to-video",
+  "references": [
+    {
+      "approvedForGeneration": null,
+      "assetId": null,
+      "assetName": null,
+      "label": "Rooftop wide",
+      "refId": "shot-1",
+      "role": "establishing",
+      "source": "shot",
+      "tag": "@Image1",
+      "usageNotes": "wide framing",
+      "variantState": "day",
+    },
+  ],
+  "shotId": 1,
+  "sourceFlags": {
+    "assetBibles": true,
+    "casting": true,
+    "projectContext": false,
+    "references": false,
+    "sequenceContext": true,
+  },
+}
+`;

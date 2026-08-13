@@ -1,0 +1,384 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildSequenceGenerationPackage > applies ignorePromptSegments and ignoreUnapprovedReferences options 1`] = `
+{
+  "kind": "sequence-generation-package",
+  "knownDurationShotCount": 1,
+  "missingDurationShotCount": 0,
+  "options": {
+    "ignorePromptSegments": true,
+    "ignoreUnapprovedReferences": true,
+  },
+  "projectId": 1,
+  "sequenceCode": "SEQ010",
+  "sequenceId": 2,
+  "sequenceTitle": "The Standoff",
+  "shotCount": 1,
+  "shots": [
+    {
+      "compiledPrompt": {
+        "hasPromptSegments": false,
+        "hasShotPrompt": true,
+        "kind": "video",
+        "sections": [
+          {
+            "id": "shotPrompt",
+            "label": "Shot Prompt",
+            "text": "Mara stands on the rooftop.",
+          },
+        ],
+        "sourcesUsed": [
+          "shotPrompt",
+        ],
+        "text": "Mara stands on the rooftop.",
+        "usedTimeline": false,
+        "warnings": [
+          "No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+        ],
+      },
+      "context": {
+        "assetBibles": [],
+        "castAssets": [
+          {
+            "assetBible": null,
+            "assetId": 1,
+            "assetName": "Mara",
+            "assetType": null,
+            "description": null,
+            "notes": null,
+          },
+        ],
+        "imageMap": {},
+        "projectContext": null,
+        "references": [],
+        "sequenceContext": null,
+        "shot": {
+          "actionPitch": null,
+          "cameraPitch": null,
+          "compiledPromptSegments": null,
+          "description": null,
+          "durationSeconds": null,
+          "hasMissingTiming": false,
+          "hasPromptSegments": false,
+          "shotPrompt": "Mara stands on the rooftop.",
+          "title": "Wide establishing",
+        },
+        "sourcesExcluded": [
+          "assetBibles",
+          "sequenceContext",
+          "projectContext",
+        ],
+        "sourcesIncluded": [
+          "shot",
+          "casting",
+          "references",
+        ],
+        "warnings": [
+          "References source was requested but produced no content.",
+        ],
+      },
+      "continuity": {
+        "cameraMovement": "static",
+        "continuityIn": "Calm",
+        "continuityNotes": "Mara notices the drone.",
+        "continuityOut": "Alert",
+        "framing": "WS",
+      },
+      "durationSeconds": 5,
+      "hasApprovedVideo": false,
+      "orderIndex": 0,
+      "referenceSourceCounts": {
+        "asset": 0,
+        "shot": 0,
+      },
+      "shotCode": "SH010",
+      "shotId": 10,
+      "title": "Wide establishing",
+      "warnings": [
+        "No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+        "References source was requested but produced no content.",
+        "No approved video or reference image for this Shot.",
+      ],
+    },
+  ],
+  "totalKnownDurationSeconds": 5,
+  "version": 1,
+  "warnings": [
+    "Shot SH010: No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+    "Shot SH010: References source was requested but produced no content.",
+    "Shot SH010: No approved video or reference image for this Shot.",
+  ],
+}
+`;
+
+exports[`buildSequenceGenerationPackage > builds a package from two shots with mixed complete/minimal data 1`] = `
+{
+  "kind": "sequence-generation-package",
+  "knownDurationShotCount": 1,
+  "missingDurationShotCount": 1,
+  "options": {
+    "ignorePromptSegments": false,
+    "ignoreUnapprovedReferences": false,
+  },
+  "projectId": 1,
+  "sequenceCode": "SEQ010",
+  "sequenceId": 2,
+  "sequenceTitle": "The Standoff",
+  "shotCount": 2,
+  "shots": [
+    {
+      "compiledPrompt": {
+        "hasPromptSegments": true,
+        "hasShotPrompt": true,
+        "kind": "video",
+        "sections": [
+          {
+            "id": "shotPrompt",
+            "label": "Shot Prompt",
+            "text": "Mara stands on the rooftop.",
+          },
+          {
+            "id": "timeline",
+            "label": "Timeline",
+            "text": "0-2s: static shot",
+          },
+        ],
+        "sourcesUsed": [
+          "shotPrompt",
+          "promptSegments",
+        ],
+        "text": "Mara stands on the rooftop.
+
+Timeline:
+0-2s: static shot",
+        "usedTimeline": true,
+        "warnings": [],
+      },
+      "context": {
+        "assetBibles": [],
+        "castAssets": [
+          {
+            "assetBible": null,
+            "assetId": 1,
+            "assetName": "Mara",
+            "assetType": null,
+            "description": null,
+            "notes": null,
+          },
+        ],
+        "imageMap": {
+          "@Image1": {
+            "approvedForGeneration": true,
+            "assetId": 1,
+            "assetName": "Mara",
+            "label": null,
+            "refId": "asset-1-2",
+            "role": null,
+            "source": "asset",
+            "tag": "@Image1",
+            "usageNotes": null,
+            "variantState": null,
+          },
+        },
+        "projectContext": null,
+        "references": [
+          {
+            "approvedForGeneration": true,
+            "assetId": 1,
+            "assetName": "Mara",
+            "label": null,
+            "refId": "asset-1-2",
+            "role": null,
+            "source": "asset",
+            "tag": "@Image1",
+            "usageNotes": null,
+            "variantState": null,
+          },
+        ],
+        "sequenceContext": null,
+        "shot": {
+          "actionPitch": null,
+          "cameraPitch": null,
+          "compiledPromptSegments": "0-2s: static shot",
+          "description": null,
+          "durationSeconds": null,
+          "hasMissingTiming": false,
+          "hasPromptSegments": true,
+          "shotPrompt": "Mara stands on the rooftop.",
+          "title": "Wide establishing",
+        },
+        "sourcesExcluded": [
+          "assetBibles",
+          "sequenceContext",
+          "projectContext",
+        ],
+        "sourcesIncluded": [
+          "shot",
+          "casting",
+          "references",
+        ],
+        "warnings": [
+          "Reference image has no role, variant/state or usage notes.",
+        ],
+      },
+      "continuity": {
+        "cameraMovement": "static",
+        "continuityIn": "Calm",
+        "continuityNotes": "Mara notices the drone.",
+        "continuityOut": "Alert",
+        "framing": "WS",
+      },
+      "durationSeconds": 5,
+      "hasApprovedVideo": false,
+      "orderIndex": 0,
+      "referenceSourceCounts": {
+        "asset": 1,
+        "shot": 0,
+      },
+      "shotCode": "SH010",
+      "shotId": 10,
+      "title": "Wide establishing",
+      "warnings": [
+        "Reference image has no role, variant/state or usage notes.",
+      ],
+    },
+    {
+      "compiledPrompt": {
+        "hasPromptSegments": false,
+        "hasShotPrompt": false,
+        "kind": "video",
+        "sections": [],
+        "sourcesUsed": [],
+        "text": "",
+        "usedTimeline": false,
+        "warnings": [
+          "Shot Prompt is empty.",
+          "No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+        ],
+      },
+      "context": {
+        "assetBibles": [],
+        "castAssets": [],
+        "imageMap": {},
+        "projectContext": null,
+        "references": [],
+        "sequenceContext": null,
+        "shot": {
+          "actionPitch": null,
+          "cameraPitch": null,
+          "compiledPromptSegments": null,
+          "description": null,
+          "durationSeconds": null,
+          "hasMissingTiming": false,
+          "hasPromptSegments": false,
+          "shotPrompt": null,
+          "title": null,
+        },
+        "sourcesExcluded": [
+          "casting",
+          "references",
+          "assetBibles",
+          "sequenceContext",
+          "projectContext",
+        ],
+        "sourcesIncluded": [
+          "shot",
+        ],
+        "warnings": [],
+      },
+      "continuity": {
+        "cameraMovement": null,
+        "continuityIn": null,
+        "continuityNotes": null,
+        "continuityOut": null,
+        "framing": null,
+      },
+      "durationSeconds": null,
+      "hasApprovedVideo": false,
+      "orderIndex": 1,
+      "referenceSourceCounts": {
+        "asset": 0,
+        "shot": 0,
+      },
+      "shotCode": null,
+      "shotId": 20,
+      "title": "Close on Mara",
+      "warnings": [
+        "Shot Prompt is empty.",
+        "No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+        "Duration is missing.",
+        "No approved video or reference image for this Shot.",
+      ],
+    },
+  ],
+  "totalKnownDurationSeconds": 5,
+  "version": 1,
+  "warnings": [
+    "Shot SH010: Reference image has no role, variant/state or usage notes.",
+    "Shot Close on Mara: Shot Prompt is empty.",
+    "Shot Close on Mara: No Prompt Segments defined for this video shot. Only the Shot Prompt is used.",
+    "Shot Close on Mara: Duration is missing.",
+    "Shot Close on Mara: No approved video or reference image for this Shot.",
+  ],
+}
+`;
+
+exports[`buildSequenceGenerationPackage > builds an empty package when the shots array is empty (no options passed) 1`] = `
+{
+  "kind": "sequence-generation-package",
+  "knownDurationShotCount": 0,
+  "missingDurationShotCount": 0,
+  "options": {
+    "ignorePromptSegments": false,
+    "ignoreUnapprovedReferences": false,
+  },
+  "projectId": 1,
+  "sequenceCode": "SEQ010",
+  "sequenceId": 2,
+  "sequenceTitle": "The Standoff",
+  "shotCount": 0,
+  "shots": [],
+  "totalKnownDurationSeconds": 0,
+  "version": 1,
+  "warnings": [
+    "This Sequence has no Shots yet.",
+  ],
+}
+`;
+
+exports[`formatSequenceGenerationPackageText > includes per-shot warnings by default 1`] = `
+"Sequence Generation Package v1
+Project 1 / Sequence 2 (SEQ010) — The Standoff
+2 shots · 5.0s known (1/2 timed)
+
+=== Shot 1/2 — SH010 — "Wide establishing" (5.0s) ===
+Mara stands on the rooftop.
+
+Timeline:
+0-2s: static shot
+Warnings:
+- Reference image has no role, variant/state or usage notes.
+
+=== Shot 2/2 — Close on Mara (no duration) ===
+(no compiled prompt)
+Warnings:
+- Shot Prompt is empty.
+- No Prompt Segments defined for this video shot. Only the Shot Prompt is used.
+- Duration is missing.
+- No approved video or reference image for this Shot."
+`;
+
+exports[`formatSequenceGenerationPackageText > omits per-shot warnings when includeWarnings is false 1`] = `
+"Sequence Generation Package v1
+Project 1 / Sequence 2 (SEQ010) — The Standoff
+2 shots · 5.0s known (1/2 timed)
+
+=== Shot 1/2 — SH010 — "Wide establishing" (5.0s) ===
+Mara stands on the rooftop.
+
+Timeline:
+0-2s: static shot
+
+=== Shot 2/2 — Close on Mara (no duration) ===
+(no compiled prompt)"
+`;

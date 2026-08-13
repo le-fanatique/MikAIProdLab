@@ -1,0 +1,104 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildPromptCompilerUserMessage > formats every section when the context is fully populated 1`] = `
+"Shot:
+Title: Close on Mara
+Duration: 5s
+Shot Prompt: Mara stands on the rooftop.
+Description: Mara grips her weapon.
+Action: She raises her weapon.
+Camera: Low angle.
+Timeline (existing, exact time codes):
+0-2s: static shot
+
+Casting:
+- Mara (character) cyberpunk farmer protagonist
+
+References (exact order):
+- @Image1 — Rooftop wide — establishing — day — wide framing
+
+Asset Bibles:
+- Mara | Tall, weathered coat. | Always framed with her tools. | Never smiling.
+
+Sequence Context:
+The Standoff
+Tense confrontation.
+tense
+Rooftop
+Climax
+
+Project Context:
+Neon Harvest
+A cyberpunk farmer.
+Full story."
+`;
+
+exports[`buildPromptCompilerUserMessage > returns an empty message when every section is empty (minimal context) 1`] = `""`;
+
+exports[`cleanDraftText > returns the trimmed text unchanged when there is no code fence 1`] = `"Mara stands on the rooftop."`;
+
+exports[`cleanDraftText > strips a \`\`\`json fenced block 1`] = `"Mara stands on the rooftop."`;
+
+exports[`computePromptCompilerFingerprint > produces a deterministic JSON fingerprint from presetId, sourceFlags and context 1`] = `"{"presetId":"text-to-video","sourceFlags":{"casting":true,"assetBibles":true,"references":false,"sequenceContext":true,"projectContext":false},"context":{"shot":{"title":null,"description":null,"actionPitch":null,"cameraPitch":null,"durationSeconds":null,"shotPrompt":null,"compiledPromptSegments":null,"hasPromptSegments":false,"hasMissingTiming":false},"castAssets":[],"references":[],"assetBibles":[],"sequenceContext":null,"projectContext":null,"sourcesIncluded":["shot"],"sourcesExcluded":[],"imageMap":{},"warnings":[]}}"`;
+
+exports[`getDefaultSourceFlags > maps required/recommended sources to true and optional/excluded to false (text-to-video) 1`] = `
+{
+  "assetBibles": true,
+  "casting": true,
+  "projectContext": false,
+  "references": false,
+  "sequenceContext": true,
+}
+`;
+
+exports[`resolveEffectiveSourceFlags > falls back to the preset defaults when userFlags is empty (absent overrides) 1`] = `
+{
+  "assetBibles": true,
+  "casting": true,
+  "projectContext": false,
+  "references": false,
+  "sequenceContext": true,
+}
+`;
+
+exports[`resolveEffectiveSourceFlags > uses the user's overrides for recommended/optional sources 1`] = `
+{
+  "assetBibles": true,
+  "casting": false,
+  "projectContext": true,
+  "references": false,
+  "sequenceContext": true,
+}
+`;
+
+exports[`validatePresetRequirements > first-last-frame: missing when no First Frame or Last Frame reference is present 1`] = `
+{
+  "missing": [
+    "First/Last Frame requires a selected reference image with an existing "First Frame" role.",
+    "First/Last Frame requires a selected reference image with an existing "Last Frame" role.",
+  ],
+  "ok": false,
+}
+`;
+
+exports[`validatePresetRequirements > reference-to-video: ok when duration and a reference are present 1`] = `
+{
+  "ok": true,
+}
+`;
+
+exports[`validatePresetRequirements > text-to-video: missing when duration and shot text are all absent 1`] = `
+{
+  "missing": [
+    "A valid Shot duration (greater than zero) is required to generate a draft.",
+    "Text-to-Video requires a Shot Prompt, a Description, or an Action pitch.",
+  ],
+  "ok": false,
+}
+`;
+
+exports[`validatePresetRequirements > text-to-video: ok when duration and a shot prompt are present 1`] = `
+{
+  "ok": true,
+}
+`;
