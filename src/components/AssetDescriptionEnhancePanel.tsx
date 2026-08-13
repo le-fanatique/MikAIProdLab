@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { generateAssetDescriptionOnlyDraft, generateAssetNotesOnlyDraft } from "@/actions/llm/assetDescription";
-import { updateAssetDescriptionFieldInline } from "@/actions/assets";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 type State =
   | { status: "idle" }
@@ -80,7 +80,7 @@ function FieldEnhancePanel({
     setIsApplying(true);
     setApplyError(null);
     try {
-      const result = await updateAssetDescriptionFieldInline({
+      const result = await ACTION_BINDINGS.updateAssetDescriptionFieldInline({
         assetId,
         projectId,
         field,

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { generateStory, applyGeneratedStory } from "@/actions/llm/story";
+import { generateStory } from "@/actions/llm/story";
 import type { LLMPreviewState, GenerateStoryResult } from "@/types/llm";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 type Props = {
   projectId: number;
@@ -47,7 +48,7 @@ export default function StoryGenerationPanel({
     const story = state.result.story;
 
     setState({ status: "loading" });
-    const result = await applyGeneratedStory(projectId, story);
+    const result = await ACTION_BINDINGS.applyGeneratedStory(projectId, story);
     if (result.ok) {
       setState({ status: "idle" });
       router.refresh();

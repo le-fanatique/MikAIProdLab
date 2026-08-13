@@ -7,11 +7,8 @@ import {
   type BatchAssetDraftResult,
   type BatchAssetDraftError,
 } from "@/actions/llm/assetDescription";
-import {
-  updateAssetDescriptionFieldInline,
-  applyBatchAssetDescriptionDraftsInline,
-} from "@/actions/assets";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 export type BatchAssetItem = {
   id: number;
@@ -111,7 +108,7 @@ export default function BatchAssetDescriptionEnhancePanel({
     setIsApplying(true);
     setGlobalMessage(null);
     setGlobalError(null);
-    const result = await updateAssetDescriptionFieldInline({ assetId, projectId, field, mode, content });
+    const result = await ACTION_BINDINGS.updateAssetDescriptionFieldInline({ assetId, projectId, field, mode, content });
     if (result.ok) {
       setAppliedState((prev) => ({
         ...prev,
@@ -146,7 +143,7 @@ export default function BatchAssetDescriptionEnhancePanel({
       return;
     }
 
-    const result = await applyBatchAssetDescriptionDraftsInline({ projectId, mode, items });
+    const result = await ACTION_BINDINGS.applyBatchAssetDescriptionDraftsInline({ projectId, mode, items });
 
     if (!result.ok) {
       setGlobalError(result.error);

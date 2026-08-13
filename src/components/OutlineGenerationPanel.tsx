@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { generateOutlineDraft, applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
+import { generateOutlineDraft } from "@/actions/llm/outlineGeneration";
 import type { LLMPreviewState, GenerateOutlineResult } from "@/types/llm";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 type Props = {
   projectId: number;
@@ -47,7 +48,7 @@ export default function OutlineGenerationPanel({
     if (state.status !== "success") return;
     const outline = state.result.outline;
     setState({ status: "loading" });
-    const result = await applyGeneratedOutline(projectId, outline);
+    const result = await ACTION_BINDINGS.applyGeneratedOutline(projectId, outline);
     if (result.ok) {
       setState({ status: "idle" });
       router.refresh();

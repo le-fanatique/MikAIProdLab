@@ -5,12 +5,15 @@
 // registry: a `commit` step invokes an existing, named, reviewed Server
 // Action rather than a generic "write row" primitive.
 //
-// **Rien n'est branché.** No caller imports this module for a production
-// mutation. `ActionId` (`../types.ts`) is the closed set of identifiers a
-// descriptor's `commit` array may reference; this module is what each of
+// This module's own data carries no runtime import — `source` stays
+// documentation. `ActionId` (`../types.ts`) is the closed set of identifiers
+// a descriptor's `commit` array may reference; this module is what each of
 // those seven identifiers actually resolves to, and the compiler keeps the
 // two in lockstep via `satisfies Record<ActionId, ActionRegistryEntry>`
-// below.
+// below. `actions/bindings.ts` (B4b) is the runtime resolution — the seven
+// Approve-side callers listed there import `ACTION_BINDINGS` instead of the
+// action directly; no caller imports this module itself for a production
+// mutation.
 //
 // Every entry declares the action's real semantics, never an idealised one
 // — per §3.2 and the six behaviours frozen by B0

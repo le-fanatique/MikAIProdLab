@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { generateShotPromptDraft } from "@/actions/llm/shotPrompt";
-import { updateShotPrompt } from "@/actions/shots";
 import type { ShotPromptAssistMode } from "@/lib/prompts/shot-prompt-from-context";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 type State =
   | { status: "idle" }
@@ -153,7 +153,7 @@ export default function ShotPromptLLMAssistPanel({
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Replace */}
-            <form action={updateShotPrompt}>
+            <form action={ACTION_BINDINGS.updateShotPrompt}>
               <input type="hidden" name="projectId" value={String(projectId)} />
               <input type="hidden" name="sequenceId" value={String(sequenceId)} />
               <input type="hidden" name="shotId" value={String(shotId)} />
@@ -168,7 +168,7 @@ export default function ShotPromptLLMAssistPanel({
             </form>
 
             {/* Append */}
-            <form action={updateShotPrompt}>
+            <form action={ACTION_BINDINGS.updateShotPrompt}>
               <input type="hidden" name="projectId" value={String(projectId)} />
               <input type="hidden" name="sequenceId" value={String(sequenceId)} />
               <input type="hidden" name="shotId" value={String(shotId)} />

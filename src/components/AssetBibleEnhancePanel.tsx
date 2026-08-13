@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { generateAssetBibleDraft } from "@/actions/llm/assetBible";
-import { updateAssetDetailsInline } from "@/actions/assets";
 import { preserveAssetBibleField } from "@/lib/prompts/assetBibleDraft";
 import type { GeneratedAssetBibleDraft } from "@/types/llm";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 type State =
   | { status: "idle" }
@@ -64,7 +64,7 @@ export default function AssetBibleEnhancePanel({
     setIsApplying(true);
     setApplyError(null);
     try {
-      const result = await updateAssetDetailsInline({
+      const result = await ACTION_BINDINGS.updateAssetDetailsInline({
         assetId,
         projectId,
         description: description ?? "",

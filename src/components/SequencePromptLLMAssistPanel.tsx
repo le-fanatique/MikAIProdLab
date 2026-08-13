@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { generateSequencePromptDraft } from "@/actions/llm/sequencePrompt";
-import { updateSequencePrompt } from "@/actions/sequences";
 import type { SequencePromptAssistMode } from "@/lib/prompts/sequence-prompt-from-context";
+import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 
 type State =
   | { status: "idle" }
@@ -140,7 +140,7 @@ export default function SequencePromptLLMAssistPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <form action={updateSequencePrompt}>
+            <form action={ACTION_BINDINGS.updateSequencePrompt}>
               <input type="hidden" name="projectId" value={String(projectId)} />
               <input type="hidden" name="sequenceId" value={String(sequenceId)} />
               <input type="hidden" name="sequencePrompt" value={state.draft} />
@@ -153,7 +153,7 @@ export default function SequencePromptLLMAssistPanel({
               </button>
             </form>
 
-            <form action={updateSequencePrompt}>
+            <form action={ACTION_BINDINGS.updateSequencePrompt}>
               <input type="hidden" name="projectId" value={String(projectId)} />
               <input type="hidden" name="sequenceId" value={String(sequenceId)} />
               <input type="hidden" name="sequencePrompt" value={appendedValue} />
