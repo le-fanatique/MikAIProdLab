@@ -1,214 +1,26 @@
 "use server";
 
 import { db } from "@/db";
-import {
-  projects,
-  assets,
-  sequenceAssets,
-  sequences,
-  shotAssets,
-  shots,
-  assetReferenceImages,
-} from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
-import { callLLMJson } from "@/lib/llm";
-import {
-  buildAssetDescriptionFromContextPrompt,
-  buildAssetDescriptionOnlyPrompt,
-  buildAssetNotesOnlyPrompt,
-  type AssetDescriptionFromContextInput,
-} from "@/lib/prompts/asset-description-from-context";
+import { assets, projects } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { runOperation } from "@/lib/llmWorkspace/runner";
+import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
+import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
+import { assetDescriptionBatchDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescriptionBatch";
 import { getLLMConfig } from "@/lib/settings";
-import { resolveAssetStyleContext } from "@/lib/projectStyle/assetAlignment/resolveAssetStyleContext";
-import type { GeneratedAssetDescriptionDraft, LLMConfig } from "@/types/llm";
-
-/** World & Design Language + Asset-applicable approved rules only — resolved once per action invocation (including once per batch, never once per item) so a Style activation mid-batch cannot mix versions within one call. */
-type DescriptionStyleSegments = { worldSegment: string; rulesSegment: string };
-
-async function resolveDescriptionStyleSegments(projectId: number): Promise<DescriptionStyleSegments> {
-  const resolved = await resolveAssetStyleContext(projectId);
-  if (!resolved.ok) throw new Error(resolved.error);
-  if (resolved.context.mode === "none") return { worldSegment: "", rulesSegment: "" };
-  return { worldSegment: resolved.context.segments.worldSegment, rulesSegment: resolved.context.segments.rulesSegment };
-}
+import type { GeneratedAssetDescriptionDraft } from "@/types/llm";
 
 const BATCH_LIMIT = 10;
 
-function extractCodeFence(raw: string): string {
-  const fence = raw.trim().match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-  return fence ? fence[1].trim() : raw.trim();
-}
-
-function parseDraft(raw: string): GeneratedAssetDescriptionDraft {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractCodeFence(raw));
-  } catch {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const obj = parsed as Record<string, unknown>;
-  const descriptionDraft =
-    typeof obj.description_draft === "string" ? obj.description_draft.trim() : "";
-  const notesDraft =
-    typeof obj.notes_draft === "string" ? obj.notes_draft.trim() : "";
-  if (!descriptionDraft && !notesDraft) {
-    throw new Error("The model returned an empty draft. Try again.");
-  }
-  return { descriptionDraft, notesDraft };
-}
-
-type ProjectContext = {
-  id: number;
-  name: string;
-  pitch: string | null;
-  story: string | null;
-  outline: string | null;
-};
-
-/**
- * Shared context assembly for one Asset — reused, byte-for-byte, by the
- * combined batch flow and both independent single-field actions
- * (UX.PRODUCTIVITY.POLISH.1 — Lot C), so there is only ever one query path
- * per Asset regardless of which prompt ends up consuming it.
- */
-async function fetchAssetContextInput(
-  project: ProjectContext,
-  assetId: number,
-  style: DescriptionStyleSegments
-): Promise<AssetDescriptionFromContextInput> {
-  const [asset] = await db.select().from(assets).where(eq(assets.id, assetId));
-  if (!asset || asset.projectId !== project.id) {
-    throw new Error("Asset not found.");
-  }
-
-  const seqRows = await db
-    .select({
-      title: sequences.title,
-      summary: sequences.summary,
-      mood: sequences.mood,
-      locationHint: sequences.locationHint,
-      narrativePurpose: sequences.narrativePurpose,
-    })
-    .from(sequenceAssets)
-    .innerJoin(sequences, eq(sequenceAssets.sequenceId, sequences.id))
-    .where(and(eq(sequenceAssets.assetId, assetId), eq(sequences.projectId, project.id)))
-    .orderBy(asc(sequences.orderIndex))
-    .limit(5);
-
-  const shotRows = await db
-    .select({
-      shotCode: shots.shotCode,
-      title: shots.title,
-      description: shots.description,
-      actionPitch: shots.actionPitch,
-      cameraPitch: shots.cameraPitch,
-    })
-    .from(shotAssets)
-    .innerJoin(shots, eq(shotAssets.shotId, shots.id))
-    .where(eq(shotAssets.assetId, assetId))
-    .orderBy(asc(shots.orderIndex))
-    .limit(10);
-
-  const refRows = await db
-    .select({
-      label: assetReferenceImages.label,
-      imageRole: assetReferenceImages.imageRole,
-      sourceFilename: assetReferenceImages.sourceFilename,
-    })
-    .from(assetReferenceImages)
-    .where(eq(assetReferenceImages.assetId, assetId))
-    .orderBy(asc(assetReferenceImages.orderIndex))
-    .limit(5);
-
-  return {
-    project: {
-      name: project.name,
-      pitch: project.pitch,
-      story: project.story,
-      outline: project.outline,
-    },
-    asset: {
-      name: asset.name,
-      type: asset.type,
-      description: asset.description ?? null,
-      notes: asset.notes ?? null,
-    },
-    sequenceContexts: seqRows,
-    shotContexts: shotRows,
-    refImageMeta: refRows,
-    style,
-  };
-}
-
-async function generateForAsset(
-  project: ProjectContext,
-  assetId: number,
-  config: LLMConfig,
-  style: DescriptionStyleSegments
-): Promise<GeneratedAssetDescriptionDraft> {
-  const contextInput = await fetchAssetContextInput(project, assetId, style);
-  const llmPrompt = buildAssetDescriptionFromContextPrompt(contextInput);
-  const raw = await callLLMJson(llmPrompt, config);
-  return parseDraft(raw);
-}
-
-/**
- * Strict single-field parser (UX.PRODUCTIVITY.POLISH.1 — Lot C): reads
- * *only* the expected key from the model's JSON response. A stray
- * `description_draft`/`notes_draft` for the OTHER field, if the model
- * ignores the prompt's schema constraint, is never read here — it can
- * never leak into (or mutate) the other field's draft.
- */
-const SINGLE_FIELD_DRAFT_MAX_LENGTH = 4000;
-
-/**
- * Strict single-field parser: the model's response must be exactly a plain
- * JSON object with exactly one key — the expected key for `field` — whose
- * value is a non-empty, bounded string. Rejects `null`, arrays, primitives,
- * an object with an unknown key, a missing key, both keys present at once,
- * a non-string value, and an oversized value. Never indexes into a
- * non-object (avoids a TypeError on `null`/arrays) — anything that doesn't
- * match exactly is a single, sanitized "unexpected format" error.
- */
-function parseSingleFieldDraft(raw: string, field: "description" | "notes"): string {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractCodeFence(raw));
-  } catch {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const key = field === "description" ? "description_draft" : "notes_draft";
-  const keys = Object.keys(parsed as Record<string, unknown>);
-  if (keys.length !== 1 || keys[0] !== key) {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const value = (parsed as Record<string, unknown>)[key];
-  if (typeof value !== "string") {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > SINGLE_FIELD_DRAFT_MAX_LENGTH) {
-    throw new Error("The model returned an empty or invalid draft. Try again.");
-  }
-  return trimmed;
-}
-
-async function generateFieldForAsset(
-  project: ProjectContext,
-  assetId: number,
-  config: LLMConfig,
-  style: DescriptionStyleSegments,
-  field: "description" | "notes"
-): Promise<string> {
-  const contextInput = await fetchAssetContextInput(project, assetId, style);
-  const llmPrompt =
-    field === "description" ? buildAssetDescriptionOnlyPrompt(contextInput) : buildAssetNotesOnlyPrompt(contextInput);
-  const raw = await callLLMJson(llmPrompt, config);
-  return parseSingleFieldDraft(raw, field);
-}
+// ── Independent single-field actions (UX.PRODUCTIVITY.POLISH.1 — Lot C) ────
+//
+// Thin adapters over `runOperation` (LLMW.MIGRATE.FLATJSON.1b, B3b):
+// translate `FormData` into `AnchorIds`, then translate `values` back to the
+// exact `{ok:true, draft}` return shape their components depend on. Id
+// validation, ownership, and context assembly — previously
+// `fetchAssetContextInput` (deleted in this same diff, its two callers were
+// this file's `generateForAsset` and `generateFieldForAsset`) — now happen
+// inside the runner, against each descriptor's own declared `messages`.
 
 async function generateSingleField(
   formData: FormData,
@@ -218,39 +30,15 @@ async function generateSingleField(
     const projectId = parseInt(formData.get("projectId") as string, 10);
     const assetId = parseInt(formData.get("assetId") as string, 10);
 
-    if (
-      !Number.isInteger(projectId) || projectId <= 0 ||
-      !Number.isInteger(assetId) || assetId <= 0
-    ) {
-      return { ok: false, error: "Invalid request." };
-    }
-
-    const config = await getLLMConfig();
-    if (!config) {
-      return { ok: false, error: "LLM is not configured. Go to Settings to set up Ollama." };
-    }
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) return { ok: false, error: "Project not found." };
-
-    const style = await resolveDescriptionStyleSegments(projectId);
-
-    const draft = await generateFieldForAsset(
-      { id: project.id, name: project.name, pitch: project.pitch ?? null, story: project.story ?? null, outline: project.outline ?? null },
-      assetId,
-      config,
-      style,
-      field
-    );
-
-    return { ok: true, draft };
+    const descriptor = field === "description" ? assetDescriptionGenerateDescriptor : assetNotesGenerateDescriptor;
+    const result = await runOperation(descriptor, { projectId, assetId });
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, draft: field === "description" ? result.values.description : result.values.notes };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";
     return { ok: false, error: message };
   }
 }
-
-// ── Independent single-field actions (UX.PRODUCTIVITY.POLISH.1 — Lot C) ────
 
 export async function generateAssetDescriptionOnlyDraft(
   formData: FormData
@@ -281,6 +69,17 @@ export type BatchAssetDraftError = {
   error: string;
 };
 
+/**
+ * The batch keeps its own loop (LLMW.MIGRATE.FLATJSON.1b, B3b): reading
+ * `assetIds`, refusing beyond `BATCH_LIMIT`, iterating, and applying
+ * partially when one item fails is a documented contract (§11.2), not
+ * something the runner expresses — `assetDescriptionBatchDescriptor`'s
+ * `entitySet` anchor exists for the descriptor's own bookkeeping
+ * (`maxSize`), but the runner dispatches on `anchor.entity` alone and never
+ * loops itself. Only the *per-asset* pipeline — id/ownership check, context
+ * assembly, builder call, parse — is replaced by one `runOperation` call per
+ * item, in the same sequential loop as before (to avoid overloading Ollama).
+ */
 export async function generateBatchAssetDescriptionDrafts(
   formData: FormData
 ): Promise<
@@ -327,18 +126,6 @@ export async function generateBatchAssetDescriptionDrafts(
     const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
     if (!project) return { ok: false, error: "Project not found." };
 
-    const projectCtx: ProjectContext = {
-      id: project.id,
-      name: project.name,
-      pitch: project.pitch ?? null,
-      story: project.story ?? null,
-      outline: project.outline ?? null,
-    };
-
-    // Resolved once for the whole batch — a Style activation mid-run must
-    // never mix versions between Assets in the same batch call.
-    const style = await resolveDescriptionStyleSegments(projectId);
-
     const results: BatchAssetDraftResult[] = [];
     const errors: BatchAssetDraftError[] = [];
 
@@ -355,7 +142,11 @@ export async function generateBatchAssetDescriptionDrafts(
           continue;
         }
 
-        const draft = await generateForAsset(projectCtx, assetId, config, style);
+        const result = await runOperation(assetDescriptionBatchDescriptor, { projectId, assetId });
+        if (!result.ok) {
+          errors.push({ assetId, assetName: assetRow.name, error: result.error });
+          continue;
+        }
 
         results.push({
           assetId,
@@ -363,7 +154,7 @@ export async function generateBatchAssetDescriptionDrafts(
           assetType: assetRow.type,
           hasExistingDescription: Boolean(assetRow.description?.trim()),
           hasExistingNotes: Boolean(assetRow.notes?.trim()),
-          draft,
+          draft: { descriptionDraft: result.values.description, notesDraft: result.values.notes },
         });
       } catch (err) {
         const [assetRow] = await db

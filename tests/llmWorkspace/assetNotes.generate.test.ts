@@ -16,15 +16,16 @@ import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descripto
 // `assetDescription.generate.test.ts` already proves it against a real
 // over-the-bound seed. This test's own contribution is proving the shared
 // variable set and the Notes-specific output.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b):
+// `generateAssetNotesOnlyDraft` no longer calls `buildAssetNotesOnlyPrompt`,
+// so a mocked capture of the action's own call would capture nothing. The
+// comparison now reads the same seeded rows directly instead, mirroring
+// `sequencePrompt.assist.test.ts`'s own re-pointing at the B3a switch.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ notes_draft: "A generated note." })),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/asset-description-from-context", () => ({
-  buildAssetNotesOnlyPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -85,21 +86,23 @@ describe("assetNotes.generate descriptor — context equality", () => {
     expect(assetNotesGenerateDescriptor.commit).toEqual(["updateAssetDescriptionFieldInline"]);
   });
 
-  it("resolving PROJECT.IDENTITY and ASSET.CORE equals the context fields generateAssetNotesOnlyDraft passes to its builder", async () => {
+  it("resolving PROJECT.IDENTITY and ASSET.CORE equals the seeded rows generateAssetNotesOnlyDraft reads", async () => {
     const result = await generateAssetNotesOnlyDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
     expect(result).toEqual({ ok: true, draft: "A generated note." });
 
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
-      project: { name: string; pitch: string | null; story: string | null; outline: string | null };
-      asset: { name: string; type: string; description: string | null; notes: string | null };
-    };
-
     const [identity, core] = await Promise.all([resolveProjectIdentity(projectId), resolveAssetCore(assetId)]);
 
-    expect({ name: identity.name, pitch: identity.pitch, story: identity.story, outline: identity.outline }).toEqual(
-      actionArg.project
-    );
-    expect(core).toEqual(actionArg.asset);
+    expect({ name: identity.name, pitch: identity.pitch, story: identity.story, outline: identity.outline }).toEqual({
+      name: "Asset Notes project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
+      outline: "An outline.",
+    });
+    expect(core).toEqual({
+      name: "Sidekick Drone",
+      type: "prop",
+      description: "A hovering support drone.",
+      notes: "Assists the protagonist in Act 1.",
+    });
   });
 });

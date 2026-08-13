@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
+import { buildAssetDescriptionOnlyPrompt } from "@/lib/prompts/asset-description-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -12,22 +13,19 @@ import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descripto
 // here — the strict single-field parser's "other field's key is refused"
 // proof (the ticket's extra requirement for strict parsers) stands in its
 // place.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b):
+// `generateAssetDescriptionOnlyDraft` no longer calls
+// `buildAssetDescriptionOnlyPrompt`, so a mocked capture of the action's own
+// call would capture nothing. The comparison now calls the frozen oracle
+// directly against the same seeded rows instead — no Sequences, Shots, or
+// reference images are inserted by this fixture, so those context lists are
+// `[]` on both sides, and no Project Style is active.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ description_draft: "A generated description." })),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/asset-description-from-context", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/asset-description-from-context")>();
-  return {
-    buildAssetDescriptionOnlyPrompt: (ctx: Parameters<typeof actual.buildAssetDescriptionOnlyPrompt>[0]) => {
-      capturedPrompt = actual.buildAssetDescriptionOnlyPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateAssetDescriptionOnlyDraft: typeof import("@/actions/llm/assetDescription").generateAssetDescriptionOnlyDraft;
@@ -71,20 +69,42 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
+function expectedPrompt() {
+  return buildAssetDescriptionOnlyPrompt({
+    project: {
+      name: "Asset Description project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
+      outline: "An outline.",
+    },
+    asset: {
+      name: "Hero Robot",
+      type: "character",
+      description: "A weathered combat robot.",
+      notes: "Appears throughout Act 2.",
+    },
+    sequenceContexts: [],
+    shotContexts: [],
+    refImageMeta: [],
+    style: { worldSegment: "", rulesSegment: "" },
+  });
+}
+
 describe("assetDescription.generate — runner proof (LLMW.RUNNER.1b)", () => {
-  it("1. the runner's {system, user} equals what generateAssetDescriptionOnlyDraft passes to its builder, byte-for-byte", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateAssetDescriptionOnlyDraft(
       form({ projectId: String(projectId), assetId: String(assetId) })
     );
     expect(result).toEqual({ ok: true, draft: "A generated description." });
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = expectedPrompt();
 
     const runnerResult = await resolveOperationPrompt(assetDescriptionGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("2. refuses an Asset belonging to a different Project, with the same message generateAssetDescriptionOnlyDraft produces", async () => {

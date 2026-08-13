@@ -115,8 +115,16 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
   // `"Project not found."` / `"Sequence not found."` / `"Shot not found."`.
   // Not proven by a runner-level equality test in this ticket — see
   // `output`'s note below for the same scoping.
+  // `invalidMode: "Invalid assist mode."` added in B3b
+  // (`LLMW.MIGRATE.FLATJSON.1b`): `generateShotPromptDraft`'s own
+  // `isValidMode` gate (`src/actions/llm/shotPrompt.ts`) refuses an
+  // unrecognised `mode` with this exact text before the switch, mirroring
+  // `sequencePrompt.assist`'s already-declared `invalidMode` one entity kind
+  // over. Omitting it here would silently fall back to `defaultMode`
+  // instead — an observable behaviour change the switch must not make.
   messages: {
     invalidRequest: "Invalid request.",
+    invalidMode: "Invalid assist mode.",
     notConfigured: "LLM not configured. Go to Settings to set up Ollama.",
     chainNotFound: {
       project: "Project not found.",

@@ -206,7 +206,13 @@ export type OperationDescriptor = {
     fields: Array<{
       field: string; // entity field, e.g. "shotPrompt"
       jsonKey: string; // model key,   e.g. "shot_prompt"
-      maxLength?: number; // 4000 on the single-field asset parsers
+      maxLength?: number; // 4000 on the single-field asset parsers: reject
+      truncateTo?: number; // 800 on the Asset Bible fields: silently cut.
+      // Distinct from maxLength — one refuses, the other keeps a shortened
+      // value. B3b first reproduced this in the adapter, which left
+      // operation-specific output logic outside the descriptor: a stored
+      // descriptor (§4.2) would then be incomplete, and B4's registry would
+      // describe an operation that quietly does more than it declares.
     }>;
     require: "all" | "any"; // every declared field non-empty, or at least one
     exactKeysOnly?: boolean; // reject any key not declared — the strict

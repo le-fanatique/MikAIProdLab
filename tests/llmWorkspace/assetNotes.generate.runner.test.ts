@@ -2,28 +2,25 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
+import { buildAssetNotesOnlyPrompt } from "@/lib/prompts/asset-description-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
 // `assetNotes.generate` — mirrors `assetDescription.generate.runner.test.ts`
 // exactly one field over (Notes instead of Description). No preconditions on
 // this descriptor either, same rationale as that file's header.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b):
+// `generateAssetNotesOnlyDraft` no longer calls `buildAssetNotesOnlyPrompt`,
+// so a mocked capture of the action's own call would capture nothing. The
+// comparison now calls the frozen oracle directly against the same seeded
+// rows instead, mirroring `assetDescription.generate.runner.test.ts`'s own
+// re-pointing.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ notes_draft: "A generated note." })),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/asset-description-from-context", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/asset-description-from-context")>();
-  return {
-    buildAssetNotesOnlyPrompt: (ctx: Parameters<typeof actual.buildAssetNotesOnlyPrompt>[0]) => {
-      capturedPrompt = actual.buildAssetNotesOnlyPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateAssetNotesOnlyDraft: typeof import("@/actions/llm/assetDescription").generateAssetNotesOnlyDraft;
@@ -67,18 +64,40 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
+function expectedPrompt() {
+  return buildAssetNotesOnlyPrompt({
+    project: {
+      name: "Asset Notes project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
+      outline: "An outline.",
+    },
+    asset: {
+      name: "Sidekick Drone",
+      type: "prop",
+      description: "A hovering support drone.",
+      notes: "Assists the protagonist in Act 1.",
+    },
+    sequenceContexts: [],
+    shotContexts: [],
+    refImageMeta: [],
+    style: { worldSegment: "", rulesSegment: "" },
+  });
+}
+
 describe("assetNotes.generate — runner proof (LLMW.RUNNER.1b)", () => {
-  it("1. the runner's {system, user} equals what generateAssetNotesOnlyDraft passes to its builder, byte-for-byte", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateAssetNotesOnlyDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
     expect(result).toEqual({ ok: true, draft: "A generated note." });
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = expectedPrompt();
 
     const runnerResult = await resolveOperationPrompt(assetNotesGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("2. refuses an Asset belonging to a different Project, with the same message generateAssetNotesOnlyDraft produces", async () => {

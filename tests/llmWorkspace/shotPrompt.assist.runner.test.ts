@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, insertSequence, insertShot } from "../actions/helpers/fixtures";
+import { insertProject, insertSequence, insertShot, readProject, readSequence, readShot } from "../actions/helpers/fixtures";
 import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotPrompt";
+import { buildShotPromptFromContextPrompt } from "@/lib/prompts/shot-prompt-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for `shotPrompt.assist`
@@ -10,22 +11,18 @@ import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotP
 // header), one entity kind deeper (project -> sequence -> shot instead of
 // project -> sequence) and its own precondition entry restricted to the four
 // transform modes.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b): `generateShotPromptDraft`
+// no longer calls `buildShotPromptFromContextPrompt`, so a mocked capture of
+// the action's own call would capture nothing. The comparison now calls the
+// frozen oracle directly against the same seeded rows instead — no cast/
+// reference rows are inserted by this fixture, so `castSummary` /
+// `referenceSummary` are `[]` on both sides.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ shot_prompt: "A generated shot prompt." })),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/shot-prompt-from-context", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/shot-prompt-from-context")>();
-  return {
-    buildShotPromptFromContextPrompt: (ctx: Parameters<typeof actual.buildShotPromptFromContextPrompt>[0]) => {
-      capturedPrompt = actual.buildShotPromptFromContextPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateShotPromptDraft: typeof import("@/actions/llm/shotPrompt").generateShotPromptDraft;
@@ -85,8 +82,38 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
+async function expectedPrompt(mode: "generate" | "enhance" | "rewrite" | "shorten" | "expand", targetShotId: number) {
+  const [project, sequence, shot] = await Promise.all([
+    readProject(ctx, projectId),
+    readSequence(ctx, sequenceId),
+    readShot(ctx, targetShotId),
+  ]);
+  return buildShotPromptFromContextPrompt({
+    projectName: project.name,
+    projectPitch: project.pitch,
+    projectStory: project.story,
+    sequenceTitle: sequence.title,
+    sequenceSummary: sequence.summary,
+    sequenceDescription: sequence.description,
+    sequenceMood: sequence.mood,
+    sequenceLocationHint: sequence.locationHint,
+    shotTitle: shot.title,
+    shotCode: shot.shotCode,
+    shotDescription: shot.description,
+    actionPitch: shot.actionPitch,
+    cameraPitch: shot.cameraPitch,
+    framing: shot.framing,
+    cameraMovement: shot.cameraMovement,
+    durationSeconds: shot.durationSeconds,
+    currentShotPrompt: shot.shotPrompt,
+    castSummary: [],
+    referenceSummary: [],
+    assistMode: mode,
+  });
+}
+
 describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
-  it("1. the runner's {system, user} equals what generateShotPromptDraft passes to its builder, byte-for-byte (enhance mode)", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte (enhance mode)", async () => {
     const result = await generateShotPromptDraft(
       form({
         projectId: String(projectId),
@@ -96,7 +123,8 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
       })
     );
     expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = await expectedPrompt("enhance", shotId);
 
     const runnerResult = await resolveOperationPrompt(
       shotPromptAssistDescriptor,
@@ -106,8 +134,8 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("1b. matches for generate mode too (the branch that never reads SHOT.CURRENT_PROMPT)", async () => {
@@ -120,7 +148,8 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
       })
     );
     expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = await expectedPrompt("generate", shotId);
 
     const runnerResult = await resolveOperationPrompt(
       shotPromptAssistDescriptor,
@@ -130,8 +159,8 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("2. refuses a Shot belonging to a different Sequence chain, with the same message generateShotPromptDraft produces", async () => {
@@ -251,5 +280,21 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
       { mode: "generate" }
     );
     expect(runnerResult.ok).toBe(true);
+  });
+
+  it("5. an unrecognised mode is refused with the exact 'Invalid assist mode.' message, before the LLM call", async () => {
+    const mockedCallLLMJson = callLLMJson as unknown as ReturnType<typeof vi.fn>;
+    mockedCallLLMJson.mockClear();
+
+    const actionResult = await generateShotPromptDraft(
+      form({
+        projectId: String(projectId),
+        sequenceId: String(sequenceId),
+        shotId: String(shotId),
+        mode: "not-a-real-mode",
+      })
+    );
+    expect(actionResult).toEqual({ ok: false, error: "Invalid assist mode." });
+    expect(mockedCallLLMJson).not.toHaveBeenCalled();
   });
 });

@@ -6,13 +6,17 @@ import { assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/ass
 // ---------------------------------------------------------------------------
 // Proof required by §11.2: the context resolved by `assetBible.generate`'s
 // three declared variables (`ASSET.CORE`, `ASSET.BIBLE`, `PROJECT.STYLE`)
-// equals what `generateAssetBibleDraft` passes to
-// `buildAssetBibleFromContextPrompt` today — `context.asset` (the union of
-// `ASSET.CORE` and `ASSET.BIBLE`) and `style` (`PROJECT.STYLE`, collapsed to
-// empty segments when no Style is active, exactly `resolveProjectStyle`'s
-// own `{ mode: "none" }` shape). Same two mocks, same real seeded database,
-// same dynamic-import discipline as `sequencePrompt.assist.test.ts` — see
-// that file's header for the full rationale.
+// equals what `generateAssetBibleDraft` used to pass to
+// `buildAssetBibleFromContextPrompt`, before the B3b switch — `context.asset`
+// (the union of `ASSET.CORE` and `ASSET.BIBLE`) and `style` (`PROJECT.STYLE`,
+// collapsed to empty segments when no Style is active, exactly
+// `resolveProjectStyle`'s own `{ mode: "none" }` shape).
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b): `generateAssetBibleDraft`
+// no longer calls `buildAssetBibleFromContextPrompt`, so a mocked capture of
+// the action's own call would capture nothing. The comparison now reads the
+// same seeded rows directly instead, mirroring
+// `sequencePrompt.assist.test.ts`'s own re-pointing at the B3a switch.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
@@ -23,11 +27,6 @@ vi.mock("@/lib/llm", () => ({
       forbidden_variations: "A generated forbidden variation.",
     })
   ),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/asset-bible-from-context", () => ({
-  buildAssetBibleFromContextPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -82,18 +81,17 @@ describe("assetBible.generate descriptor — context equality", () => {
       },
     });
 
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
+    const actionArg = {
       asset: {
-        name: string;
-        type: string;
-        description: string | null;
-        notes: string | null;
-        visualIdentity: string | null;
-        usageRules: string | null;
-        forbiddenVariations: string | null;
-      };
-      style: { worldSegment: string; visualSegment: string; rulesSegment: string };
+        name: "Hero Robot",
+        type: "character",
+        description: "A weathered combat robot.",
+        notes: "Appears throughout Act 2.",
+        visualIdentity: "Existing visual identity.",
+        usageRules: "Existing usage rule.",
+        forbiddenVariations: "Existing forbidden variation.",
+      },
+      style: { worldSegment: "", visualSegment: "", rulesSegment: "" },
     };
 
     expect(assetBibleGenerateDescriptor.context.variables.map((v) => v.id)).toEqual([

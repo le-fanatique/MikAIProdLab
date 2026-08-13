@@ -34,6 +34,7 @@
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
+import { MAX_ASSET_BIBLE_FIELD_LENGTH } from "@/lib/prompts/assetBibleDraft";
 
 export const assetBibleGenerateDescriptor: OperationDescriptor = {
   id: "assetBible.generate",
@@ -127,16 +128,19 @@ No markdown. No explanation. Only the JSON object.`,
   // (`.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH)`) rather than rejecting an
   // oversized value the way the strict single-field asset parsers do
   // (`description.ts` / `assetNotes.ts`, which reject above 4000) — the
-  // `maxLength` field's contract (§4.1) is a rejection bound, and reusing it
-  // for a silent-truncation bound would misrepresent this parser's real
-  // behaviour. Not proven by a runner-level equality test in this ticket —
-  // see `shotPrompt.ts`'s identical note.
+  // `maxLength` field's contract (§4.1) is a rejection bound, distinct from
+  // `truncateTo`'s silent-cut one. B3b (LLMW.MIGRATE.FLATJSON.1b) first
+  // reproduced this truncation in the adapter; moved here, onto the
+  // descriptor itself, so a stored descriptor (§4.2) stays complete and the
+  // runner performs it generically (`runner.ts`'s `parseOutput`) rather than
+  // an operation-specific branch. Not proven by a runner-level equality test
+  // in this ticket — see `shotPrompt.ts`'s identical note.
   output: {
     target: { entity: "asset" },
     fields: [
-      { field: "visualIdentity", jsonKey: "visual_identity" },
-      { field: "usageRules", jsonKey: "usage_rules" },
-      { field: "forbiddenVariations", jsonKey: "forbidden_variations" },
+      { field: "visualIdentity", jsonKey: "visual_identity", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
+      { field: "usageRules", jsonKey: "usage_rules", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
+      { field: "forbiddenVariations", jsonKey: "forbidden_variations", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
     ],
     require: "any",
     errors: {

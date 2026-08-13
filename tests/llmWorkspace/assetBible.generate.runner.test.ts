@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetBible";
+import { buildAssetBibleFromContextPrompt } from "@/lib/prompts/asset-bible-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -10,13 +11,13 @@ import { assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/ass
 // equality, chain refusal, parsing, preconditions.
 //
 // The fourth (preconditions) was initially left unwritten: `resolveAssetBibleContext`
-// (`src/lib/prompts/assetBibleContext.ts`) refuses with "Add a Description
-// or Notes to this asset before generating an Asset Bible draft." only when
-// *both* `description` and `notes` are empty — an "at least one of two
-// fields" gate a single-`field: FieldRef` precondition entry could not
-// express without two entries that each wrongly refuse on their own (a
-// non-empty `notes` with an empty `description` would then be refused,
-// contradicting the real action). `OperationDescriptor["preconditions"]`
+// (`src/lib/prompts/assetBibleContext.ts`, deleted at the B3b switch) refused
+// with "Add a Description or Notes to this asset before generating an Asset
+// Bible draft." only when *both* `description` and `notes` are empty — an
+// "at least one of two fields" gate a single-`field: FieldRef` precondition
+// entry could not express without two entries that each wrongly refuse on
+// their own (a non-empty `notes` with an empty `description` would then be
+// refused, contradicting the real action). `OperationDescriptor["preconditions"]`
 // (`types.ts`) was widened to `fields: FieldRef[]` plus
 // `require: "all" | "any"` to close exactly this gap, and
 // `descriptors/assetBible.ts` now declares `fields: ["description",
@@ -24,6 +25,14 @@ import { assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/ass
 // `"any"` from `"all"`: exactly one of the two fields set must NOT be
 // refused — the case a naive pair of single-field entries would have gotten
 // wrong.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b): `generateAssetBibleDraft`
+// no longer calls `buildAssetBibleFromContextPrompt`, so a mocked capture of
+// the action's own call would capture nothing. The comparison now calls the
+// frozen oracle directly against the same seeded row instead, mirroring
+// `sequencePrompt.assist.runner.test.ts`'s own re-pointing at the B3a
+// switch. `style` is `{worldSegment: "", visualSegment: "", rulesSegment:
+// ""}` in both — no Project Style is activated by this fixture.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
@@ -35,17 +44,6 @@ vi.mock("@/lib/llm", () => ({
     })
   ),
 }));
-
-let capturedPrompt: { system: string; user: string } | undefined;
-vi.mock("@/lib/prompts/asset-bible-from-context", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/asset-bible-from-context")>();
-  return {
-    buildAssetBibleFromContextPrompt: (ctx: Parameters<typeof actual.buildAssetBibleFromContextPrompt>[0]) => {
-      capturedPrompt = actual.buildAssetBibleFromContextPrompt(ctx);
-      return capturedPrompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateAssetBibleDraft: typeof import("@/actions/llm/assetBible").generateAssetBibleDraft;
@@ -87,18 +85,34 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
+async function expectedPrompt() {
+  return buildAssetBibleFromContextPrompt({
+    asset: {
+      name: "Hero Robot",
+      type: "character",
+      description: "A weathered combat robot.",
+      notes: "Appears throughout Act 2.",
+      visualIdentity: "Existing visual identity.",
+      usageRules: "Existing usage rule.",
+      forbiddenVariations: "Existing forbidden variation.",
+    },
+    style: { worldSegment: "", visualSegment: "", rulesSegment: "" },
+  });
+}
+
 describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
-  it("1. the runner's {system, user} equals what generateAssetBibleDraft passes to its builder, byte-for-byte", async () => {
+  it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateAssetBibleDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
     expect(result.ok).toBe(true);
-    expect(capturedPrompt).toBeDefined();
+
+    const expected = await expectedPrompt();
 
     const runnerResult = await resolveOperationPrompt(assetBibleGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    expect(runnerResult.prompt.system).toBe(capturedPrompt!.system);
-    expect(runnerResult.prompt.user).toBe(capturedPrompt!.user);
+    expect(runnerResult.prompt.system).toBe(expected.system);
+    expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
   it("2. refuses an Asset belonging to a different Project, with the same message generateAssetBibleDraft produces", async () => {
@@ -156,6 +170,39 @@ describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
       ok: false,
       error: "The model returned an empty draft. Try again.",
     });
+  });
+
+  it("3b. the runner silently truncates an oversized field to output.fields[].truncateTo, matching the pre-switch parser", async () => {
+    const { MAX_ASSET_BIBLE_FIELD_LENGTH } = await import("@/lib/prompts/assetBibleDraft");
+    const oversized = "x".repeat(MAX_ASSET_BIBLE_FIELD_LENGTH + 50);
+
+    // The descriptor declares the bound — not the adapter, which is pure
+    // translation after this correction (moved out of
+    // `src/actions/llm/assetBible.ts`, onto `output.fields[].truncateTo`).
+    expect(
+      assetBibleGenerateDescriptor.output.fields.map((f) => f.truncateTo)
+    ).toEqual([MAX_ASSET_BIBLE_FIELD_LENGTH, MAX_ASSET_BIBLE_FIELD_LENGTH, MAX_ASSET_BIBLE_FIELD_LENGTH]);
+
+    const mockedCallLLMJson = callLLMJson as unknown as ReturnType<typeof vi.fn>;
+    mockedCallLLMJson.mockResolvedValueOnce(
+      JSON.stringify({ visual_identity: oversized, usage_rules: "", forbidden_variations: "" })
+    );
+
+    const runnerResult = await runOperation(assetBibleGenerateDescriptor, { projectId, assetId });
+    expect(runnerResult.ok).toBe(true);
+    if (!runnerResult.ok) throw new Error("unreachable");
+    expect(runnerResult.values.visualIdentity).toHaveLength(MAX_ASSET_BIBLE_FIELD_LENGTH);
+    expect(runnerResult.values.visualIdentity).toBe(oversized.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH));
+
+    // The adapter passes the runner's already-truncated value through
+    // unchanged — no `.slice()` of its own left to prove.
+    mockedCallLLMJson.mockResolvedValueOnce(
+      JSON.stringify({ visual_identity: oversized, usage_rules: "", forbidden_variations: "" })
+    );
+    const actionResult = await generateAssetBibleDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
+    expect(actionResult.ok).toBe(true);
+    if (!actionResult.ok) throw new Error("unreachable");
+    expect(actionResult.draft.visualIdentity).toBe(oversized.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH));
   });
 
   it("4. both Description and Notes empty is refused before the LLM call, with the exact precondition message", async () => {

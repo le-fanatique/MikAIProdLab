@@ -13,17 +13,19 @@ import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descripto
 // modifié hors src/lib/llmWorkspace"), so the real value is read back out of
 // the action's own refusal message, produced by seeding one more assetId
 // than any declared bound and calling the real action.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b):
+// `generateBatchAssetDescriptionDrafts` no longer calls
+// `buildAssetDescriptionFromContextPrompt`, so a mocked capture of the
+// action's own call would capture nothing. The comparison now reads the
+// same seeded rows directly instead, mirroring
+// `sequencePrompt.assist.test.ts`'s own re-pointing at the B3a switch.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () =>
     JSON.stringify({ description_draft: "A generated description.", notes_draft: "A generated note." })
   ),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/asset-description-from-context", () => ({
-  buildAssetDescriptionFromContextPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -120,7 +122,7 @@ describe("assetDescription.batch descriptor — context equality", () => {
     expect(assetDescriptionBatchDescriptor.commit).toEqual(["applyBatchAssetDescriptionDraftsInline"]);
   });
 
-  it("resolving PROJECT.IDENTITY and ASSET.CORE per item equals what generateBatchAssetDescriptionDrafts passes to its builder", async () => {
+  it("resolving PROJECT.IDENTITY and ASSET.CORE per item equals the seeded rows generateBatchAssetDescriptionDrafts reads", async () => {
     const result = await generateBatchAssetDescriptionDrafts(
       form({ projectId: String(projectId), assetIds: JSON.stringify([assetIdA, assetIdB]) })
     );
@@ -129,26 +131,21 @@ describe("assetDescription.batch descriptor — context equality", () => {
     expect(result.results).toHaveLength(2);
     expect(result.errors).toEqual([]);
 
-    expect(captureBuilderArg).toHaveBeenCalledTimes(2);
-    const calls = captureBuilderArg.mock.calls.map(
-      (call) =>
-        call[0] as {
-          project: { name: string; pitch: string | null; story: string | null; outline: string | null };
-          asset: { name: string; type: string; description: string | null; notes: string | null };
-        }
-    );
-
     const identity = await resolveProjectIdentity(projectId);
     const [coreA, coreB] = await Promise.all([resolveAssetCore(assetIdA), resolveAssetCore(assetIdB)]);
 
-    for (const call of calls) {
-      expect({
-        name: identity.name,
-        pitch: identity.pitch,
-        story: identity.story,
-        outline: identity.outline,
-      }).toEqual(call.project);
-    }
-    expect(calls.map((c) => c.asset)).toEqual([coreA, coreB]);
+    expect({
+      name: identity.name,
+      pitch: identity.pitch,
+      story: identity.story,
+      outline: identity.outline,
+    }).toEqual({
+      name: "Batch Asset Description project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
+      outline: "An outline.",
+    });
+    expect(coreA).toEqual({ name: "Asset A", type: "character", description: null, notes: null });
+    expect(coreB).toEqual({ name: "Asset B", type: "prop", description: null, notes: null });
   });
 });

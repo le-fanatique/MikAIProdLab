@@ -6,30 +6,27 @@ import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotP
 // ---------------------------------------------------------------------------
 // Proof required by §11.2: the context resolved by `shotPrompt.assist`'s six
 // declared variables equals what `generateShotPromptDraft`
-// (`src/actions/llm/shotPrompt.ts`) passes to `buildShotPromptFromContextPrompt`
-// today. Same two mocks, same real seeded database, same dynamic-import
-// discipline as `sequencePrompt.assist.test.ts` — see that file's header for
-// the full rationale.
+// (`src/actions/llm/shotPrompt.ts`) used to pass to
+// `buildShotPromptFromContextPrompt`, before the B3b switch.
 //
-// `SHOT.CAST` / `SHOT.REFERENCES` are the one place this ticket's proof
-// needs an extra step: the action does not pass the raw joined rows to the
-// builder, it pre-formats them into `castSummary` / `referenceSummary`
-// display strings (`src/actions/llm/shotPrompt.ts` lines building
-// `castSummary`/`referenceSummary`). `formatCastSummary` /
-// `formatReferenceSummary` below reproduce that exact formatting rule, so
-// the comparison still proves the *resolved variable data* is what the
-// action's strings are built from — formatting itself belongs to the
-// runner/template B2 builds, per §3.1's resolver contract ("returns typed
-// data, never a formatted string").
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b): `generateShotPromptDraft`
+// no longer calls `buildShotPromptFromContextPrompt`, so a mocked capture of
+// the action's own call would capture nothing. The comparison now reads the
+// same seeded rows directly instead, mirroring
+// `sequencePrompt.assist.test.ts`'s own re-pointing at the B3a switch.
+//
+// `SHOT.CAST` / `SHOT.REFERENCES` are the one place this proof needs an
+// extra step: the action used to pre-format the raw joined rows into
+// `castSummary` / `referenceSummary` display strings.
+// `formatCastSummary` / `formatReferenceSummary` below reproduce that exact
+// formatting rule, so the comparison still proves the *resolved variable
+// data* is what those display strings are built from — formatting itself
+// belongs to the runner/template, per §3.1's resolver contract ("returns
+// typed data, never a formatted string").
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ shot_prompt: "A generated shot prompt." })),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/shot-prompt-from-context", () => ({
-  buildShotPromptFromContextPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -50,7 +47,7 @@ function form(fields: Record<string, string>): FormData {
   return data;
 }
 
-// Reproduces `generateShotPromptDraft`'s castSummary formatting rule verbatim.
+// Reproduces the pre-switch castSummary formatting rule verbatim.
 function formatCastSummary(entries: Array<{ name: string; type: string; description: string | null; notes: string | null }>): string[] {
   return entries.map((r) => {
     const extras = [r.description?.trim(), r.notes?.trim()].filter(Boolean).join("; ");
@@ -58,7 +55,7 @@ function formatCastSummary(entries: Array<{ name: string; type: string; descript
   });
 }
 
-// Reproduces `generateShotPromptDraft`'s referenceSummary formatting rule verbatim.
+// Reproduces the pre-switch referenceSummary formatting rule verbatim.
 function formatReferenceSummary(
   entries: Array<{ label: string | null; imageRole: string | null; sourceFilename: string | null }>
 ): string[] {
@@ -122,7 +119,7 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("shotPrompt.assist descriptor — context equality", () => {
-  it("resolving the six declared variables equals the context fields generateShotPromptDraft passes to its builder", async () => {
+  it("resolving the six declared variables equals the context fields the pre-switch builder read", async () => {
     const result = await generateShotPromptDraft(
       form({
         projectId: String(projectId),
@@ -132,30 +129,6 @@ describe("shotPrompt.assist descriptor — context equality", () => {
       })
     );
     expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
-
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
-      projectName: string;
-      projectPitch: string | null;
-      projectStory: string | null;
-      sequenceTitle: string;
-      sequenceSummary: string | null;
-      sequenceDescription: string | null;
-      sequenceMood: string | null;
-      sequenceLocationHint: string | null;
-      shotTitle: string;
-      shotCode: string | null;
-      shotDescription: string | null;
-      actionPitch: string | null;
-      cameraPitch: string | null;
-      framing: string | null;
-      cameraMovement: string | null;
-      durationSeconds: number | null;
-      currentShotPrompt: string | null;
-      castSummary: string[];
-      referenceSummary: string[];
-      assistMode: string;
-    };
 
     expect(shotPromptAssistDescriptor.context.variables.map((v) => v.id)).toEqual([
       "PROJECT.IDENTITY",
@@ -176,46 +149,50 @@ describe("shotPrompt.assist descriptor — context equality", () => {
       resolveShotReferences(shotId),
     ]);
 
-    // PROJECT.IDENTITY: the action reads name/pitch/story, not
+    // PROJECT.IDENTITY: the operation reads name/pitch/story, not
     // description/outline.
     expect({ name: identity.name, pitch: identity.pitch, story: identity.story }).toEqual({
-      name: actionArg.projectName,
-      pitch: actionArg.projectPitch,
-      story: actionArg.projectStory,
+      name: "Shot Prompt project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
     });
 
     // SEQ.CONTEXT: all five fields.
     expect(seqContext).toEqual({
-      title: actionArg.sequenceTitle,
-      summary: actionArg.sequenceSummary,
-      description: actionArg.sequenceDescription,
-      mood: actionArg.sequenceMood,
-      locationHint: actionArg.sequenceLocationHint,
+      title: "Opening sequence",
+      summary: "A short summary.",
+      description: "A longer description.",
+      mood: "Tense",
+      locationHint: "Rooftop, dusk",
     });
 
     // SHOT.CORE: all eight fields.
     expect(shotCore).toEqual({
-      title: actionArg.shotTitle,
-      shotCode: actionArg.shotCode,
-      description: actionArg.shotDescription,
-      actionPitch: actionArg.actionPitch,
-      cameraPitch: actionArg.cameraPitch,
-      framing: actionArg.framing,
-      cameraMovement: actionArg.cameraMovement,
-      durationSeconds: actionArg.durationSeconds,
+      title: "Hero enters",
+      shotCode: "SH01",
+      description: "The hero steps into frame.",
+      actionPitch: "Walks forward, looks up.",
+      cameraPitch: "Slow push-in.",
+      framing: "Medium shot",
+      cameraMovement: "Dolly",
+      durationSeconds: 4,
     });
 
     // SHOT.CURRENT_PROMPT.
-    expect(currentPrompt).toEqual({ shotPrompt: actionArg.currentShotPrompt });
+    expect(currentPrompt).toEqual({ shotPrompt: "An existing shot prompt." });
 
     // SHOT.CAST / SHOT.REFERENCES: the raw resolved data, formatted through
-    // the action's own known display rule, equals the actual formatted
-    // strings the action built.
-    expect(formatCastSummary(cast)).toEqual(actionArg.castSummary);
-    expect(formatReferenceSummary(references)).toEqual(actionArg.referenceSummary);
+    // the pre-switch display rule, equals the known display strings.
+    expect(formatCastSummary(cast)).toEqual([
+      "Drone (prop)",
+      "Hero (character: Weathered protagonist.; Central character.)",
+    ]);
+    expect(formatReferenceSummary(references)).toEqual(["Establishing frame", "raw-1.png"]);
 
-    // Intent: mode is carried on the descriptor's `intent.mode`, mirroring
-    // sequencePrompt.assist one entity kind over.
+    // Intent: mode is carried on the descriptor's `intent.mode`, exercised
+    // end-to-end by `shotPrompt.assist.runner.test.ts`'s own proof (test 1),
+    // not re-captured here since the action no longer exposes it via a
+    // mocked builder call.
     expect(shotPromptAssistDescriptor.intent.mode?.modes.map((m) => m.id)).toEqual([
       "generate",
       "enhance",
@@ -223,7 +200,6 @@ describe("shotPrompt.assist descriptor — context equality", () => {
       "shorten",
       "expand",
     ]);
-    expect(actionArg.assistMode).toBe("enhance");
   });
 
   it("the four transform modes carry the preconditions entry generateShotPromptDraft enforces pre-call", async () => {

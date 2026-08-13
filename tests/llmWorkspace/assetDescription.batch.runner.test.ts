@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetDescriptionBatchDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescriptionBatch";
+import { buildAssetDescriptionFromContextPrompt } from "@/lib/prompts/asset-description-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -28,6 +29,15 @@ import { assetDescriptionBatchDescriptor } from "@/lib/llmWorkspace/descriptors/
 // equivalent, so obligation 5 is proven against the real action directly,
 // the same way `tests/llmWorkspace/assetDescription.batch.test.ts` already
 // does for the descriptor's `maxSize`.
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b):
+// `generateBatchAssetDescriptionDrafts` no longer calls
+// `buildAssetDescriptionFromContextPrompt`, so a mocked capture of the
+// action's own per-item call would capture nothing. Test 1 now calls the
+// frozen oracle directly against the same seeded rows instead, once per
+// Asset — no Sequences, Shots, or reference images are inserted by this
+// fixture, and no Project Style is active, so those inputs are `[]` /
+// `{worldSegment: "", rulesSegment: ""}` for both Assets.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
@@ -35,18 +45,6 @@ vi.mock("@/lib/llm", () => ({
     JSON.stringify({ description_draft: "A generated description.", notes_draft: "A generated note." })
   ),
 }));
-
-let capturedPrompts: Array<{ system: string; user: string }> = [];
-vi.mock("@/lib/prompts/asset-description-from-context", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/prompts/asset-description-from-context")>();
-  return {
-    buildAssetDescriptionFromContextPrompt: (ctx: Parameters<typeof actual.buildAssetDescriptionFromContextPrompt>[0]) => {
-      const prompt = actual.buildAssetDescriptionFromContextPrompt(ctx);
-      capturedPrompts.push(prompt);
-      return prompt;
-    },
-  };
-});
 
 let ctx: TempDb;
 let generateBatchAssetDescriptionDrafts: typeof import("@/actions/llm/assetDescription").generateBatchAssetDescriptionDrafts;
@@ -87,9 +85,24 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
+function expectedPrompt(asset: { name: string; type: string; description: string | null; notes: string | null }) {
+  return buildAssetDescriptionFromContextPrompt({
+    project: {
+      name: "Batch Asset Description project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
+      outline: "An outline.",
+    },
+    asset,
+    sequenceContexts: [],
+    shotContexts: [],
+    refImageMeta: [],
+    style: { worldSegment: "", rulesSegment: "" },
+  });
+}
+
 describe("assetDescription.batch — runner proof (LLMW.RUNNER.1b)", () => {
-  it("1. the runner's {system, user}, resolved per item on the plain asset anchor, equals what generateBatchAssetDescriptionDrafts passes to its builder for that same item", async () => {
-    capturedPrompts = [];
+  it("1. the runner's {system, user}, resolved per item on the plain asset anchor, equals the frozen oracle called directly for that same item", async () => {
     const result = await generateBatchAssetDescriptionDrafts(
       form({ projectId: String(projectId), assetIds: JSON.stringify([assetIdA, assetIdB]) })
     );
@@ -97,7 +110,9 @@ describe("assetDescription.batch — runner proof (LLMW.RUNNER.1b)", () => {
     if (!result.ok) throw new Error("unreachable");
     expect(result.results).toHaveLength(2);
     expect(result.errors).toEqual([]);
-    expect(capturedPrompts).toHaveLength(2);
+
+    const expectedA = expectedPrompt({ name: "Asset A", type: "character", description: "A description.", notes: null });
+    const expectedB = expectedPrompt({ name: "Asset B", type: "prop", description: null, notes: "Some notes." });
 
     const runnerA = await resolveOperationPrompt(assetDescriptionBatchDescriptor, { projectId, assetId: assetIdA });
     const runnerB = await resolveOperationPrompt(assetDescriptionBatchDescriptor, { projectId, assetId: assetIdB });
@@ -105,10 +120,10 @@ describe("assetDescription.batch — runner proof (LLMW.RUNNER.1b)", () => {
     expect(runnerB.ok).toBe(true);
     if (!runnerA.ok || !runnerB.ok) throw new Error("unreachable");
 
-    expect(runnerA.prompt.system).toBe(capturedPrompts[0].system);
-    expect(runnerA.prompt.user).toBe(capturedPrompts[0].user);
-    expect(runnerB.prompt.system).toBe(capturedPrompts[1].system);
-    expect(runnerB.prompt.user).toBe(capturedPrompts[1].user);
+    expect(runnerA.prompt.system).toBe(expectedA.system);
+    expect(runnerA.prompt.user).toBe(expectedA.user);
+    expect(runnerB.prompt.system).toBe(expectedB.system);
+    expect(runnerB.prompt.user).toBe(expectedB.user);
   });
 
   it("2. an Asset belonging to a different Project is refused per item with the same message generateBatchAssetDescriptionDrafts collects", async () => {

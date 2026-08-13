@@ -387,7 +387,15 @@ function parseOutput(
   const values: Record<string, string> = {};
   for (const field of output.fields) {
     const rawValue = obj[field.jsonKey];
-    const value = typeof rawValue === "string" ? rawValue.trim() : "";
+    let value = typeof rawValue === "string" ? rawValue.trim() : "";
+    // `truncateTo` (§4.1): silently cut, distinct from `maxLength`'s reject.
+    // Generic — no branch names an operation. 800 on the Asset Bible
+    // fields, reproducing `cleanAssetBibleField`'s `.trim().slice(0, 800)`
+    // (`src/lib/prompts/assetBibleDraft.ts`) now that the descriptor
+    // declares it instead of the adapter.
+    if (field.truncateTo != null) {
+      value = value.slice(0, field.truncateTo);
+    }
     if (field.maxLength != null && value.length > field.maxLength) {
       return { ok: false, error: output.errors.empty };
     }

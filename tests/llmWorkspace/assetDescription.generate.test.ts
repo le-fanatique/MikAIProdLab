@@ -6,25 +6,26 @@ import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descripto
 // ---------------------------------------------------------------------------
 // Proof required by §11.2: the context resolved by `assetDescription.generate`'s
 // six declared variables equals what `generateAssetDescriptionOnlyDraft`
-// passes to `buildAssetDescriptionOnlyPrompt` today, through the shared
-// `fetchAssetContextInput` (`src/actions/llm/assetDescription.ts`). Same two
-// mocks, same real seeded database, same dynamic-import discipline as
-// `sequencePrompt.assist.test.ts`.
+// used to pass to `buildAssetDescriptionOnlyPrompt`, through the shared
+// `fetchAssetContextInput` (`src/actions/llm/assetDescription.ts`, deleted at
+// the B3b switch).
+//
+// Re-pointed at the B3b switch (LLMW.MIGRATE.FLATJSON.1b):
+// `generateAssetDescriptionOnlyDraft` no longer calls
+// `buildAssetDescriptionOnlyPrompt`, so a mocked capture of the action's own
+// call would capture nothing. The comparison now reads the same seeded rows
+// directly instead, mirroring `sequencePrompt.assist.test.ts`'s own
+// re-pointing at the B3a switch.
 //
 // Plus the ticket's limit requirement: 12 Shots (> the 10 bound), 7
 // Sequences (> the 5 bound) and 7 reference images (> the 5 bound) are
 // seeded, and the resolvers are proven to return exactly the bound, in
-// order, matching what the action's own bounded query actually returned —
+// order, matching what the operation's own bounded query actually returns —
 // not a declared number nobody exercised.
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
   callLLMJson: vi.fn(async () => JSON.stringify({ description_draft: "A generated description." })),
-}));
-
-const captureBuilderArg = vi.fn((ctx: unknown) => ({ system: "s", user: "u", __ctx: ctx }));
-vi.mock("@/lib/prompts/asset-description-from-context", () => ({
-  buildAssetDescriptionOnlyPrompt: (ctx: unknown) => captureBuilderArg(ctx),
 }));
 
 let ctx: TempDb;
@@ -127,33 +128,11 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("assetDescription.generate descriptor — context equality", () => {
-  it("resolving the six declared variables equals the context fields generateAssetDescriptionOnlyDraft passes to its builder", async () => {
+  it("resolving the six declared variables equals the seeded rows the operation reads", async () => {
     const result = await generateAssetDescriptionOnlyDraft(
       form({ projectId: String(projectId), assetId: String(assetId) })
     );
     expect(result).toEqual({ ok: true, draft: "A generated description." });
-
-    expect(captureBuilderArg).toHaveBeenCalledTimes(1);
-    const actionArg = captureBuilderArg.mock.calls[0][0] as {
-      project: { name: string; pitch: string | null; story: string | null; outline: string | null };
-      asset: { name: string; type: string; description: string | null; notes: string | null };
-      sequenceContexts: Array<{
-        title: string;
-        summary: string | null;
-        mood: string | null;
-        locationHint: string | null;
-        narrativePurpose: string | null;
-      }>;
-      shotContexts: Array<{
-        shotCode: string | null;
-        title: string;
-        description: string | null;
-        actionPitch: string | null;
-        cameraPitch: string | null;
-      }>;
-      refImageMeta: Array<{ label: string | null; imageRole: string | null; sourceFilename?: string | null }>;
-      style?: { worldSegment: string; rulesSegment: string };
-    };
 
     expect(assetDescriptionGenerateDescriptor.context.variables.map((v) => v.id)).toEqual([
       "PROJECT.IDENTITY",
@@ -175,46 +154,47 @@ describe("assetDescription.generate descriptor — context equality", () => {
       resolveProjectStyle(projectId),
     ]);
 
-    // PROJECT.IDENTITY: the action reads name/pitch/story/outline, not
+    // PROJECT.IDENTITY: the operation reads name/pitch/story/outline, not
     // description.
-    expect({ name: identity.name, pitch: identity.pitch, story: identity.story, outline: identity.outline }).toEqual(
-      actionArg.project
-    );
+    expect({ name: identity.name, pitch: identity.pitch, story: identity.story, outline: identity.outline }).toEqual({
+      name: "Asset Description project",
+      pitch: "A compelling pitch.",
+      story: "A previously generated story.",
+      outline: "An outline.",
+    });
 
     // ASSET.CORE: all four fields.
-    expect(core).toEqual(actionArg.asset);
+    expect(core).toEqual({
+      name: "Hero Robot",
+      type: "character",
+      description: "A weathered combat robot.",
+      notes: "Appears throughout Act 2.",
+    });
 
     // ASSET.SEQ_APPEARANCES — bound proof: 7 Sequences seeded, exactly 5
-    // resolved, in orderIndex order, equal to the action's own bounded
-    // query.
+    // resolved, in orderIndex order.
     expect(seqAppearances).toHaveLength(5);
     expect(seqAppearances.map((s) => s.title)).toEqual(["Sequence 0", "Sequence 1", "Sequence 2", "Sequence 3", "Sequence 4"]);
-    expect(seqAppearances).toEqual(actionArg.sequenceContexts);
 
     // ASSET.SHOT_APPEARANCES — bound proof: 12 Shots seeded, exactly 10
-    // resolved, in orderIndex order, equal to the action's own bounded
-    // query.
+    // resolved, in orderIndex order.
     expect(shotAppearances).toHaveLength(10);
     expect(shotAppearances.map((s) => s.shotCode)).toEqual([
       "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
     ]);
-    expect(shotAppearances).toEqual(actionArg.shotContexts);
 
     // ASSET.REFERENCES — bound proof: 7 reference images seeded, exactly 5
-    // resolved, in orderIndex order, equal to the action's own bounded
-    // query.
+    // resolved, in orderIndex order.
     expect(references).toHaveLength(5);
     expect(references.map((r) => r.label)).toEqual([
       "Reference 0", "Reference 1", "Reference 2", "Reference 3", "Reference 4",
     ]);
-    expect(references).toEqual(actionArg.refImageMeta);
 
     // PROJECT.STYLE: no active Style in this fixture, resolves to
-    // `{ mode: "none" }`; `resolveDescriptionStyleSegments` (the action's own
-    // caller of `resolveAssetStyleContext`) collapses that to
-    // `{worldSegment: "", rulesSegment: ""}` — never `visualSegment`, unlike
-    // `assetBible.generate`.
+    // `{ mode: "none" }`, collapsed by the render form to
+    // `{worldSegment: "", rulesSegment: ""}` (proven byte-for-byte by
+    // `assetDescription.generate.render.test.ts`) — never `visualSegment`,
+    // unlike `assetBible.generate`.
     expect(style).toEqual({ mode: "none" });
-    expect(actionArg.style).toEqual({ worldSegment: "", rulesSegment: "" });
   });
 });
