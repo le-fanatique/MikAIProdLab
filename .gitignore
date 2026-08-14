@@ -91,6 +91,11 @@ next-env.d.ts
 .agents/design-references/
 .agents/skills/
 
+# Browser-validation artefacts (SUPERVISION — Playwright pass before verdict).
+# Every pass regenerates page snapshots, console logs and downloaded fixtures
+# here. They are evidence for one verdict, never part of the repository.
+.agents/playwright-output/
+
 # local backup-executor configuration (Cline / OpenRouter), machine-specific
 .vscode/
 .cline/

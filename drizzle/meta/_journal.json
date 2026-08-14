@@ -351,6 +351,13 @@
       "when": 1786408762292,
       "tag": "0049_workable_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1786699845508,
+      "tag": "0050_mighty_lockheed",
+      "breakpoints": true
     }
   ]
 }

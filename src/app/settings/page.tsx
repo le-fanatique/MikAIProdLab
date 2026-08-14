@@ -18,8 +18,9 @@ import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
 import { db } from "@/db";
-import { comfyWorkflows } from "@/db/schema";
+import { comfyWorkflows, llmTemplates } from "@/db/schema";
 import { sql, desc } from "drizzle-orm";
+import { DESCRIPTORS } from "@/lib/llmWorkspace/descriptors";
 
 export const dynamic = "force-dynamic";
 
@@ -43,13 +44,14 @@ export default async function SettingsPage({ searchParams }: Props) {
   const openReelSidecarUrl = await getOpenReelSidecarUrl();
   const mikaiPublicBaseUrl = await getMikAIPublicBaseUrl();
 
-  const [{ workflowCount }, allWorkflows, defaults] = await Promise.all([
+  const [{ workflowCount }, allWorkflows, defaults, { llmTemplateCount }] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
     db
       .select({ id: comfyWorkflows.id, name: comfyWorkflows.name, kind: comfyWorkflows.kind })
       .from(comfyWorkflows)
       .orderBy(desc(comfyWorkflows.updatedAt)),
     getWorkflowDefaults(),
+    db.select({ llmTemplateCount: sql<number>`count(*)` }).from(llmTemplates).then(([r]) => r),
   ]);
 
   const imageWorkflows = allWorkflows.filter((wf) => wf.kind === "image");
@@ -164,6 +166,22 @@ export default async function SettingsPage({ searchParams }: Props) {
                       <span>Click Test Connection to verify, then Save Changes.</span>
                     </li>
                   </ol>
+                </Card>
+
+                <Card title="LLM Workflows" className="mb-6">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-[#a4abb2]">
+                      <span className="text-[#e7e9ec] font-medium">{llmTemplateCount}</span>{" "}
+                      {llmTemplateCount === 1 ? "editable template" : "editable templates"},{" "}
+                      {Object.keys(DESCRIPTORS).length} built-in operations.
+                    </p>
+                    <Link
+                      href="/settings/llm-workflows"
+                      className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+                    >
+                      Manage LLM Workflows →
+                    </Link>
+                  </div>
                 </Card>
               </>
             ),

@@ -2491,6 +2491,15 @@ cross-cutting UI/display view.
 - 2026-07-15: This observation does not authorize a schema, migration,
   generation-runtime, or dependency change without a dedicated ticket and
   architecture decision.
+- 2026-08-14: `LLMW.STORAGE.1` (B6a) delivers `/settings/llm-workflows`: one
+  list showing every LLM operation of the application — the eight built-in
+  (code) descriptors as read-only entries, plus the editable `llm_templates`
+  rows the workshop creates or imports, each with its scope (global or a
+  named Project). This is the "one place to see every LLM process's prompt"
+  half of the request. Status stays `OPEN`: B6a ships no workbench (no panel,
+  no entity selector, no Run) — B6b/B6c deliver the three-pane bench that
+  lets a prompt actually be read and tuned per entity, which is what closes
+  this observation.
 
 ### FB-20260715-014 - ComfyUI port presets in Render Settings
 

@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B5 COMPLETE (2026-08-14)
+## LLM Workspace Phase B — B0 to B6a COMPLETE (2026-08-14)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -238,6 +238,63 @@ not to be multiplied.
 Known limit, unchanged from B4b: `tests/actions/proposalCommit.test.ts` proves
 the hidden-field keys against a hardcoded list, not against `shots.ts` itself,
 so a simultaneous rename on both sides would still pass.
+
+### B6a — templates become storable, and the list appears (2026-08-14)
+
+`LLMW.STORAGE.1`, the **first of three** tickets B6 was split into by the user:
+B6a storage + list, B6b the read-only three-pane bench (resolved context and
+effective prompt, no LLM call), B6c Run + right pane + variable library.
+
+**The scope decision that shapes everything after it.** Arbitrated by the user
+on 2026-08-14: **code stays the source of truth.** The eight descriptors remain
+TypeScript and keep serving production untouched; `runner.ts` was not modified
+and still reads no database. `llm_templates` holds only what the workshop
+creates or imports. The list shows both origins — the eight code descriptors
+read-only, the rows editable. What this protects is concrete: the seven Approve
+paths the user validated by hand on 2026-08-13, and the byte-for-byte descriptor
+proofs against the frozen prompt builders, both survive the ticket untouched.
+
+**Schema and migration authorisation** (§4.2 requires it in the ticket itself)
+was granted for exactly one table and one generated migration —
+`drizzle/0050_mighty_lockheed.sql`, `llm_templates`, `project_id` nullable with
+`ON DELETE set null`. `llm_knowledge_documents` was **deliberately deferred**:
+all eight descriptors declare `knowledge: []`, so the table would have had no
+reader. `anchor_kind` is the one authorised denormalisation, so the list and
+B6b's entity picker can filter without deserialising every row.
+
+**The validator is the ticket's real proof.** `templateStorage.ts` is pure and
+checks membership in the closed registries — variable ids, action ids, entity
+kinds, and **every render form a block references**, read from
+`variables/registry.ts`'s four tables rather than copied. This matters because
+`runner.ts:307-341` *throws* on an unknown render form: without the validator,
+an imported template naming a nonexistent one would only detonate at Run, in
+B6c. It reads the registries instead of duplicating them, so it cannot drift.
+
+**What the supervisor's own review caught, and the automated battery did not.**
+`tsc`, 301 tests and `npm run build` were all green on the first submission, and
+`projectId` was nevertheless unreachable from the product: both creation paths
+wrote `null` outright, and `updateLlmTemplateMetadata` — the only write that set
+it — had no caller outside tests. A dead column, a scope badge permanently
+reading `Global`, an unused join, and a production export with no caller. The
+cause was a hole in the ticket, which specified the write without the control
+that triggers it. Fixed with a plain `<form action={...}>` per row (a project
+`<select>` plus "Global", hidden `name`/`description` so changing scope does not
+wipe the row), plus runtime validation of `projectId` before the write — a
+non-integer or a nonexistent project now redirects with a message instead of
+letting `foreign_keys = ON` (`src/db/index.ts:22`) throw a 500.
+
+**Two browser passes, both on the standing test Project.** The first covered the
+Settings entry point, the eight built-ins, duplicate, scope round trip to
+`ZZ-TEST-PLAYWRIGHT` and back, export (200, `attachment`, indented JSON), a 404
+on an absent id, and delete. The second covered the one production path the
+first left unproven — **import** — as a genuine round trip: the fixture was the
+file the product had itself exported, and a second fixture, the same JSON plus a
+block naming a nonexistent render form, was **refused** at import with "This
+file is not a valid LLM template." That is the validator proven end to end
+rather than claimed. Suite 279 → 303. The table was left empty both times.
+
+**Note for later passes.** The `/settings` card lives under the **Language
+Model** tab, not the default Appearance tab.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 
