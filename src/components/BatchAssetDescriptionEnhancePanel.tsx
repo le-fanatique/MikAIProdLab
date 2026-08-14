@@ -9,6 +9,11 @@ import {
 } from "@/actions/llm/assetDescription";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
+import {
+  resolveBatchApplyOutcome,
+  batchApplyOutcomeToneClass,
+  type BatchApplyOutcome,
+} from "@/lib/llmWorkspace/batchApplyOutcome";
 
 export type BatchAssetItem = {
   id: number;
@@ -57,7 +62,7 @@ export default function BatchAssetDescriptionEnhancePanel({
   const [state, setState] = useState<State>({ status: "idle" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [appliedState, setAppliedState] = useState<AppliedState>({});
-  const [globalMessage, setGlobalMessage] = useState<string | null>(null);
+  const [applyOutcome, setApplyOutcome] = useState<BatchApplyOutcome | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
 
@@ -86,7 +91,7 @@ export default function BatchAssetDescriptionEnhancePanel({
     if (selected.size === 0 || !isConfigured) return;
     setState({ status: "loading", count: selected.size });
     setAppliedState({});
-    setGlobalMessage(null);
+    setApplyOutcome(null);
     setGlobalError(null);
     const fd = new FormData();
     fd.set("projectId", String(projectId));
@@ -106,7 +111,7 @@ export default function BatchAssetDescriptionEnhancePanel({
     content: string
   ) {
     setIsApplying(true);
-    setGlobalMessage(null);
+    setApplyOutcome(null);
     setGlobalError(null);
     const result = await ACTION_BINDINGS.updateAssetDescriptionFieldInline({ assetId, projectId, field, mode, content });
     if (result.ok) {
@@ -126,7 +131,7 @@ export default function BatchAssetDescriptionEnhancePanel({
   async function handleApplyAll(mode: "replace" | "append") {
     if (state.status !== "success") return;
     setIsApplying(true);
-    setGlobalMessage(null);
+    setApplyOutcome(null);
     setGlobalError(null);
 
     const items = state.results
@@ -158,10 +163,7 @@ export default function BatchAssetDescriptionEnhancePanel({
       }
       setAppliedState((prev) => ({ ...prev, ...updates }));
 
-      const modeLabel = mode === "replace" ? "replaced" : "appended";
-      const countLabel = `${result.applied.length} asset${result.applied.length !== 1 ? "s" : ""}`;
-      const errNote = result.errors.length > 0 ? ` ${result.errors.length} failed.` : "";
-      setGlobalMessage(`Batch ${modeLabel}: ${countLabel} updated.${errNote}`);
+      setApplyOutcome(resolveBatchApplyOutcome(result.applied, result.errors, mode));
     }
     setIsApplying(false);
   }
@@ -292,9 +294,30 @@ export default function BatchAssetDescriptionEnhancePanel({
       {/* Success */}
       {state.status === "success" && (
         <div className="flex flex-col gap-5">
-          {/* Global feedback */}
-          {globalMessage && (
-            <p className="text-xs text-[#6b9e72]">{globalMessage}</p>
+          {/* Global feedback — batch apply outcome (all / partial / none applied) */}
+          {applyOutcome && (
+            <div className="flex flex-col gap-1">
+              <p className={`text-xs ${batchApplyOutcomeToneClass(applyOutcome.tone)}`}>
+                {applyOutcome.message}
+              </p>
+              {applyOutcome.failures.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <p
+                    className={`text-[10px] font-medium uppercase tracking-wider ${batchApplyOutcomeToneClass(applyOutcome.tone)}`}
+                  >
+                    Not applied ({applyOutcome.failures.length})
+                  </p>
+                  {applyOutcome.failures.map((f) => {
+                    const assetName = assets.find((a) => a.id === f.assetId)?.name ?? `Asset #${f.assetId}`;
+                    return (
+                      <p key={f.assetId} className={`text-xs ${batchApplyOutcomeToneClass(applyOutcome.tone)}`}>
+                        {assetName}: {f.error}
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
           {globalError && (
             <p className="text-xs text-[#cf7b6b]">{globalError}</p>
@@ -477,7 +500,7 @@ export default function BatchAssetDescriptionEnhancePanel({
               onClick={() => {
                 setState({ status: "idle" });
                 setAppliedState({});
-                setGlobalMessage(null);
+                setApplyOutcome(null);
                 setGlobalError(null);
               }}
               className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"

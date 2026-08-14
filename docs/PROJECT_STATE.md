@@ -116,6 +116,33 @@ Settings-naming question dissolved: `FB-20260715-013` is an unpromoted
 likely supersede it. Phase B now needs a prepared ticket, not another
 decision.
 
+### `LLMW.BATCH.OUTCOME.1` — the batch stops lying about its outcome (2026-08-14)
+
+The batch Asset-description panel painted every `ok: true` answer green, so a
+batch that saved nothing displayed `Batch replaced: 0 assets updated. 5 failed.`
+as a success. Registry behaviours 1 and 2 (not atomic; `ok: true` with
+`applied: []` when every item is refused) are the arbitrated contract and were
+**not** changed — `src/actions/assets.ts` and `registry.ts` are absent from the
+diff. Only what the interface says about that answer changed.
+
+Three outcomes, three tones, arbitrated by the user: all applied stays green,
+partial is amber (`N of M updated`), nothing applied is red and says no changes
+were saved. Failures are listed by Asset name with the action's own reason,
+resolved from the `assets` prop already in hand.
+
+`resolveBatchApplyOutcome` is a pure function outside the client component
+(`.claude/rules/frontend.md`), and that is what makes the ticket provable: the
+"nothing applied" case is unreachable from the interface — the panel only lists
+the current project's Assets, so every one would have to be refused. It is
+covered by unit tests instead of by a claim. Suite 274 → 279. The nominal
+Replace/Append paths were verified in a real browser on the disposable
+`ZZ-B5-PLAYWRIGHT-TEST` Project; partial and nothing-applied are recorded as
+not tested there, deliberately, rather than forced.
+
+Known unreachable edge, left alone on purpose: `resolveBatchApplyOutcome([], [])`
+would render `No changes were saved. 0 assets failed.` The action refuses an
+empty batch upstream, so adding a branch with no caller would be debt.
+
 ### B5 — the proposal component, object mode (2026-08-14)
 
 `LLMW.PROPOSAL.COMPONENT.1`. One `ProposalPanel` (Approve / Redo / Cancel)
