@@ -3116,6 +3116,15 @@ cross-cutting UI/display view.
 - 2026-07-16: Generation UX should distinguish the base Story prompt from the
   user-provided extra constraints and retain both in the generation record or
   visible result context, subject to the existing persistence rules.
+- 2026-08-14: **Partially addressed by `LLMW.BENCH.READ.1` (B6b)** — status
+  stays `OPEN`. The read-only bench at `/settings/llm-workflows/[templateId]`
+  now shows the effective `system` and `user` messages, and each context
+  variable's resolved value, for any operation against a chosen test entity,
+  without calling the model. That is the "no longer a black box" half of this
+  entry. The other half is **not** delivered: there is still no
+  `Extra System Prompt` control, and nothing changes inside the Story LLM
+  Assist production screen — the bench is a workshop surface. Closing this
+  entry needs the steering control itself.
 
 ### FB-20260716-036 - Introduce a specialist-agent MikAI Assist Director
 

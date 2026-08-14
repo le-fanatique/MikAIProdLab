@@ -111,6 +111,12 @@ export default async function LlmWorkflowsListPage({ searchParams }: Props) {
                     <p className="text-xs font-mono text-[#6e767d]">{id}</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    <Link
+                      href={`/settings/llm-workflows/${encodeURIComponent(id)}`}
+                      className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    >
+                      Open bench
+                    </Link>
                     <form action={duplicateAction}>
                       <button
                         type="submit"
@@ -179,6 +185,12 @@ export default async function LlmWorkflowsListPage({ searchParams }: Props) {
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
+                      <Link
+                        href={`/settings/llm-workflows/${row.id}`}
+                        className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                      >
+                        Open bench
+                      </Link>
                       <Link
                         href={`/api/llm-templates/${row.id}/export`}
                         className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"

@@ -80,7 +80,12 @@ export type RunOperationResult =
 // Step 1 — validate anchor identifiers
 // ---------------------------------------------------------------------------
 
-function requiredIdKeys(entity: EntityKind): Array<keyof AnchorIds> {
+/**
+ * Exported as `requiredAnchorIdKeys` (renamed, §4 of `LLMW.BENCH.READ.1`,
+ * B6b) so the bench's entity selector (`src/lib/llmWorkspace/bench.ts`)
+ * reads this one table instead of keeping a second copy that could drift.
+ */
+export function requiredAnchorIdKeys(entity: EntityKind): Array<keyof AnchorIds> {
   switch (entity) {
     case "project":
       return ["projectId"];
@@ -94,7 +99,7 @@ function requiredIdKeys(entity: EntityKind): Array<keyof AnchorIds> {
 }
 
 function validateAnchorIds(entity: EntityKind, ids: AnchorIds): boolean {
-  return requiredIdKeys(entity).every((key) => {
+  return requiredAnchorIdKeys(entity).every((key) => {
     const value = ids[key];
     return typeof value === "number" && Number.isInteger(value) && value > 0;
   });
@@ -415,11 +420,32 @@ function parseOutput(
 // Orchestration
 // ---------------------------------------------------------------------------
 
+/**
+ * `requireLlmConfig` (§5a of `LLMW.BENCH.READ.1`, B6b) defaults to `true` —
+ * production's own behaviour, unchanged. The read-only bench passes `false`
+ * (via `resolveOperationPreview` below) so a panel that never calls the
+ * model is not refused for the one precondition that only matters once it
+ * does; `config` becomes `LLMConfig | null` on the shared return type to
+ * carry that.
+ */
+type ResolvePromptInternalOptions = { requireLlmConfig?: boolean };
+
 async function resolvePromptInternal(
   descriptor: OperationDescriptor,
   ids: AnchorIds,
-  intent: OperationIntentInput
-): Promise<{ ok: true; prompt: LLMPrompt; config: LLMConfig } | { ok: false; error: string }> {
+  intent: OperationIntentInput,
+  options: ResolvePromptInternalOptions = {}
+): Promise<
+  | {
+      ok: true;
+      prompt: LLMPrompt;
+      config: LLMConfig | null;
+      resolved: Partial<Record<VariableId, unknown>>;
+    }
+  | { ok: false; error: string }
+> {
+  const requireLlmConfig = options.requireLlmConfig ?? true;
+
   // Step 1 — validate anchor identifiers. `messages.invalidRequest` is
   // optional (§3.1's second-round correction): `story.generate` has no
   // verbatim source for it (`generateStory(projectId: number)` never
@@ -432,11 +458,12 @@ async function resolvePromptInternal(
     return { ok: false, error: descriptor.messages.invalidRequest };
   }
 
-  // Step 2 — getLLMConfig(), refuse if absent. Dynamic import: `@/lib/settings`
-  // imports `@/db` at its own module top.
+  // Step 2 — getLLMConfig(), refuse if absent unless the caller declared it
+  // does not need one. Dynamic import: `@/lib/settings` imports `@/db` at its
+  // own module top.
   const { getLLMConfig } = await import("@/lib/settings");
   const config = await getLLMConfig();
-  if (!config) {
+  if (!config && requireLlmConfig) {
     return { ok: false, error: descriptor.messages.notConfigured };
   }
 
@@ -459,7 +486,7 @@ async function resolvePromptInternal(
   const { renderParameter, renderMode } = buildIntentDispatchers(intent.parameters, selectedMode);
   const prompt = assembleDescriptorMessages(descriptor, renderVariable, renderParameter, renderMode, renderVariables);
 
-  return { ok: true, prompt, config };
+  return { ok: true, prompt, config: config ?? null, resolved };
 }
 
 /**
@@ -490,6 +517,18 @@ export async function runOperation(
   const resolved = await resolvePromptInternal(descriptor, ids, intent);
   if (!resolved.ok) return resolved;
 
+  // `config` is typed `LLMConfig | null` on `resolvePromptInternal`'s shared
+  // return shape (§5a of `LLMW.BENCH.READ.1`, B6b) so that
+  // `resolveOperationPreview` below can reuse it with `config: null`.
+  // `runOperation` always calls with the implicit default
+  // (`requireLlmConfig: true`), so step 2 has already refused with
+  // `descriptor.messages.notConfigured` when no config exists — `config` is
+  // guaranteed non-null here. This is a type narrowing that reuses that same
+  // declared message, not a new refusal path.
+  if (!resolved.config) {
+    return { ok: false, error: descriptor.messages.notConfigured };
+  }
+
   // Step 6 — callLLMJson. Dynamic import: `@/lib/llm` transitively imports
   // `@/db` via `@/lib/vramManager.ts`.
   const { callLLMJson } = await import("@/lib/llm");
@@ -497,4 +536,36 @@ export async function runOperation(
 
   // Steps 7-8 — strip the fence, parse, map the error.
   return parseOutput(raw, descriptor.output);
+}
+
+// ---------------------------------------------------------------------------
+// `resolveOperationPreview` — LLMW.BENCH.READ.1 (B6b), §5b. The read-only
+// bench's centre pane: steps 1-5 with no LLM configuration required, every
+// resolved variable surfaced in `descriptor.context.variables`'s own order
+// alongside the assembled prompt. A variable resolver that throws
+// (`resolveProjectIdentity` on a project row not found, for example) must
+// not become an unhandled exception in the bench's render (§7 of the
+// ticket) — caught here, once, rather than at every call site.
+// ---------------------------------------------------------------------------
+
+export type OperationPreviewResult =
+  | { ok: true; prompt: LLMPrompt; variables: Array<{ id: VariableId; data: unknown }> }
+  | { ok: false; error: string };
+
+export async function resolveOperationPreview(
+  descriptor: OperationDescriptor,
+  ids: AnchorIds,
+  intent: OperationIntentInput = {}
+): Promise<OperationPreviewResult> {
+  try {
+    const result = await resolvePromptInternal(descriptor, ids, intent, { requireLlmConfig: false });
+    if (!result.ok) return result;
+    const variables = descriptor.context.variables.map((declared) => ({
+      id: declared.id,
+      data: result.resolved[declared.id],
+    }));
+    return { ok: true, prompt: result.prompt, variables };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B6a COMPLETE (2026-08-14)
+## LLM Workspace Phase B — B0 to B6b COMPLETE (2026-08-14)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -295,6 +295,73 @@ rather than claimed. Suite 279 → 303. The table was left empty both times.
 
 **Note for later passes.** The `/settings` card lives under the **Language
 Model** tab, not the default Appearance tab.
+
+### B6b — the bench, in read-only form (2026-08-14)
+
+`LLMW.BENCH.READ.1`, the second of B6's three tickets: the §5.1 three-pane
+bench with **no LLM call**, the §5.3 entity picker, and no right pane.
+`FB-20260716-035` is answered — the effective prompt stops being a black box.
+`/settings/llm-workflows/[templateId]` resolves both origins: an integer
+segment addresses an `llm_templates` row, anything else a `DESCRIPTORS` key.
+
+**The pipeline was already there.** `resolveOperationPrompt` — runner steps 1
+to 5, no model call — has existed since B2. The bench needed two things it did
+not give, and `runner.ts` was changed in exactly three authorised ways and no
+more: a `requireLlmConfig` option (default `true`, production untouched), a new
+`resolveOperationPreview` export returning the per-variable resolved data
+alongside the prompt, and `requiredIdKeys` exported as `requiredAnchorIdKeys`
+so the picker reads the one anchor→required-levels table instead of copying it.
+`resolveOperationPrompt` and `runOperation` keep signature and behaviour, and
+the proof is a test, not a claim: with no LLM configured the former still
+refuses with `messages.notConfigured` while the preview succeeds.
+
+**Read-only by construction.** No Run button, no `ProposalPanel`, no variable
+library, no write path, no schema change, no migration, no new dependency.
+`llm_knowledge_documents` stays deferred. `intent.freeText` was deliberately
+not built: none of the eight descriptors declares it, so a control for it would
+have been untestable dead code — B6c's, if ever.
+
+**What the automated battery could not see, again.** `tsc`, 333 tests and
+`npm run build` were green on a first delivery carrying two selector-state
+defects, both found by reading the diff: the shot list was queried from the
+unvalidated `sequenceId`, so after a project switch the Shot `<select>` still
+listed the previous project's shots while Sequence had gone back to empty (the
+*resolution* was correctly blocked — `normalizeBenchSelection` had already
+dropped both — so the screen showed a state that did not exist rather than
+wrong data); and the Mode `<select>` reset to `defaultMode` on every Apply made
+while the selection was still incomplete, wiping the user's choice exactly while
+they worked down the cascade. Both fixed, both then verified in a browser.
+
+**Every decision is a pure tested function**, none of it inside the Server
+Component: `parseTemplateRef`, `normalizeBenchSelection`, the search-param
+parsers and `buildVariablePreviewRows` in `bench.ts`, plus `estimateTokens`.
+Suite 303 → 333.
+
+**Token cost is an estimate and says so.** `Math.ceil(chars / 4)`, rendered
+everywhere as `~N tokens (est.)` beside the exact character count. No tokenizer
+is a dependency of this repository and this ticket authorised none.
+
+**Sixteen enumerated browser paths, sixteen PASS**, on the standing test
+Project. All four anchors plus the `entitySet` case, all eight built-ins, and
+the stored-row path end to end (duplicate → `Stored` badge → resolve → delete,
+table left empty). The proofs worth keeping: the intent parameter genuinely
+reaches the prompt (blank gives `"Choose a natural number of sections based on
+the story structure (typically 4 to 8)."`, 6 gives `"Write exactly 6
+sections."`); a precondition refusal renders instead of crashing (`"A Shot
+Prompt is required for this assist mode."`); and both an unknown textual id and
+an absent numeric one answer 404, never a 500. Two built-ins were missing from
+the first pass and were covered by a second — what a scenario does not
+enumerate does not get tested, which is now the third ticket in a row where
+that held true.
+
+**Known limit.** The page itself has no automated test: this repository has no
+precedent for testing a Server Component. Its proof is the browser pass, not a
+test file. Also deliberate: `parseTemplateRef("12abc")` resolves stored row 12,
+reproducing the export route's own `parseInt` convention rather than fixing it
+on one side only — tested as such.
+
+B6c remains: the Run button, the right pane on `ProposalPanel`, and the
+variable library (§5.2).
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 
