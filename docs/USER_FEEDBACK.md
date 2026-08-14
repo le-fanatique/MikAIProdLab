@@ -4951,3 +4951,55 @@ Copy this block under `Active Feedback` for each new note:
 
 Move entries here only after setting their status to `RESOLVED`, `DECLINED`,
 or `DUPLICATE`. Keep the full entry and its history.
+
+### FB-20260814-001 - LLM bench cascade stays empty until Apply is clicked
+
+- Status: `RESOLVED`
+- Date observed: 2026-08-14
+- Area: LLM Workspace / Bench / Entity picker
+- Context: Trying the read-only three-pane bench delivered by B6b
+  (`/settings/llm-workflows/[templateId]`), choosing a test entity.
+- Original observation:
+
+  > lorsque je choisi un projet, ca serait bien de pouvoir un bouton pour aller
+  > lister les sequence et shot, de ce projet, car actuellement, lorsque je
+  > choisi un projet, j ai rien dans la liste des sequence et des shot
+
+- Expected outcome: choosing a Project immediately lists that Project's
+  Sequences, and choosing a Sequence immediately lists its Shots, without the
+  user having to discover that a separate action is required first.
+- Impact: the bench appeared broken on first use. The data was never missing —
+  the lists did fill after clicking `Apply` — but nothing signalled that a
+  submit was required, and `Apply` reads as "run the preview", not "load the
+  next level".
+- Related ticket: `LLMW.BENCH.CASCADE.1`
+- Resolution: the five `<select>`s of the entity selector (Project, Sequence,
+  Shot, Asset, Mode) now submit their GET form on change, so each level fills
+  the next one on its own. `intent.parameters` inputs deliberately do NOT
+  auto-submit — a form must not reload on every keystroke — and the `Apply`
+  button stays, both for them and as the no-JavaScript path.
+- Resolved or validated on: 2026-08-14
+
+#### Follow-up notes
+
+- 2026-08-14: `Mode` was included beyond the literal request. It is the same
+  control type with the same expectation of immediate feedback; leaving one
+  select manual would have produced an inconsistent surface, worse than either
+  behaviour applied throughout.
+- 2026-08-14: Deliberately rejected — loading every Project's Sequences and
+  Shots up front to filter client-side. That would move data and state into the
+  browser for no gain and replace a bounded query with a dump.
+- 2026-08-14: Accepted trade-off of the technique — some browsers fire `change`
+  on each arrow-key step inside a `<select>`, so keyboard navigation can trigger
+  several submits. Documented rather than worked around with an invented
+  `onBlur` rule.
+- 2026-08-14: Observed while validating, and left as is: a value typed into a
+  parameter input but not yet applied is carried along by an auto-submit
+  triggered from another control, and takes effect. Consistent with how a form
+  works, mildly at odds with what `Apply` suggests.
+- 2026-08-14: The no-JavaScript fallback is **reasoned, not proven**. The
+  browser tooling available offers no safe way to disable JavaScript, and the
+  validation pass correctly refused to reach for an arbitrary-code-execution
+  tool to force it. The markup is a plain `<select>` inside a
+  `<form method="get">` with a submit button, so without JavaScript the control
+  degrades to the previous click-to-apply behaviour.

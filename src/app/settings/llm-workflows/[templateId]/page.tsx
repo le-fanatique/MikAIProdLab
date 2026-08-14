@@ -7,6 +7,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
+import AutoSubmitSelect from "@/components/AutoSubmitSelect";
 import { DESCRIPTORS } from "@/lib/llmWorkspace/descriptors";
 import { validateLlmTemplateJson } from "@/lib/llmWorkspace/templateStorage";
 import { requiredAnchorIdKeys, resolveOperationPreview } from "@/lib/llmWorkspace/runner";
@@ -183,78 +184,58 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
         <form method="get" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">Project</label>
-            <select
+            <AutoSubmitSelect
               name="projectId"
               defaultValue={selection.projectId != null ? String(selection.projectId) : ""}
+              placeholder="Select a project…"
+              options={projectRows.map((p) => ({ value: String(p.id), label: p.name }))}
               className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-            >
-              <option value="">Select a project…</option>
-              {projectRows.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {needsSequence && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">Sequence</label>
-              <select
+              <AutoSubmitSelect
                 name="sequenceId"
                 defaultValue={selection.sequenceId != null ? String(selection.sequenceId) : ""}
+                placeholder="Select a sequence…"
+                options={sequenceRows.map((s) => ({ value: String(s.id), label: s.title }))}
                 className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-              >
-                <option value="">Select a sequence…</option>
-                {sequenceRows.map((s) => (
-                  <option key={s.id} value={String(s.id)}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 
           {needsShot && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">Shot</label>
-              <select
+              <AutoSubmitSelect
                 name="shotId"
                 defaultValue={selection.shotId != null ? String(selection.shotId) : ""}
+                placeholder="Select a shot…"
+                options={shotRows.map((s) => ({ value: String(s.id), label: s.title }))}
                 className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-              >
-                <option value="">Select a shot…</option>
-                {shotRows.map((s) => (
-                  <option key={s.id} value={String(s.id)}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 
           {needsAsset && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">Asset</label>
-              <select
+              <AutoSubmitSelect
                 name="assetId"
                 defaultValue={selection.assetId != null ? String(selection.assetId) : ""}
+                placeholder="Select an asset…"
+                options={assetRows.map((a) => ({ value: String(a.id), label: a.name }))}
                 className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-              >
-                <option value="">Select an asset…</option>
-                {assetRows.map((a) => (
-                  <option key={a.id} value={String(a.id)}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 
           {descriptor.intent.mode && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">Mode</label>
-              <select
+              <AutoSubmitSelect
                 name="mode"
                 // R2 retake (supervisor review): read straight from `search`,
                 // not from `intentInput` — `intentInput` is `{}` whenever the
@@ -264,16 +245,14 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
                 // resolve, exactly while the user is still working down the
                 // project → sequence → shot cascade and setting their
                 // controls. `intent.parameters` inputs below already read
-                // `search` directly for the same reason.
+                // `search` directly for the same reason. This still holds now
+                // that Mode auto-submits: an incomplete cascade round-trip
+                // still resolves this control's value from `search`, not
+                // `descriptor.intent.mode.defaultMode`.
                 defaultValue={firstBenchParam(search.mode) ?? descriptor.intent.mode.defaultMode}
+                options={descriptor.intent.mode.modes.map((m) => ({ value: m.id, label: m.id }))}
                 className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-              >
-                {descriptor.intent.mode.modes.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.id}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 

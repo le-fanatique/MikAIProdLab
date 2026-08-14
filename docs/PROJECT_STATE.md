@@ -363,6 +363,33 @@ on one side only — tested as such.
 B6c remains: the Run button, the right pane on `ProposalPanel`, and the
 variable library (§5.2).
 
+### B6b follow-up — the cascade fills itself (2026-08-14)
+
+`LLMW.BENCH.CASCADE.1`, from the user's first hands-on trial of the bench
+(`FB-20260814-001`). B6b's entity picker was a server-rendered
+`<form method="get">` with an explicit `Apply`, so choosing a Project left the
+Sequence list empty until the form was submitted — the data was never missing,
+but nothing said a submit was needed, and `Apply` reads as "run the preview".
+The five `<select>`s now submit on change through one shared
+`AutoSubmitSelect` client component that renders and submits and holds no
+business logic; `intent.parameters` inputs keep their manual `Apply`, which
+also remains the no-JavaScript path.
+
+`Mode` was included beyond the literal request, on the argument that leaving
+one select manual is worse than either behaviour applied throughout. Rejected
+on the way: loading every Project's Sequences and Shots up front to filter in
+the browser.
+
+No test was added — the component renders and submits, there is nothing pure to
+cover, and a decorative test would have proven nothing. Thirteen browser paths,
+twelve PASS: the cascade fills with zero `Apply` clicks at every anchor level,
+and **both of B6b's review fixes still hold** under a regime that exercises
+them far more often (no shot of the previous Project survives a Project switch;
+a chosen mode survives an incomplete round trip). The thirteenth, the
+no-JavaScript fallback, is reasoned rather than proven: the tooling offers no
+safe way to disable JavaScript, and the pass refused to reach for an
+arbitrary-code-execution tool to force it.
+
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 
 `install.bat`/`.sh`, `start.bat`/`.sh`, `update.bat`/`.sh` added at repo root
