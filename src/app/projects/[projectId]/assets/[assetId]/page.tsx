@@ -122,10 +122,6 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const detailsUpdated =
     rawDetailsUpdated === "1" || (Array.isArray(rawDetailsUpdated) && rawDetailsUpdated[0] === "1");
 
-  const rawBibleUpdated = resolvedSearchParams["bibleUpdated"];
-  const bibleUpdated =
-    rawBibleUpdated === "1" || (Array.isArray(rawBibleUpdated) && rawBibleUpdated[0] === "1");
-
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
 
@@ -354,11 +350,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
         </Card>
       </Collapsible>
 
-      <Collapsible label="Enhance Asset Bible" defaultOpen={bibleUpdated}>
+      <Collapsible label="Enhance Asset Bible">
         <Card title="Enhance Asset Bible">
-          {bibleUpdated && (
-            <p className="mb-3 text-xs text-[#6b9e72]">Asset Bible updated.</p>
-          )}
           <AssetBibleEnhancePanel
             projectId={pid}
             assetId={aid}
@@ -368,7 +361,6 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             usageRules={asset.usageRules}
             forbiddenVariations={asset.forbiddenVariations}
             isConfigured={!!llmSettings.model.trim()}
-            returnTo={`/projects/${pid}/assets/${aid}`}
           />
         </Card>
       </Collapsible>

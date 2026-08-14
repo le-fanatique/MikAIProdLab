@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateAssetDetailsInline } from "@/actions/assets";
 import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
 
@@ -38,6 +38,23 @@ export default function AssetInlineDetailsForm({
   const [forbiddenVariations, setForbiddenVariations] = useState(initialForbiddenVariations ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Retake 2 (LLMW.PROPOSAL.COMPONENT.1) — `useState(initial... ?? "")` only
+  // seeds this component's state at mount. Asset Bible and Description/Notes
+  // now commit via `router.refresh()` instead of a full page reload
+  // (`ProposalPanel`'s Decision 2), which re-renders this already-mounted
+  // component with fresh props but does not itself update state React
+  // already owns — the exact stale-value defect that arbitration existed to
+  // fix. Same pattern as `OutlineEditorForm.tsx`/`StoryFoundationEditor.tsx`:
+  // resync each field from its prop whenever the prop changes. An unsaved
+  // edit in one of these five fields is overwritten by the server value on
+  // the next refresh — the same trade-off already accepted for Outline and
+  // Story Foundation, not a new one invented here.
+  useEffect(() => { setDescription(initialDescription ?? ""); }, [initialDescription]);
+  useEffect(() => { setNotes(initialNotes ?? ""); }, [initialNotes]);
+  useEffect(() => { setVisualIdentity(initialVisualIdentity ?? ""); }, [initialVisualIdentity]);
+  useEffect(() => { setUsageRules(initialUsageRules ?? ""); }, [initialUsageRules]);
+  useEffect(() => { setForbiddenVariations(initialForbiddenVariations ?? ""); }, [initialForbiddenVariations]);
 
   async function handleSave() {
     setIsSaving(true);

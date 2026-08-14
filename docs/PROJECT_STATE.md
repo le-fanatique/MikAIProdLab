@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B4 COMPLETE (2026-08-13)
+## LLM Workspace Phase B — B0 to B5 COMPLETE (2026-08-14)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -50,6 +50,7 @@ application after each production switch.
 | B3 — the switch | `5f11464`, `0b40a74` | the 8 actions became thin adapters; ~1150 lines of replaced code deleted |
 | B4a — the declaration | `33a289f` | seven declared entries, `ActionId` closed into a union, each entry's `columns.written` verified against a real full-row diff |
 | B4b — the resolution | `89768f7` | `actions/bindings.ts`: `ActionId` resolves to the real Server Action; the 7 Approve-side callers switched |
+| B5 — the proposal component | (this ticket) | `ProposalPanel` + `proposalCommit.ts`; 6 panels collapsed onto one Approve/Redo/Cancel engine, net −408 lines |
 
 The suite went from 100 tests to 263. No A2 snapshot moved in any of these
 tickets, and no exported signature or user-visible message changed.
@@ -114,6 +115,88 @@ Settings-naming question dissolved: `FB-20260715-013` is an unpromoted
 `USER_FEEDBACK` observation, and the workspace's bench and variable library
 likely supersede it. Phase B now needs a prepared ticket, not another
 decision.
+
+### B5 — the proposal component, object mode (2026-08-14)
+
+`LLMW.PROPOSAL.COMPONENT.1`. One `ProposalPanel` (Approve / Redo / Cancel)
+now backs the **seven mono-entity operations** (`anchor.kind === "entity"`);
+`assetDescription.batch` (`entitySet`) is untouched and still calls
+`ACTION_BINDINGS` directly. Six panel files collapsed onto it: 8 files
+modified, 3 added (`ProposalPanel.tsx`, `actions/proposalCommit.ts`,
+`tests/actions/proposalCommit.test.ts`), +469 / −877. Suite 263 → 274.
+
+**The two things B4b deliberately left open are now closed.**
+
+*The commit call shape.* There is no single uniform signature, and the ticket
+proved why rather than assuming it: `updateAssetDetailsInline` and
+`updateAssetDescriptionFieldInline` take an object,
+`applyGeneratedStory`/`applyGeneratedOutline` are positional, and the two
+prompt actions take `FormData`. `proposalCommit.ts` holds one adapter per
+entry, each typed `Parameters<typeof ACTION_BINDINGS[K]>`, so a signature
+drift fails `tsc` instead of a production Approve click. It covers the seven
+mono-entity entries **and only those** — the batch item list is not in the
+payload, because the `entitySet` entry has its own migration. B4b's refusal
+was right: the shape could only be written once a consumer constrained it.
+
+*Post-Approve.* Arbitrated by the user on 2026-08-14, and **derived from the
+`response` field `registry.ts` already declares** — no second field was added.
+`redirectOnly` renders `<form action={binding}>` with adapter-built hidden
+fields, so the server `redirect()`, form identity and no-JS submission stay
+structurally intact (exactly what B4b protected). `returnValue` calls the
+binding then `router.refresh()`. The four inconsistent behaviours that existed
+before — server redirect, `window.location.href`, `router.refresh()`, and
+*nothing at all* — collapse to two, chosen by declaration rather than by
+accident. Asset Bible's `?bibleUpdated=1` round trip is gone, replaced by a
+local confirmation; the searchParam plumbing was removed in the same diff.
+
+**The defect the automated battery could not see.** `tsc`, the full suite and
+`npm run build` were green on all three passes. The user found by hand what
+none of them could: after Approve, the asset Description/Notes fields kept
+their stale value until F5. Cause — `AssetInlineDetailsForm` seeded state with
+`useState(initial ?? "")`, a mount-time-only seed, and `router.refresh()`
+re-renders with fresh props but never updates state React already owns. The
+old code hid this: Asset Bible did a full `window.location.href` reload.
+Fixed by the repository's own existing pattern (`OutlineEditorForm.tsx:21-23`,
+`StoryFoundationEditor.tsx:34-36`) — a per-prop resync `useEffect` — applied to
+**all five** fields, since Asset Bible writes the other three through the same
+display component and was silently exposed to the identical defect.
+
+Accepted trade-off, identical to Outline and Story Foundation: an unsaved edit
+in one of those five fields is overwritten by the server value on the next
+refresh. The five new `useEffect`s trip `react-hooks/set-state-in-effect`;
+verified to be pre-existing repository drift, since the two unmodified
+reference files fail the same rule. Reproducing the established pattern was
+preferred to inventing a second one for the same problem.
+
+**The lesson worth carrying, not the bug.** B5 is the first Phase B ticket
+whose result lives in the browser, and Phase B has no tooling for that. The
+supervisor named the gap as a residual risk and closed the verdict on green
+checks; it was an outright blind spot — Playwright was available the whole time
+and simply was not used. **From now on, any ticket visible in the product gets
+a Playwright pass — delegated to a Sonnet subagent to contain the token cost —
+before a verdict.** Note that the seven Approve paths write to the live
+database: the pass must create its own disposable Project and write only there,
+never into existing data.
+
+B5 itself was validated that way before commit, on a disposable
+`ZZ-B5-PLAYWRIGHT-TEST` Project: all nine cases passed — the five in-place
+refresh paths update without a reload, the two `redirectOnly` paths do navigate
+(`?shotPromptSaved=1` / `?sequencePromptSaved=1`), Asset Bible's Apply leaves
+Description and Notes intact rather than nulling them, a double click on
+Generate starts one generation, and Discard writes nothing. The only console
+errors come from a local antivirus script and the hydration warning it causes,
+on every page, unrelated to this code.
+
+**Deliberate scope line.** `ProposalPanel` owns the proposal phase and the
+generic trigger chrome (trigger row, loading, error, not-configured message);
+the trigger *definitions* stay in the six wrapper components, which remain
+genuinely heterogeneous. Two adapters (`buildApplyGeneratedStoryArgs`,
+`...OutlineArgs`) are identity passthroughs; kept for a uniform typed surface,
+not to be multiplied.
+
+Known limit, unchanged from B4b: `tests/actions/proposalCommit.test.ts` proves
+the hidden-field keys against a hardcoded list, not against `shots.ts` itself,
+so a simultaneous rename on both sides would still pass.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 
