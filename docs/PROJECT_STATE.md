@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B6b COMPLETE (2026-08-14)
+## LLM Workspace Phase B — B0 to B6c1 COMPLETE (2026-08-14)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -389,6 +389,87 @@ a chosen mode survives an incomplete round trip). The thirteenth, the
 no-JavaScript fallback, is reasoned rather than proven: the tooling offers no
 safe way to disable JavaScript, and the pass refused to reach for an
 arbitrary-code-execution tool to force it.
+
+### B6c1 — the bench executes and applies (2026-08-14)
+
+`LLMW.BENCH.RUN.1`. B6c was split in two by the user before implementation:
+**B6c1** is the Run button, the right pane on `ProposalPanel`, and an Approve
+that really writes; **B6c2** is the variable library (§5.2), still to do. The
+argument for splitting: only one of the two writes to the database, and it
+deserved its own diff review and its own browser pass rather than sharing them
+with a read-only surface.
+
+**The question B6a and B6b both left open is now closed.** Neither ticket could
+show that a stored template actually executes — B6a wrote `llm_templates`, B6b
+read it for the workshop, and no path ran it. The mechanism needed no
+invention: `loadBenchDescriptor` resolves the descriptor from both origins (a
+`DESCRIPTORS` key, or an `llm_templates` row through
+`validateLlmTemplateJson`), `runBenchOperation` calls `runOperation` on **that
+same variable**, and `commitBenchProposal` writes through the descriptor's own
+`commit`. Proven in the real database: a row duplicated from `story.generate`
+was executed and applied on the standing test Project.
+
+**What is still deferred, and must not be read as done**: §6 Product
+Integration. No product screen invokes a stored template by identifier; the
+eight production operations remain wired to their TypeScript descriptors. The
+proof runs through the workshop, not through production.
+
+**No second adapter layer, and the check that decided it.** The fear was that a
+generic bench Approve would duplicate `proposalCommit.ts`. It does not, because
+`updateShotPrompt`'s `returnTo` is entirely caller-supplied
+(`src/actions/shots.ts:588-590`): the bench passes its own URL, so both
+`redirectOnly` paths reuse B5's hidden-field builders unchanged and come back
+to the bench with the selection intact — the server `redirect()`, form identity
+and no-JS submission that B4b protected all stay structurally untouched.
+`buildAssetBibleCommitArgs` already took the `existing*` values it needs. The
+dispatch is on `ActionId`, exhaustive, so an eighth id would fail `tsc`.
+
+**The write guard, and why it exists.** Approve is a request distinct from the
+Run that resolved the preview, and two of the seven commit actions
+(`applyGeneratedStory`, `applyGeneratedOutline`) verify nothing themselves
+(registry behaviour 5). `runner.ts` therefore received its fourth authorised
+change since B2, and only that: `loadAndVerifyChain` exported as
+`verifyAnchorChain`, body untouched. One ownership-chain table, not a copy.
+
+**`preservedAssetDetailColumns` is the ticket's quiet load-bearing piece.**
+`updateAssetDetailsInline` replaces all five columns on every call and turns a
+blank one into `null` (registry behaviour 3), while `assetBible.generate`
+declares only three. The columns to carry through are derived from
+`ACTION_REGISTRY`, not hard-coded, and the proof is asserted twice: in
+`tests/actions/benchCommit.test.ts`, and in the browser, where the Asset's
+`description` (925 chars) and `notes` (1113) were re-read intact after Approve.
+Without it, two columns would have been erased in silence.
+
+**Deliberate scope lines, stated rather than hidden.** The bench's Approve is
+`replace` only — `append` is native on one action and pre-computed by the caller
+on two others, production-panel ergonomics the workshop does not need. The
+`entitySet` batch descriptor offers Run but refuses Approve, with the reason
+visible **before** the Run so no model call is paid to learn it. No LLM
+pre-check: an absent configuration surfaces through the Run error with the
+descriptor's own `notConfigured` message, exactly as Shot/Sequence Prompt do in
+production.
+
+**What diff review caught that the green checks did not.** `tsc`, the full
+suite and `npm run build` were green on the first delivery, which nonetheless
+carried two dead fields, a stale "click Apply" instruction (false since
+`ca46847` made the cascade auto-submit), a `returnTo` that re-injected the
+current query so the URL grew by one confirmation parameter per Approve, and a
+batch refusal only visible after a paid model call. All four fixed; the
+exclusion list for `returnTo` was read off `shots.ts` and `sequences.ts` rather
+than guessed, and lives in a tested pure function. This is the fourth ticket in
+a row where the automated battery was green on something a diff read found.
+
+Suite 333 → 346. Two browser passes on `ZZ-TEST-PLAYWRIGHT`: sixteen of
+seventeen enumerated paths, then five of five on the corrections — including
+two successive Approves returning byte-identical URLs, which is what proves the
+accumulation gone. Writes were verified in the database afterwards to have
+stayed inside project 999005, with `llm_templates` left empty.
+
+**The one path not proven, kept as such.** Checking that no shot of the previous
+Project survives a Project switch could not be exercised: the permission
+classifier blocked navigation to a real production Project, and the pass refused
+to force it. It is a B6b non-regression control, and the code concerned is
+verified untouched by diff review — covered by reading, not by the browser.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 

@@ -2,14 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { assets, llmTemplates, projects, sequences, shots } from "@/db/schema";
+import { assets, projects, sequences, shots } from "@/db/schema";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import AutoSubmitSelect from "@/components/AutoSubmitSelect";
-import { DESCRIPTORS } from "@/lib/llmWorkspace/descriptors";
-import { validateLlmTemplateJson } from "@/lib/llmWorkspace/templateStorage";
+import { loadBenchDescriptor } from "@/lib/llmWorkspace/benchDescriptor";
+import { isBenchReturnToQueryKey, planBenchCommit } from "@/lib/llmWorkspace/benchRun";
 import { requiredAnchorIdKeys, resolveOperationPreview } from "@/lib/llmWorkspace/runner";
 import { estimateTokens } from "@/lib/llmWorkspace/tokenEstimate";
 import {
@@ -18,17 +18,19 @@ import {
   normalizeBenchSelection,
   parseIntentInputFromSearchParams,
   parseSelectionFromSearchParams,
-  parseTemplateRef,
   type BenchSearchParams,
 } from "@/lib/llmWorkspace/bench";
-import type { Block, OperationDescriptor } from "@/lib/llmWorkspace/types";
+import BenchRunPanel from "@/components/llmWorkspace/BenchRunPanel";
+import type { Block } from "@/lib/llmWorkspace/types";
 
 // LLMW.BENCH.READ.1 (B6b) — the three-pane bench in read-only form
 // (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §5.1, §5.3): left = the template's
-// own descriptor, centre = the resolved context and the effective prompt,
-// right = nothing yet (Run, the proposal panel and the variable library are
-// B6c). This route answers `FB-20260716-035` — the effective prompt stops
-// being a black box — without ever calling the model.
+// own descriptor, centre = the resolved context and the effective prompt.
+// LLMW.BENCH.RUN.1 (B6c1) fills the third pane: Run, the proposal panel and
+// a real Approve that writes in base (the variable library, §5.2, stays
+// B6c2). This route answers `FB-20260716-035` — the effective prompt stops
+// being a black box — and now also proves a stored template can actually be
+// executed and applied (§1.1 of the ticket), not only previewed.
 
 export const dynamic = "force-dynamic";
 
@@ -49,46 +51,38 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   const { templateId } = await params;
   const search = await searchParams;
 
-  const ref = parseTemplateRef(templateId);
+  // §4.1 — the page and both bench Server Actions (`src/actions/llmWorkspace/bench.ts`)
+  // share this one resolution: Approve writes according to exactly the
+  // descriptor the screen displayed, never a second, independently
+  // re-resolved one.
+  const resolved = await loadBenchDescriptor(templateId);
 
-  let descriptor: OperationDescriptor;
-  let sourceLabel: string;
+  if (resolved.status === "notFound") notFound();
 
-  if (ref.kind === "builtin") {
-    const found = (DESCRIPTORS as Record<string, OperationDescriptor>)[ref.id];
-    if (!found) notFound();
-    descriptor = found;
-    sourceLabel = "Built-in";
-  } else {
-    const [row] = await db.select().from(llmTemplates).where(eq(llmTemplates.id, ref.id));
-    if (!row) notFound();
-
-    const validated = validateLlmTemplateJson(row.templateJson);
-    if (!validated.ok) {
-      return (
-        <div>
-          <Breadcrumb
-            crumbs={[
-              { label: "Settings", href: "/settings" },
-              { label: "LLM Workflows", href: "/settings/llm-workflows" },
-              { label: row.name },
-            ]}
-          />
-          <PageHeader title={row.name} meta={`Stored template #${row.id}`} />
-          <Card title="Invalid Template">
-            <p className="text-sm text-[#cf7b6b]">
-              This template&apos;s stored JSON is not a valid operation descriptor and cannot be opened
-              in the bench.
-            </p>
-            <p className="text-xs text-[#a4abb2] mt-2 font-mono">{validated.reason}</p>
-          </Card>
-        </div>
-      );
-    }
-
-    descriptor = validated.descriptor;
-    sourceLabel = "Stored";
+  if (resolved.status === "invalid") {
+    return (
+      <div>
+        <Breadcrumb
+          crumbs={[
+            { label: "Settings", href: "/settings" },
+            { label: "LLM Workflows", href: "/settings/llm-workflows" },
+            { label: resolved.storedName },
+          ]}
+        />
+        <PageHeader title={resolved.storedName} meta={`Stored template #${resolved.storedId}`} />
+        <Card title="Invalid Template">
+          <p className="text-sm text-[#cf7b6b]">
+            This template&apos;s stored JSON is not a valid operation descriptor and cannot be opened
+            in the bench.
+          </p>
+          <p className="text-xs text-[#a4abb2] mt-2 font-mono">{resolved.reason}</p>
+        </Card>
+      </div>
+    );
   }
+
+  const descriptor = resolved.descriptor;
+  const sourceLabel = resolved.source === "builtin" ? "Built-in" : "Stored";
 
   const anchorEntity = descriptor.anchor.entity;
   const requiredKeys = requiredAnchorIdKeys(anchorEntity);
@@ -154,6 +148,27 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   const preview = complete ? await resolveOperationPreview(descriptor, selection, intentInput) : null;
 
   const isBatch = descriptor.anchor.kind === "entitySet";
+
+  // §4.3 — decided once, server-side, and passed down to `BenchRunPanel` as
+  // data: whether Approve can write at all, and how.
+  const plan = planBenchCommit(descriptor);
+
+  // §4.6 — computed server-side from the current query string, so both
+  // `redirectOnly` Approve paths (`updateShotPrompt` / `updateSequencePrompt`)
+  // return to this exact bench state, selection intact, instead of the
+  // Shot/Sequence screen their own action would otherwise redirect to by
+  // default. `isBenchReturnToQueryKey` drops the confirmation parameter
+  // those two actions append to `returnTo` on their own redirect (review
+  // retake, post-B6c1) — left in, it would ride along into the *next*
+  // `returnTo` and grow the URL by one parameter per Approve.
+  const returnQuery = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (!isBenchReturnToQueryKey(key)) continue;
+    const first = firstBenchParam(value);
+    if (first != null) returnQuery.set(key, first);
+  }
+  const returnQueryString = returnQuery.toString();
+  const returnTo = `/settings/llm-workflows/${templateId}${returnQueryString ? `?${returnQueryString}` : ""}`;
 
   return (
     <div>
@@ -286,7 +301,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
         )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card title="Template">
           <div className="flex flex-col gap-4 text-xs">
             <div>
@@ -372,7 +387,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
           {!complete && (
             <EmptyState
               title="Select a test entity to resolve the context."
-              description="Choose every required level above and click Apply."
+              description="Choose every required level above — each selection applies automatically."
             />
           )}
 
@@ -430,6 +445,32 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
                 </div>
               </div>
             </div>
+          )}
+        </Card>
+
+        <Card title="Proposed Output">
+          {!complete && (
+            <EmptyState
+              title="Select a test entity to run this template."
+              description="Choose every required level above — each selection applies automatically."
+            />
+          )}
+
+          {complete && preview && !preview.ok && (
+            <p className="text-sm text-[#cf7b6b]">
+              The context must resolve before this template can run — see Resolved Context.
+            </p>
+          )}
+
+          {complete && preview && preview.ok && (
+            <BenchRunPanel
+              templateId={templateId}
+              ids={selection}
+              searchParams={search}
+              plan={plan}
+              outputFields={descriptor.output.fields}
+              returnTo={returnTo}
+            />
           )}
         </Card>
       </div>

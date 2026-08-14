@@ -110,6 +110,17 @@ function validateAnchorIds(entity: EntityKind, ids: AnchorIds): boolean {
 // throughout, per this module's own module-scope-`@/db` ban.
 // ---------------------------------------------------------------------------
 
+/**
+ * Exported as `verifyAnchorChain` (§4.2 of `LLMW.BENCH.RUN.1`, B6c1) — the
+ * fourth authorized change to this file since B2, and the only one this
+ * ticket makes. The bench's Approve (`src/actions/llmWorkspace/bench.ts`) is
+ * a request distinct from Run, and `.claude/rules/database.md` requires
+ * validating untrusted Server Action inputs before a write; two of the seven
+ * commit actions (`applyGeneratedStory`, `applyGeneratedOutline`) verify
+ * nothing themselves (`ACTION_REGISTRY`, behaviour 5), so the bench must run
+ * this same check itself rather than trust the client's ids — using the one
+ * ownership-chain table that already exists, not a second copy of it.
+ */
 async function loadAndVerifyChain(
   entity: EntityKind,
   ids: AnchorIds,
@@ -153,6 +164,8 @@ async function loadAndVerifyChain(
   }
   return { ok: true };
 }
+
+export { loadAndVerifyChain as verifyAnchorChain };
 
 // ---------------------------------------------------------------------------
 // Step 4 — resolve declared variables via the registry.

@@ -1,0 +1,105 @@
+// ---------------------------------------------------------------------------
+// benchRun.ts — LLMW.BENCH.RUN.1 (B6c1), §4.3
+//
+// Pure decision logic for the bench's Run/Approve surface — no database
+// access, no LLM call, no component import. Same discipline as `bench.ts`
+// (B6b): every decision this ticket makes lives here, where it is testable
+// in isolation (`tests/llmWorkspace/benchRun.test.ts`).
+// ---------------------------------------------------------------------------
+
+import { ACTION_REGISTRY } from "./actions/registry";
+import type { ActionId, OperationDescriptor } from "./types";
+
+// ---------------------------------------------------------------------------
+// `planBenchCommit` — decides how (or whether) the bench's Approve can write
+// for a given descriptor, per §4.3's ordered rules.
+// ---------------------------------------------------------------------------
+
+export type BenchCommitPlan =
+  | { kind: "returnValue"; actionId: ActionId }
+  | { kind: "redirectOnly"; actionId: ActionId }
+  | { kind: "unsupported"; reason: string };
+
+export function planBenchCommit(descriptor: OperationDescriptor): BenchCommitPlan {
+  if (descriptor.anchor.kind === "entitySet") {
+    return { kind: "unsupported", reason: "Batch operations cannot be approved from the bench." };
+  }
+
+  if (descriptor.commit.length !== 1) {
+    return { kind: "unsupported", reason: "This template declares no single commit action." };
+  }
+
+  const actionId = descriptor.commit[0];
+
+  if (actionId === "applyBatchAssetDescriptionDraftsInline") {
+    return { kind: "unsupported", reason: "Batch operations cannot be approved from the bench." };
+  }
+
+  const response = ACTION_REGISTRY[actionId].response;
+  return response === "redirectOnly" ? { kind: "redirectOnly", actionId } : { kind: "returnValue", actionId };
+}
+
+// ---------------------------------------------------------------------------
+// `buildBenchDraftFields` — the draft's initial state and the textareas'
+// render order, both driven by the descriptor's `output.fields`, in their
+// own order.
+//
+// Takes `descriptor.output.fields` directly (not the whole descriptor):
+// `BenchRunPanel` (§4.5) receives only `outputFields` as a prop — the
+// declared fields, in order — not the full `OperationDescriptor`, so this
+// is the shape its one caller actually has in hand. Kept as `descriptor`'s
+// own sub-type (`OperationDescriptor["output"]["fields"]`), not a hand-typed
+// duplicate, so the two stay in lockstep.
+// ---------------------------------------------------------------------------
+
+export function buildBenchDraftFields(
+  fields: OperationDescriptor["output"]["fields"],
+  values: Record<string, string>
+): Array<{ field: string; value: string }> {
+  return fields.map((f) => ({ field: f.field, value: values[f.field] ?? "" }));
+}
+
+// ---------------------------------------------------------------------------
+// `preservedAssetDetailColumns` — the `updateAssetDetailsInline` columns a
+// descriptor does *not* declare in its own `output.fields`, derived from the
+// registry rather than hard-coded. Registry behaviour 3:
+// `updateAssetDetailsInline` replaces all five columns on every call, a
+// blank one becoming null — so the Approve path must read these columns off
+// the existing row and carry them through, or it silently erases them.
+// ---------------------------------------------------------------------------
+
+export function preservedAssetDetailColumns(descriptor: OperationDescriptor): string[] {
+  const declared = new Set(descriptor.output.fields.map((f) => f.field));
+  return ACTION_REGISTRY.updateAssetDetailsInline.columns.written.filter((column) => !declared.has(column));
+}
+
+// ---------------------------------------------------------------------------
+// `isBenchReturnToQueryKey` — supervisor review retake (post-B6c1). The
+// bench rebuilds its own `returnTo` from the current query string
+// (`src/app/settings/llm-workflows/[templateId]/page.tsx`), and the two
+// `redirectOnly` commit actions append their own confirmation parameter to
+// that same `returnTo` on redirect, on *both* the success and the error
+// path:
+//
+//   - `updateShotPrompt` (`src/actions/shots.ts:594,628`):
+//     `shotPromptError`, `shotPromptSaved`
+//   - `updateSequencePrompt` (`src/actions/sequences.ts:283,306`):
+//     `sequencePromptError`, `sequencePromptSaved`
+//
+// Left unfiltered, that parameter rides along into the *next* `returnTo`
+// the bench builds after the redirect lands — the query string grows by one
+// parameter on every Approve. Excluded here, once, so the page's `returnTo`
+// construction stays a one-line loop over this predicate rather than a
+// hard-coded exclusion list repeated at the call site.
+// ---------------------------------------------------------------------------
+
+const BENCH_RETURN_TO_EXCLUDED_KEYS = [
+  "shotPromptError",
+  "shotPromptSaved",
+  "sequencePromptError",
+  "sequencePromptSaved",
+] as const;
+
+export function isBenchReturnToQueryKey(key: string): boolean {
+  return !(BENCH_RETURN_TO_EXCLUDED_KEYS as readonly string[]).includes(key);
+}
