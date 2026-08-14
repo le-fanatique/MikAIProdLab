@@ -136,7 +136,7 @@ resolved from the `assets` prop already in hand.
 the current project's Assets, so every one would have to be refused. It is
 covered by unit tests instead of by a claim. Suite 274 → 279. The nominal
 Replace/Append paths were verified in a real browser on the disposable
-`ZZ-B5-PLAYWRIGHT-TEST` Project; partial and nothing-applied are recorded as
+`ZZ-TEST-PLAYWRIGHT` Project (named `ZZ-B5-PLAYWRIGHT-TEST` at the time); partial and nothing-applied are recorded as
 not tested there, deliberately, rather than forced.
 
 Known unreachable edge, left alone on purpose: `resolveBatchApplyOutcome([], [])`
@@ -202,11 +202,25 @@ checks; it was an outright blind spot — Playwright was available the whole tim
 and simply was not used. **From now on, any ticket visible in the product gets
 a Playwright pass — delegated to a Sonnet subagent to contain the token cost —
 before a verdict.** Note that the seven Approve paths write to the live
-database: the pass must create its own disposable Project and write only there,
-never into existing data.
+database, so the pass writes only into the **standing test Project**, never into
+real data.
+
+**The standing test Project.** `ZZ-TEST-PLAYWRIGHT` (id 999005) is kept on
+purpose and reused by every browser pass, decided by the user on 2026-08-14:
+re-creating a Project, an Asset, a Sequence and a Shot at the start of each pass
+was burning a large share of the subagent's tokens for no added proof. Find it
+by name, do not create a second one. It currently holds three Assets, one
+Sequence and one Shot.
+
+Two consequences a pass must account for rather than be surprised by: it
+accumulates state between passes — its Assets already have descriptions and
+notes, so precondition-gated affordances (`Select Missing Descriptions`, the
+Enhance/Rewrite modes that need an existing value) will not be in their
+first-run state — and anything it needs beyond that, it adds there rather than
+elsewhere.
 
 B5 itself was validated that way before commit, on a disposable
-`ZZ-B5-PLAYWRIGHT-TEST` Project: all nine cases passed — the five in-place
+`ZZ-TEST-PLAYWRIGHT` Project (named `ZZ-B5-PLAYWRIGHT-TEST` at the time): all nine cases passed — the five in-place
 refresh paths update without a reload, the two `redirectOnly` paths do navigate
 (`?shotPromptSaved=1` / `?sequencePromptSaved=1`), Asset Bible's Apply leaves
 Description and Notes intact rather than nulling them, a double click on
