@@ -338,19 +338,25 @@ export type OperationDescriptor = {
  * named render form of one variable, a named render form declaring every
  * variable it reads (when a source builder concatenates two variables'
  * fragments with no separator — see `sequencePrompt.assist` /
- * `shotPrompt.assist`), a named render form of an intent parameter, or a
- * named render form of the operation's selected `intent.mode`. A block that
- * renders empty is dropped before the list is joined by its separator
- * (§4.1 correction 4, widened 2026-08-13 with the `variables` and `mode`
- * forms after `LLMW.DESCRIPTOR.RENDER.1`'s proof found two shapes the
- * original three variants could not declare honestly: a mode-conditional
- * fragment referenced as if it were an `intent.parameters` entry, and a
+ * `shotPrompt.assist`), a named render form of an intent parameter, a named
+ * render form of the operation's selected `intent.mode`, or a named render
+ * form of the operation's free-text director's note (`intent.freeText`,
+ * LLMW.INTENT.FREETEXT.1, B9a). A block that renders empty is dropped before
+ * the list is joined by its separator (§4.1 correction 4, widened
+ * 2026-08-13 with the `variables` and `mode` forms after
+ * `LLMW.DESCRIPTOR.RENDER.1`'s proof found two shapes the original three
+ * variants could not declare honestly: a mode-conditional fragment
+ * referenced as if it were an `intent.parameters` entry, and a
  * multi-variable render form that named only one of the variables it
- * actually read).
+ * actually read; widened again by B9a with `freeText`, on the same model —
+ * `intent.freeText` has no owning variable, no parameter id and is not the
+ * selected mode, so it needs its own block shape rather than borrowing one
+ * of the other four's).
  */
 export type Block =
   | { text: string }
   | { variable: VariableId; render: string }
   | { variables: VariableId[]; render: string } // a render form that reads more than one variable — declares all of them
   | { parameter: string; render: string } // an intent parameter, e.g. targetSections
-  | { mode: true; render: string }; // the operation's selected intent.mode
+  | { mode: true; render: string } // the operation's selected intent.mode
+  | { freeText: true; render: string }; // the operation's free-text director's note (intent.freeText)

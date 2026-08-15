@@ -901,6 +901,35 @@ export function renderShotPromptClosingLine(mode: ShotPromptAssistModeId): strin
 }
 
 // ---------------------------------------------------------------------------
+// `intent.freeText` render forms — LLMW.INTENT.FREETEXT.1 (B9a). Named render
+// forms for the `{freeText: true, render}` block (`types.ts`), on the same
+// model as `PARAMETER_RENDER_FORMS` / `MODE_RENDER_FORMS`: the runner holds
+// no table of its own, only the dispatch.
+//
+// Contract (§4.1 of the ticket): an absent, empty or blank consigne renders
+// as the empty string, so the block disappears before the block list is
+// joined (§4.1 correction 4) — a `shotPrompt.assist` run with no consigne
+// therefore produces byte-for-byte the same prompt as before this block
+// existed. A renseigned consigne is truncated, never refused, per the
+// repository's standing convention for free-text input (e.g. `Story` is
+// truncated to 400 chars in `renderShotPromptGenerateContextLines` above).
+// ---------------------------------------------------------------------------
+
+const SHOT_PROMPT_FREE_TEXT_MAX_LENGTH = 500;
+
+/**
+ * `shotPrompt.assist` template: the user's free-text direction, framed as a
+ * directorial instruction for the model rather than echoed verbatim — it
+ * sits among lines like `Camera intent: ...` / `Action: ...` above, so it
+ * reads as one more directed fact about the shot rather than a stray quote.
+ */
+export function renderShotPromptFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `Director's direction: ${trimmed.slice(0, SHOT_PROMPT_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+// ---------------------------------------------------------------------------
 // The registry — one entry per `VariableId`. Resolver signatures differ
 // across variables (project-anchored vs. sequence-anchored vs. shot/asset
 // -anchored), matching the precedent's shape rather than forcing a uniform
@@ -1003,6 +1032,17 @@ export const MODE_RENDER_FORMS = {
   "shotPrompt.generateSystemBody": renderShotPromptGenerateSystemBody,
   "shotPrompt.transformSystemBody": renderShotPromptTransformSystemBody,
   "shotPrompt.closingLine": renderShotPromptClosingLine,
+} as const;
+
+/**
+ * Render forms referenced by `{freeText: true, render}` blocks — the
+ * operation's `intent.freeText` consigne, keyed by its `render` string
+ * alone, same model as `MODE_RENDER_FORMS` above (LLMW.INTENT.FREETEXT.1,
+ * B9a). One entry so far: `shotPrompt.assist` is the first (and, for this
+ * ticket, only) operation to declare `intent.freeText`.
+ */
+export const FREE_TEXT_RENDER_FORMS = {
+  "shotPrompt.freeTextDirective": renderShotPromptFreeTextDirective,
 } as const;
 
 export const VARIABLE_REGISTRY = {

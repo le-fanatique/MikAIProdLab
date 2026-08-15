@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { generateShotPromptDraft } from "@/actions/llm/shotPrompt";
 import type { ShotPromptAssistMode } from "@/lib/prompts/shot-prompt-from-context";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
@@ -53,6 +54,11 @@ export default function ShotPromptLLMAssistPanel({
   returnTo,
 }: Props) {
   const hasExistingPrompt = Boolean(currentShotPrompt?.trim());
+  // LLMW.INTENT.FREETEXT.1 (B9a), §4.7: the director's note, transmitted at
+  // trigger time. Owned here (not by `ProposalPanel`) so this trigger's own
+  // `run` closure can read it directly, the same way it already reads
+  // `projectId` / `sequenceId` / `shotId` / `mode`.
+  const [freeText, setFreeText] = useState("");
 
   const triggers: ProposalTrigger<Draft>[] = MODES.map((mode) => ({
     id: mode,
@@ -65,6 +71,7 @@ export default function ShotPromptLLMAssistPanel({
       fd.set("sequenceId", String(sequenceId));
       fd.set("shotId", String(shotId));
       fd.set("mode", mode);
+      fd.set("freeText", freeText);
       const result = await generateShotPromptDraft(fd);
       return result.ok ? { ok: true, draft: { mode, text: result.draft } } : { ok: false, error: result.error };
     },
@@ -116,6 +123,12 @@ export default function ShotPromptLLMAssistPanel({
       <ProposalPanel<Draft>
         triggers={triggers}
         approveActions={approveActions}
+        freeTextInput={{
+          label: "Director's note (optional)",
+          value: freeText,
+          onChange: setFreeText,
+          placeholder: "e.g. a low angle shot, the hero entering and exiting frame",
+        }}
         hints={
           !hasExistingPrompt ? (
             <p className="text-xs text-[#4b5158]">

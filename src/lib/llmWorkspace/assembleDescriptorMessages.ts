@@ -15,18 +15,30 @@ import type { Block, VariableId } from "./types";
 // directly; the test-only copy is deleted, so there is exactly one
 // implementation.
 //
-// Five dispatchers, one per `Block` variant (`text`, `variable`,
-// `variables`, `parameter`, `mode`). Each caller supplies a small dispatcher
-// over the render forms its own descriptor's blocks reference — an
-// unmatched pair throws, so a descriptor referencing a render form the
-// caller does not know about fails loudly instead of silently rendering
-// `undefined`.
+// Six dispatchers, one per `Block` variant (`text`, `variable`, `variables`,
+// `parameter`, `mode`, `freeText` — the last added by LLMW.INTENT.FREETEXT.1,
+// B9a). Each caller supplies a small dispatcher over the render forms its
+// own descriptor's blocks reference — an unmatched pair throws, so a
+// descriptor referencing a render form the caller does not know about fails
+// loudly instead of silently rendering `undefined`.
+//
+// `renderFreeText`'s default is the one exception to that discipline: unlike
+// the other four, `intent.freeText` is *always* optional and its own render
+// contract (§4.1 of the ticket) already defines "absent -> empty string" —
+// an absent dispatcher is therefore equivalent to an absent consigne, not an
+// unknown one, and defaults to producing the empty string rather than
+// throwing. This lets every existing caller that predates the `freeText`
+// block shape (the render-equality tests in particular, which hand-build
+// their own dispatcher set) keep working unmodified: a descriptor's
+// `freeText` block, resolved against no consigne, renders empty and is
+// dropped before the join either way.
 // ---------------------------------------------------------------------------
 
 export type RenderVariable = (variableId: string, render: string) => string;
 export type RenderVariables = (variableIds: VariableId[], render: string) => string;
 export type RenderParameter = (parameterId: string, render: string) => string;
 export type RenderMode = (render: string) => string;
+export type RenderFreeText = (render: string) => string;
 
 function assembleBlocks(
   blocks: Block[],
@@ -34,13 +46,15 @@ function assembleBlocks(
   renderVariable: RenderVariable,
   renderVariables: RenderVariables,
   renderParameter: RenderParameter,
-  renderMode: RenderMode
+  renderMode: RenderMode,
+  renderFreeText: RenderFreeText
 ): string {
   const parts = blocks.map((block) => {
     if ("text" in block) return block.text;
     if ("variables" in block) return renderVariables(block.variables, block.render);
     if ("variable" in block) return renderVariable(block.variable, block.render);
     if ("mode" in block) return renderMode(block.render);
+    if ("freeText" in block) return renderFreeText(block.render);
     return renderParameter(block.parameter, block.render);
   });
   return parts.filter((part) => part.length > 0).join(separator);
@@ -60,7 +74,8 @@ export function assembleDescriptorMessages(
   },
   renderVariables: RenderVariables = () => {
     throw new Error("assembleDescriptorMessages: no renderVariables dispatcher supplied.");
-  }
+  },
+  renderFreeText: RenderFreeText = () => ""
 ): { system: string; user: string } {
   return {
     system: assembleBlocks(
@@ -69,7 +84,8 @@ export function assembleDescriptorMessages(
       renderVariable,
       renderVariables,
       renderParameter,
-      renderMode
+      renderMode,
+      renderFreeText
     ),
     user: assembleBlocks(
       descriptor.template.blocks,
@@ -77,7 +93,8 @@ export function assembleDescriptorMessages(
       renderVariable,
       renderVariables,
       renderParameter,
-      renderMode
+      renderMode,
+      renderFreeText
     ),
   };
 }

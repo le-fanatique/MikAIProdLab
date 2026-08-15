@@ -130,8 +130,15 @@ export function parseSelectionFromSearchParams(searchParams: BenchSearchParams):
  * runner itself would silently correct). A left-blank `integer` parameter is
  * omitted, not defaulted — `outline.generate` / `targetSections` treats
  * blank and filled as two legitimately different renders (§4.2).
- * `intent.freeText` is deliberately not read: no descriptor declares it
- * (deferred to B6c, see the executor report).
+ *
+ * `intent.freeText` (LLMW.INTENT.FREETEXT.1, B9a) is read only when the
+ * descriptor declares it, and only when the `freeText` param is actually
+ * present in `searchParams` — an absent param means "the field was never
+ * submitted" and `intent.freeText` stays `undefined`, exactly like `mode`
+ * and `parameters` above. Unlike `parameters`, an empty or blank value is
+ * *kept*, not omitted: the render form's own contract (§4.1 of the ticket)
+ * already collapses "absent / empty / blank" to the same empty-string
+ * output, so there is no second place that needs to re-decide it.
  */
 export function parseIntentInputFromSearchParams(
   descriptor: OperationDescriptor,
@@ -158,6 +165,11 @@ export function parseIntentInputFromSearchParams(
       }
     }
     if (Object.keys(parameters).length > 0) intent.parameters = parameters;
+  }
+
+  if (descriptor.intent.freeText) {
+    const raw = firstBenchParam(searchParams.freeText);
+    if (raw != null) intent.freeText = raw;
   }
 
   return intent;

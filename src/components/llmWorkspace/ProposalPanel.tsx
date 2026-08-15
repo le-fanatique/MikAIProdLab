@@ -72,6 +72,22 @@ export type ProposalTrigger<TDraft> = {
   run: () => Promise<{ ok: true; draft: TDraft } | { ok: false; error: string }>;
 };
 
+/**
+ * A free-text input rendered above the trigger row, before any generation
+ * runs — LLMW.INTENT.FREETEXT.1 (B9a), §4.7. Controlled by the caller (this
+ * component holds no state of its own for it): the wrapper owns the value
+ * via its own `useState` and reads it directly inside its trigger(s)' own
+ * `run` closures, exactly as it already reads any other local state today.
+ * Optional and additive — every caller that omits it renders and behaves
+ * exactly as before.
+ */
+export type ProposalFreeTextInput = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+};
+
 type State<TDraft> =
   | { status: "idle" }
   | { status: "loading"; triggerId: string; loadingLabel: string }
@@ -90,6 +106,10 @@ export type ProposalPanelProps<TDraft> = {
    * editable state — e.g. Asset Bible falling back to the pre-generation
    * value on a blank generated field. */
   mapDraft?: (draft: TDraft) => TDraft;
+  /** A free-text input shown above the trigger row while idle/error, before
+   * any generation runs. Optional — omitted by every wrapper except the one
+   * whose operation declares `intent.freeText` (§4.7). */
+  freeTextInput?: ProposalFreeTextInput;
   /** Static content shown above the trigger row while idle/error (context
    * hints, "limited context" warnings). */
   hints?: ReactNode;
@@ -117,6 +137,7 @@ export default function ProposalPanel<TDraft>({
   notConfiguredMessage = "",
   triggers,
   mapDraft,
+  freeTextInput,
   hints,
   disabledHint,
   renderDraft,
@@ -204,6 +225,18 @@ export default function ProposalPanel<TDraft>({
 
       {(state.status === "idle" || state.status === "error") && (
         <div className="flex flex-col gap-2">
+          {freeTextInput && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">{freeTextInput.label}</label>
+              <input
+                type="text"
+                value={freeTextInput.value}
+                onChange={(e) => freeTextInput.onChange(e.target.value)}
+                placeholder={freeTextInput.placeholder}
+                className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] focus:outline-none focus:border-[#3a4046] transition-colors"
+              />
+            </div>
+          )}
           {hints}
           <div className="flex flex-wrap gap-2">
             {triggers.map((trigger) => (

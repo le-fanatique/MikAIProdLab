@@ -44,7 +44,8 @@ function describeBlock(block: Block): string {
   if ("variable" in block) return `variable: ${block.variable} :: ${block.render}`;
   if ("variables" in block) return `variables: [${block.variables.join(", ")}] :: ${block.render}`;
   if ("parameter" in block) return `parameter: ${block.parameter} :: ${block.render}`;
-  return `mode :: ${block.render}`;
+  if ("mode" in block) return `mode :: ${block.render}`;
+  return `freeText :: ${block.render}`;
 }
 
 export default async function LlmWorkflowBenchPage({ params, searchParams }: Props) {
@@ -291,6 +292,26 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
               />
             </div>
           ))}
+
+          {descriptor.intent.freeText && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">
+                {descriptor.intent.freeText.label}
+              </label>
+              <input
+                type="text"
+                name="freeText"
+                // Same reason as Mode's `defaultValue` above (R2 retake, B6b):
+                // read straight from `search`, not from `intentInput` — the
+                // latter is `{}` whenever the entity selection is incomplete,
+                // which would otherwise blank this field on every Apply that
+                // doesn't yet resolve, mid-cascade. No auto-submit: this is a
+                // text input, submitted with Apply, like `intent.parameters`.
+                defaultValue={firstBenchParam(search.freeText) ?? ""}
+                className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 w-64 focus:outline-none focus:border-[#3a4046]"
+              />
+            </div>
+          )}
 
           <button
             type="submit"

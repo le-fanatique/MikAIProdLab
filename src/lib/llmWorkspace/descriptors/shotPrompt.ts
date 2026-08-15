@@ -90,12 +90,24 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
         render: "shotPrompt.generateContextLines",
       },
       { variables: ["SHOT.CURRENT_PROMPT", "SHOT.CORE", "SEQ.CONTEXT"], render: "shotPrompt.transformBlock" },
+      // LLMW.INTENT.FREETEXT.1 (B9a): the user's free-text director's note,
+      // placed after every context block and before the mode-dependent
+      // closing instruction — a directorial direction reads naturally once
+      // the reader already has the shot's context, and just before the
+      // instruction telling the model what to do with everything above.
+      // Renders empty (and is dropped, §4.1 correction 4) when no consigne
+      // is given, in every mode.
+      { freeText: true, render: "shotPrompt.freeTextDirective" },
       { mode: true, render: "shotPrompt.closingLine" },
     ],
     separator: "\n",
   },
 
   intent: {
+    // LLMW.INTENT.FREETEXT.1 (B9a): the first descriptor to declare
+    // `intent.freeText` — see `.agents/executor_report.md` for why this
+    // operation was chosen (§2 of the ticket).
+    freeText: { label: "Director's note (optional)" },
     mode: {
       modes: [
         { id: "generate" },

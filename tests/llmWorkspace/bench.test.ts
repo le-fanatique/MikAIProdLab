@@ -8,6 +8,7 @@ import {
 } from "@/lib/llmWorkspace/bench";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
 import { sequencePromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/sequencePrompt";
+import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotPrompt";
 
 describe("parseTemplateRef — LLMW.BENCH.READ.1 (B6b) §3", () => {
   it("a positive integer segment resolves to a stored row", () => {
@@ -174,6 +175,47 @@ describe("parseIntentInputFromSearchParams", () => {
   it("an integer parameter with a value is parsed as a number", () => {
     const intent = parseIntentInputFromSearchParams(outlineGenerateDescriptor, { targetSections: "6" });
     expect(intent.parameters).toEqual({ targetSections: 6 });
+  });
+
+  // LLMW.INTENT.FREETEXT.1 (B9a) — `shotPrompt.assist` is the first
+  // descriptor to declare `intent.freeText`; `sequencePromptAssistDescriptor`
+  // does not, so it doubles as the "descriptor never declares freeText"
+  // control case above (its own `intent.freeText` stays undefined
+  // regardless of `searchParams`, implicitly proven by every assertion in
+  // this describe block never setting `intent.freeText`).
+
+  it("intent.freeText stays undefined when the descriptor does not declare it, even if the param is present", () => {
+    const intent = parseIntentInputFromSearchParams(sequencePromptAssistDescriptor, { freeText: "some text" });
+    expect(intent.freeText).toBeUndefined();
+  });
+
+  it("intent.freeText stays undefined when the param is absent", () => {
+    const intent = parseIntentInputFromSearchParams(shotPromptAssistDescriptor, {});
+    expect(intent.freeText).toBeUndefined();
+  });
+
+  it("intent.freeText is kept as an empty string when the param is present but empty", () => {
+    const intent = parseIntentInputFromSearchParams(shotPromptAssistDescriptor, { freeText: "" });
+    expect(intent.freeText).toBe("");
+  });
+
+  it("intent.freeText is kept as-is when the param is whitespace-only", () => {
+    const intent = parseIntentInputFromSearchParams(shotPromptAssistDescriptor, { freeText: "   " });
+    expect(intent.freeText).toBe("   ");
+  });
+
+  it("intent.freeText is kept when the param is filled", () => {
+    const intent = parseIntentInputFromSearchParams(shotPromptAssistDescriptor, {
+      freeText: "a low angle shot",
+    });
+    expect(intent.freeText).toBe("a low angle shot");
+  });
+
+  it("takes the first value of a repeated freeText query key", () => {
+    const intent = parseIntentInputFromSearchParams(shotPromptAssistDescriptor, {
+      freeText: ["first", "second"],
+    });
+    expect(intent.freeText).toBe("first");
   });
 });
 

@@ -31,12 +31,14 @@
 import type { EntityKind, OperationDescriptor, VariableId } from "./types";
 import {
   assembleDescriptorMessages,
+  type RenderFreeText,
   type RenderMode,
   type RenderParameter,
   type RenderVariable,
   type RenderVariables,
 } from "./assembleDescriptorMessages";
 import {
+  FREE_TEXT_RENDER_FORMS,
   MODE_RENDER_FORMS,
   MULTI_VARIABLE_RENDER_FORMS,
   PARAMETER_RENDER_FORMS,
@@ -369,6 +371,22 @@ function buildIntentDispatchers(
   return { renderParameter, renderMode };
 }
 
+/**
+ * `intent.freeText` dispatcher — LLMW.INTENT.FREETEXT.1 (B9a), same model as
+ * `buildIntentDispatchers` above, kept separate since it does not depend on
+ * `selectedMode`.
+ */
+function buildFreeTextDispatcher(freeText: string | undefined): { renderFreeText: RenderFreeText } {
+  const renderFreeText: RenderFreeText = (render) => {
+    const table = FREE_TEXT_RENDER_FORMS as unknown as Record<string, (value: string | undefined) => string>;
+    const fn = table[render];
+    if (!fn) throw new Error(`runner: no free text render form ${render}`);
+    return fn(freeText);
+  };
+
+  return { renderFreeText };
+}
+
 // ---------------------------------------------------------------------------
 // Steps 7-8 — strip the code fence, parse per `output`, map the error.
 // `extractCodeFence` reproduced verbatim from the three copies in
@@ -583,7 +601,15 @@ async function resolvePromptInternal(
   // Step 5 — assemble {system, user} from blocks.
   const { renderVariable, renderVariables } = buildVariableDispatchers(resolved, selectedMode);
   const { renderParameter, renderMode } = buildIntentDispatchers(intent.parameters, selectedMode);
-  const prompt = assembleDescriptorMessages(descriptor, renderVariable, renderParameter, renderMode, renderVariables);
+  const { renderFreeText } = buildFreeTextDispatcher(intent.freeText);
+  const prompt = assembleDescriptorMessages(
+    descriptor,
+    renderVariable,
+    renderParameter,
+    renderMode,
+    renderVariables,
+    renderFreeText
+  );
 
   return { ok: true, prompt, config: config ?? null, resolved };
 }

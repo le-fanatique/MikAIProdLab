@@ -196,3 +196,42 @@ describe("validateLlmTemplateJson — output.kind (LLMW.OUTPUT.LIST.1, B7a)", ()
     if (!result.ok) expect(result.reason).toMatch(/"output\.maxItems"/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// LLMW.INTENT.FREETEXT.1 (B9a) — the sixth `Block` shape (`freeText`),
+// membership-checked against `FREE_TEXT_RENDER_FORMS` the same way the other
+// five are already checked (§4.5 of the ticket): a stored/imported template
+// declaring a `freeText` block naming an unknown render form must be refused
+// here, not left to detonate inside `runner.ts` at Run — the same B7a
+// discipline this module's own header describes.
+// ---------------------------------------------------------------------------
+
+describe("validateLlmTemplateJson — freeText blocks (LLMW.INTENT.FREETEXT.1, B9a)", () => {
+  it("accepts a real code descriptor declaring intent.freeText and a freeText block — shotPrompt.assist itself", () => {
+    const result = validateLlmTemplateJson(JSON.stringify(DESCRIPTORS["shotPrompt.assist"]));
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts a descriptor whose template declares a freeText block naming a real render form", () => {
+    const descriptor = clone();
+    descriptor.template.blocks = [{ freeText: true, render: "shotPrompt.freeTextDirective" }];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a freeText block naming a render form that does not exist", () => {
+    const descriptor = clone();
+    descriptor.template.blocks = [{ freeText: true, render: "totally.made.up" }];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/unknown free text render form/i);
+  });
+
+  it("refuses a freeText block whose \"freeText\" field is not literally true", () => {
+    const descriptor = clone() as unknown as { template: { blocks: unknown[] } };
+    descriptor.template.blocks = [{ freeText: "yes", render: "shotPrompt.freeTextDirective" }];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"freeText" must be true/);
+  });
+});

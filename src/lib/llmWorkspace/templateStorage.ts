@@ -37,6 +37,7 @@
 
 import type { ActionId, EntityKind, OperationDescriptor, VariableId } from "./types";
 import {
+  FREE_TEXT_RENDER_FORMS,
   MODE_RENDER_FORMS,
   MULTI_VARIABLE_RENDER_FORMS,
   PARAMETER_RENDER_FORMS,
@@ -124,7 +125,15 @@ function validateBlock(block: unknown, path: string): string | null {
     return null;
   }
 
-  return `${path}: block matches none of the known shapes (text/variable/variables/parameter/mode).`;
+  if ("freeText" in block) {
+    if (block.freeText !== true) return `${path}: "freeText" must be true.`;
+    if (typeof block.render !== "string") return `${path}: "render" must be a string.`;
+    const table = FREE_TEXT_RENDER_FORMS as unknown as Record<string, unknown>;
+    if (!table[block.render]) return `${path}: unknown free text render form "${block.render}".`;
+    return null;
+  }
+
+  return `${path}: block matches none of the known shapes (text/variable/variables/parameter/mode/freeText).`;
 }
 
 function validateBlockList(value: unknown, path: string): string | null {

@@ -11,6 +11,12 @@ import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotP
  * equivalent) depends on. Mode validation ("Invalid assist mode.") now
  * happens inside the runner, against the descriptor's own declared
  * `invalidMode` message.
+ *
+ * `freeText` (LLMW.INTENT.FREETEXT.1, B9a): read the same way as `mode` —
+ * an absent field is `undefined`, which the descriptor's own render
+ * contract already treats as "no consigne" (empty string, block dropped).
+ * A caller that never sends this field (every trigger before this ticket)
+ * gets exactly the previous behaviour.
  */
 export async function generateShotPromptDraft(
   formData: FormData
@@ -20,11 +26,12 @@ export async function generateShotPromptDraft(
     const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
     const shotId = parseInt(formData.get("shotId") as string, 10);
     const rawMode = (formData.get("mode") as string | null) ?? "generate";
+    const rawFreeText = formData.get("freeText") as string | null;
 
     const result = await runOperation(
       shotPromptAssistDescriptor,
       { projectId, sequenceId, shotId },
-      { mode: rawMode }
+      { mode: rawMode, freeText: rawFreeText ?? undefined }
     );
     if (!result.ok) return { ok: false, error: result.error };
     // `shotPromptAssistDescriptor.output.kind` is always `"object"` — the

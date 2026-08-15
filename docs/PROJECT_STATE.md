@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B7a COMPLETE (2026-08-15)
+## LLM Workspace Phase B — B0 to B9a COMPLETE (2026-08-15)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -547,6 +547,64 @@ defect.
 **This ticket blocks the next one.** B7b was to write four list descriptors.
 There are at most three, and they need the five format extensions first. That
 arbitration is the user's and was open at the time of writing.
+
+### B9a — the plain-language directive becomes real (2026-08-15)
+
+`LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
+capability rather than reorganise an existing one.** On a Shot's assist panel
+the user can now write "low angle shot, show more empathy with the character"
+and the model answers to it.
+
+**Why it took nine tickets.** `intent.freeText` has been in the descriptor
+format since B1a. No descriptor declared it, so no control was ever built: B6b
+and B6c1 each deferred it, and each was locally right — a control with no
+declarer would have been untestable dead code. The cumulative effect went
+unnoticed until the user asked whether the work in flight still served his three
+founding use cases. It did not: all three *are* a plain-language request, and
+nothing in the queue delivered the primitive that carries them. See
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 "Reachability".
+
+**The constraint that made it safe.** `shotPrompt.assist` carries a
+byte-for-byte prompt equality proof against its frozen builder (B1c discipline).
+The format already had the answer — §4.1 correction 4, a block that renders
+empty is dropped before joining — so an unfilled directive yields a
+character-identical prompt. The two proof files do not appear in the ticket's
+changed-file list at all, and both stayed green. The ticket stated that having
+to modify one of them would be a defect, not a test to adjust.
+
+**Landed on an operation that already worked end to end**, deliberately:
+`shotPrompt.assist` is migrated, backed by `ProposalPanel`, runnable and
+applicable from the bench, and its write action is already declared. No new
+write action, no new registry entry.
+
+`ProposalPanel` gained an optional pre-trigger input — the shared engine behind
+seven wrappers, which UC1, UC2 and UC3 will all need. The other seven wrappers
+pass nothing and are unchanged.
+
+**The deviation worth keeping in mind.** The executor modified
+`src/actions/llm/shotPrompt.ts`, which the ticket did not enumerate: without it
+the production input existed but was silently ignored, since the action never
+read a `freeText` field or passed it to the runner. A decorative control that
+does nothing would have passed every test. It was flagged, not slipped in.
+
+Suite 366 → 387. Seven browser paths, seven PASS, with the evidence that
+matters: no occurrence of the directive in the effective prompt when the field
+is empty (~669 tokens), exactly one occurrence at the declared position when
+filled (~688), a draft that visibly answers the direction, and a production
+Replace that rewrote shot 153's prompt end to end.
+
+**Three user-visible strings await the user's own judgement**, written by the
+executor for lack of a specification: the field label `Director's note
+(optional)`, the rendered fragment `Director's direction: <text>`, and the
+production placeholder `e.g. a low angle shot, the hero entering and exiting
+frame` — the last being the user's own UC1 sentence returned in the interface.
+
+**B9b is blocked on two arbitrations**, both found while preparing this ticket
+and deliberately left out of it: `updateShot` fits neither `response` shape the
+action registry declares (positional arguments *and* `FormData`, answering by
+`redirect()`), and it silently rewrites `shotPrompt` from
+`description`/`actionPitch`/`cameraPitch` while also doing nothing at all —
+no write, no error, no redirect — when `title` is blank.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 
