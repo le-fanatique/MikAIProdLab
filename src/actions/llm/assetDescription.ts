@@ -33,6 +33,12 @@ async function generateSingleField(
     const descriptor = field === "description" ? assetDescriptionGenerateDescriptor : assetNotesGenerateDescriptor;
     const result = await runOperation(descriptor, { projectId, assetId });
     if (!result.ok) return { ok: false, error: result.error };
+    // Both descriptors' `output.kind` is always `"object"` — the guard
+    // exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "object") {
+      throw new Error("generateSingleField: expected an object-kind result.");
+    }
     return { ok: true, draft: field === "description" ? result.values.description : result.values.notes };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";
@@ -146,6 +152,13 @@ export async function generateBatchAssetDescriptionDrafts(
         if (!result.ok) {
           errors.push({ assetId, assetName: assetRow.name, error: result.error });
           continue;
+        }
+        // `assetDescriptionBatchDescriptor.output.kind` is always `"object"`
+        // — the guard exists because `RunOperationResult` is
+        // `kind`-discriminated (LLMW.OUTPUT.LIST.1, B7a), not because this
+        // branch is reachable here.
+        if (result.kind !== "object") {
+          throw new Error("generateBatchAssetDescriptionDrafts: expected an object-kind result.");
         }
 
         results.push({

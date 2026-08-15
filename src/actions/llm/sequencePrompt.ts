@@ -25,6 +25,12 @@ export async function generateSequencePromptDraft(
       { mode: rawMode }
     );
     if (!result.ok) return { ok: false, error: result.error };
+    // `sequencePromptAssistDescriptor.output.kind` is always `"object"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "object") {
+      throw new Error("generateSequencePromptDraft: expected an object-kind result.");
+    }
     return { ok: true, draft: result.values.sequencePrompt };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";

@@ -15,12 +15,11 @@
 // ---------------------------------------------------------------------------
 
 import { runBenchOperation, commitBenchProposal } from "@/actions/llmWorkspace/bench";
-import { buildBenchDraftFields, type BenchCommitPlan } from "@/lib/llmWorkspace/benchRun";
+import { buildBenchDraftFields, type BenchCommitPlan, type ObjectOutputFields } from "@/lib/llmWorkspace/benchRun";
 import { buildUpdateSequencePromptHiddenFields, buildUpdateShotPromptHiddenFields } from "@/lib/llmWorkspace/actions/proposalCommit";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import type { AnchorIds } from "@/lib/llmWorkspace/runner";
 import type { BenchSearchParams } from "@/lib/llmWorkspace/bench";
-import type { OperationDescriptor } from "@/lib/llmWorkspace/types";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
 
 type Draft = Record<string, string>;
@@ -30,7 +29,7 @@ type Props = {
   ids: AnchorIds;
   searchParams: BenchSearchParams;
   plan: BenchCommitPlan;
-  outputFields: OperationDescriptor["output"]["fields"];
+  outputFields: ObjectOutputFields;
   returnTo: string;
 };
 

@@ -164,7 +164,7 @@ describe("assetDescription.batch — runner proof (LLMW.RUNNER.1b)", () => {
       JSON.stringify({ description_draft: "A fresh description.", notes_draft: "" })
     );
     const valid = await runOperation(assetDescriptionBatchDescriptor, { projectId, assetId: assetIdA });
-    expect(valid).toEqual({ ok: true, values: { description: "A fresh description.", notes: "" } });
+    expect(valid).toEqual({ ok: true, kind: "object", values: { description: "A fresh description.", notes: "" } });
 
     mockedCallLLMJson.mockResolvedValueOnce("not json at all {{{");
     const unparsable = await runOperation(assetDescriptionBatchDescriptor, { projectId, assetId: assetIdA });

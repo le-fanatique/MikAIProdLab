@@ -110,12 +110,12 @@ describe("outline.generate — runner proof (LLMW.RUNNER.1a)", () => {
 
     mockedCallLLMJson.mockResolvedValueOnce(JSON.stringify({ outline: "## Fresh\nBody." }));
     const valid = await runOperation(outlineGenerateDescriptor, { projectId });
-    expect(valid).toEqual({ ok: true, values: { outline: "## Fresh\nBody." } });
+    expect(valid).toEqual({ ok: true, kind: "object", values: { outline: "## Fresh\nBody." } });
 
     // outline.generate's parser is tolerant of a stray extra key.
     mockedCallLLMJson.mockResolvedValueOnce(JSON.stringify({ outline: "## Fresh\nBody.", extra_field: "ignored" }));
     const withExtraKey = await runOperation(outlineGenerateDescriptor, { projectId });
-    expect(withExtraKey).toEqual({ ok: true, values: { outline: "## Fresh\nBody." } });
+    expect(withExtraKey).toEqual({ ok: true, kind: "object", values: { outline: "## Fresh\nBody." } });
 
     mockedCallLLMJson.mockResolvedValueOnce("not json at all {{{");
     const unparsable = await runOperation(outlineGenerateDescriptor, { projectId });

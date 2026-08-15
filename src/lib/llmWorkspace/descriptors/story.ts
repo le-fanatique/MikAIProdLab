@@ -91,6 +91,7 @@ No markdown. No explanation. Only the JSON object.`,
   // (`src/actions/llm/story.ts`): one key, tolerant of extra keys (no
   // `exactKeysOnly`), non-empty after `.trim()`.
   output: {
+    kind: "object",
     target: { entity: "project" },
     fields: [{ field: "story", jsonKey: "story" }],
     require: "all",

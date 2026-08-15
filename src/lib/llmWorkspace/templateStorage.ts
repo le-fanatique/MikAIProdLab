@@ -24,6 +24,15 @@
 //
 // No optional-field business rule is invented beyond this: an absent
 // optional field is valid.
+//
+// Supervisor review retake, post-LLMW.OUTPUT.LIST.1 (B7a): `output` widened
+// into a `kind`-discriminated union (`./types.ts`) without this validator
+// following — it kept checking the `"object"` shape unconditionally and
+// never looked at `kind`, reopening exactly the gap this module exists to
+// close (an import that only detonates inside `parseListOutput` at Run, not
+// here). `validateOutput` now dispatches on `output.kind` first, refusing an
+// absent or unrecognised `kind` outright rather than falling back to
+// `"object"` silently.
 // ---------------------------------------------------------------------------
 
 import type { ActionId, EntityKind, OperationDescriptor, VariableId } from "./types";
@@ -127,6 +136,91 @@ function validateBlockList(value: unknown, path: string): string | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// `output` — widened by LLMW.OUTPUT.LIST.1 (B7a) into a `kind`-discriminated
+// union (`./types.ts`). This validator must dispatch on `kind` the same way
+// `runner.ts:515`'s own `parseOutput` does — an imported template that
+// declares `kind: "list"` but has enough top-level object-shaped fields to
+// pass the pre-B7a checks would otherwise validate clean and only detonate
+// inside `parseListOutput` at Run, exactly the failure mode B6a's header
+// comment (and `docs/PROJECT_STATE.md`) describes this module as existing to
+// close. No silent fallback to `"object"` on an absent/unknown `kind` — an
+// undeclared kind is refused, not guessed.
+// ---------------------------------------------------------------------------
+
+function validateObjectOutput(output: Record<string, unknown>): string | null {
+  if (!isPlainObject(output.target)) return '"output.target" is required and must be an object.';
+  if (!isEntityKind(output.target.entity)) {
+    return `"output.target.entity" references an unknown entity kind "${String(output.target.entity)}".`;
+  }
+  if (!Array.isArray(output.fields)) return '"output.fields" is required and must be an array.';
+  if (output.require !== "all" && output.require !== "any") return '"output.require" must be "all" or "any".';
+  if (!isPlainObject(output.errors)) return '"output.errors" is required and must be an object.';
+  if (typeof output.errors.unparsable !== "string") return '"output.errors.unparsable" is required and must be a string.';
+  if (typeof output.errors.empty !== "string") return '"output.errors.empty" is required and must be a string.';
+  return null;
+}
+
+function validateListOutput(output: Record<string, unknown>): string | null {
+  if (typeof output.arrayKey !== "string" || !output.arrayKey) {
+    return '"output.arrayKey" is required and must be a non-empty string.';
+  }
+
+  if (!isPlainObject(output.item)) return '"output.item" is required and must be an object.';
+  const item = output.item;
+
+  if (!Array.isArray(item.fields) || item.fields.length === 0) {
+    return '"output.item.fields" is required and must be a non-empty array.';
+  }
+  const declaredFields = new Set<string>();
+  for (let i = 0; i < item.fields.length; i++) {
+    const entry = item.fields[i];
+    if (!isPlainObject(entry)) return `"output.item.fields[${i}]" must be an object.`;
+    if (typeof entry.field !== "string" || !entry.field) {
+      return `"output.item.fields[${i}].field" is required and must be a non-empty string.`;
+    }
+    if (typeof entry.jsonKey !== "string" || !entry.jsonKey) {
+      return `"output.item.fields[${i}].jsonKey" is required and must be a non-empty string.`;
+    }
+    declaredFields.add(entry.field);
+  }
+
+  if (!isPlainObject(item.validity)) return '"output.item.validity" is required and must be an object.';
+  if (!Array.isArray(item.validity.fields) || item.validity.fields.length === 0) {
+    return '"output.item.validity.fields" is required and must be a non-empty array.';
+  }
+  // Membership, not mere presence — the same principle B6a already applies
+  // to render forms (`validateBlock`): a validity field that names something
+  // `item.fields` never declared would otherwise pass validation and then
+  // silently never gate anything at Run (`parseListOutput` looks it up in
+  // the mapped `values`, which never has that key).
+  for (const field of item.validity.fields) {
+    if (typeof field !== "string" || !declaredFields.has(field)) {
+      return `"output.item.validity.fields" references "${String(field)}", which "output.item.fields" does not declare.`;
+    }
+  }
+  if (item.validity.require !== "all" && item.validity.require !== "any") {
+    return '"output.item.validity.require" must be "all" or "any".';
+  }
+
+  if (output.maxItems != null && (typeof output.maxItems !== "number" || !Number.isInteger(output.maxItems) || output.maxItems <= 0)) {
+    return '"output.maxItems" must be an integer greater than 0 when present.';
+  }
+
+  if (!isPlainObject(output.errors)) return '"output.errors" is required and must be an object.';
+  if (typeof output.errors.unparsable !== "string") return '"output.errors.unparsable" is required and must be a string.';
+  if (typeof output.errors.notArray !== "string") return '"output.errors.notArray" is required and must be a string.';
+  if (typeof output.errors.empty !== "string") return '"output.errors.empty" is required and must be a string.';
+
+  return null;
+}
+
+function validateOutput(output: Record<string, unknown>): string | null {
+  if (output.kind === "object") return validateObjectOutput(output);
+  if (output.kind === "list") return validateListOutput(output);
+  return `"output.kind" must be "object" or "list" (was ${output.kind === undefined ? "absent" : `"${String(output.kind)}"`}).`;
+}
+
 export function validateLlmTemplateJson(raw: string): TemplateValidationResult {
   let parsed: unknown;
   try {
@@ -185,15 +279,10 @@ export function validateLlmTemplateJson(raw: string): TemplateValidationResult {
   if (!isPlainObject(d.messages.chainNotFound)) return fail('"messages.chainNotFound" is required and must be an object.');
 
   if (!isPlainObject(d.output)) return fail('"output" is required and must be an object.');
-  if (!isPlainObject(d.output.target)) return fail('"output.target" is required and must be an object.');
-  if (!isEntityKind(d.output.target.entity)) {
-    return fail(`"output.target.entity" references an unknown entity kind "${String(d.output.target.entity)}".`);
+  {
+    const err = validateOutput(d.output);
+    if (err) return fail(err);
   }
-  if (!Array.isArray(d.output.fields)) return fail('"output.fields" is required and must be an array.');
-  if (d.output.require !== "all" && d.output.require !== "any") return fail('"output.require" must be "all" or "any".');
-  if (!isPlainObject(d.output.errors)) return fail('"output.errors" is required and must be an object.');
-  if (typeof d.output.errors.unparsable !== "string") return fail('"output.errors.unparsable" is required and must be a string.');
-  if (typeof d.output.errors.empty !== "string") return fail('"output.errors.empty" is required and must be a string.');
 
   if (!Array.isArray(d.commit)) return fail('"commit" is required and must be an array.');
   for (const actionId of d.commit) {

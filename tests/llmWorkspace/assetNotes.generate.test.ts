@@ -74,6 +74,7 @@ describe("assetNotes.generate descriptor — context equality", () => {
     expect(assetNotesGenerateDescriptor.anchor).toEqual({ kind: "entity", entity: "asset" });
     expect(assetNotesGenerateDescriptor.intent).toEqual({});
     expect(assetNotesGenerateDescriptor.output).toEqual({
+      kind: "object",
       target: { entity: "asset" },
       fields: [{ field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
       require: "all",

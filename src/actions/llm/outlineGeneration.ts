@@ -30,6 +30,12 @@ export async function generateOutlineDraft(
       targetSections != null ? { parameters: { targetSections } } : {}
     );
     if (!result.ok) return { ok: false, error: result.error };
+    // `outlineGenerateDescriptor.output.kind` is always `"object"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "object") {
+      throw new Error("generateOutlineDraft: expected an object-kind result.");
+    }
     return { ok: true, outline: result.values.outline };
   } catch (err) {
     const message =

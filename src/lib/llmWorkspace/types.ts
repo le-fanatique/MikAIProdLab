@@ -45,6 +45,12 @@
 //
 // `runner.ts` is the pipeline that consumes this module. It is not wired
 // into any production path.
+//
+// LLMW.OUTPUT.LIST.1 (B7a) widens `output` from the single object shape
+// above into a `kind`-discriminated union (`"object"` | `"list"`) — see the
+// field itself for the list shape and its known limits. All eight existing
+// descriptors gain `kind: "object"` mechanically; no other field of theirs
+// changes.
 // ---------------------------------------------------------------------------
 
 /**
@@ -213,28 +219,113 @@ export type OperationDescriptor = {
   // and each operation validates differently. A runner cannot guess the key
   // mapping, the strictness, or the error text — and B3 must not change one
   // observable message (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §4.1).
-  output: {
-    target: { entity: EntityKind };
-    fields: Array<{
-      field: string; // entity field, e.g. "shotPrompt"
-      jsonKey: string; // model key,   e.g. "shot_prompt"
-      maxLength?: number; // 4000 on the single-field asset parsers: reject
-      truncateTo?: number; // 800 on the Asset Bible fields: silently cut.
-      // Distinct from maxLength — one refuses, the other keeps a shortened
-      // value. B3b first reproduced this in the adapter, which left
-      // operation-specific output logic outside the descriptor: a stored
-      // descriptor (§4.2) would then be incomplete, and B4's registry would
-      // describe an operation that quietly does more than it declares.
-    }>;
-    require: "all" | "any"; // every declared field non-empty, or at least one
-    exactKeysOnly?: boolean; // reject any key not declared — the strict
-    // single-field asset parsers, which refuse a stray draft for the other
-    // field
-    errors: {
-      unparsable: string; // JSON.parse failed, or the shape is wrong
-      empty: string; // the `require` rule was not satisfied
-    };
-  };
+  //
+  // Widened to a discriminated union by `LLMW.OUTPUT.LIST.1` (B7a): `kind`
+  // distinguishes the single-object shape above (now `"object"`, unchanged
+  // in every other respect — mechanical on all eight existing descriptors)
+  // from the list shape (`"list"`) the four flat-JSON-array operations need
+  // (`sequenceShots.ts`, `assetExtraction.ts`, `sequenceGeneration.ts`,
+  // `castingSuggestions.ts`). A `list?` field bolted onto the object shape
+  // was rejected on purpose (ticket §3.1): two shapes cohabiting with an
+  // implicit precedence is exactly how a format rots.
+  //
+  // The list shape is deliberately narrower than what all four parsers
+  // actually do — read `.agents/executor_report.md` (§2) before writing a
+  // fifth list descriptor. In particular:
+  //   - every item field here is a *string* field (trim, optional
+  //     `truncateTo`), because `RunOperationResult`'s list items are frozen
+  //     as `Record<string, string>` (§3.2 of the ticket). Three of the four
+  //     parsers carry a genuinely numeric field on some items
+  //     (`duration_seconds` in `GeneratedSequenceShot`, `order_index` in
+  //     `GeneratedSequence`, `targetId`/`assetId` in `RawSuggestion`) that
+  //     this shape cannot honestly declare — signalled, not modelled;
+  //   - `item.validity` only expresses "these string fields, all/any
+  //     non-empty" (mirroring `require`'s own vocabulary, reused rather than
+  //     inventing a second one). `castingSuggestions.ts`'s real gate needs a
+  //     valid `targetType` enum plus two positive-integer ids — outside what
+  //     any string-field rule can express, so `castingSuggestions` is not
+  //     representable by this shape at all (§2 of the report);
+  //   - no field carries an enum-with-default (`assetType`, `sourceLevel`,
+  //     `confidence` all silently default on an unrecognised value) or a
+  //     dual JSON-key fallback (`r.assetType ?? r.asset_type`) — both real,
+  //     both unmodelled;
+  //   - no declared "sort the result" or "seed a field from the item's own
+  //     array position" step exists — `sequenceGeneration.ts`'s post-parse
+  //     `.sort(order_index)` and its `order_index` fallback to the item's
+  //     index have no home here.
+  output:
+    | {
+        kind: "object";
+        target: { entity: EntityKind };
+        fields: Array<{
+          field: string; // entity field, e.g. "shotPrompt"
+          jsonKey: string; // model key,   e.g. "shot_prompt"
+          maxLength?: number; // 4000 on the single-field asset parsers: reject
+          truncateTo?: number; // 800 on the Asset Bible fields: silently cut.
+          // Distinct from maxLength — one refuses, the other keeps a shortened
+          // value. B3b first reproduced this in the adapter, which left
+          // operation-specific output logic outside the descriptor: a stored
+          // descriptor (§4.2) would then be incomplete, and B4's registry would
+          // describe an operation that quietly does more than it declares.
+        }>;
+        require: "all" | "any"; // every declared field non-empty, or at least one
+        exactKeysOnly?: boolean; // reject any key not declared — the strict
+        // single-field asset parsers, which refuse a stray draft for the other
+        // field
+        errors: {
+          unparsable: string; // JSON.parse failed, or the shape is wrong
+          empty: string; // the `require` rule was not satisfied
+        };
+      }
+    | {
+        kind: "list";
+        // The model's top-level array key — `shots` / `assets` / `sequences`
+        // / `suggestions` on the four real operations (never assumed
+        // uniform: each descriptor declares its own).
+        arrayKey: string;
+        item: {
+          fields: Array<{
+            field: string; // entity field, e.g. "title"
+            jsonKey: string; // model key, e.g. "shot_code" — snake_case on
+            // `GeneratedSequenceShot`/`GeneratedSequence`, camelCase on
+            // `GeneratedAssetCandidate`; this shape carries either without
+            // preferring one (ticket §3.1).
+            truncateTo?: number; // silent trim to N chars. Every one of the
+            // four parsers' `str(value, maxLen)` helper *always* trims to
+            // `maxLen` — none of them ever refuses an oversized item field
+            // the way `ObjectOutput.fields[].maxLength` refuses. No
+            // `maxLength` (reject) variant exists on a list item field
+            // because none of the four evidences one.
+          }>;
+          // Item-validity gate: the subset of the fields above (by `field`
+          // name) that must be non-empty for the item to survive, and
+          // whether all or at least one must be. Mirrors `require`'s own
+          // vocabulary rather than inventing a second one. All three
+          // representable parsers (`sequenceShots`, `assetExtraction`,
+          // `sequenceGeneration`) gate on exactly one field (`title` /
+          // `title` / `name`), so `"all"` and `"any"` are equivalent for
+          // them — `"all"` chosen for the same reason `preconditions`
+          // standardised on it. `castingSuggestions` cannot be expressed
+          // here at all (see the type-level note above and the report).
+          validity: { fields: string[]; require: "all" | "any" };
+        };
+        // Present on `assetExtraction` (20) and `castingSuggestions` (60);
+        // absent on `sequenceShots` and `sequenceGeneration` (no cap found
+        // in either). Every capped parser truncates the already-filtered
+        // array silently — neither refuses on overflow — so this shape has
+        // no "refuse" variant; there is no evidence for one.
+        maxItems?: number;
+        errors: {
+          unparsable: string; // JSON.parse failed
+          // `parsed[arrayKey]` missing, or present but not an array — one
+          // message, matching all four parsers: none of them distinguishes
+          // "wrong top-level shape" from "key present but not an array",
+          // both fall through the same `!Array.isArray(...)` check to the
+          // same message.
+          notArray: string;
+          empty: string; // every item was filtered out by `item.validity`
+        };
+      };
 
   commit: ActionId[]; // section 3.2
 

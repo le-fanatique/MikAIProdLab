@@ -55,7 +55,17 @@ export async function runBenchOperation(input: {
   const intent = parseIntentInputFromSearchParams(descriptor, input.searchParams);
 
   try {
-    return await runOperation(descriptor, input.ids, intent);
+    const result = await runOperation(descriptor, input.ids, intent);
+    if (!result.ok) return result;
+    // The bench's Run/Approve surface only knows the object shape today —
+    // list-kind descriptors have no writer yet (B7b) and no bench UI yet
+    // (B7c), forced here by `RunOperationResult`'s `kind` discriminant
+    // (LLMW.OUTPUT.LIST.1, B7a). Never reachable against a real stored or
+    // built-in descriptor as of this ticket.
+    if (result.kind !== "object") {
+      return { ok: false, error: "This template's output kind is not supported by the bench yet." };
+    }
+    return { ok: true, values: result.values };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -115,7 +125,11 @@ export async function commitBenchProposal(input: {
     }
 
     case "updateAssetDescriptionFieldInline": {
-      const field = descriptor.output.fields[0]?.field;
+      // Every descriptor reaching this case is `output.kind === "object"` in
+      // practice (bench list-output commit does not exist yet — B7c);
+      // narrowed defensively per `OperationDescriptor["output"]`'s
+      // discriminant (LLMW.OUTPUT.LIST.1, B7a).
+      const field = descriptor.output.kind === "object" ? descriptor.output.fields[0]?.field : undefined;
       if (field !== "description" && field !== "notes") {
         return { ok: false, error: "This template's output field cannot be routed to an update action." };
       }

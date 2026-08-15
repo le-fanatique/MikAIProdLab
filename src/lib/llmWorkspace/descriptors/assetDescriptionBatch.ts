@@ -123,6 +123,7 @@ No markdown. No explanation. Only the JSON object.`,
   // — the batch action is one of §9's "4 return array-wrapped lists",
   // deferred until the proposal component gets a list mode (§10.1).
   output: {
+    kind: "object",
     target: { entity: "asset" },
     fields: [
       { field: "description", jsonKey: "description_draft" },

@@ -72,8 +72,15 @@ export type PromptResolutionResult =
   | { ok: true; prompt: LLMPrompt }
   | { ok: false; error: string };
 
+// LLMW.OUTPUT.LIST.1 (B7a): discriminated on `kind`, following
+// `descriptor.output`'s own split. Every one of the eight adapters in
+// `src/actions/llm/` (plus the bench's `runBenchOperation` /
+// `commitBenchProposal`, forced by the same type change) is narrowed by
+// `kind === "object"` before reading `.values` — `tsc` enforces it, on
+// purpose (§3.2 of the ticket).
 export type RunOperationResult =
-  | { ok: true; values: Record<string, string> }
+  | { ok: true; kind: "object"; values: Record<string, string> }
+  | { ok: true; kind: "list"; items: Array<Record<string, string>> }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
@@ -377,10 +384,10 @@ function extractCodeFence(raw: string): string {
   return fence ? fence[1].trim() : trimmed;
 }
 
-function parseOutput(
+function parseObjectOutput(
   raw: string,
-  output: OperationDescriptor["output"]
-): { ok: true; values: Record<string, string> } | { ok: false; error: string } {
+  output: Extract<OperationDescriptor["output"], { kind: "object" }>
+): RunOperationResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(extractCodeFence(raw));
@@ -426,7 +433,86 @@ function parseOutput(
     return { ok: false, error: output.errors.empty };
   }
 
-  return { ok: true, values };
+  return { ok: true, kind: "object", values };
+}
+
+// ---------------------------------------------------------------------------
+// The list branch (LLMW.OUTPUT.LIST.1, B7a). Read verbatim off
+// `sequenceShots.ts`, `assetExtraction.ts`, `sequenceGeneration.ts` and
+// `castingSuggestions.ts` — see `types.ts`'s `output` field and
+// `.agents/executor_report.md` (§2) for exactly what is and is not
+// reproduced, and why `castingSuggestions` cannot be modelled by this shape
+// at all.
+// ---------------------------------------------------------------------------
+
+function parseListOutput(
+  raw: string,
+  output: Extract<OperationDescriptor["output"], { kind: "list" }>
+): RunOperationResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractCodeFence(raw));
+  } catch {
+    return { ok: false, error: output.errors.unparsable };
+  }
+
+  // Matches all four parsers' own `(parsed as Record<string, unknown>)?.<key>`
+  // read: no separate "wrong top-level shape" check exists in any of them —
+  // a non-object `parsed` simply produces `undefined` here, which fails the
+  // `Array.isArray` test the same way a present-but-non-array value does,
+  // collapsing to the one declared message.
+  const arr = (parsed as Record<string, unknown> | null | undefined)?.[output.arrayKey];
+  if (!Array.isArray(arr)) {
+    return { ok: false, error: output.errors.notArray };
+  }
+
+  const { fields: validityFields, require } = output.item.validity;
+  const items: Array<Record<string, string>> = [];
+
+  for (const rawItem of arr) {
+    // Matches every one of the four `normalizeXxx(raw: unknown)` functions'
+    // own `if (!raw || typeof raw !== "object") return null;` guard — an
+    // invalid item is filtered, not refused.
+    if (!rawItem || typeof rawItem !== "object") continue;
+    const obj = rawItem as Record<string, unknown>;
+
+    const values: Record<string, string> = {};
+    for (const field of output.item.fields) {
+      const rawValue = obj[field.jsonKey];
+      let value = typeof rawValue === "string" ? rawValue.trim() : "";
+      // Every one of the four parsers' `str(value, maxLen)` helper always
+      // trims to `maxLen` — none of them ever refuses an oversized item
+      // field, so there is no reject variant here (contrast `ObjectOutput`'s
+      // `maxLength`).
+      if (field.truncateTo != null) {
+        value = value.slice(0, field.truncateTo);
+      }
+      values[field.field] = value;
+    }
+
+    const satisfied =
+      require === "all"
+        ? validityFields.every((f) => (values[f] ?? "").length > 0)
+        : validityFields.some((f) => (values[f] ?? "").length > 0);
+    if (!satisfied) continue;
+
+    items.push(values);
+  }
+
+  // Matches all four parsers: the "no valid items" refusal is checked
+  // against the filtered array, *before* `maxItems` truncation — moot in
+  // practice (truncating a non-empty array cannot make it empty), but kept
+  // in the same order for fidelity.
+  if (items.length === 0) {
+    return { ok: false, error: output.errors.empty };
+  }
+
+  const truncated = output.maxItems != null ? items.slice(0, output.maxItems) : items;
+  return { ok: true, kind: "list", items: truncated };
+}
+
+function parseOutput(raw: string, output: OperationDescriptor["output"]): RunOperationResult {
+  return output.kind === "list" ? parseListOutput(raw, output) : parseObjectOutput(raw, output);
 }
 
 // ---------------------------------------------------------------------------

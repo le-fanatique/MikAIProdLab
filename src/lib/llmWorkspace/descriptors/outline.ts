@@ -123,6 +123,7 @@ No markdown outside the JSON string. No explanation. No text before or after. On
   // (`src/actions/llm/outlineGeneration.ts`): one key, tolerant of extra
   // keys, non-empty after `.trim()`.
   output: {
+    kind: "object",
     target: { entity: "project" },
     fields: [{ field: "outline", jsonKey: "outline" }],
     require: "all",

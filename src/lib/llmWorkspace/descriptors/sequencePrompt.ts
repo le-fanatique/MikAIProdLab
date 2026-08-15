@@ -129,6 +129,7 @@ export const sequencePromptAssistDescriptor: OperationDescriptor = {
   // (`src/actions/llm/sequencePrompt.ts`): one key `sequence_prompt`,
   // tolerant of extra keys, non-empty after `.trim()`.
   output: {
+    kind: "object",
     target: { entity: "sequence" },
     fields: [{ field: "sequencePrompt", jsonKey: "sequence_prompt" }],
     require: "all",

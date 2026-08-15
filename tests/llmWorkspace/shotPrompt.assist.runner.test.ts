@@ -208,7 +208,7 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
 
     mockedCallLLMJson.mockResolvedValueOnce(JSON.stringify({ shot_prompt: "A fresh prompt." }));
     const valid = await runOperation(shotPromptAssistDescriptor, { projectId, sequenceId, shotId }, { mode: "generate" });
-    expect(valid).toEqual({ ok: true, values: { shotPrompt: "A fresh prompt." } });
+    expect(valid).toEqual({ ok: true, kind: "object", values: { shotPrompt: "A fresh prompt." } });
 
     mockedCallLLMJson.mockResolvedValueOnce("not json at all {{{");
     const unparsable = await runOperation(

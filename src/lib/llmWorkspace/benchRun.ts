@@ -48,12 +48,17 @@ export function planBenchCommit(descriptor: OperationDescriptor): BenchCommitPla
 // `BenchRunPanel` (§4.5) receives only `outputFields` as a prop — the
 // declared fields, in order — not the full `OperationDescriptor`, so this
 // is the shape its one caller actually has in hand. Kept as `descriptor`'s
-// own sub-type (`OperationDescriptor["output"]["fields"]`), not a hand-typed
-// duplicate, so the two stay in lockstep.
+// own sub-type, not a hand-typed duplicate, so the two stay in lockstep.
+//
+// Narrowed to the `"object"` branch of `output` (LLMW.OUTPUT.LIST.1, B7a):
+// the bench's Run/Approve draft only knows how to render flat fields today —
+// a list-output template has no bench UI yet (B7c).
 // ---------------------------------------------------------------------------
 
+export type ObjectOutputFields = Extract<OperationDescriptor["output"], { kind: "object" }>["fields"];
+
 export function buildBenchDraftFields(
-  fields: OperationDescriptor["output"]["fields"],
+  fields: ObjectOutputFields,
   values: Record<string, string>
 ): Array<{ field: string; value: string }> {
   return fields.map((f) => ({ field: f.field, value: values[f.field] ?? "" }));
@@ -69,7 +74,12 @@ export function buildBenchDraftFields(
 // ---------------------------------------------------------------------------
 
 export function preservedAssetDetailColumns(descriptor: OperationDescriptor): string[] {
-  const declared = new Set(descriptor.output.fields.map((f) => f.field));
+  // `updateAssetDetailsInline`-committing descriptors are `output.kind ===
+  // "object"` in practice (no list descriptor commits through it — B7b/B7c);
+  // narrowed defensively per the discriminant (LLMW.OUTPUT.LIST.1, B7a). A
+  // hypothetical list descriptor declares no fields here, so every column is
+  // "not declared" and preserved, rather than guessed.
+  const declared = new Set(descriptor.output.kind === "object" ? descriptor.output.fields.map((f) => f.field) : []);
   return ACTION_REGISTRY.updateAssetDetailsInline.columns.written.filter((column) => !declared.has(column));
 }
 

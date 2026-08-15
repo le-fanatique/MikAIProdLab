@@ -73,7 +73,11 @@ describe("planBenchCommit — a stored-shaped descriptor", () => {
 
 describe("buildBenchDraftFields", () => {
   it("respects the declared fields' order and defaults a missing value to \"\"", () => {
-    const fields = assetBibleGenerateDescriptor.output.fields;
+    // `output.kind` is always `"object"` for this descriptor
+    // (LLMW.OUTPUT.LIST.1, B7a).
+    const output = assetBibleGenerateDescriptor.output;
+    if (output.kind !== "object") throw new Error("unreachable");
+    const fields = output.fields;
     const result = buildBenchDraftFields(fields, { usageRules: "kept" });
 
     expect(result).toEqual([

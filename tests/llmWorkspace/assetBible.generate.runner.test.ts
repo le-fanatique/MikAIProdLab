@@ -152,6 +152,7 @@ describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
     const valid = await runOperation(assetBibleGenerateDescriptor, { projectId, assetId });
     expect(valid).toEqual({
       ok: true,
+      kind: "object",
       values: { visualIdentity: "A fresh visual identity.", usageRules: "", forbiddenVariations: "" },
     });
 
@@ -179,9 +180,16 @@ describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
     // The descriptor declares the bound — not the adapter, which is pure
     // translation after this correction (moved out of
     // `src/actions/llm/assetBible.ts`, onto `output.fields[].truncateTo`).
-    expect(
-      assetBibleGenerateDescriptor.output.fields.map((f) => f.truncateTo)
-    ).toEqual([MAX_ASSET_BIBLE_FIELD_LENGTH, MAX_ASSET_BIBLE_FIELD_LENGTH, MAX_ASSET_BIBLE_FIELD_LENGTH]);
+    // `output.kind` is always `"object"` for this descriptor
+    // (LLMW.OUTPUT.LIST.1, B7a).
+    expect(assetBibleGenerateDescriptor.output.kind).toBe("object");
+    const objectOutput = assetBibleGenerateDescriptor.output;
+    if (objectOutput.kind !== "object") throw new Error("unreachable");
+    expect(objectOutput.fields.map((f) => f.truncateTo)).toEqual([
+      MAX_ASSET_BIBLE_FIELD_LENGTH,
+      MAX_ASSET_BIBLE_FIELD_LENGTH,
+      MAX_ASSET_BIBLE_FIELD_LENGTH,
+    ]);
 
     const mockedCallLLMJson = callLLMJson as unknown as ReturnType<typeof vi.fn>;
     mockedCallLLMJson.mockResolvedValueOnce(
@@ -190,7 +198,7 @@ describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
 
     const runnerResult = await runOperation(assetBibleGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);
-    if (!runnerResult.ok) throw new Error("unreachable");
+    if (!runnerResult.ok || runnerResult.kind !== "object") throw new Error("unreachable");
     expect(runnerResult.values.visualIdentity).toHaveLength(MAX_ASSET_BIBLE_FIELD_LENGTH);
     expect(runnerResult.values.visualIdentity).toBe(oversized.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH));
 

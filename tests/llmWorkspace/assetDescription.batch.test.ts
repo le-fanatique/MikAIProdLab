@@ -108,6 +108,7 @@ describe("assetDescription.batch descriptor — context equality", () => {
     );
     expect(assetDescriptionBatchDescriptor.intent).toEqual({});
     expect(assetDescriptionBatchDescriptor.output).toEqual({
+      kind: "object",
       target: { entity: "asset" },
       fields: [
         { field: "description", jsonKey: "description_draft" },

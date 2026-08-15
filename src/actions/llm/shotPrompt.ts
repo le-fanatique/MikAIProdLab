@@ -27,6 +27,12 @@ export async function generateShotPromptDraft(
       { mode: rawMode }
     );
     if (!result.ok) return { ok: false, error: result.error };
+    // `shotPromptAssistDescriptor.output.kind` is always `"object"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "object") {
+      throw new Error("generateShotPromptDraft: expected an object-kind result.");
+    }
     return { ok: true, draft: result.values.shotPrompt };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";

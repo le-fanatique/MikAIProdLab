@@ -25,6 +25,12 @@ export async function generateAssetBibleDraft(
 
     const result = await runOperation(assetBibleGenerateDescriptor, { projectId, assetId });
     if (!result.ok) return { ok: false, error: result.error };
+    // `assetBibleGenerateDescriptor.output.kind` is always `"object"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "object") {
+      throw new Error("generateAssetBibleDraft: expected an object-kind result.");
+    }
     return {
       ok: true,
       draft: {

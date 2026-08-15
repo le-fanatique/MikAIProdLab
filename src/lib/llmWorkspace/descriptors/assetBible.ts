@@ -136,6 +136,7 @@ No markdown. No explanation. Only the JSON object.`,
   // an operation-specific branch. Not proven by a runner-level equality test
   // in this ticket — see `shotPrompt.ts`'s identical note.
   output: {
+    kind: "object",
     target: { entity: "asset" },
     fields: [
       { field: "visualIdentity", jsonKey: "visual_identity", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },

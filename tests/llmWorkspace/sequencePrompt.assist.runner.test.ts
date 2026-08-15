@@ -154,7 +154,7 @@ describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
 
     mockedCallLLMJson.mockResolvedValueOnce(JSON.stringify({ sequence_prompt: "A fresh prompt." }));
     const valid = await runOperation(sequencePromptAssistDescriptor, { projectId, sequenceId }, { mode: "generate" });
-    expect(valid).toEqual({ ok: true, values: { sequencePrompt: "A fresh prompt." } });
+    expect(valid).toEqual({ ok: true, kind: "object", values: { sequencePrompt: "A fresh prompt." } });
 
     mockedCallLLMJson.mockResolvedValueOnce("not json at all {{{");
     const unparsable = await runOperation(

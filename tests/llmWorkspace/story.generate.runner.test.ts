@@ -102,7 +102,7 @@ describe("story.generate — runner proof (LLMW.RUNNER.1a)", () => {
 
     mockedCallLLMJson.mockResolvedValueOnce(JSON.stringify({ story: "A fresh synopsis." }));
     const valid = await runOperation(storyGenerateDescriptor, { projectId });
-    expect(valid).toEqual({ ok: true, values: { story: "A fresh synopsis." } });
+    expect(valid).toEqual({ ok: true, kind: "object", values: { story: "A fresh synopsis." } });
 
     mockedCallLLMJson.mockResolvedValueOnce("not json at all {{{");
     const unparsable = await runOperation(storyGenerateDescriptor, { projectId });

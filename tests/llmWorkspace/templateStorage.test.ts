@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateLlmTemplateJson } from "@/lib/llmWorkspace/templateStorage";
 import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
+import { DESCRIPTORS } from "@/lib/llmWorkspace/descriptors";
 import type { OperationDescriptor } from "@/lib/llmWorkspace/types";
 
 // ---------------------------------------------------------------------------
@@ -110,5 +111,88 @@ describe("validateLlmTemplateJson", () => {
     delete descriptor.preconditions;
     const result = validateLlmTemplateJson(JSON.stringify(descriptor));
     expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Supervisor review retake, post-LLMW.OUTPUT.LIST.1 (B7a): `output.kind`
+// must gate which shape the rest of `output` is checked against — an
+// imported template declaring `kind: "list"` with a malformed `item` must be
+// refused here, not at Run inside `parseListOutput`.
+// ---------------------------------------------------------------------------
+
+describe("validateLlmTemplateJson — output.kind (LLMW.OUTPUT.LIST.1, B7a)", () => {
+  it("round-trips all eight built-in descriptors — the format and its validator do not diverge", () => {
+    for (const [id, descriptor] of Object.entries(DESCRIPTORS)) {
+      const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+      expect(result.ok, `${id} should validate`).toBe(true);
+    }
+  });
+
+  it("refuses an object without output.kind, rather than assuming \"object\"", () => {
+    const descriptor = clone() as unknown as { output: Record<string, unknown> };
+    delete descriptor.output.kind;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.kind"/);
+  });
+
+  it("refuses an unknown output.kind", () => {
+    const descriptor = clone() as unknown as { output: Record<string, unknown> };
+    descriptor.output.kind = "table";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.kind"/);
+  });
+
+  function syntheticListDescriptor(): Record<string, unknown> {
+    const base = clone() as unknown as Record<string, unknown>;
+    base.output = {
+      kind: "list",
+      arrayKey: "items",
+      item: {
+        fields: [
+          { field: "title", jsonKey: "title" },
+          { field: "note", jsonKey: "note", truncateTo: 5 },
+        ],
+        validity: { fields: ["title"], require: "all" },
+      },
+      maxItems: 20,
+      errors: {
+        unparsable: "Unparsable response.",
+        notArray: "No items array.",
+        empty: "No valid items.",
+      },
+    };
+    return base;
+  }
+
+  it("accepts a fully valid kind: \"list\" output", () => {
+    const result = validateLlmTemplateJson(JSON.stringify(syntheticListDescriptor()));
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses kind: \"list\" with output.item.fields missing", () => {
+    const descriptor = syntheticListDescriptor();
+    delete (descriptor.output as Record<string, unknown> & { item: Record<string, unknown> }).item.fields;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields"/);
+  });
+
+  it("refuses kind: \"list\" with output.item.validity.fields naming an undeclared field", () => {
+    const descriptor = syntheticListDescriptor();
+    (descriptor.output as { item: { validity: { fields: string[] } } }).item.validity.fields = ["notDeclared"];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.validity\.fields".*notDeclared/);
+  });
+
+  it("refuses kind: \"list\" with a non-integer maxItems", () => {
+    const descriptor = syntheticListDescriptor();
+    (descriptor.output as Record<string, unknown>).maxItems = 1.5;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.maxItems"/);
   });
 });

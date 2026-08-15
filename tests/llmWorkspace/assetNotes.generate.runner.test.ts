@@ -133,7 +133,7 @@ describe("assetNotes.generate — runner proof (LLMW.RUNNER.1b)", () => {
 
     mockedCallLLMJson.mockResolvedValueOnce(JSON.stringify({ notes_draft: "A fresh note." }));
     const valid = await runOperation(assetNotesGenerateDescriptor, { projectId, assetId });
-    expect(valid).toEqual({ ok: true, values: { notes: "A fresh note." } });
+    expect(valid).toEqual({ ok: true, kind: "object", values: { notes: "A fresh note." } });
 
     mockedCallLLMJson.mockResolvedValueOnce("not json at all {{{");
     const unparsable = await runOperation(assetNotesGenerateDescriptor, { projectId, assetId });

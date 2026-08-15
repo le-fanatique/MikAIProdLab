@@ -92,6 +92,7 @@ No markdown. No explanation. Only the JSON object.`,
   // runner-level equality test in this ticket — see `shotPrompt.ts`'s
   // identical note.
   output: {
+    kind: "object",
     target: { entity: "asset" },
     fields: [{ field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
     require: "all",

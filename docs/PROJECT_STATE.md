@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B6c1 COMPLETE (2026-08-14)
+## LLM Workspace Phase B — B0 to B7a COMPLETE (2026-08-15)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -470,6 +470,83 @@ Project survives a Project switch could not be exercised: the permission
 classifier blocked navigation to a real production Project, and the pass refused
 to force it. It is a B6b non-regression control, and the code concerned is
 verified untouched by diff review — covered by reading, not by the browser.
+
+### B7a — the list output contract, and the wall it found (2026-08-15)
+
+`LLMW.OUTPUT.LIST.1`, first ticket of the order the user settled on 2026-08-15
+(§11.3): list mode and its migrations before text mode, B6c2, the editor and
+Phase C.
+
+**Why the contract had to come before the component.** "List mode in the
+proposal component" could not be the first ticket: `RunOperationResult` was
+`{ ok: true; values: Record<string, string> }` — a flat string map that cannot
+hold a list — and `parseOutput` turned any array into `{}`. The component would
+have had nothing to consume. `output` is now a union discriminated on `kind`,
+`RunOperationResult` likewise, and `parseOutput` dispatches to a list branch.
+The eight existing descriptors gained `kind: "object"` and nothing else; no
+visible message changed and no A2 snapshot moved.
+
+**The ticket's real product is a finding, not code.** It was written to make the
+executor stop and report format gaps rather than flatten them — the mechanism
+that produced Phase B's seven format corrections. It produced six, two of which
+decide what happens next.
+
+*`castingSuggestions` is not describable, and not for a format reason.* Its item
+validity rests on an enum and two integers, which no string-field rule can
+express. More decisively, `generateCastingSuggestionsDraft` performs, **after**
+parsing, a validation and enrichment against the live database: it filters
+model-hallucinated ids by looking them up in the project's real shots and
+assets, computes `alreadyAssigned`, and rewrites names from the existing rows.
+No field declaration can express a database lookup. This is not a hole in the
+output format — it is a resolution step that does not belong in a description
+of output at all.
+
+*Five declarative gaps, all needed for a behaviour-preserving migration:*
+numeric item fields (`duration_seconds`, `order_index`) that
+`Record<string, string>` cannot carry; a same-field fallback across two JSON
+keys (`assetType ?? asset_type`); enum fields with a silent default; a default
+that depends on the item's index in the array; and a sort of the whole list
+after parsing. Without them a migration would change observable behaviour,
+which B3 was forbidden to do.
+
+**What the four parsers agree on**, and what the format therefore adopts: an
+invalid item is filtered, not fatal; an empty result after filtering refuses the
+whole response; an over-long string field is always silently truncated and never
+refused — so the list branch has `truncateTo` and no `maxLength` counterpart,
+unlike the object branch; and each operation keeps its own three refusal
+messages, never unified.
+
+**The defect the green checks did not show.** `validateLlmTemplateJson` had not
+followed the format: it still checked `output` as if it had one shape and never
+looked at `kind`, while claiming to return an `OperationDescriptor`. That
+reopened exactly the gap B6a exists to close — an imported template that only
+detonates at Run — on a real path, since hand-editing and importing JSON is
+currently the only way a user can author their own workflow. Fixed by
+dispatching on `kind` first, refusing an absent or unknown `kind` outright with
+**no silent fallback to `"object"`**, and validating the list shape by
+membership (a `validity` field must be declared in `item.fields`), the same
+principle B6a already applied to render forms. A round-trip test over the eight
+built-in descriptors now makes format and validator unable to drift apart in
+silence.
+
+Suite 346 → 366. Four browser paths, four PASS: the bench surface shipped that
+same morning is unregressed, and a valid `kind: "list"` template is accepted at
+import and opened in the bench without crashing, showing "List-output templates
+cannot be inspected here yet." rather than its output fields.
+
+**Two false alarms worth recording, both the supervisor's own doing.** The first
+browser pass reported the list import refused — the supervisor's test JSON used
+`notAnArray` where the format declares `notArray`; the validator was right. It
+also captured a server-side `ReferenceError: isBenchReturnToQueryKey is not
+defined`; the import is present, `tsc` and the build pass, and the page stopped
+producing it — the cause was running `npm run build` twice against the live dev
+server, which rewrites `.next` underneath it. **Do not run a production build
+against a running dev server**, or expect a corrupted chunk and a phantom
+defect.
+
+**This ticket blocks the next one.** B7b was to write four list descriptors.
+There are at most three, and they need the five format extensions first. That
+arbitration is the user's and was open at the time of writing.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 

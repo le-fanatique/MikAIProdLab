@@ -151,6 +151,7 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
   // Record<string, OperationDescriptor>` still type-checks against the
   // corrected `output` shape.
   output: {
+    kind: "object",
     target: { entity: "shot" },
     fields: [{ field: "shotPrompt", jsonKey: "shot_prompt" }],
     require: "all",

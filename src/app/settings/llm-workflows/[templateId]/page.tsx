@@ -84,6 +84,12 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   const descriptor = resolved.descriptor;
   const sourceLabel = resolved.source === "builtin" ? "Built-in" : "Stored";
 
+  // Every built-in and stored descriptor is `output.kind === "object"` today
+  // — list output has no writer (B7b) or bench UI (B7c) yet. Narrowed here,
+  // once, per `OperationDescriptor["output"]`'s discriminant
+  // (LLMW.OUTPUT.LIST.1, B7a).
+  const objectOutput = descriptor.output.kind === "object" ? descriptor.output : null;
+
   const anchorEntity = descriptor.anchor.entity;
   const requiredKeys = requiredAnchorIdKeys(anchorEntity);
   const needsSequence = requiredKeys.includes("sequenceId");
@@ -356,14 +362,20 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
 
             <div>
               <p className="text-[10px] uppercase tracking-wide text-[#6e767d] mb-1">Output fields</p>
-              <ul className="flex flex-col gap-1">
-                {descriptor.output.fields.map((f) => (
-                  <li key={f.field} className="font-mono text-[#a4abb2]">
-                    {f.field} ← {f.jsonKey}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[#6e767d] mt-1">require: {descriptor.output.require}</p>
+              {objectOutput ? (
+                <>
+                  <ul className="flex flex-col gap-1">
+                    {objectOutput.fields.map((f) => (
+                      <li key={f.field} className="font-mono text-[#a4abb2]">
+                        {f.field} ← {f.jsonKey}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[#6e767d] mt-1">require: {objectOutput.require}</p>
+                </>
+              ) : (
+                <p className="text-[#4b5158]">List-output templates cannot be inspected here yet.</p>
+              )}
             </div>
 
             <div>
@@ -462,15 +474,19 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
             </p>
           )}
 
-          {complete && preview && preview.ok && (
+          {complete && preview && preview.ok && objectOutput && (
             <BenchRunPanel
               templateId={templateId}
               ids={selection}
               searchParams={search}
               plan={plan}
-              outputFields={descriptor.output.fields}
+              outputFields={objectOutput.fields}
               returnTo={returnTo}
             />
+          )}
+
+          {complete && preview && preview.ok && !objectOutput && (
+            <p className="text-sm text-[#cf7b6b]">List-output templates cannot be run from the bench yet.</p>
           )}
         </Card>
       </div>
