@@ -177,6 +177,74 @@ describe("buildApplyGeneratedStoryArgs / buildApplyGeneratedOutlineArgs — posi
   });
 });
 
+describe("buildShotRetakeCommitArgs — shot.retakeDirected → updateShotNarrativeContext (§4.3 preservation)", () => {
+  it("keeps an unproposed (blank) field at its existing value — the most important case (§4.3 of the ticket)", () => {
+    const [, , , data] = proposalCommit.buildShotRetakeCommitArgs({
+      shotId: 1,
+      sequenceId: 2,
+      projectId: 3,
+      existing: { description: "Existing description", actionPitch: "Existing action", cameraPitch: "Existing camera" },
+      applied: { description: "", actionPitch: "A new action pitch", cameraPitch: "" },
+    });
+
+    expect(data.description).toBe("Existing description");
+    expect(data.actionPitch).toBe("A new action pitch");
+    expect(data.cameraPitch).toBe("Existing camera");
+  });
+
+  it("treats a whitespace-only applied field as unproposed too", () => {
+    const [, , , data] = proposalCommit.buildShotRetakeCommitArgs({
+      shotId: 1,
+      sequenceId: 2,
+      projectId: 3,
+      existing: { description: "Existing", actionPitch: null, cameraPitch: null },
+      applied: { description: "   ", actionPitch: "", cameraPitch: "" },
+    });
+
+    expect(data.description).toBe("Existing");
+    expect(data.actionPitch).toBeNull();
+    expect(data.cameraPitch).toBeNull();
+  });
+
+  it("applies a proposed field, trimmed", () => {
+    const [, , , data] = proposalCommit.buildShotRetakeCommitArgs({
+      shotId: 1,
+      sequenceId: 2,
+      projectId: 3,
+      existing: { description: "Old", actionPitch: "Old", cameraPitch: "Old" },
+      applied: { description: "  New description  ", actionPitch: "Old", cameraPitch: "Old" },
+    });
+
+    expect(data.description).toBe("New description");
+  });
+
+  it("when both existing and applied are blank, writes null (never an empty string)", () => {
+    const [, , , data] = proposalCommit.buildShotRetakeCommitArgs({
+      shotId: 1,
+      sequenceId: 2,
+      projectId: 3,
+      existing: { description: null, actionPitch: null, cameraPitch: null },
+      applied: { description: "", actionPitch: "", cameraPitch: "" },
+    });
+
+    expect(data).toEqual({ description: null, actionPitch: null, cameraPitch: null });
+  });
+
+  it("passes shotId/sequenceId/projectId through positionally, unchanged", () => {
+    const [shotId, sequenceId, projectId] = proposalCommit.buildShotRetakeCommitArgs({
+      shotId: 42,
+      sequenceId: 7,
+      projectId: 3,
+      existing: { description: null, actionPitch: null, cameraPitch: null },
+      applied: { description: "d", actionPitch: "a", cameraPitch: "c" },
+    });
+
+    expect(shotId).toBe(42);
+    expect(sequenceId).toBe(7);
+    expect(projectId).toBe(3);
+  });
+});
+
 describe("buildUpdateShotPromptHiddenFields — shotPrompt.assist → updateShotPrompt (redirectOnly)", () => {
   it("produces exactly the field names updateShotPrompt reads off its FormData (src/actions/shots.ts)", () => {
     const fields = proposalCommit.buildUpdateShotPromptHiddenFields({

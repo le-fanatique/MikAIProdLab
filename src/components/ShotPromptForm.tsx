@@ -47,7 +47,7 @@ export default function ShotPromptForm({
             htmlFor="shot-prompt-textarea"
             className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]"
           >
-            Prompt
+            Narrative Creative Prompt
           </label>
           {!initialShotPrompt?.trim() && defaultPromptProposal && (
             <p className="text-[10px] text-[#4b5158]">

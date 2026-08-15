@@ -20,6 +20,7 @@
 
 import { preserveAssetBibleField } from "@/lib/prompts/assetBibleDraft";
 import { ACTION_BINDINGS } from "./bindings";
+import { ACTION_REGISTRY } from "./registry";
 
 // ── assetBible.generate → updateAssetDetailsInline (returnValue) ──────────
 //
@@ -116,6 +117,61 @@ export function buildUpdateShotPromptHiddenFields(input: {
     shotPrompt: input.shotPrompt,
     returnTo: input.returnTo,
   };
+}
+
+// ── shot.retakeDirected → updateShotNarrativeContext (returnValue) ────────
+//
+// LLMW.UC2.RETAKE.1 (B9b), §4.3's piège: `shot.retakeDirected` declares
+// `output.require: "any"` — the model may leave any of the three fields
+// empty — but `updateShotNarrativeContext` replaces all three on every call
+// (`set({ ...data })`, registry `writeSemantics: "replace"`). The motif is
+// `preservedAssetDetailColumns` + `buildAssetBibleCommitArgs` (B6c1):
+// derive which columns need fallback from `ACTION_REGISTRY`'s own
+// `columns.written` (not a hard-coded three-name list), and fall back to the
+// existing row's value — via `preserveAssetBibleField`, which is generic
+// (existing/applied strings) despite its name, not asset-Bible-specific — for
+// any column whose applied value is blank. Every one of this action's three
+// written columns is always declared by this descriptor's `output.fields`
+// (unlike `updateAssetDetailsInline`, where `assetBible.generate` never
+// declares two of its five columns at all) — so unlike
+// `preservedAssetDetailColumns`, the preservation this operation needs is
+// per-value (an empty string the model chose not to fill), not per-column
+// declaration. Both mechanisms fall back to the same existing-row value; only
+// the trigger differs.
+export function buildShotRetakeCommitArgs(input: {
+  shotId: number;
+  sequenceId: number;
+  projectId: number;
+  existing: { description: string | null; actionPitch: string | null; cameraPitch: string | null };
+  applied: { description: string; actionPitch: string; cameraPitch: string };
+}): Parameters<typeof ACTION_BINDINGS.updateShotNarrativeContext> {
+  const existingByColumn: Record<string, string | null> = {
+    description: input.existing.description,
+    actionPitch: input.existing.actionPitch,
+    cameraPitch: input.existing.cameraPitch,
+  };
+  const appliedByColumn: Record<string, string> = {
+    description: input.applied.description,
+    actionPitch: input.applied.actionPitch,
+    cameraPitch: input.applied.cameraPitch,
+  };
+
+  const merged: Record<string, string | null> = {};
+  for (const column of ACTION_REGISTRY.updateShotNarrativeContext.columns.written) {
+    const preserved = preserveAssetBibleField(existingByColumn[column] ?? "", appliedByColumn[column] ?? "");
+    merged[column] = preserved.trim() ? preserved.trim() : null;
+  }
+
+  return [
+    input.shotId,
+    input.sequenceId,
+    input.projectId,
+    {
+      description: merged.description ?? null,
+      actionPitch: merged.actionPitch ?? null,
+      cameraPitch: merged.cameraPitch ?? null,
+    },
+  ];
 }
 
 // ── sequencePrompt.assist → updateSequencePrompt (redirectOnly) ───────────

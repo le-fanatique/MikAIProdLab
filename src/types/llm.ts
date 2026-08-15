@@ -245,6 +245,13 @@ export type GeneratedAssetBibleDraft = {
   forbiddenVariations: string;
 };
 
+/** Draft output for "Retake Shot (Directed)" (LLMW.UC2.RETAKE.1) — any field may come back empty (§4.3, "any" field is optional per director's direction). */
+export type GeneratedShotRetakeDraft = {
+  description: string;
+  actionPitch: string;
+  cameraPitch: string;
+};
+
 // ---------------------------------------------------------------------------
 // Preview state (used by Client Components in V0.4)
 // ---------------------------------------------------------------------------

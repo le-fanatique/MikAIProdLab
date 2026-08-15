@@ -1107,7 +1107,50 @@ the workspace existing rather than as features of their own.
 
 ### 11.3 After B6
 
-**Order settled by the user on 2026-08-15**, and it is the one in force:
+**Revised 2026-08-15 after B7a and after the user restated the founding use
+cases.** This list supersedes the ordering written earlier the same day: B7a
+proved there are three list migrations and not four, and the user's challenge
+established that nothing in the queue served UC1/UC2/UC3.
+
+### Chantier 1 — finishing the workspace
+
+| # | Ticket | Delivers | UC impact |
+| --- | --- | --- | --- |
+| B7b | Format extensions | The five declarative gaps B7a found (numeric item fields, dual `jsonKey` fallback, enum-with-default, index-dependent default, list-level sort) **plus the selection declaration** — which `FormData` key carries the user's retained subset. No descriptor, no UI. | none |
+| B7c | The three row-creating descriptors | `shots-from-sequence`, asset extraction, `sequences-from-outline`, with byte-for-byte prompt equality against the existing builders (B1c discipline). | none |
+| B7d | List mode in `ProposalPanel` | Propose → **cherry-pick** → approve. The selection is the new primitive; object mode has no equivalent. | none |
+| B7e-g | The three migrations | One at a time, each preserving observable behaviour. | none |
+| B7h | Casting | Decided on facts once B7b lands. Needs **reference hydration** — resolving proposed ids to names for display, the generic need of any reference-producing operation. | none |
+| B8 | Text mode + its two migrations | `promptCompiler`, `translation`. | none |
+| B6c2 | The variable library (§5.2) | Browse the registry filtered by anchor, resolved value and token cost per variable. Read-only. | prepares all three |
+| **B9** | **`intent.freeText` + the UC2 descriptor** | **The first ticket of the whole phase to deliver a new capability rather than reorganise an existing one.** The control has never been built; declared since B1a, deferred by B6b and B6c1 on correct local reasoning each time. | **delivers UC2** |
+| B10 | The UC3 descriptor | The hard part already exists: `ASSET.SHOT_APPEARANCES` performs the relational traversal and projects `description` + `actionPitch`. | **delivers UC3** |
+| B11 | UC1 | `insertionPoint` really implemented in `runner.ts` (nominal today), a twelve-field output, and the re-run-with-another-seed control. The heaviest of the three. | **delivers UC1** |
+| E1 | The template editor | `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. Must make `intent.freeText` editable — see that file's 2026-08-15 correction. | makes all three authorable |
+
+### Chantier 2 — the cleanup, which only B7-B8 make possible
+
+A panel that still serves an unmigrated operation cannot be deleted. Phase C
+therefore starts after the migrations, not before.
+
+- **C0 — re-anchor the A2 snapshots on the runner's own output.** Prerequisite
+  for everything else: the builders under `src/lib/prompts/` (23 files, 3 526
+  lines) are the frozen oracle the descriptor proofs assert against. Deleting
+  them without re-anchoring destroys the proof along with the code.
+- **C1** remove the assist panels · **C2** remove the LLM actions · **C3**
+  convert the prompt builders into declarative templates · **C4** reorganise the
+  128 flat components in `src/components/` · **C5** break up the large UI files
+  · **C6** migrate to `src/features/`, LLM domain first.
+- **Independent, schedulable any time**, no interaction with the workspace:
+  `ThemeModeToggle.tsx` (1 835 lines), `src/actions/sequenceVideoSplit.ts`
+  (1 828 lines), the large storyboard and editorial page files.
+- **Then** the code-level token-efficiency audit the user asked for, and only
+  then the roadmap reconciliation — both are worth far more once ~6 000 lines of
+  superseded code have actually left the repository.
+
+### The ordering the user settled, and what B7a changed
+
+**Order settled by the user on 2026-08-15**, revised as above:
 
 1. **List mode in the proposal component, then the 4 array-wrapped list
    actions.** The mode ships as its own ticket, never mixed with a migration —

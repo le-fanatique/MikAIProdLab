@@ -243,6 +243,28 @@ export const ACTION_REGISTRY = {
       "Defensible only because Project is the root of its own ownership chain (docs/LLM_WORKSPACE_ARCHITECTURE.md §11.2, B1a scope correction) — stops being defensible the moment this action is reached through anything other than a direct projectId argument.",
     ],
   },
+
+  // LLMW.UC2.RETAKE.1 (B9b) — the eighth action, the write side of
+  // `shot.retakeDirected`. Not from B0/B4a's original seven; declared per the
+  // same discipline (real semantics, proven against a real database), not on
+  // parole.
+  updateShotNarrativeContext: {
+    id: "updateShotNarrativeContext",
+    source: { module: "@/actions/shots", export: "updateShotNarrativeContext" },
+    target: { entity: "shot" },
+    response: "returnValue",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["description", "actionPitch", "cameraPitch"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "Full replacement: `set({ ...data })` writes all three fields on every call (src/actions/shots.ts:155-158) — a caller passing null for a field nulls the column. Proven by tests/actions/registry.test.ts's own column-correspondence case for this entry.",
+      "Ownership check (src/actions/shots.ts:143-153, two SELECTs — shot->sequence, sequence->project) and mutation (src/actions/shots.ts:155-158, UPDATE) are three separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+      "Never redirects, never touches shotPrompt/framing/cameraMovement/shotCode/title/duration/continuity — the narrow surface §0bis of the ticket arbitrated updateShot out for.",
+    ],
+  },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;
 
 export type ActionRegistryId = keyof typeof ACTION_REGISTRY;

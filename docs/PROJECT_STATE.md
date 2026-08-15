@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B9a COMPLETE (2026-08-15)
+## LLM Workspace Phase B — B0 to B9b COMPLETE (2026-08-15)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -605,6 +605,80 @@ action registry declares (positional arguments *and* `FormData`, answering by
 `redirect()`), and it silently rewrites `shotPrompt` from
 `description`/`actionPitch`/`cameraPitch` while also doing nothing at all —
 no write, no error, no redirect — when `title` is blank.
+
+### B9b — UC2 delivered, then corrected by first use (2026-08-15)
+
+`LLMW.UC2.RETAKE.1`, then `LLMW.RETAKE.OUTPUT.1` on the same day. **The user's
+first founding use case works**: on a Shot he writes "propose me another action
+and another framing, more empathy with the character" and the assistant answers.
+
+**The arbitration that shaped it.** A directed retake rewrites **the three
+narrative fields** — `description`, `actionPitch`, `cameraPitch` — and nothing
+else. Decided by the user on 2026-08-15 after the supervisor surfaced what
+`updateShot` really does: it redirects to Sequence Detail, silently rewrites
+`shotPrompt` from the narrative fields, and does nothing at all — no write, no
+error, no redirect — when `title` is blank. `updateShotNarrativeContext` was
+already written for exactly this need, returns `{ ok }`, verifies the ownership
+chain, and touches neither `shotPrompt` nor `framing` nor `cameraMovement`.
+`framing` and `cameraMovement` stay the user's.
+
+**`SEQ.SHOTS`, the fourteenth variable.** UC2 requires "the context of all other
+Shots" and nothing resolved it — `SEQ.CONTEXT` returns the sequence's own five
+fields only. The new variable serves UC1 too, which needs continuity with the
+preceding and following Shots. One variable, two founding use cases.
+
+**The first descriptor with no oracle.** Every prior descriptor was proven
+byte-for-byte against a frozen prompt builder — the B1c discipline that caught
+three drifted system prompts. Here the prompt is *written*, not transcribed, so
+no equality test could prove anything. The ticket forbade inventing one and
+required the full resolved prompt in the report instead. Its quality is a human
+judgement, and that is exactly where the defect turned up.
+
+**The preservation trap, and why it is not theoretical.** `output.require` is
+`"any"`, so the model may leave a field empty, but the action replaces all
+three. Without preservation, asking for "another action" would erase the shot's
+description. The B6c1 pattern was reused and the column list derived from
+`ACTION_REGISTRY`, not hardcoded. Proven in the real application: the model
+returned an empty description and the stored value survived.
+
+**What the supervisor's diff review caught.** The closing template block said
+"per the director's direction above" — a static text, while the directive block
+disappears when the note is blank. With an empty note the model was told to
+follow a direction present nowhere, and nothing prevented triggering that way.
+Fixed by a neutral closing block, a trigger disabled until a note exists, and
+the regression test that was missing.
+
+**What only first use could catch.** The user tried it on his own Shots and
+reported fields coming back empty. The cause was in the prompt: "never all three
+are required" plus "return an empty string" gave the model explicit permission
+to answer half the question. The rules now read "fill in every field the
+director's direction actually concerns… do not stop at one when the direction
+names several", and an unfilled field is labelled `Unchanged — keeps current
+value` with the shot's real value shown as placeholder — a blank box read as a
+failure regardless of the help text beneath it.
+
+The same round renamed the Shot Prompt card's main textarea from `Prompt` to
+`Narrative Creative Prompt` (the user's own diagnosis: it holds literary prose
+while it is meant to produce a technical image prompt) and added one explainer
+line under each of the two adjacent cards. The two `Director's note` fields
+still share a name; a further rename was proposed and **deferred by the user**
+until he reworks the shot-prompt system as a whole.
+
+Suite 387 → 414. Seven browser paths then six, all PASS, including the proof
+that a two-theme direction now fills both fields and a single-theme one
+correctly leaves the others untouched.
+
+**Flagged, not fixed — a Phase C obstacle.** `buildShotRetakeCommitArgs` is the
+second production caller of `preserveAssetBibleField`, which lives in
+`src/lib/prompts/` — the frozen oracle this document describes as having no
+production caller and scheduled for deletion. B5 created the dependency; B9b
+deepened it. The three-line helper needs a neutral home before C3.
+
+**A supervisor process failure worth keeping.** `npm run build` was run against
+the live dev server and corrupted the bench route's dev chunk, producing a
+phantom `ReferenceError` in two separate browser passes. The post-build check
+had queried a different route than the one affected. Procedure corrected: verify
+every route the ticket touched, or do not build while the dev server is live.
 
 ## DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1 - Implemented, awaiting Codex review (2026-08-10)
 

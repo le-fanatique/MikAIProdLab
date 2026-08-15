@@ -40,6 +40,7 @@ import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import ShotNarrativeContextEditor from "@/components/ShotNarrativeContextEditor";
+import ShotRetakeDirectedPanel from "@/components/ShotRetakeDirectedPanel";
 import ShotVideoLibraryPanel, { type ShotVideoLibraryRow } from "@/components/shotVideoLibrary/ShotVideoLibraryPanel";
 
 type Props = {
@@ -922,6 +923,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         </Card>
 
         <Card title="Shot Prompt">
+          <p className="mb-3 text-xs text-[#4b5158]">
+            The Narrative Creative Prompt below is sent directly to image generation, independent of the shot&apos;s narrative fields once saved here. Its own Director&apos;s note only steers that draft — it never touches Description, Action Pitch or Camera Pitch.
+          </p>
           <ShotPromptForm
             projectId={pid}
             sequenceId={sid}
@@ -931,6 +935,24 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             saved={shotPromptSaved === "1"}
             error={shotPromptError ?? null}
             defaultPromptProposal={defaultPromptProposal || null}
+          />
+        </Card>
+
+        {/* LLMW.UC2.RETAKE.1 (B9b) — directed retake of the narrative
+            fields (description/actionPitch/cameraPitch), next to the
+            existing Shot Prompt LLM Assist above; that assistant stays
+            untouched. */}
+        <Card title="Directed Retake">
+          <p className="mb-3 text-xs text-[#4b5158]">
+            This Director&apos;s note rewrites the shot&apos;s narrative fields (Description, Action Pitch, Camera Pitch) — not the Narrative Creative Prompt above, which stays as-is unless you edit it yourself.
+          </p>
+          <ShotRetakeDirectedPanel
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            description={shot.description}
+            actionPitch={shot.actionPitch}
+            cameraPitch={shot.cameraPitch}
           />
         </Card>
 

@@ -14,7 +14,7 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { assets } from "@/db/schema";
+import { assets, shots } from "@/db/schema";
 import { loadBenchDescriptor } from "@/lib/llmWorkspace/benchDescriptor";
 import { planBenchCommit, preservedAssetDetailColumns } from "@/lib/llmWorkspace/benchRun";
 import { parseIntentInputFromSearchParams, type BenchSearchParams } from "@/lib/llmWorkspace/bench";
@@ -30,6 +30,7 @@ import {
   buildApplyGeneratedStoryArgs,
   buildAssetBibleCommitArgs,
   buildAssetDescriptionFieldCommitArgs,
+  buildShotRetakeCommitArgs,
 } from "@/lib/llmWorkspace/actions/proposalCommit";
 
 function invalidTemplateError(reason: string): string {
@@ -183,6 +184,46 @@ export async function commitBenchProposal(input: {
         forbiddenVariations: pick("forbiddenVariations"),
       });
       return ACTION_BINDINGS.updateAssetDetailsInline(...args);
+    }
+
+    // LLMW.UC2.RETAKE.1 (B9b) — the ninth commit action, added to keep this
+    // exhaustive switch actually exhaustive over the widened `ActionId`
+    // (§4.3's piège applies here too: a field the model left blank must be
+    // preserved from the existing row, not written blank).
+    case "updateShotNarrativeContext": {
+      const shotId = input.ids.shotId as number;
+      const sequenceId = input.ids.sequenceId as number;
+
+      const [existing] = await db
+        .select({
+          sequenceId: shots.sequenceId,
+          description: shots.description,
+          actionPitch: shots.actionPitch,
+          cameraPitch: shots.cameraPitch,
+        })
+        .from(shots)
+        .where(eq(shots.id, shotId));
+
+      if (!existing || existing.sequenceId !== sequenceId) {
+        return { ok: false, error: descriptor.messages.chainNotFound.shot ?? "Shot not found." };
+      }
+
+      const args = buildShotRetakeCommitArgs({
+        shotId,
+        sequenceId,
+        projectId,
+        existing: {
+          description: existing.description,
+          actionPitch: existing.actionPitch,
+          cameraPitch: existing.cameraPitch,
+        },
+        applied: {
+          description: input.values.description ?? "",
+          actionPitch: input.values.actionPitch ?? "",
+          cameraPitch: input.values.cameraPitch ?? "",
+        },
+      });
+      return ACTION_BINDINGS.updateShotNarrativeContext(...args);
     }
 
     // Never reachable: `planBenchCommit` refuses `entitySet` anchors and the

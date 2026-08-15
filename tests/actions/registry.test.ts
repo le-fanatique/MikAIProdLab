@@ -220,6 +220,23 @@ describe("action registry — declared columns match the columns actually writte
       ACTION_REGISTRY.applyGeneratedOutline.columns.written
     );
   });
+
+  it("updateShotNarrativeContext", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotId = await insertShot(ctx, sequenceId);
+    const before = await readShot(ctx, shotId);
+
+    await shotsActions.updateShotNarrativeContext(shotId, sequenceId, projectId, {
+      description: "d",
+      actionPitch: "a",
+      cameraPitch: "c",
+    });
+
+    const after = await readShot(ctx, shotId);
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt").sort()).toEqual(
+      [...ACTION_REGISTRY.updateShotNarrativeContext.columns.written].sort()
+    );
+  });
 });
 
 describe("action registry — particularities referenced instead of duplicated", () => {
@@ -300,6 +317,11 @@ describe("action registry — behaviour 4, ownership check and mutation are not 
     },
     { id: "updateShotPrompt", file: "src/actions/shots.ts", export: "updateShotPrompt" },
     { id: "updateSequencePrompt", file: "src/actions/sequences.ts", export: "updateSequencePrompt" },
+    {
+      id: "updateShotNarrativeContext",
+      file: "src/actions/shots.ts",
+      export: "updateShotNarrativeContext",
+    },
   ];
 
   it.each(cases)("$id: no db.transaction, at least one SELECT and one UPDATE", (testCase) => {

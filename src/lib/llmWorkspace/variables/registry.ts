@@ -323,6 +323,91 @@ export async function resolveShotReferences(shotId: number): Promise<ShotReferen
 }
 
 // ---------------------------------------------------------------------------
+// SEQ.SHOTS — anchors: sequence. LLMW.UC2.RETAKE.1 (B9b) — added for
+// `shot.retakeDirected`, which needs "the other Shots in this Sequence" for
+// continuity (UC2, §4 of the vision doc); UC1 will read the same variable
+// for the same reason (§0 of the ticket).
+//
+// Fields: `shotCode` (the Shot's human identifier — "au minimum
+// l'identifiant" per §4.1 of the ticket; not the DB primary key, which is
+// never meaningful prose for the model), `orderIndex`, `title`,
+// `description`, `actionPitch` — the five fields §4.1 asks for at minimum,
+// and no more: `cameraPitch`/`framing`/`cameraMovement` are not included,
+// since UC2's own "other Shots" context (§4 of the vision doc) only asks for
+// continuity of story and action, not camera, and every extra field costs
+// tokens on every call, on every Shot, in every render.
+//
+// Bound: `SEQ_SHOTS_LIMIT` (20), ordered by `orderIndex` ascending. No
+// existing caller sets this precedent (unlike `ASSET.SEQ_APPEARANCES` /
+// `ASSET.SHOT_APPEARANCES`, both copied verbatim from a real query) — declared
+// here for the reason the ticket names directly: a thirty-Shot Sequence must
+// not produce an unbounded prompt. 20 is an editorial choice, not derived
+// from evidence; see `.agents/executor_report.md`.
+// ---------------------------------------------------------------------------
+
+const SEQ_SHOTS_LIMIT = 20;
+
+export type SeqShotEntry = {
+  shotCode: string | null;
+  orderIndex: number;
+  title: string;
+  description: string | null;
+  actionPitch: string | null;
+};
+
+export async function resolveSeqShots(sequenceId: number): Promise<SeqShotEntry[]> {
+  const { db } = await import("@/db");
+  const [sequence] = await db.select({ id: sequences.id }).from(sequences).where(eq(sequences.id, sequenceId));
+  if (!sequence) {
+    throw new Error(`resolveSeqShots: sequence ${sequenceId} not found.`);
+  }
+  return db
+    .select({
+      shotCode: shots.shotCode,
+      orderIndex: shots.orderIndex,
+      title: shots.title,
+      description: shots.description,
+      actionPitch: shots.actionPitch,
+    })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId))
+    .orderBy(asc(shots.orderIndex))
+    .limit(SEQ_SHOTS_LIMIT);
+}
+
+/**
+ * `shotRetake.otherShotsLines` — `shot.retakeDirected`'s render form for
+ * `SEQ.SHOTS`, combined with `SHOT.CORE` in a `{variables: [...]}` block
+ * because identifying "the current Shot" requires both (§4.1 of the ticket:
+ * "Le shot courant doit être identifiable"). Chosen: **exclusion** — the
+ * current Shot is already fully described by its own `SHOT.CORE` block, so
+ * repeating it here would cost tokens for no new information. Matched by
+ * `shotCode` when both sides have one (the Shot's own human identifier,
+ * expected unique within a Sequence — `generateNextCode`,
+ * `src/lib/nomenclature.ts`); falls back to `title` when either side's
+ * `shotCode` is null, since a resolver anchored on `sequenceId` alone has no
+ * `shotId` to exclude by (the resolver contract, §3.1: one anchor id per
+ * variable — see `runner.ts`'s `anchorIdForVariable`). A duplicate title
+ * among un-coded Shots is a known, accepted limitation of this fallback, not
+ * silently masked — see the report.
+ */
+export function renderSeqShotsOtherShotsLines(shots: SeqShotEntry[], current: ShotCoreData): string {
+  const isCurrent = (s: SeqShotEntry) =>
+    current.shotCode && s.shotCode ? s.shotCode === current.shotCode : s.title === current.title;
+  const others = shots.filter((s) => !isCurrent(s));
+  if (others.length === 0) return "";
+  const lines: string[] = [`\nOther shots in this sequence:`];
+  for (const s of others) {
+    const label = s.shotCode ? `${s.shotCode} — ${s.title}` : s.title;
+    const parts: string[] = [`- ${label}`];
+    if (s.description?.trim()) parts.push(s.description.trim());
+    if (s.actionPitch?.trim()) parts.push(`action: ${s.actionPitch.trim()}`);
+    lines.push(parts.join(" | "));
+  }
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // ASSET.CORE — anchors: asset
 // ---------------------------------------------------------------------------
 
@@ -930,6 +1015,67 @@ export function renderShotPromptFreeTextDirective(freeText: string | undefined):
 }
 
 // ---------------------------------------------------------------------------
+// `shot.retakeDirected` render forms — LLMW.UC2.RETAKE.1 (B9b). This is the
+// first descriptor with no flat-JSON action to reproduce (§3 of the ticket:
+// "the prompt is written, not transcribed") — every block below is authored
+// for this ticket, in the register of the eight existing descriptors, rather
+// than copied from an existing builder. No equality oracle exists for any of
+// them; see `.agents/executor_report.md` for the resolved prompt these
+// produce against a real seeded Shot.
+// ---------------------------------------------------------------------------
+
+const SHOT_RETAKE_FREE_TEXT_MAX_LENGTH = 500;
+
+/** System: fixed role/rules text — the counterpart's own comment block for the JSON schema is a separate, static block in the descriptor itself. */
+export const SHOT_RETAKE_SYSTEM_INTRO =
+  "You are a story and shot-direction supervisor helping a director retake a single shot.";
+
+/** Template: the Shot being retaken — its own narrative fields, not its camera/movement (§0bis: framing/cameraMovement are never read or written by this operation). */
+export function renderShotCoreRetakeLines(shot: ShotCoreData): string {
+  const label = shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title;
+  const lines: string[] = [`Shot being retaken: ${label}`];
+  lines.push(shot.description?.trim() ? `Current description: ${shot.description.trim()}` : `Current description: (none)`);
+  lines.push(shot.actionPitch?.trim() ? `Current action pitch: ${shot.actionPitch.trim()}` : `Current action pitch: (none)`);
+  lines.push(shot.cameraPitch?.trim() ? `Current camera pitch: ${shot.cameraPitch.trim()}` : `Current camera pitch: (none)`);
+  return lines.join("\n");
+}
+
+/** Template: the Shot's cast — who is in frame, so "more empathy with the character" has a character to be about. Empty when the Shot has no cast. */
+export function renderShotCastRetakeLines(cast: ShotCastEntry[]): string {
+  if (cast.length === 0) return "";
+  const summary = cast.map((r) => {
+    const extras = [r.description?.trim(), r.notes?.trim()].filter(Boolean).join("; ");
+    return extras ? `${r.name} (${r.type}: ${extras})` : `${r.name} (${r.type})`;
+  });
+  return `\nCast in this shot: ${summary.join(", ")}`;
+}
+
+/** Template: the parent Sequence's own context — mood/location/summary, for continuity of tone. */
+export function renderSeqContextRetakeLines(seq: SeqContextData): string {
+  const lines: string[] = [`\nSequence: ${seq.title}`];
+  if (seq.summary?.trim()) lines.push(`Summary: ${seq.summary.trim()}`);
+  if (seq.mood?.trim()) lines.push(`Mood: ${seq.mood.trim()}`);
+  if (seq.locationHint?.trim()) lines.push(`Location: ${seq.locationHint.trim()}`);
+  return lines.join("\n");
+}
+
+/** Template: the Project's story, "where useful" (§4 UC2) — pitch and story only, truncated like every other consumer of these two free-text fields (`renderShotPromptGenerateContextLines` truncates story to 400 chars; matched here). Empty when the Project carries neither. */
+export function renderProjectIdentityRetakeLines(project: ProjectIdentityData): string {
+  const lines: string[] = [];
+  if (project.pitch?.trim()) lines.push(`Project pitch: ${project.pitch.trim()}`);
+  if (project.story?.trim()) lines.push(`Story: ${project.story.trim().slice(0, 400)}`);
+  if (lines.length === 0) return "";
+  return `\n${lines.join("\n")}`;
+}
+
+/** Template: the director's free-text direction — the same "absent/empty/blank -> empty string" contract as `shotPrompt.assist`'s (§4.1 of B9a's ticket), reused verbatim rather than re-derived. */
+export function renderShotRetakeFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's direction: ${trimmed.slice(0, SHOT_RETAKE_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+// ---------------------------------------------------------------------------
 // The registry — one entry per `VariableId`. Resolver signatures differ
 // across variables (project-anchored vs. sequence-anchored vs. shot/asset
 // -anchored), matching the precedent's shape rather than forcing a uniform
@@ -956,9 +1102,11 @@ export const VARIABLE_RENDER_FORMS = {
     "outline.projectContextLines": renderProjectIdentityOutlineContextLines,
     "assetContext.identityLines": renderProjectIdentityAssetContextLines,
     "sequencePrompt.generateProjectLines": renderProjectIdentitySequencePromptGenerateLines,
+    "shotRetake.projectLines": renderProjectIdentityRetakeLines,
   },
   "SEQ.CONTEXT": {
     "sequencePrompt.generateSequenceLines": renderSeqContextSequencePromptGenerateLines,
+    "shotRetake.sequenceLines": renderSeqContextRetakeLines,
   },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
@@ -988,6 +1136,12 @@ export const VARIABLE_RENDER_FORMS = {
   "ASSET.REFERENCES": {
     "assetContext.referencesLine": renderAssetReferencesLine,
   },
+  "SHOT.CORE": {
+    "shotRetake.coreLines": renderShotCoreRetakeLines,
+  },
+  "SHOT.CAST": {
+    "shotRetake.castLines": renderShotCastRetakeLines,
+  },
 } as const;
 
 /**
@@ -1002,6 +1156,7 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "sequencePrompt.transformBlock": renderSeqCurrentPromptTransformBlock,
   "shotPrompt.generateContextLines": renderShotPromptGenerateContextLines,
   "shotPrompt.transformBlock": renderShotCurrentPromptTransformBlock,
+  "shotRetake.otherShotsLines": renderSeqShotsOtherShotsLines,
 } as const;
 
 /**
@@ -1043,6 +1198,7 @@ export const MODE_RENDER_FORMS = {
  */
 export const FREE_TEXT_RENDER_FORMS = {
   "shotPrompt.freeTextDirective": renderShotPromptFreeTextDirective,
+  "shotRetake.freeTextDirective": renderShotRetakeFreeTextDirective,
 } as const;
 
 export const VARIABLE_REGISTRY = {
@@ -1059,4 +1215,5 @@ export const VARIABLE_REGISTRY = {
   "ASSET.SEQ_APPEARANCES": resolveAssetSeqAppearances,
   "ASSET.SHOT_APPEARANCES": resolveAssetShotAppearances,
   "ASSET.REFERENCES": resolveAssetReferences,
+  "SEQ.SHOTS": resolveSeqShots,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;

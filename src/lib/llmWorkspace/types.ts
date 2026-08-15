@@ -76,7 +76,12 @@ export type VariableId =
   | "ASSET.BIBLE"
   | "ASSET.SEQ_APPEARANCES"
   | "ASSET.SHOT_APPEARANCES"
-  | "ASSET.REFERENCES";
+  | "ASSET.REFERENCES"
+  // LLMW.UC2.RETAKE.1 (B9b) — the sequence's other shots, for a shot-anchored
+  // descriptor that needs sibling-shot continuity (`shot.retakeDirected`, and
+  // UC1's future insertion descriptor). See `variables/registry.ts` for the
+  // resolver and its bound.
+  | "SEQ.SHOTS";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque
@@ -103,7 +108,11 @@ export type ActionId =
   | "updateShotPrompt"
   | "updateSequencePrompt"
   | "applyGeneratedStory"
-  | "applyGeneratedOutline";
+  | "applyGeneratedOutline"
+  // LLMW.UC2.RETAKE.1 (B9b) — the write side of `shot.retakeDirected`
+  // (§0bis of the ticket: `updateShot` is arbitrated out — it redirects,
+  // silently rewrites `shotPrompt`, and no-ops on a blank title).
+  | "updateShotNarrativeContext";
 
 /**
  * Names a field on the operation's anchor entity, for a `preconditions`
