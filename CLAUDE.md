@@ -54,7 +54,8 @@ Do not commit or push before an explicit user go.
 - Product state and roadmap: `docs/PROJECT_STATE.md`, `docs/ROADMAP.md`
 - Architecture and durable decisions: `docs/ARCHITECTURE_DECISIONS.md`
 - Supervision workflow: `docs/DEVELOPMENT_WORKFLOW.md`
-- User observations: `docs/USER_FEEDBACK.md`
+- User observations: `docs/USER_FEEDBACK.md` — **idea box, not a development
+  input.** Never read it to decide what to build; see `AGENTS.md`.
 - Project Style: `docs/PROJECT_STYLE_EXECUTION_PLAN.md`
 - Generation / ComfyUI: `src/lib/comfy/`, generation actions, `/api/jobs`
 - Storyboard / Sequence video: `src/lib/sequenceVideoSplit/`, related actions

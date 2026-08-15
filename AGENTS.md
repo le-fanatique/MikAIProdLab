@@ -41,8 +41,17 @@ Codex uses supervisor-oriented progressive context:
   persistence, runtime, or cross-domain decisions;
 - read `docs/DEVELOPMENT_WORKFLOW.md` for process changes, ticket preparation,
   review, commit, or closure;
-- read `docs/USER_FEEDBACK.md` only when handling user observations, retakes,
-  validation, or feedback status.
+- **`docs/USER_FEEDBACK.md` is an idea box, not a development input.** Decided
+  by the user on 2026-08-15. An entry in it is an observation awaiting the
+  user's arbitration — never a requirement, never a justification for a ticket,
+  never a reason to change code. Do not read it to decide what to build, what to
+  prioritise, or how to scope. Read it only when the user explicitly asks about
+  feedback, or to update an entry's status for a ticket they already approved.
+  When an entry does become load-bearing for a chantier, its substance is
+  copied into that chantier's own document — as `docs/LLM_WORKSPACE_ARCHITECTURE.md`
+  §1.1 already does for the four entries the LLM Workspace rests on — so the
+  chantier stays self-contained and the 5 000-line idea box never has to be
+  opened to work on it.
 
 Do not load every durable document for a simple status answer, operational
 command, or narrowly scoped review. Follow links from the active ticket or

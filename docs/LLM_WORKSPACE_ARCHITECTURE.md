@@ -1107,8 +1107,27 @@ the workspace existing rather than as features of their own.
 
 ### 11.3 After B6
 
-Per §10.1's settled order: the 4 array-wrapped list actions, then the 2 free
-text ones, then chat and image generation — which may never belong in the
-registry at all, being conversational rather than anchored. Each needs its
-mode in the proposal component before its migration. Phase C (§9) starts once
-those are done.
+**Order settled by the user on 2026-08-15**, and it is the one in force:
+
+1. **List mode in the proposal component, then the 4 array-wrapped list
+   actions.** The mode ships as its own ticket, never mixed with a migration —
+   the discipline B5 established.
+2. **Text mode, then the 2 free-text actions.**
+3. **B6c2** — the variable library (§5.2).
+4. **The template editor, E1** — scoped in
+   `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. Placed here, not
+   later: §5.2 delivers *seeing* what a block produces, E1 delivers *wiring*
+   it. It is what turns the workspace from a thing that runs the eight
+   built-ins into a thing the user authors in.
+5. **Phase C** (§9) — the removal.
+
+**Chat and image generation are out, permanently.** Decided by the user on
+2026-08-15: they stay exactly as they are and do not join the registry. The
+earlier "may never belong at all, being conversational rather than anchored"
+is now settled rather than open. No ticket, no migration, no descriptor.
+
+Two consequences worth stating. Phase C cannot start before steps 1 and 2: a
+panel that still serves an unmigrated operation cannot be deleted. And the
+prompt builders under `src/lib/prompts/` cannot be retired until a ticket first
+re-anchors the A2 snapshots on the runner's own output — they are the frozen
+oracle the descriptor proofs assert against byte-for-byte.
