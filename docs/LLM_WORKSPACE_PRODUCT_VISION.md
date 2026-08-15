@@ -186,6 +186,36 @@ own fields.
 
 ---
 
+### Reachability — measured 2026-08-15, after B7a
+
+Written because the user asked whether the work in flight was still being
+designed with these three cases in mind. It was not, and this section exists so
+the answer stops depending on anyone remembering.
+
+**The common blocker is `intent.freeText`.** All three cases are a request the
+user phrases in plain language — that is what the quotes above *are*. The field
+has existed in the descriptor format since B1a, but none of the eight
+descriptors declares it, so no control was ever built: B6b and B6c1 both
+deferred it, each time correctly on its own terms ("a control for it would have
+been untestable dead code"), and the cumulative effect was to defer the one
+primitive every founding use case needs. Nothing in the queue as of 2026-08-15
+delivers it.
+
+| Case | What already exists | What is missing |
+| --- | --- | --- |
+| UC2 — retake the current Shot | Object-mode `ProposalPanel`, the bench (run + approve), the Shot and Sequence variables | `intent.freeText` and its control; a descriptor |
+| UC3 — adjust a character design | **The hard part is built**: `ASSET.SHOT_APPEARANCES` already performs the relational traversal and projects exactly `description` and `actionPitch`, which is what §4 says this case exists to prove | `intent.freeText` and its control; a descriptor |
+| UC1 — insert a directed Shot | The descriptor format names an `insertionPoint` anchor kind and the storage validator accepts it | `intent.freeText`; **`insertionPoint` is nominal — `runner.ts` handles it nowhere**; a twelve-field output; the re-run-with-another-seed control |
+
+**The drift this section was written to stop.** The template editor scoping
+(`docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`) was written on 2026-08-15
+making `intent.mode` and `intent.parameters` editable and **not**
+`intent.freeText` — in the very document describing the tool meant to make the
+user an author. The cause was structural: this file was named in no reading
+contract, so nothing ever put these three cases back in front of whoever was
+scoping. `AGENTS.md` and `CLAUDE.md` were corrected the same day, and every LLM
+Workspace ticket now has to state its impact on UC1/UC2/UC3.
+
 ## 5. Product Rules
 
 These were decided during design and are binding until explicitly revisited.

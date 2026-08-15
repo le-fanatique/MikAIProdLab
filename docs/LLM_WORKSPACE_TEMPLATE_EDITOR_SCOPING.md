@@ -66,7 +66,20 @@ inventer, seulement à choisir.
 
 Éditable : `name`, `expertise.role`, `expertise.system.blocks`,
 `template.blocks`, `context.variables` (ajout / retrait / `userAdjustable`),
-`intent.mode` et `intent.parameters`.
+`intent.mode`, `intent.parameters` et **`intent.freeText`**.
+
+**Correction du 2026-08-15.** La première version de ce cadrage omettait
+`intent.freeText`. C'était une dérive, relevée par l'utilisateur : les trois cas
+fondateurs (`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4) sont **tous** des
+demandes qu'il formule en langage naturel, et `freeText` est la primitive qui
+les porte. Un éditeur qui ne sait pas la déclarer produit des templates
+incapables d'exprimer ce pour quoi l'atelier existe. Elle est donc éditable en
+E1, sans discussion.
+
+À noter : déclarer `freeText` dans un descripteur ne suffit pas — il faut aussi
+que le contrôle de saisie existe côté exécution (établi et surfaces produit).
+Ce contrôle n'est construit nulle part à ce jour ; c'est un ticket à part, et il
+conditionne UC1, UC2 et UC3.
 
 Hérité de la duplication, **non éditable en E1** : `anchor`, `output`,
 `commit`, `messages`, `preconditions`.

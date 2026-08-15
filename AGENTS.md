@@ -34,6 +34,15 @@ Codex uses supervisor-oriented progressive context:
   supervision, or review;
 - read `.agents/claude_report.md`, `.agents/codex_review.md`, and
   `.agents/codex_verdict.json` only for active review or closure;
+- **always read `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 before preparing,
+  implementing, or reviewing any LLM Workspace ticket.** It holds the user's
+  three founding use cases in their own words, and declares itself the
+  acceptance reference. It was in no reading contract until 2026-08-15, and the
+  drift that caused is documented in that file's own "Reachability" section —
+  the editor scoping written on 2026-08-15 omitted `intent.freeText`, the one
+  primitive all three use cases need. A ticket in this domain states which of
+  UC1/UC2/UC3 it brings closer, which it constrains, and which it leaves
+  untouched. "None" is an acceptable answer; not asking is not;
 - read `docs/PROJECT_STATE.md` when repository/product state must be
   reconciled;
 - read `docs/ROADMAP.md` for prioritization or ticket sequencing;

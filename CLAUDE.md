@@ -52,6 +52,11 @@ Do not commit or push before an explicit user go.
 ## Domain Map
 
 - Product state and roadmap: `docs/PROJECT_STATE.md`, `docs/ROADMAP.md`
+- **LLM Workspace user vision: `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 — the
+  three founding use cases. Mandatory reading for any LLM Workspace ticket, and
+  the acceptance reference: a design that cannot express all three is the wrong
+  design. Every such ticket states which of UC1/UC2/UC3 it brings closer, which
+  it constrains, and which it leaves untouched.**
 - Architecture and durable decisions: `docs/ARCHITECTURE_DECISIONS.md`
 - Supervision workflow: `docs/DEVELOPMENT_WORKFLOW.md`
 - User observations: `docs/USER_FEEDBACK.md` — **idea box, not a development
