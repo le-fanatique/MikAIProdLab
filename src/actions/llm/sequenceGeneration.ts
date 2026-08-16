@@ -181,6 +181,14 @@ export async function createGeneratedSequences(formData: FormData): Promise<void
     errRedirect("Invalid request.");
   }
 
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (!project) {
+    errRedirect("Project not found.");
+  }
+
   let candidates: GeneratedSequence[];
   try {
     const raw = JSON.parse(sequencesJson);

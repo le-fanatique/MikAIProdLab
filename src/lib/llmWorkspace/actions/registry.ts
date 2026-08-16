@@ -102,21 +102,11 @@ export type ActionRegistryEntry = {
         transactional: false;
       }
     | {
-        /** `applyGeneratedStory` / `applyGeneratedOutline` (behaviour 5),
-         * plus `createSelectedAssets` / `createGeneratedSequences`
-         * (`LLMW.ACTION.INSERT.1`, B7c-w) — four entries, not two: the
-         * insert pair share the same *absence* of an explicit `SELECT`
-         * before writing, but not the same consequence. `applyGeneratedStory`
-         * / `applyGeneratedOutline` `UPDATE ... WHERE id = ?` against a
-         * nonexistent Project and silently match zero rows — `ok: true`,
-         * nothing written. `createSelectedAssets` / `createGeneratedSequences`
-         * `INSERT` a row whose `projectId` foreign key does not exist; the
-         * database itself refuses it (`pragma foreign_keys = ON`,
-         * `src/db/index.ts:21`) by throwing, uncaught by either action — the
-         * Server Action itself rejects instead of redirecting. Both pairs
-         * are defensible only because Project is the root of its own chain;
-         * either stops being defensible the moment it is reached through
-         * something other than a direct `projectId` argument. */
+        /** `applyGeneratedStory` / `applyGeneratedOutline` only —
+         * behaviour 5. The action is defensible only because a Project is
+         * the root of its own chain; it stops being defensible the moment
+         * either is reached through something other than a direct
+         * `projectId` argument. */
         checked: false;
       };
 
@@ -352,11 +342,11 @@ export const ACTION_REGISTRY = {
     },
     writeSemantics: "insertPerItem",
     notes: [
-      "One `db.insert(shots).values(...)` call per parsed item, inside a plain for-loop (src/actions/llm/sequenceShots.ts:185-209), not wrapped in db.transaction — a later item's insert failing (e.g. a DB error mid-loop) leaves the earlier items' rows committed. No test proves this partiality; it is a structural fact about the loop shape, reported rather than exercised (nothing in the loop body is expected to fail on valid input).",
+      "One `db.insert(shots).values(...)` call per parsed item, inside a plain for-loop (src/actions/llm/sequenceShots.ts:185-209), not wrapped in db.transaction — a later item's insert failing (e.g. a DB error mid-loop) leaves the earlier items' rows committed. No test proves this partiality; it is a structural fact about the loop shape, reported rather than exercised (nothing in the loop body is expected to fail on valid input). Arbitrated 2026-08-16 (LLMW.ACTION.INSERT.2, B7c-w2): rather than an oversight, the risk is a race between two concurrent Approve calls on the same sequence — not reachable on a single-connection, single-process, local SQLite application.",
       "`shotCode` (src/actions/llm/sequenceShots.ts:196) is never the model's own proposed `shot_code` — it is regenerated from the project's nomenclature template (`getNomenclatureSettings`, `generateSequentialCodes`, src/actions/llm/sequenceShots.ts:176-183). The model's `shot_code` is parsed by `normalizeShot` (sequenceShots.ts:38) but its value is read nowhere in `createGeneratedShots`. Proven by registry.test.ts: the created row's `shotCode` differs from the item's supplied `shot_code` and matches the nomenclature template.",
       "`orderIndex` (src/actions/llm/sequenceShots.ts:169-174,207) is `max(shots.orderIndex) for this sequenceId, then +1, then +i` per item — a separate SELECT before the insert loop, no db.transaction enclosing the SELECT and the loop. Two concurrent calls for the same sequence could read the same max and assign colliding orderIndex values to different rows; not observable on better-sqlite3's single connection, reported as a structural fact rather than exercised as a race. Continuation (not restarting at 0) is proven by registry.test.ts against a pre-seeded row.",
       "Ownership check: `sequences` is selected by `sequenceId` and `sequence.projectId !== projectId` is verified (src/actions/llm/sequenceShots.ts:151-154) before any insert — a one-level chain (sequence→project), not atomic with the insert loop that follows (separate statements, no db.transaction). Refusal writes no row; proven by registry.test.ts against a sequence belonging to another project.",
-      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceShots.ts:211) — present, unlike `createSelectedAssets` below.",
+      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceShots.ts:211) — present, like `createSelectedAssets` and `createGeneratedSequences` below.",
     ],
   },
 
@@ -366,19 +356,19 @@ export const ACTION_REGISTRY = {
     source: { module: "@/actions/llm/assetExtraction", export: "createSelectedAssets" },
     target: { entity: "asset" },
     response: "redirectOnly",
-    ownership: { checked: false },
+    ownership: { checked: true, transactional: false },
     columns: {
       written: ["projectId", "name", "type", "description", "notes", "orderIndex"],
       writesUpdatedAt: true,
     },
     writeSemantics: "insertPerItem",
     notes: [
-      "One `db.insert(assets).values(...)` call per parsed candidate, inside a plain for-loop (src/actions/llm/assetExtraction.ts:235-245), not wrapped in db.transaction.",
-      "No explicit ownership check anywhere in the action: `projectId` is only validated as a positive integer (src/actions/llm/assetExtraction.ts:209-211), never checked against a real `projects` row before the insert loop runs. A nonexistent `projectId` is not silently absorbed the way behaviour 5's two UPDATE actions absorb it — the `INSERT` violates the `assets.project_id` foreign key (`pragma foreign_keys = ON`, src/db/index.ts:21) and the driver throws; the action has no try/catch around the loop, so the throw propagates out of the exported Server Action instead of producing a redirect. Proven by registry.test.ts: the call rejects and the assets table gains no row.",
-      "`orderIndex` (src/actions/llm/assetExtraction.ts:228-233,243) is `max(assets.orderIndex) for this projectId, then +1, then +i` per item — a separate SELECT before the insert loop, no db.transaction enclosing both. Same structural, unraced-on-sqlite concurrency note as `createGeneratedShots` above. Continuation is proven by registry.test.ts against a pre-seeded row.",
+      "One `db.insert(assets).values(...)` call per parsed candidate, inside a plain for-loop (src/actions/llm/assetExtraction.ts:244-254), not wrapped in db.transaction. Arbitrated 2026-08-16 (LLMW.ACTION.INSERT.2, B7c-w2): rather than an oversight, the risk is a race between two concurrent Approve calls on the same project — not reachable on a single-connection, single-process, local SQLite application.",
+      "Ownership check: `projects` is selected by `projectId` (src/actions/llm/assetExtraction.ts:214-217) and the action refuses with `errRedirect(\"Project not found.\")` (src/actions/llm/assetExtraction.ts:218-220) before any insert if no row matches — not atomic with the insert loop that follows (separate statements, no db.transaction). Refusal writes no row; proven by registry.test.ts against a nonexistent projectId.",
+      "`orderIndex` (src/actions/llm/assetExtraction.ts:237-242,252) is `max(assets.orderIndex) for this projectId, then +1, then +i` per item — a separate SELECT before the insert loop, no db.transaction enclosing both. Same structural, unraced-on-sqlite concurrency note as `createGeneratedShots` above. Continuation is proven by registry.test.ts against a pre-seeded row.",
       "`visualIdentity`, `usageRules`, `forbiddenVariations` are never written by this action (only `updateAssetDetailsInline` touches them) — proven null on the created row by registry.test.ts, the same way `sequencePrompt` is proven untouched for `createGeneratedSequences` below.",
-      "The candidate's `sourceLevel`, `sourceExcerpt` and `duplicateWarning` (parsed by `normalizeCandidate`, src/actions/llm/assetExtraction.ts:41-57) are read from the submitted JSON but never written anywhere — no column stores them. Reported, not fixed: this drops the sourcing metadata the draft step attached to a candidate the moment it is created.",
-      "No `revalidatePath` call anywhere in this file (`src/actions/llm/assetExtraction.ts`) — unlike `createGeneratedShots` and `createGeneratedSequences`, which both call `revalidatePath(\"/\", \"layout\")` before their success redirect. Reported, not fixed.",
+      "The candidate's `sourceLevel`, `sourceExcerpt` and `duplicateWarning` (parsed by `normalizeCandidate`, src/actions/llm/assetExtraction.ts:42-58) are read from the submitted JSON but never written anywhere — no column stores them. Reported, not fixed: this drops the sourcing metadata the draft step attached to a candidate the moment it is created.",
+      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/assetExtraction.ts:256, added by LLMW.ACTION.INSERT.2, B7c-w2) — present, like `createGeneratedShots` and `createGeneratedSequences`.",
     ],
   },
 
@@ -388,7 +378,7 @@ export const ACTION_REGISTRY = {
     source: { module: "@/actions/llm/sequenceGeneration", export: "createGeneratedSequences" },
     target: { entity: "sequence" },
     response: "redirectOnly",
-    ownership: { checked: false },
+    ownership: { checked: true, transactional: false },
     columns: {
       written: [
         "projectId",
@@ -405,12 +395,12 @@ export const ACTION_REGISTRY = {
     },
     writeSemantics: "insertPerItem",
     notes: [
-      "One `db.insert(sequences).values(...)` call per parsed candidate, inside a plain for-loop (src/actions/llm/sequenceGeneration.ts:216-229), not wrapped in db.transaction.",
-      "No explicit ownership check: `projectId` is only validated as a positive integer (src/actions/llm/sequenceGeneration.ts:180-182), never checked against a real `projects` row. Same consequence as `createSelectedAssets` above: an invalid `projectId` trips the `sequences.project_id` foreign key (`pragma foreign_keys = ON`, src/db/index.ts:21) and the action, having no try/catch around the loop, rejects instead of redirecting. Proven by registry.test.ts: the call rejects and the sequences table gains no row.",
-      "`sequenceCode` (src/actions/llm/sequenceGeneration.ts:220) is generated from the nomenclature template (`getNomenclatureSettings`, `generateSequentialCodes`, lines 208-214), never from the model — `GeneratedSequence`/`normalizeSequence` (sequenceGeneration.ts:54-74) has no code field to ignore in the first place, unlike `createGeneratedShots`.",
-      "The model's `order_index` (`normalizeSequence`, sequenceGeneration.ts:60-63,72) is used only to sort the candidate array before insertion (sequenceGeneration.ts:188-191, `.sort((a,b) => a.order_index - b.order_index)`) — the stored `orderIndex` column is `max(sequences.orderIndex) for this projectId, then +1, then +i` in that sorted order (sequenceGeneration.ts:200-205,227), never the model's own number. Proven by registry.test.ts alongside orderIndex continuation.",
+      "One `db.insert(sequences).values(...)` call per parsed candidate, inside a plain for-loop (src/actions/llm/sequenceGeneration.ts:224-237), not wrapped in db.transaction. Arbitrated 2026-08-16 (LLMW.ACTION.INSERT.2, B7c-w2): rather than an oversight, the risk is a race between two concurrent Approve calls on the same project — not reachable on a single-connection, single-process, local SQLite application.",
+      "Ownership check: `projects` is selected by `projectId` (src/actions/llm/sequenceGeneration.ts:184-187) and the action refuses with `errRedirect(\"Project not found.\")` (src/actions/llm/sequenceGeneration.ts:188-190) before any insert if no row matches — not atomic with the insert loop that follows (separate statements, no db.transaction). Refusal writes no row; proven by registry.test.ts against a nonexistent projectId.",
+      "`sequenceCode` (src/actions/llm/sequenceGeneration.ts:228) is generated from the nomenclature template (`getNomenclatureSettings`, `generateSequentialCodes`, lines 216-222), never from the model — `GeneratedSequence`/`normalizeSequence` (sequenceGeneration.ts:54-74) has no code field to ignore in the first place, unlike `createGeneratedShots`.",
+      "The model's `order_index` (`normalizeSequence`, sequenceGeneration.ts:60-63,72) is used only to sort the candidate array before insertion (sequenceGeneration.ts:196-199, `.sort((a,b) => a.order_index - b.order_index)`) — the stored `orderIndex` column is `max(sequences.orderIndex) for this projectId, then +1, then +i` in that sorted order (sequenceGeneration.ts:208-213,235), never the model's own number. Proven by registry.test.ts alongside orderIndex continuation.",
       "`sequencePrompt`, `rowBackgroundImagePath`, `rowBackgroundOpacity` are never written by this action — proven null on the created row by registry.test.ts.",
-      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceGeneration.ts:231) — present, like `createGeneratedShots`.",
+      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceGeneration.ts:239) — present, like `createGeneratedShots`.",
     ],
   },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;

@@ -378,7 +378,7 @@ export type OperationDescriptor = {
         // key) but not the same key name: `shotsJson`
         // (`sequenceShots.ts:137`), `sequencesJson`
         // (`sequenceGeneration.ts:173`), `selectedJson`
-        // (`assetExtraction.ts:202`, `castingSuggestions.ts:289`).
+        // (`assetExtraction.ts:203`, `castingSuggestions.ts:289`).
         // Obligatory: a list operation with no declared selection
         // destination is not approvable, and B7d must not have to guess it.
         //

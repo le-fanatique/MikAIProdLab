@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { projects, sequences, shots, assets } from "@/db/schema";
 import { eq, max, inArray, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { callLLMJson } from "@/lib/llm";
 import { buildAssetsFromProjectPrompt } from "@/lib/prompts/assets-from-project";
 import { getLLMConfig } from "@/lib/settings";
@@ -210,6 +211,14 @@ export async function createSelectedAssets(formData: FormData): Promise<void> {
     errRedirect("Invalid request.");
   }
 
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (!project) {
+    errRedirect("Project not found.");
+  }
+
   let candidates: GeneratedAssetCandidate[];
   try {
     const raw = JSON.parse(selectedJson);
@@ -244,6 +253,7 @@ export async function createSelectedAssets(formData: FormData): Promise<void> {
     });
   }
 
+  revalidatePath("/", "layout");
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}assetsCreated=${candidates!.length}`);
 }

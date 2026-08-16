@@ -508,17 +508,20 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].forbiddenVariations).toBeNull();
   });
 
-  it("createSelectedAssets — refuses a nonexistent projectId and writes no row", async () => {
+  it("createSelectedAssets — refuses a nonexistent projectId cleanly and writes no row", async () => {
     const before = await ctx.db.select().from(ctx.schema.assets);
 
-    await expect(
+    const target = await captureRedirect(() =>
       assetExtractionActions.createSelectedAssets(
         form({
           projectId: "999999",
           selectedJson: JSON.stringify([{ name: "Injected", assetType: "prop" }]),
         })
       )
-    ).rejects.toThrow();
+    );
+    // Pinned to the project-existence refusal specifically: a bare
+    // `assetsCreateError=` would also pass on any other guard's message.
+    expect(target).toContain(`assetsCreateError=${encodeURIComponent("Project not found.")}`);
 
     const after = await ctx.db.select().from(ctx.schema.assets);
     expect(after).toHaveLength(before.length);
@@ -592,17 +595,20 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].rowBackgroundOpacity).toBeNull();
   });
 
-  it("createGeneratedSequences — refuses a nonexistent projectId and writes no row", async () => {
+  it("createGeneratedSequences — refuses a nonexistent projectId cleanly and writes no row", async () => {
     const before = await ctx.db.select().from(ctx.schema.sequences);
 
-    await expect(
+    const target = await captureRedirect(() =>
       sequenceGenerationActions.createGeneratedSequences(
         form({
           projectId: "999999",
           sequencesJson: JSON.stringify([{ title: "Injected" }]),
         })
       )
-    ).rejects.toThrow();
+    );
+    // Pinned to the project-existence refusal specifically: a bare
+    // `sequencesCreateError=` would also pass on any other guard's message.
+    expect(target).toContain(`sequencesCreateError=${encodeURIComponent("Project not found.")}`);
 
     const after = await ctx.db.select().from(ctx.schema.sequences);
     expect(after).toHaveLength(before.length);
