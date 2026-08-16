@@ -360,6 +360,63 @@ function buildVariableDispatchers(
   return { renderVariable, renderVariables };
 }
 
+// ---------------------------------------------------------------------------
+// `normalizeIntentParameters` — LLMW.PARAM.BOUNDS.1 (B7e-n). The runner's own
+// enforcement of `intent.parameters`' `type`/`min`/`max`/`default`, absent
+// since B2a: `buildIntentDispatchers` and `buildVariableParameterDispatcher`
+// below used to pass `intent.parameters` straight through, so an
+// out-of-bounds value reached the prompt unchanged (the `c6ad874` regression
+// this ticket closes) and a bench-forged URL could send anything at all
+// (`bench.ts`'s `parseIntentInputFromSearchParams`, out of this ticket's
+// scope — it also calls through `runOperation`, so this one normalization
+// point covers it without being touched).
+//
+// The rule, frozen by the supervisor from the two real parameters' own
+// pre-migration behaviour (`targetCount`, `f892850:sequenceShots.ts:85-87`;
+// `targetSections`, `outlineGeneration.ts:21-30`): a declared entry's
+// provided value is valid if it satisfies its `type` (`"integer"` ->
+// `Number.isInteger`; `"string"` -> `typeof === "string"`) and, for
+// `"integer"`, its declared `min`/`max`. An invalid or missing value becomes
+// the declared `default` when one exists, or is omitted otherwise — never
+// clamped to `min`/`max`, matching what both actions actually did. A
+// provided key not named by any declared entry is dropped: the descriptor is
+// the whole contract of what it accepts.
+//
+// Called exactly once, in `resolvePromptInternal` below, before either
+// dispatcher is built — not inside `buildIntentDispatchers` or
+// `buildVariableParameterDispatcher`, so the rule is applied a single time
+// per resolution, not once per dispatcher.
+// ---------------------------------------------------------------------------
+
+export function normalizeIntentParameters(
+  declared: NonNullable<OperationDescriptor["intent"]["parameters"]> | undefined,
+  provided: Record<string, number | string> | undefined
+): Record<string, number | string> | undefined {
+  if (!declared || declared.length === 0) return undefined;
+
+  const normalized: Record<string, number | string> = {};
+  for (const entry of declared) {
+    const value = provided?.[entry.id];
+    const isValid =
+      value !== undefined &&
+      (entry.type === "integer"
+        ? typeof value === "number" &&
+          Number.isInteger(value) &&
+          (entry.min == null || value >= entry.min) &&
+          (entry.max == null || value <= entry.max)
+        : typeof value === "string");
+
+    if (isValid) {
+      normalized[entry.id] = value as number | string;
+    } else if (entry.default !== undefined) {
+      normalized[entry.id] = entry.default;
+    }
+    // else: omitted — no default declared for an invalid/missing value.
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function buildIntentDispatchers(
   parameters: Record<string, number | string> | undefined,
   selectedMode: string | undefined
@@ -703,11 +760,14 @@ async function resolvePromptInternal(
   const precondition = checkPreconditions(descriptor.preconditions, mergeAnchorFields(resolved), selectedMode);
   if (!precondition.ok) return precondition;
 
-  // Step 5 — assemble {system, user} from blocks.
+  // Step 5 — assemble {system, user} from blocks. `intent.parameters` is
+  // normalized exactly once here, before either dispatcher reads it (see
+  // `normalizeIntentParameters`'s own header above).
+  const normalizedParameters = normalizeIntentParameters(descriptor.intent.parameters, intent.parameters);
   const { renderVariable, renderVariables } = buildVariableDispatchers(resolved, selectedMode);
-  const { renderParameter, renderMode } = buildIntentDispatchers(intent.parameters, selectedMode);
+  const { renderParameter, renderMode } = buildIntentDispatchers(normalizedParameters, selectedMode);
   const { renderFreeText } = buildFreeTextDispatcher(intent.freeText);
-  const { renderVariablesParameters } = buildVariableParameterDispatcher(resolved, intent.parameters, selectedMode);
+  const { renderVariablesParameters } = buildVariableParameterDispatcher(resolved, normalizedParameters, selectedMode);
   const prompt = assembleDescriptorMessages(
     descriptor,
     renderVariable,

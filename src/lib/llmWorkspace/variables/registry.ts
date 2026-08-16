@@ -1102,6 +1102,16 @@ export function renderShotsFromSequenceSystemPathABody(input: VariableParameterR
   const currentPrompt = input.variables["SEQ.CURRENT_PROMPT"] as SeqCurrentPromptData;
   const hasSequencePrompt = (currentPrompt.sequencePrompt ?? "").trim().length > 0;
   if (!hasSequencePrompt) return "";
+  // `?? 6` (here and the four siblings below) is deliberately kept, even
+  // though `normalizeIntentParameters` (`runner.ts`, LLMW.PARAM.BOUNDS.1,
+  // B7e-n) now applies `targetCount`'s declared bound/default before this
+  // render form ever runs on the production path, making this fallback
+  // redundant there. These render forms are also called directly, with a
+  // hand-built input, by the render-level tests
+  // (`shotsFromSequence.render.test.ts` and its siblings) — the frozen
+  // proofs of the B1c render-form discipline. Removing `?? 6` would break
+  // those tests for no production gain: an assumed duplication, kept and
+  // explained, not an oversight.
   const count = input.parameters.targetCount ?? 6;
   return `You are a professional cinematographer and storyboard supervisor.
 Your task is to generate exactly ${count} shots for the given sequence.

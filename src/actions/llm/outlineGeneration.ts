@@ -18,16 +18,19 @@ export async function generateOutlineDraft(
   try {
     const projectId = parseInt(formData.get("projectId") as string, 10);
 
+    // The 2-20 bound and the "no default" behaviour used to be re-checked
+    // here by hand; both are now the runner's own job
+    // (`normalizeIntentParameters`, LLMW.PARAM.BOUNDS.1, B7e-n), driven by
+    // `outlineGenerateDescriptor.intent.parameters`. The raw parsed value
+    // (possibly `NaN` when the field is absent) is passed through as-is —
+    // an invalid or missing `targetSections` is omitted by the runner the
+    // same way it was omitted here before.
     const rawSections = parseInt(formData.get("targetSections") as string, 10);
-    const targetSections =
-      Number.isInteger(rawSections) && rawSections >= 2 && rawSections <= 20
-        ? rawSections
-        : undefined;
 
     const result = await runOperation(
       outlineGenerateDescriptor,
       { projectId },
-      targetSections != null ? { parameters: { targetSections } } : {}
+      { parameters: { targetSections: rawSections } }
     );
     if (!result.ok) return { ok: false, error: result.error };
     // `outlineGenerateDescriptor.output.kind` is always `"object"` — the
