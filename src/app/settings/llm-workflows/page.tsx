@@ -25,7 +25,7 @@ import {
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; detail?: string }>;
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -47,7 +47,7 @@ function fmtDate(iso: string): string {
 }
 
 export default async function LlmWorkflowsListPage({ searchParams }: Props) {
-  const { error } = await searchParams;
+  const { error, detail } = await searchParams;
 
   const [rows, allProjects] = await Promise.all([
     db
@@ -82,6 +82,9 @@ export default async function LlmWorkflowsListPage({ searchParams }: Props) {
       {error && ERROR_MESSAGES[error] && (
         <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-4 py-3">
           <p className="text-sm text-[#cf7b6b]">{ERROR_MESSAGES[error]}</p>
+          {error === "invalid_json" && detail && (
+            <p className="mt-1 text-xs text-[#6e767d]">{detail}</p>
+          )}
         </div>
       )}
 

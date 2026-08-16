@@ -62,7 +62,9 @@ describe("importLlmTemplate", () => {
     const formData = fileFormData("templateFile", "{ not json", "broken.json");
 
     const target = await captureRedirect(() => importLlmTemplate(formData));
-    expect(target).toBe("/settings/llm-workflows?error=invalid_json");
+    expect(target).toBe(
+      `/settings/llm-workflows?error=invalid_json&detail=${encodeURIComponent("The file is not valid JSON.")}`
+    );
 
     const after = await ctx.db.select().from(ctx.schema.llmTemplates);
     expect(after.length).toBe(before.length);
@@ -74,10 +76,54 @@ describe("importLlmTemplate", () => {
     const formData = fileFormData("templateFile", JSON.stringify(broken), "broken2.json");
 
     const target = await captureRedirect(() => importLlmTemplate(formData));
-    expect(target).toBe("/settings/llm-workflows?error=invalid_json");
+    expect(target).toBe(
+      `/settings/llm-workflows?error=invalid_json&detail=${encodeURIComponent(
+        '"commit" references an unknown action id "notARealAction".'
+      )}`
+    );
 
     const after = await ctx.db.select().from(ctx.schema.llmTemplates);
     expect(after.length).toBe(before.length);
+  });
+
+  // LLMW.IMPORT.DETAIL.1 (§2.1) — the redirected `detail` must decode to
+  // exactly `result.reason` (`validateLlmTemplateJson`'s failure branch),
+  // not merely contain a fragment of it: this is the proof that the message
+  // arrives at the screen whole.
+  it("carries the exact validator message in the redirect's detail param", async () => {
+    const formData = fileFormData("templateFile", "{ not json", "broken3.json");
+
+    const target = await captureRedirect(() => importLlmTemplate(formData));
+    const url = new URL(target, "http://localhost");
+    expect(url.searchParams.get("error")).toBe("invalid_json");
+    expect(url.searchParams.get("detail")).toBe("The file is not valid JSON.");
+  });
+
+  // §2.2 — the validator's field-type rule message contains quotes and
+  // brackets (`"output.item.fields[0].type"`); prove the encode/decode
+  // round-trip preserves it without loss.
+  it("round-trips a detail message containing quotes and brackets", async () => {
+    const broken = {
+      ...storyGenerateDescriptor,
+      output: {
+        kind: "list",
+        arrayKey: "items",
+        item: {
+          fields: [{ field: "name", jsonKey: "name" }],
+          validity: { fields: [], require: "all" },
+        },
+        selection: { formDataKey: "selected" },
+        errors: { unparsable: "x", notArray: "x", empty: "x" },
+      },
+    };
+    const formData = fileFormData("templateFile", JSON.stringify(broken), "broken4.json");
+
+    const target = await captureRedirect(() => importLlmTemplate(formData));
+    const url = new URL(target, "http://localhost");
+    expect(url.searchParams.get("error")).toBe("invalid_json");
+    expect(url.searchParams.get("detail")).toBe(
+      '"output.item.fields[0].type" must be "string", "number" or "enum" (was absent).'
+    );
   });
 
   it("imports a valid template file and records its source filename", async () => {

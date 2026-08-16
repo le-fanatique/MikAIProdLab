@@ -86,7 +86,9 @@ export async function importLlmTemplate(formData: FormData) {
   if (error === "too_large") redirect("/settings/llm-workflows?error=too_large");
 
   const result = validateLlmTemplateJson(raw);
-  if (!result.ok) redirect("/settings/llm-workflows?error=invalid_json");
+  if (!result.ok) {
+    redirect(`/settings/llm-workflows?error=invalid_json&detail=${encodeURIComponent(result.reason)}`);
+  }
 
   await db.insert(llmTemplates).values({
     name: result.descriptor.name,
