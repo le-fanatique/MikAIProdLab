@@ -1,8 +1,19 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { changedColumns, setupTempDb, type TempDb } from "./helpers/tempDb";
+
+// `createGeneratedShots` and `createGeneratedSequences` call
+// `revalidatePath("/", "layout")` on their success path
+// (src/actions/llm/sequenceShots.ts:211, src/actions/llm/sequenceGeneration.ts:231).
+// Outside a real Next.js request (this test's plain Node/vitest process),
+// `revalidatePath` throws ("Invariant: static generation store missing") —
+// no action tested by this file before LLMW.ACTION.INSERT.1 (B7c-w) called
+// it. Mocked to a no-op so the insert side effects can be proven; this does
+// not touch or hide any of the three actions' own written behaviour.
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import {
   insertAsset,
   insertProject,
@@ -47,6 +58,9 @@ let shotsActions: typeof import("@/actions/shots");
 let sequencesActions: typeof import("@/actions/sequences");
 let storyActions: typeof import("@/actions/llm/story");
 let outlineActions: typeof import("@/actions/llm/outlineGeneration");
+let sequenceShotsActions: typeof import("@/actions/llm/sequenceShots");
+let assetExtractionActions: typeof import("@/actions/llm/assetExtraction");
+let sequenceGenerationActions: typeof import("@/actions/llm/sequenceGeneration");
 let projectId: number;
 
 beforeAll(async () => {
@@ -56,6 +70,9 @@ beforeAll(async () => {
   sequencesActions = await import("@/actions/sequences");
   storyActions = await import("@/actions/llm/story");
   outlineActions = await import("@/actions/llm/outlineGeneration");
+  sequenceShotsActions = await import("@/actions/llm/sequenceShots");
+  assetExtractionActions = await import("@/actions/llm/assetExtraction");
+  sequenceGenerationActions = await import("@/actions/llm/sequenceGeneration");
   projectId = await insertProject(ctx, "Registry project");
 });
 
@@ -350,5 +367,244 @@ describe("action registry — behaviour 4, ownership check and mutation are not 
     const body = readFunctionBody(testCase.file, testCase.export);
     expect(body).not.toMatch(/db\s*\.\s*select/);
     expect(body).toMatch(/db\s*\.\s*update/);
+  });
+});
+
+describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () => {
+  it("createGeneratedShots — one row per item, declared columns only, code from nomenclature not the model, orderIndex continues", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    // Seed one existing shot so the next orderIndex must continue rather
+    // than restart at 0.
+    await insertShot(ctx, sequenceId, { orderIndex: 4 });
+
+    const shotsPayload = [
+      {
+        title: "Shot A",
+        shot_code: "MODEL_PROPOSED_CODE",
+        description: "d1",
+        duration_seconds: 5,
+        continuity_in: "ci1",
+        action_pitch: "ap1",
+        camera_pitch: "cp1",
+        framing: "wide",
+        camera_movement: "pan",
+        continuity_out: "co1",
+        shot_prompt: "sp1",
+      },
+      { title: "Shot B", shot_code: "MODEL_PROPOSED_CODE_2" },
+    ];
+
+    const target = await captureRedirect(() =>
+      sequenceShotsActions.createGeneratedShots(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          shotsJson: JSON.stringify(shotsPayload),
+        })
+      )
+    );
+    expect(target).toContain("shotsCreated=2");
+
+    const rows = await ctx.db
+      .select()
+      .from(ctx.schema.shots)
+      .where(eq(ctx.schema.shots.sequenceId, sequenceId));
+    const created = rows.filter((r) => r.orderIndex > 4).sort((a, b) => a.orderIndex - b.orderIndex);
+
+    expect(created).toHaveLength(2);
+    expect(created[0].orderIndex).toBe(5);
+    expect(created[1].orderIndex).toBe(6);
+
+    // shotCode: from the nomenclature template, not the model's proposed value.
+    expect(created[0].shotCode).not.toBe("MODEL_PROPOSED_CODE");
+    expect(created[0].shotCode).toMatch(/^Sh_/);
+    expect(created[1].shotCode).not.toBe("MODEL_PROPOSED_CODE_2");
+    expect(created[1].shotCode).toMatch(/^Sh_/);
+    expect(created[0].shotCode).not.toBe(created[1].shotCode);
+
+    // Declared columns are the ones populated; every undeclared column the
+    // schema also allows to write stays at its default (null).
+    expect(created[0].description).toBe("d1");
+    expect(created[0].durationSeconds).toBe(5);
+    expect(created[0].actionPitch).toBe("ap1");
+    expect(created[0].cameraPitch).toBe("cp1");
+    expect(created[0].framing).toBe("wide");
+    expect(created[0].cameraMovement).toBe("pan");
+    expect(created[0].continuityIn).toBe("ci1");
+    expect(created[0].continuityOut).toBe("co1");
+    expect(created[0].shotPrompt).toBe("sp1");
+    expect(created[0].continuityNotes).toBeNull();
+    expect(created[0].approvedVideoPath).toBeNull();
+    expect(created[0].trimInSeconds).toBeNull();
+    expect(created[0].trimOutSeconds).toBeNull();
+  });
+
+  it("createGeneratedShots — refuses a sequence belonging to another project and writes no row", async () => {
+    const otherProjectId = await insertProject(ctx, "Foreign project (shots)");
+    const otherSequenceId = await insertSequence(ctx, otherProjectId);
+
+    const before = await ctx.db
+      .select()
+      .from(ctx.schema.shots)
+      .where(eq(ctx.schema.shots.sequenceId, otherSequenceId));
+    expect(before).toHaveLength(0);
+
+    const target = await captureRedirect(() =>
+      sequenceShotsActions.createGeneratedShots(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(otherSequenceId),
+          shotsJson: JSON.stringify([{ title: "Injected" }]),
+        })
+      )
+    );
+    expect(target).toContain("shotsCreateError=");
+
+    const after = await ctx.db
+      .select()
+      .from(ctx.schema.shots)
+      .where(eq(ctx.schema.shots.sequenceId, otherSequenceId));
+    expect(after).toHaveLength(0);
+  });
+
+  it("createSelectedAssets — one row per item, declared columns only, orderIndex continues", async () => {
+    // Seed one existing asset so the next orderIndex must continue.
+    await insertAsset(ctx, projectId, { orderIndex: 9 });
+    const beforeCount = (await ctx.db.select().from(ctx.schema.assets)).length;
+
+    const selectedPayload = [
+      { name: "Asset A", assetType: "character", description: "d1", notes: "n1" },
+      { name: "Asset B", assetType: "prop" },
+    ];
+
+    const target = await captureRedirect(() =>
+      assetExtractionActions.createSelectedAssets(
+        form({
+          projectId: String(projectId),
+          selectedJson: JSON.stringify(selectedPayload),
+        })
+      )
+    );
+    expect(target).toContain("assetsCreated=2");
+
+    const after = await ctx.db.select().from(ctx.schema.assets);
+    expect(after).toHaveLength(beforeCount + 2);
+
+    const created = after
+      .filter((r) => r.name === "Asset A" || r.name === "Asset B")
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    expect(created).toHaveLength(2);
+    expect(created[0].orderIndex).toBe(10);
+    expect(created[1].orderIndex).toBe(11);
+
+    expect(created[0].description).toBe("d1");
+    expect(created[0].notes).toBe("n1");
+    expect(created[0].type).toBe("character");
+    expect(created[1].type).toBe("prop");
+
+    // Undeclared columns stay at their schema default.
+    expect(created[0].visualIdentity).toBeNull();
+    expect(created[0].usageRules).toBeNull();
+    expect(created[0].forbiddenVariations).toBeNull();
+  });
+
+  it("createSelectedAssets — refuses a nonexistent projectId and writes no row", async () => {
+    const before = await ctx.db.select().from(ctx.schema.assets);
+
+    await expect(
+      assetExtractionActions.createSelectedAssets(
+        form({
+          projectId: "999999",
+          selectedJson: JSON.stringify([{ name: "Injected", assetType: "prop" }]),
+        })
+      )
+    ).rejects.toThrow();
+
+    const after = await ctx.db.select().from(ctx.schema.assets);
+    expect(after).toHaveLength(before.length);
+  });
+
+  it("createGeneratedSequences — one row per item, declared columns only, code from nomenclature, orderIndex continues, and the model's order_index only sorts", async () => {
+    // Seed one existing sequence so the next orderIndex must continue.
+    await insertSequence(ctx, projectId, { orderIndex: 20 });
+    const beforeCount = (await ctx.db.select().from(ctx.schema.sequences)).length;
+
+    const sequencesPayload = [
+      {
+        title: "Sequence B",
+        summary: "s2",
+        order_index: 1,
+        description: "desc2",
+        narrative_purpose: "purpose2",
+        mood: "mood2",
+        location_hint: "loc2",
+      },
+      {
+        title: "Sequence A",
+        summary: "s1",
+        order_index: 0,
+        description: "desc1",
+        narrative_purpose: "purpose1",
+        mood: "mood1",
+        location_hint: "loc1",
+      },
+    ];
+
+    const target = await captureRedirect(() =>
+      sequenceGenerationActions.createGeneratedSequences(
+        form({
+          projectId: String(projectId),
+          sequencesJson: JSON.stringify(sequencesPayload),
+        })
+      )
+    );
+    expect(target).toContain("sequencesCreated=2");
+
+    const after = await ctx.db.select().from(ctx.schema.sequences);
+    expect(after).toHaveLength(beforeCount + 2);
+
+    const created = after
+      .filter((r) => r.title === "Sequence A" || r.title === "Sequence B")
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    expect(created).toHaveLength(2);
+    // The model's own order_index (0 for A, 1 for B) only decides which
+    // item is inserted first; the stored orderIndex continues the scope's
+    // own numbering (21, 22), never the model's 0/1.
+    expect(created[0].title).toBe("Sequence A");
+    expect(created[0].orderIndex).toBe(21);
+    expect(created[1].title).toBe("Sequence B");
+    expect(created[1].orderIndex).toBe(22);
+
+    expect(created[0].sequenceCode).toMatch(/^Sq_/);
+    expect(created[1].sequenceCode).toMatch(/^Sq_/);
+    expect(created[0].sequenceCode).not.toBe(created[1].sequenceCode);
+
+    expect(created[0].summary).toBe("s1");
+    expect(created[1].summary).toBe("s2");
+    expect(created[0].description).toBe("desc1");
+    expect(created[0].narrativePurpose).toBe("purpose1");
+    expect(created[0].mood).toBe("mood1");
+    expect(created[0].locationHint).toBe("loc1");
+
+    // Undeclared columns stay at their schema default.
+    expect(created[0].sequencePrompt).toBeNull();
+    expect(created[0].rowBackgroundImagePath).toBeNull();
+    expect(created[0].rowBackgroundOpacity).toBeNull();
+  });
+
+  it("createGeneratedSequences — refuses a nonexistent projectId and writes no row", async () => {
+    const before = await ctx.db.select().from(ctx.schema.sequences);
+
+    await expect(
+      sequenceGenerationActions.createGeneratedSequences(
+        form({
+          projectId: "999999",
+          sequencesJson: JSON.stringify([{ title: "Injected" }]),
+        })
+      )
+    ).rejects.toThrow();
+
+    const after = await ctx.db.select().from(ctx.schema.sequences);
+    expect(after).toHaveLength(before.length);
   });
 });

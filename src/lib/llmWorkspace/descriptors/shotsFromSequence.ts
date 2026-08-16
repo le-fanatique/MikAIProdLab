@@ -190,18 +190,11 @@ CONTINUITY RULES:
     },
   },
 
-  // Deliberately empty. `createGeneratedShots` (`sequenceShots.ts:131-214`)
-  // *inserts* new Shot rows (`db.insert(shots).values(...)`, in a loop) —
-  // every existing `ActionId` in `ACTION_REGISTRY` instead *updates* an
-  // already-existing row, and `columns.written` /
-  // `writeSemantics: "replace" | "partialPerItem"` (§3.2's vocabulary) was
-  // built to describe an update, not an insert with a nomenclature-derived
-  // `shotCode` and an `orderIndex` computed from the Sequence's current max.
-  // Declaring the write side here is a ticket of its own (§2.1 of this
-  // ticket). An empty `commit` is not rejected by `templateStorage.ts`'s
-  // validator (`templateStorage.ts:377-380` checks the array shape, not its
-  // length) and does not claim a write path that does not exist yet.
-  commit: [],
+  // `createGeneratedShots` (`src/actions/llm/sequenceShots.ts:131-214`) is
+  // now declared in `ACTION_REGISTRY` as an `"insert"` entry
+  // (`LLMW.ACTION.INSERT.1`, B7c-w) — the write side this descriptor was
+  // missing.
+  commit: ["createGeneratedShots"],
 
   executor: "inProcess",
 };

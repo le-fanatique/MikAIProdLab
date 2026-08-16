@@ -227,13 +227,18 @@ export async function commitBenchProposal(input: {
     }
 
     // Never reachable: `planBenchCommit` refuses `entitySet` anchors and the
-    // batch action before this switch runs, and both redirect-only actions
-    // are refused as `redirectOnly` above. Kept as explicit branches, not a
-    // `default`, so the switch stays exhaustive over `ActionId`.
+    // batch action before this switch runs. Kept as an explicit branch, not a
+    // `default`, so the switch stays exhaustive over the ids that can reach
+    // it — a future committing action still fails `tsc` here until it is
+    // handled.
+    //
+    // The `updateShotPrompt` / `updateSequencePrompt` branches that used to
+    // sit here are gone (LLMW.ACTION.INSERT.1, B7c-w): `BenchCommitPlan`'s
+    // `returnValue` branch now excludes every `response: "redirectOnly"` id
+    // (`benchRun.ts`'s `RedirectOnlyActionId`), so the early return at Step 2
+    // is no longer merely a runtime fact — the type proves those ids cannot
+    // arrive here, and listing them would not compile.
     case "applyBatchAssetDescriptionDraftsInline":
       return { ok: false, error: "Batch operations cannot be approved from the bench." };
-    case "updateShotPrompt":
-    case "updateSequencePrompt":
-      return { ok: false, error: "This operation is applied through its own form." };
   }
 }

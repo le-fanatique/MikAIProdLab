@@ -42,6 +42,15 @@
 // re-verified there or, where doing so would duplicate an existing proof
 // under `tests/actions/`, referenced by comment instead (per this ticket's
 // instructions) rather than re-run.
+//
+// LLMW.ACTION.INSERT.1 (B7c-w) widens the registry to the three write
+// actions of the list operations (§3.2's `commit`, §3.4's Approve step):
+// `createGeneratedShots`, `createSelectedAssets`, `createGeneratedSequences`
+// each `INSERT` one new row per retained item, rather than `UPDATE` an
+// existing one like the eight entries above. `ActionRegistryEntry.operation`
+// distinguishes the two; `columns.written` and `writeSemantics` (new value
+// `"insertPerItem"`) carry a different sense for an `"insert"` entry, each
+// field's own comment says which.
 // ---------------------------------------------------------------------------
 
 import type { ActionId, EntityKind } from "../types";
@@ -52,6 +61,15 @@ export type ActionRegistryEntry = {
   /** Where the action is exported from, and under which name. Documentation
    * only — this module imports neither the action nor its host file. */
   source: { module: string; export: string };
+
+  /** `"update"` — the action mutates one or more already-existing rows
+   * (the original seven, plus `updateShotNarrativeContext`). `"insert"` —
+   * the action creates one new row per retained item
+   * (`LLMW.ACTION.INSERT.1`, B7c-w: `createGeneratedShots`,
+   * `createSelectedAssets`, `createGeneratedSequences`). Every field below
+   * that reads differently depending on which value this is says so where it
+   * matters — most importantly `columns.written`. */
+  operation: "update" | "insert";
 
   /** The entity whose row(s) the action writes. */
   target: { entity: EntityKind };
@@ -84,24 +102,45 @@ export type ActionRegistryEntry = {
         transactional: false;
       }
     | {
-        /** `applyGeneratedStory` / `applyGeneratedOutline` only —
-         * behaviour 5. The action is defensible only because a Project is
-         * the root of its own chain; it stops being defensible the moment
-         * either is reached through something other than a direct
-         * `projectId` argument. */
+        /** `applyGeneratedStory` / `applyGeneratedOutline` (behaviour 5),
+         * plus `createSelectedAssets` / `createGeneratedSequences`
+         * (`LLMW.ACTION.INSERT.1`, B7c-w) — four entries, not two: the
+         * insert pair share the same *absence* of an explicit `SELECT`
+         * before writing, but not the same consequence. `applyGeneratedStory`
+         * / `applyGeneratedOutline` `UPDATE ... WHERE id = ?` against a
+         * nonexistent Project and silently match zero rows — `ok: true`,
+         * nothing written. `createSelectedAssets` / `createGeneratedSequences`
+         * `INSERT` a row whose `projectId` foreign key does not exist; the
+         * database itself refuses it (`pragma foreign_keys = ON`,
+         * `src/db/index.ts:21`) by throwing, uncaught by either action — the
+         * Server Action itself rejects instead of redirecting. Both pairs
+         * are defensible only because Project is the root of its own chain;
+         * either stops being defensible the moment it is reached through
+         * something other than a direct `projectId` argument. */
         checked: false;
       };
 
   columns: {
-    /** Deterministic columns the action can write, excluding `updatedAt`
-     * (declared separately below because every entry writes it and its
-     * value is never asserted for equality, only for shape/monotonicity).
-     * For `updateAssetDescriptionFieldInline`, both are listed because
-     * which one is written is a caller-supplied argument (`field`), not
-     * two different actions — one entry, one column set, exercised at both
-     * values in `registry.test.ts`. For `applyBatchAssetDescriptionDraftsInline`,
-     * both are listed for the same reason, plus behaviour 1: a column is
-     * only actually written when its per-item draft is non-blank. */
+    /** For an `"update"` entry: the deterministic columns the action
+     * rewrites on an already-existing row, excluding `updatedAt` (declared
+     * separately below because every entry writes it and its value is never
+     * asserted for equality, only for shape/monotonicity). For
+     * `updateAssetDescriptionFieldInline`, both are listed because which one
+     * is written is a caller-supplied argument (`field`), not two different
+     * actions — one entry, one column set, exercised at both values in
+     * `registry.test.ts`. For `applyBatchAssetDescriptionDraftsInline`, both
+     * are listed for the same reason, plus behaviour 1: a column is only
+     * actually written when its per-item draft is non-blank.
+     *
+     * For an `"insert"` entry (`LLMW.ACTION.INSERT.1`, B7c-w): the same
+     * field name carries a different sense — the columns populated on each
+     * newly created row, including ones the action itself computes rather
+     * than receives from the caller (e.g. `createGeneratedShots`'s
+     * `shotCode`, from the nomenclature settings, not the model's proposed
+     * `shot_code`; every insert entry's own `orderIndex`, computed from the
+     * scope's current max). The row's primary key and `createdAt` are never
+     * listed (schema-assigned, not action-computed); the anchor foreign key
+     * is listed because the action itself supplies its value on every call. */
     written: string[];
     writesUpdatedAt: true;
   };
@@ -114,8 +153,12 @@ export type ActionRegistryEntry = {
    * `"partialPerItem"` — only `applyBatchAssetDescriptionDraftsInline`:
    * a column is written for an item only when that item's own draft for it
    * is non-blank, and the batch as a whole commits whichever items
-   * succeeded even when a sibling item failed (behaviour 1). */
-  writeSemantics: "replace" | "partialPerItem";
+   * succeeded even when a sibling item failed (behaviour 1). `"insertPerItem"`
+   * — the three `"insert"` entries (`LLMW.ACTION.INSERT.1`, B7c-w): one new
+   * row per item retained after the entry's own validation, in the order the
+   * (already-filtered) list arrives at the action — the list's own order is
+   * the insertion order, and therefore the `orderIndex` order. */
+  writeSemantics: "replace" | "partialPerItem" | "insertPerItem";
 
   /** Free-text particularities, each naming which of the six B0 behaviours
    * it is and where it is proven. */
@@ -125,6 +168,7 @@ export type ActionRegistryEntry = {
 export const ACTION_REGISTRY = {
   updateAssetDetailsInline: {
     id: "updateAssetDetailsInline",
+    operation: "update",
     source: { module: "@/actions/assets", export: "updateAssetDetailsInline" },
     target: { entity: "asset" },
     response: "returnValue",
@@ -142,6 +186,7 @@ export const ACTION_REGISTRY = {
 
   updateAssetDescriptionFieldInline: {
     id: "updateAssetDescriptionFieldInline",
+    operation: "update",
     source: { module: "@/actions/assets", export: "updateAssetDescriptionFieldInline" },
     target: { entity: "asset" },
     response: "returnValue",
@@ -159,6 +204,7 @@ export const ACTION_REGISTRY = {
 
   applyBatchAssetDescriptionDraftsInline: {
     id: "applyBatchAssetDescriptionDraftsInline",
+    operation: "update",
     source: { module: "@/actions/assets", export: "applyBatchAssetDescriptionDraftsInline" },
     target: { entity: "asset" },
     response: "returnValue",
@@ -178,6 +224,7 @@ export const ACTION_REGISTRY = {
 
   updateShotPrompt: {
     id: "updateShotPrompt",
+    operation: "update",
     source: { module: "@/actions/shots", export: "updateShotPrompt" },
     target: { entity: "shot" },
     response: "redirectOnly",
@@ -195,6 +242,7 @@ export const ACTION_REGISTRY = {
 
   updateSequencePrompt: {
     id: "updateSequencePrompt",
+    operation: "update",
     source: { module: "@/actions/sequences", export: "updateSequencePrompt" },
     target: { entity: "sequence" },
     response: "redirectOnly",
@@ -212,6 +260,7 @@ export const ACTION_REGISTRY = {
 
   applyGeneratedStory: {
     id: "applyGeneratedStory",
+    operation: "update",
     source: { module: "@/actions/llm/story", export: "applyGeneratedStory" },
     target: { entity: "project" },
     response: "returnValue",
@@ -229,6 +278,7 @@ export const ACTION_REGISTRY = {
 
   applyGeneratedOutline: {
     id: "applyGeneratedOutline",
+    operation: "update",
     source: { module: "@/actions/llm/outlineGeneration", export: "applyGeneratedOutline" },
     target: { entity: "project" },
     response: "returnValue",
@@ -250,6 +300,7 @@ export const ACTION_REGISTRY = {
   // parole.
   updateShotNarrativeContext: {
     id: "updateShotNarrativeContext",
+    operation: "update",
     source: { module: "@/actions/shots", export: "updateShotNarrativeContext" },
     target: { entity: "shot" },
     response: "returnValue",
@@ -263,6 +314,103 @@ export const ACTION_REGISTRY = {
       "Full replacement: `set({ ...data })` writes all three fields on every call (src/actions/shots.ts:155-158) — a caller passing null for a field nulls the column. Proven by tests/actions/registry.test.ts's own column-correspondence case for this entry.",
       "Ownership check (src/actions/shots.ts:143-153, two SELECTs — shot->sequence, sequence->project) and mutation (src/actions/shots.ts:155-158, UPDATE) are three separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
       "Never redirects, never touches shotPrompt/framing/cameraMovement/shotCode/title/duration/continuity — the narrow surface §0bis of the ticket arbitrated updateShot out for.",
+    ],
+  },
+
+  // LLMW.ACTION.INSERT.1 (B7c-w) — the write side of the three list
+  // operations' Approve step. `createGeneratedShots`, `createSelectedAssets`
+  // and `createGeneratedSequences` each `INSERT` one new row per retained
+  // item; none of them `UPDATE` an existing row. Only `createGeneratedShots`
+  // is reachable from a descriptor's `commit` today (`shots.fromSequence`)
+  // — the other two are declared here for the same reason B4a declared all
+  // seven original entries together (a shared shape described honestly),
+  // without yet being wired to a descriptor of their own (future tickets).
+  createGeneratedShots: {
+    id: "createGeneratedShots",
+    operation: "insert",
+    source: { module: "@/actions/llm/sequenceShots", export: "createGeneratedShots" },
+    target: { entity: "shot" },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: [
+        "sequenceId",
+        "shotCode",
+        "title",
+        "description",
+        "durationSeconds",
+        "actionPitch",
+        "cameraPitch",
+        "framing",
+        "cameraMovement",
+        "continuityIn",
+        "continuityOut",
+        "shotPrompt",
+        "orderIndex",
+      ],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "insertPerItem",
+    notes: [
+      "One `db.insert(shots).values(...)` call per parsed item, inside a plain for-loop (src/actions/llm/sequenceShots.ts:185-209), not wrapped in db.transaction — a later item's insert failing (e.g. a DB error mid-loop) leaves the earlier items' rows committed. No test proves this partiality; it is a structural fact about the loop shape, reported rather than exercised (nothing in the loop body is expected to fail on valid input).",
+      "`shotCode` (src/actions/llm/sequenceShots.ts:196) is never the model's own proposed `shot_code` — it is regenerated from the project's nomenclature template (`getNomenclatureSettings`, `generateSequentialCodes`, src/actions/llm/sequenceShots.ts:176-183). The model's `shot_code` is parsed by `normalizeShot` (sequenceShots.ts:38) but its value is read nowhere in `createGeneratedShots`. Proven by registry.test.ts: the created row's `shotCode` differs from the item's supplied `shot_code` and matches the nomenclature template.",
+      "`orderIndex` (src/actions/llm/sequenceShots.ts:169-174,207) is `max(shots.orderIndex) for this sequenceId, then +1, then +i` per item — a separate SELECT before the insert loop, no db.transaction enclosing the SELECT and the loop. Two concurrent calls for the same sequence could read the same max and assign colliding orderIndex values to different rows; not observable on better-sqlite3's single connection, reported as a structural fact rather than exercised as a race. Continuation (not restarting at 0) is proven by registry.test.ts against a pre-seeded row.",
+      "Ownership check: `sequences` is selected by `sequenceId` and `sequence.projectId !== projectId` is verified (src/actions/llm/sequenceShots.ts:151-154) before any insert — a one-level chain (sequence→project), not atomic with the insert loop that follows (separate statements, no db.transaction). Refusal writes no row; proven by registry.test.ts against a sequence belonging to another project.",
+      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceShots.ts:211) — present, unlike `createSelectedAssets` below.",
+    ],
+  },
+
+  createSelectedAssets: {
+    id: "createSelectedAssets",
+    operation: "insert",
+    source: { module: "@/actions/llm/assetExtraction", export: "createSelectedAssets" },
+    target: { entity: "asset" },
+    response: "redirectOnly",
+    ownership: { checked: false },
+    columns: {
+      written: ["projectId", "name", "type", "description", "notes", "orderIndex"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "insertPerItem",
+    notes: [
+      "One `db.insert(assets).values(...)` call per parsed candidate, inside a plain for-loop (src/actions/llm/assetExtraction.ts:235-245), not wrapped in db.transaction.",
+      "No explicit ownership check anywhere in the action: `projectId` is only validated as a positive integer (src/actions/llm/assetExtraction.ts:209-211), never checked against a real `projects` row before the insert loop runs. A nonexistent `projectId` is not silently absorbed the way behaviour 5's two UPDATE actions absorb it — the `INSERT` violates the `assets.project_id` foreign key (`pragma foreign_keys = ON`, src/db/index.ts:21) and the driver throws; the action has no try/catch around the loop, so the throw propagates out of the exported Server Action instead of producing a redirect. Proven by registry.test.ts: the call rejects and the assets table gains no row.",
+      "`orderIndex` (src/actions/llm/assetExtraction.ts:228-233,243) is `max(assets.orderIndex) for this projectId, then +1, then +i` per item — a separate SELECT before the insert loop, no db.transaction enclosing both. Same structural, unraced-on-sqlite concurrency note as `createGeneratedShots` above. Continuation is proven by registry.test.ts against a pre-seeded row.",
+      "`visualIdentity`, `usageRules`, `forbiddenVariations` are never written by this action (only `updateAssetDetailsInline` touches them) — proven null on the created row by registry.test.ts, the same way `sequencePrompt` is proven untouched for `createGeneratedSequences` below.",
+      "The candidate's `sourceLevel`, `sourceExcerpt` and `duplicateWarning` (parsed by `normalizeCandidate`, src/actions/llm/assetExtraction.ts:41-57) are read from the submitted JSON but never written anywhere — no column stores them. Reported, not fixed: this drops the sourcing metadata the draft step attached to a candidate the moment it is created.",
+      "No `revalidatePath` call anywhere in this file (`src/actions/llm/assetExtraction.ts`) — unlike `createGeneratedShots` and `createGeneratedSequences`, which both call `revalidatePath(\"/\", \"layout\")` before their success redirect. Reported, not fixed.",
+    ],
+  },
+
+  createGeneratedSequences: {
+    id: "createGeneratedSequences",
+    operation: "insert",
+    source: { module: "@/actions/llm/sequenceGeneration", export: "createGeneratedSequences" },
+    target: { entity: "sequence" },
+    response: "redirectOnly",
+    ownership: { checked: false },
+    columns: {
+      written: [
+        "projectId",
+        "sequenceCode",
+        "title",
+        "summary",
+        "description",
+        "narrativePurpose",
+        "mood",
+        "locationHint",
+        "orderIndex",
+      ],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "insertPerItem",
+    notes: [
+      "One `db.insert(sequences).values(...)` call per parsed candidate, inside a plain for-loop (src/actions/llm/sequenceGeneration.ts:216-229), not wrapped in db.transaction.",
+      "No explicit ownership check: `projectId` is only validated as a positive integer (src/actions/llm/sequenceGeneration.ts:180-182), never checked against a real `projects` row. Same consequence as `createSelectedAssets` above: an invalid `projectId` trips the `sequences.project_id` foreign key (`pragma foreign_keys = ON`, src/db/index.ts:21) and the action, having no try/catch around the loop, rejects instead of redirecting. Proven by registry.test.ts: the call rejects and the sequences table gains no row.",
+      "`sequenceCode` (src/actions/llm/sequenceGeneration.ts:220) is generated from the nomenclature template (`getNomenclatureSettings`, `generateSequentialCodes`, lines 208-214), never from the model — `GeneratedSequence`/`normalizeSequence` (sequenceGeneration.ts:54-74) has no code field to ignore in the first place, unlike `createGeneratedShots`.",
+      "The model's `order_index` (`normalizeSequence`, sequenceGeneration.ts:60-63,72) is used only to sort the candidate array before insertion (sequenceGeneration.ts:188-191, `.sort((a,b) => a.order_index - b.order_index)`) — the stored `orderIndex` column is `max(sequences.orderIndex) for this projectId, then +1, then +i` in that sorted order (sequenceGeneration.ts:200-205,227), never the model's own number. Proven by registry.test.ts alongside orderIndex continuation.",
+      "`sequencePrompt`, `rowBackgroundImagePath`, `rowBackgroundOpacity` are never written by this action — proven null on the created row by registry.test.ts.",
+      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceGeneration.ts:231) — present, like `createGeneratedShots`.",
     ],
   },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;

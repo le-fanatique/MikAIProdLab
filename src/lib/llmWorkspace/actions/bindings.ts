@@ -24,6 +24,12 @@ import { updateShotPrompt, updateShotNarrativeContext } from "@/actions/shots";
 import { updateSequencePrompt } from "@/actions/sequences";
 import { applyGeneratedStory } from "@/actions/llm/story";
 import { applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
+// LLMW.ACTION.INSERT.1 (B7c-w) — the three insert-operation actions. Same
+// shape as updateShotPrompt/updateSequencePrompt above: (formData: FormData)
+// => Promise<void>, response observable only through redirect().
+import { createGeneratedShots } from "@/actions/llm/sequenceShots";
+import { createSelectedAssets } from "@/actions/llm/assetExtraction";
+import { createGeneratedSequences } from "@/actions/llm/sequenceGeneration";
 import type { ActionId } from "../types";
 
 export const ACTION_BINDINGS = {
@@ -35,4 +41,7 @@ export const ACTION_BINDINGS = {
   applyGeneratedStory,
   applyGeneratedOutline,
   updateShotNarrativeContext,
+  createGeneratedShots,
+  createSelectedAssets,
+  createGeneratedSequences,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

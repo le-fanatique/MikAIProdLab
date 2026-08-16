@@ -121,7 +121,19 @@ export type ActionId =
   // LLMW.UC2.RETAKE.1 (B9b) — the write side of `shot.retakeDirected`
   // (§0bis of the ticket: `updateShot` is arbitrated out — it redirects,
   // silently rewrites `shotPrompt`, and no-ops on a blank title).
-  | "updateShotNarrativeContext";
+  | "updateShotNarrativeContext"
+  // LLMW.ACTION.INSERT.1 (B7c-w) — the write side of the three list
+  // operations' Approve step. Unlike the eight above, these `INSERT` a row
+  // per retained item rather than `UPDATE` an existing one —
+  // `ActionRegistryEntry.operation` in `actions/registry.ts` distinguishes
+  // the two. Only `createGeneratedShots` is wired into a descriptor's
+  // `commit` (`shots.fromSequence`); the other two are declared for the same
+  // reason B4a declared all seven together — describing the shared shape
+  // honestly — without yet being reachable (their own descriptors are future
+  // tickets).
+  | "createGeneratedShots"
+  | "createSelectedAssets"
+  | "createGeneratedSequences";
 
 /**
  * Names a field on the operation's anchor entity, for a `preconditions`

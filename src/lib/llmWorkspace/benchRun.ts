@@ -15,10 +15,41 @@ import type { ActionId, OperationDescriptor } from "./types";
 // for a given descriptor, per §4.3's ordered rules.
 // ---------------------------------------------------------------------------
 
+// `RedirectOnlyActionId` — narrows `BenchCommitPlan`'s two committing
+// branches to exactly the `ActionId`s each can carry. Without this,
+// `actionId` types as the full `ActionId` on both branches, and
+// `bench.ts`'s dispatch switch (exhaustive over `ActionId`, no `default`
+// by design — see its Step 5 comment) stops being exhaustive the moment
+// `ActionId` grows: TS2366, "not all code paths return a value". The three
+// insert `ActionId`s added by this ticket (LLMW.ACTION.INSERT.1, B7c-w) are
+// all `response: "redirectOnly"`, and `planBenchCommit` already routes
+// `redirectOnly` actions out of `commitBenchProposal` before its switch
+// runs (Step 2) — so the switch only ever needs to be exhaustive over the
+// non-`redirectOnly` `ActionId`s, and this type says so.
+//
+// This fixes the TS2366 the ticket named, but exposes a second, narrower
+// mismatch this file alone cannot close: `bench.ts`'s switch still carries
+// two explicit `case` branches (`updateShotPrompt`, `updateSequencePrompt`)
+// kept only for exhaustiveness against the old, unnarrowed `ActionId`. Once
+// `plan.actionId` (returnValue branch) excludes every `redirectOnly` id,
+// those two case labels are no longer comparable to the switch's own
+// discriminant type (TS2678) — see `.agents/executor_report.md` C.1.
+type RedirectOnlyActionId = {
+  [K in ActionId]: (typeof ACTION_REGISTRY)[K]["response"] extends "redirectOnly" ? K : never;
+}[ActionId];
+
 export type BenchCommitPlan =
-  | { kind: "returnValue"; actionId: ActionId }
-  | { kind: "redirectOnly"; actionId: ActionId }
+  | { kind: "returnValue"; actionId: Exclude<ActionId, RedirectOnlyActionId> }
+  | { kind: "redirectOnly"; actionId: RedirectOnlyActionId }
   | { kind: "unsupported"; reason: string };
+
+// A type predicate, not an inline `.response === "redirectOnly"` check: only
+// a predicate lets `tsc` narrow `actionId` itself (to `RedirectOnlyActionId`
+// on the true branch, to `Exclude<ActionId, RedirectOnlyActionId>` on the
+// false branch) from the ternary below.
+function isRedirectOnlyAction(actionId: ActionId): actionId is RedirectOnlyActionId {
+  return ACTION_REGISTRY[actionId].response === "redirectOnly";
+}
 
 export function planBenchCommit(descriptor: OperationDescriptor): BenchCommitPlan {
   if (descriptor.anchor.kind === "entitySet") {
@@ -35,8 +66,7 @@ export function planBenchCommit(descriptor: OperationDescriptor): BenchCommitPla
     return { kind: "unsupported", reason: "Batch operations cannot be approved from the bench." };
   }
 
-  const response = ACTION_REGISTRY[actionId].response;
-  return response === "redirectOnly" ? { kind: "redirectOnly", actionId } : { kind: "returnValue", actionId };
+  return isRedirectOnlyAction(actionId) ? { kind: "redirectOnly", actionId } : { kind: "returnValue", actionId };
 }
 
 // ---------------------------------------------------------------------------
