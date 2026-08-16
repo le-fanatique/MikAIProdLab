@@ -51,6 +51,15 @@
 // field itself for the list shape and its known limits. All eight existing
 // descriptors gain `kind: "object"` mechanically; no other field of theirs
 // changes.
+//
+// LLMW.OUTPUT.LIST.2 (B7b) closes six of the gaps B7a's own comment (below,
+// preserved for the record of what was and was not representable at the
+// time) signalled: numeric item fields, a second JSON-key fallback, an
+// enum-with-default item field, an index-seeded default for a numeric field,
+// a post-parse sort of the whole list, and a declared cherry-pick selection
+// destination. `castingSuggestions` is still not representable — its gate
+// needs a validity rule on non-string fields, which `item.validity` (§3.5 of
+// this ticket) still does not express — and is not decided here (B7h).
 // ---------------------------------------------------------------------------
 
 /**
@@ -121,6 +130,39 @@ export type ActionId =
  * the field.
  */
 export type FieldRef = string;
+
+/**
+ * A single field of a `kind: "list"` item, discriminated on `type` — closed
+ * by LLMW.OUTPUT.LIST.2 (B7b) §2.1, read off the four flat-JSON-array
+ * parsers rather than designed. `type` is mandatory on every entry: no
+ * silent fallback to `"string"`, on the same principle B7a already applied
+ * to `output.kind` itself (a net refusal of an absent or unknown `kind`).
+ */
+export type ListItemField =
+  | {
+      type: "string";
+      field: string;
+      jsonKey: string;
+      jsonKeyFallback?: string;
+      truncateTo?: number;
+    }
+  | {
+      type: "number";
+      field: string;
+      jsonKey: string;
+      jsonKeyFallback?: string;
+      exclusiveMin?: number; // value accepted if > exclusiveMin (strict)
+      max?: number; // value accepted if <= max (inclusive bound)
+      fallback: "omit" | "index"; // mandatory, never implicit
+    }
+  | {
+      type: "enum";
+      field: string;
+      jsonKey: string;
+      jsonKeyFallback?: string;
+      values: string[];
+      default: string; // must belong to values
+    };
 
 /**
  * The frozen descriptor shape — copied verbatim from §4.1, substituting the
@@ -238,30 +280,26 @@ export type OperationDescriptor = {
   // was rejected on purpose (ticket §3.1): two shapes cohabiting with an
   // implicit precedence is exactly how a format rots.
   //
-  // The list shape is deliberately narrower than what all four parsers
-  // actually do — read `.agents/executor_report.md` (§2) before writing a
-  // fifth list descriptor. In particular:
-  //   - every item field here is a *string* field (trim, optional
-  //     `truncateTo`), because `RunOperationResult`'s list items are frozen
-  //     as `Record<string, string>` (§3.2 of the ticket). Three of the four
-  //     parsers carry a genuinely numeric field on some items
-  //     (`duration_seconds` in `GeneratedSequenceShot`, `order_index` in
-  //     `GeneratedSequence`, `targetId`/`assetId` in `RawSuggestion`) that
-  //     this shape cannot honestly declare — signalled, not modelled;
-  //   - `item.validity` only expresses "these string fields, all/any
-  //     non-empty" (mirroring `require`'s own vocabulary, reused rather than
-  //     inventing a second one). `castingSuggestions.ts`'s real gate needs a
-  //     valid `targetType` enum plus two positive-integer ids — outside what
-  //     any string-field rule can express, so `castingSuggestions` is not
-  //     representable by this shape at all (§2 of the report);
-  //   - no field carries an enum-with-default (`assetType`, `sourceLevel`,
-  //     `confidence` all silently default on an unrecognised value) or a
-  //     dual JSON-key fallback (`r.assetType ?? r.asset_type`) — both real,
-  //     both unmodelled;
-  //   - no declared "sort the result" or "seed a field from the item's own
-  //     array position" step exists — `sequenceGeneration.ts`'s post-parse
-  //     `.sort(order_index)` and its `order_index` fallback to the item's
-  //     index have no home here.
+  // LLMW.OUTPUT.LIST.1 (B7a) left the list shape deliberately narrower than
+  // what all four parsers actually do; LLMW.OUTPUT.LIST.2 (B7b) closes five
+  // of the six gaps it signalled — see `.agents/executor_report.md` before
+  // writing a fifth list descriptor. What remains true after B7b:
+  //   - item fields are now a discriminated union (`ListItemField`, §2.1) —
+  //     `"string"`, `"number"` (with `exclusiveMin`/`max`/an obligatory
+  //     `fallback`) and `"enum"` (with a mandatory `default`) — and
+  //     `RunOperationResult`'s list items carry `string | number` (§2.3);
+  //   - `item.validity` still only expresses "these fields, all/any
+  //     non-empty", and only over fields of type `"string"` (§3.5).
+  //     `castingSuggestions.ts`'s real gate needs a valid `targetType` enum
+  //     plus two positive-integer ids checked for existence in the
+  //     database — outside what any field-presence rule can express, so
+  //     `castingSuggestions` is still not representable by this shape at
+  //     all (§2 of the report). Not decided here — B7h;
+  //   - a dual JSON-key fallback (`jsonKeyFallback`) and an enum-with-default
+  //     are both now representable (§3.1, §3.4);
+  //   - a post-parse `sort` and an index-seeded numeric `fallback` are both
+  //     now representable (§3.3, §3.6), matching `sequenceGeneration.ts`'s
+  //     `order_index` and its `.sort(order_index)`.
   output:
     | {
         kind: "object";
@@ -293,19 +331,7 @@ export type OperationDescriptor = {
         // uniform: each descriptor declares its own).
         arrayKey: string;
         item: {
-          fields: Array<{
-            field: string; // entity field, e.g. "title"
-            jsonKey: string; // model key, e.g. "shot_code" — snake_case on
-            // `GeneratedSequenceShot`/`GeneratedSequence`, camelCase on
-            // `GeneratedAssetCandidate`; this shape carries either without
-            // preferring one (ticket §3.1).
-            truncateTo?: number; // silent trim to N chars. Every one of the
-            // four parsers' `str(value, maxLen)` helper *always* trims to
-            // `maxLen` — none of them ever refuses an oversized item field
-            // the way `ObjectOutput.fields[].maxLength` refuses. No
-            // `maxLength` (reject) variant exists on a list item field
-            // because none of the four evidences one.
-          }>;
+          fields: Array<ListItemField>; // §2.1 of LLMW.OUTPUT.LIST.2 (B7b)
           // Item-validity gate: the subset of the fields above (by `field`
           // name) that must be non-empty for the item to survive, and
           // whether all or at least one must be. Mirrors `require`'s own
@@ -316,6 +342,7 @@ export type OperationDescriptor = {
           // them — `"all"` chosen for the same reason `preconditions`
           // standardised on it. `castingSuggestions` cannot be expressed
           // here at all (see the type-level note above and the report).
+          // Only `"string"` fields can appear (§3.5 of the B7b ticket).
           validity: { fields: string[]; require: "all" | "any" };
         };
         // Present on `assetExtraction` (20) and `castingSuggestions` (60);
@@ -324,6 +351,37 @@ export type OperationDescriptor = {
         // array silently — neither refuses on overflow — so this shape has
         // no "refuse" variant; there is no evidence for one.
         maxItems?: number;
+
+        // LLMW.OUTPUT.LIST.2 (B7b), §2.2 gap 5. A post-parse sort of the
+        // whole filtered list. Only `sequenceGeneration.ts` sorts
+        // (`.sort((a, b) => a.order_index - b.order_index)`), ascending, on
+        // a numeric field — `direction` is therefore the literal `"asc"`
+        // and nothing else; no parser evidences a descending or
+        // string-keyed sort.
+        sort?: { field: string; direction: "asc" };
+
+        // LLMW.OUTPUT.LIST.2 (B7b), §2.2 gap 6. The `FormData` key that
+        // carries the cherry-picked subset at Approve. The four write
+        // actions share the same shape (identifiers + `returnTo` + one JSON
+        // key) but not the same key name: `shotsJson`
+        // (`sequenceShots.ts:137`), `sequencesJson`
+        // (`sequenceGeneration.ts:173`), `selectedJson`
+        // (`assetExtraction.ts:202`, `castingSuggestions.ts:289`).
+        // Obligatory: a list operation with no declared selection
+        // destination is not approvable, and B7d must not have to guess it.
+        //
+        // Carries only the destination key, not a second payload shape: the
+        // four write actions re-parse the JSON they receive through their
+        // own `normalize*`, so the payload must carry the model's own JSON
+        // keys (`shot_code`, `duration_seconds`, `assetType`…), not entity
+        // field names. B7d can rebuild that payload from the descriptor
+        // alone — for each declared item field, emit `jsonKey: value` — and
+        // the re-normalization is idempotent (an already-truncated string
+        // re-truncates identically, an already-resolved enum is a member of
+        // `values`, an omitted numeric field becomes `null` again). No
+        // further field is therefore needed here, and none is added.
+        selection: { formDataKey: string };
+
         errors: {
           unparsable: string; // JSON.parse failed
           // `parsed[arrayKey]` missing, or present but not an array — one

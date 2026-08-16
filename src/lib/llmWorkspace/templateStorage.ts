@@ -170,6 +170,62 @@ function validateObjectOutput(output: Record<string, unknown>): string | null {
   return null;
 }
 
+// LLMW.OUTPUT.LIST.2 (B7b), §4 rule 1-5: one item field entry, discriminated
+// on `type`. Returns the declared field's `type` on success (needed by the
+// caller to type-check `validity.fields` — rule 6 — and `output.sort` —
+// rule 7), or an error message.
+function validateListItemField(entry: Record<string, unknown>, path: string): { type: "string" | "number" | "enum"; fallback?: "omit" | "index" } | string {
+  if (entry.type !== "string" && entry.type !== "number" && entry.type !== "enum") {
+    return `"${path}.type" must be "string", "number" or "enum" (was ${entry.type === undefined ? "absent" : `"${String(entry.type)}"`}).`;
+  }
+  if (typeof entry.field !== "string" || !entry.field) {
+    return `"${path}.field" is required and must be a non-empty string.`;
+  }
+  if (typeof entry.jsonKey !== "string" || !entry.jsonKey) {
+    return `"${path}.jsonKey" is required and must be a non-empty string.`;
+  }
+  // Rule 2 — jsonKeyFallback, when present.
+  if (entry.jsonKeyFallback != null) {
+    if (typeof entry.jsonKeyFallback !== "string" || !entry.jsonKeyFallback) {
+      return `"${path}.jsonKeyFallback" must be a non-empty string when present.`;
+    }
+    if (entry.jsonKeyFallback === entry.jsonKey) {
+      return `"${path}.jsonKeyFallback" must differ from "${path}.jsonKey".`;
+    }
+  }
+
+  if (entry.type === "string") {
+    // Rule 3.
+    if (entry.truncateTo != null && (typeof entry.truncateTo !== "number" || !Number.isInteger(entry.truncateTo) || entry.truncateTo <= 0)) {
+      return `"${path}.truncateTo" must be an integer greater than 0 when present.`;
+    }
+    return { type: "string" };
+  }
+
+  if (entry.type === "number") {
+    // Rule 4.
+    if (entry.exclusiveMin != null && (typeof entry.exclusiveMin !== "number" || !Number.isFinite(entry.exclusiveMin))) {
+      return `"${path}.exclusiveMin" must be a finite number when present.`;
+    }
+    if (entry.max != null && (typeof entry.max !== "number" || !Number.isFinite(entry.max))) {
+      return `"${path}.max" must be a finite number when present.`;
+    }
+    if (entry.fallback !== "omit" && entry.fallback !== "index") {
+      return `"${path}.fallback" is required and must be "omit" or "index".`;
+    }
+    return { type: "number", fallback: entry.fallback };
+  }
+
+  // entry.type === "enum" — rule 5.
+  if (!Array.isArray(entry.values) || entry.values.length === 0 || entry.values.some((v) => typeof v !== "string" || !v)) {
+    return `"${path}.values" is required and must be a non-empty array of non-empty strings.`;
+  }
+  if (typeof entry.default !== "string" || !(entry.values as string[]).includes(entry.default)) {
+    return `"${path}.default" is required and must be a member of "${path}.values".`;
+  }
+  return { type: "enum" };
+}
+
 function validateListOutput(output: Record<string, unknown>): string | null {
   if (typeof output.arrayKey !== "string" || !output.arrayKey) {
     return '"output.arrayKey" is required and must be a non-empty string.';
@@ -181,17 +237,13 @@ function validateListOutput(output: Record<string, unknown>): string | null {
   if (!Array.isArray(item.fields) || item.fields.length === 0) {
     return '"output.item.fields" is required and must be a non-empty array.';
   }
-  const declaredFields = new Set<string>();
+  const declaredFields = new Map<string, { type: "string" | "number" | "enum"; fallback?: "omit" | "index" }>();
   for (let i = 0; i < item.fields.length; i++) {
     const entry = item.fields[i];
     if (!isPlainObject(entry)) return `"output.item.fields[${i}]" must be an object.`;
-    if (typeof entry.field !== "string" || !entry.field) {
-      return `"output.item.fields[${i}].field" is required and must be a non-empty string.`;
-    }
-    if (typeof entry.jsonKey !== "string" || !entry.jsonKey) {
-      return `"output.item.fields[${i}].jsonKey" is required and must be a non-empty string.`;
-    }
-    declaredFields.add(entry.field);
+    const result = validateListItemField(entry, `output.item.fields[${i}]`);
+    if (typeof result === "string") return result;
+    declaredFields.set(entry.field as string, result);
   }
 
   if (!isPlainObject(item.validity)) return '"output.item.validity" is required and must be an object.';
@@ -202,10 +254,15 @@ function validateListOutput(output: Record<string, unknown>): string | null {
   // to render forms (`validateBlock`): a validity field that names something
   // `item.fields` never declared would otherwise pass validation and then
   // silently never gate anything at Run (`parseListOutput` looks it up in
-  // the mapped `values`, which never has that key).
+  // the mapped `values`, which never has that key). Rule 6, widened by B7b:
+  // a declared-but-non-string field is a distinct author error from an
+  // undeclared one.
   for (const field of item.validity.fields) {
     if (typeof field !== "string" || !declaredFields.has(field)) {
       return `"output.item.validity.fields" references "${String(field)}", which "output.item.fields" does not declare.`;
+    }
+    if (declaredFields.get(field)!.type !== "string") {
+      return `"output.item.validity.fields" references "${field}", which "output.item.fields" declares as a non-string field.`;
     }
   }
   if (item.validity.require !== "all" && item.validity.require !== "any") {
@@ -214,6 +271,30 @@ function validateListOutput(output: Record<string, unknown>): string | null {
 
   if (output.maxItems != null && (typeof output.maxItems !== "number" || !Number.isInteger(output.maxItems) || output.maxItems <= 0)) {
     return '"output.maxItems" must be an integer greater than 0 when present.';
+  }
+
+  // Rule 7. A field in `"omit"` may be absent from some items; sorting on a
+  // key that can be missing would silently produce `NaN` comparisons.
+  // `sequenceGeneration`, the only real sorter, is `"index"`.
+  if (output.sort != null) {
+    if (!isPlainObject(output.sort)) return '"output.sort" must be an object when present.';
+    if (output.sort.direction !== "asc") return '"output.sort.direction" must be "asc".';
+    if (typeof output.sort.field !== "string" || !output.sort.field) {
+      return '"output.sort.field" is required and must be a non-empty string.';
+    }
+    const sortField = declaredFields.get(output.sort.field);
+    if (!sortField || sortField.type !== "number") {
+      return `"output.sort.field" references "${String(output.sort.field)}", which "output.item.fields" does not declare as a number field.`;
+    }
+    if (sortField.fallback !== "index") {
+      return `"output.sort.field" references "${String(output.sort.field)}", whose "fallback" must be "index" to be sortable.`;
+    }
+  }
+
+  // Rule 8.
+  if (!isPlainObject(output.selection)) return '"output.selection" is required and must be an object.';
+  if (typeof output.selection.formDataKey !== "string" || !output.selection.formDataKey) {
+    return '"output.selection.formDataKey" is required and must be a non-empty string.';
   }
 
   if (!isPlainObject(output.errors)) return '"output.errors" is required and must be an object.';

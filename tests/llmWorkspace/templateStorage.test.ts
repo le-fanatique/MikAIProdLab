@@ -152,12 +152,28 @@ describe("validateLlmTemplateJson — output.kind (LLMW.OUTPUT.LIST.1, B7a)", ()
       arrayKey: "items",
       item: {
         fields: [
-          { field: "title", jsonKey: "title" },
-          { field: "note", jsonKey: "note", truncateTo: 5 },
+          { type: "string", field: "title", jsonKey: "title" },
+          { type: "string", field: "note", jsonKey: "note", truncateTo: 5 },
+          {
+            type: "number",
+            field: "order",
+            jsonKey: "order_index",
+            fallback: "index",
+          },
+          {
+            type: "enum",
+            field: "level",
+            jsonKey: "level",
+            jsonKeyFallback: "level_fallback",
+            values: ["low", "medium", "high"],
+            default: "medium",
+          },
         ],
         validity: { fields: ["title"], require: "all" },
       },
       maxItems: 20,
+      sort: { field: "order", direction: "asc" },
+      selection: { formDataKey: "itemsJson" },
       errors: {
         unparsable: "Unparsable response.",
         notArray: "No items array.",
@@ -167,7 +183,7 @@ describe("validateLlmTemplateJson — output.kind (LLMW.OUTPUT.LIST.1, B7a)", ()
     return base;
   }
 
-  it("accepts a fully valid kind: \"list\" output", () => {
+  it("accepts a fully valid kind: \"list\" output — all six B7b extensions declared at once", () => {
     const result = validateLlmTemplateJson(JSON.stringify(syntheticListDescriptor()));
     expect(result.ok).toBe(true);
   });
@@ -194,6 +210,106 @@ describe("validateLlmTemplateJson — output.kind (LLMW.OUTPUT.LIST.1, B7a)", ()
     const result = validateLlmTemplateJson(JSON.stringify(descriptor));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/"output\.maxItems"/);
+  });
+
+  // -------------------------------------------------------------------------
+  // LLMW.OUTPUT.LIST.2 (B7b) §4 — the eight new list-output validation rules,
+  // one refusal per rule.
+  // -------------------------------------------------------------------------
+
+  it("rule 1 — refuses an item field with no type, rather than assuming \"string\"", () => {
+    const descriptor = syntheticListDescriptor();
+    const fields = (descriptor.output as { item: { fields: Array<Record<string, unknown>> } }).item.fields;
+    delete fields[0].type;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields\[0\]\.type"/);
+  });
+
+  it("rule 1b — refuses an item field with an unknown type", () => {
+    const descriptor = syntheticListDescriptor();
+    const fields = (descriptor.output as { item: { fields: Array<Record<string, unknown>> } }).item.fields;
+    fields[0].type = "boolean";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields\[0\]\.type"/);
+  });
+
+  it("rule 2 — refuses a jsonKeyFallback equal to jsonKey", () => {
+    const descriptor = syntheticListDescriptor();
+    const fields = (descriptor.output as { item: { fields: Array<Record<string, unknown>> } }).item.fields;
+    fields[0].jsonKeyFallback = fields[0].jsonKey;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields\[0\]\.jsonKeyFallback"/);
+  });
+
+  it("rule 3 — refuses a string field's truncateTo of 0", () => {
+    const descriptor = syntheticListDescriptor();
+    const fields = (descriptor.output as { item: { fields: Array<Record<string, unknown>> } }).item.fields;
+    fields[1].truncateTo = 0;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields\[1\]\.truncateTo"/);
+  });
+
+  it("rule 4 — refuses a number field with no fallback declared", () => {
+    const descriptor = syntheticListDescriptor();
+    const fields = (descriptor.output as { item: { fields: Array<Record<string, unknown>> } }).item.fields;
+    delete fields[2].fallback;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields\[2\]\.fallback"/);
+  });
+
+  it("rule 5 — refuses an enum field whose default is not a member of values", () => {
+    const descriptor = syntheticListDescriptor();
+    const fields = (descriptor.output as { item: { fields: Array<Record<string, unknown>> } }).item.fields;
+    fields[3].default = "extreme";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.fields\[3\]\.default"/);
+  });
+
+  it("rule 6 — refuses output.item.validity.fields naming a declared field that is not of type \"string\"", () => {
+    const descriptor = syntheticListDescriptor();
+    (descriptor.output as { item: { validity: { fields: string[] } } }).item.validity.fields = ["order"];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.item\.validity\.fields".*non-string/);
+  });
+
+  it("rule 7 — refuses output.sort.field referencing a number field whose fallback is \"omit\"", () => {
+    const descriptor = syntheticListDescriptor();
+    const output = descriptor.output as { item: { fields: Array<Record<string, unknown>> }; sort: Record<string, unknown> };
+    output.item.fields[2].fallback = "omit";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.sort\.field"/);
+  });
+
+  it("rule 7b — refuses output.sort.direction other than \"asc\"", () => {
+    const descriptor = syntheticListDescriptor();
+    (descriptor.output as { sort: Record<string, unknown> }).sort.direction = "desc";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.sort\.direction"/);
+  });
+
+  it("rule 8 — refuses a list output with no selection declared", () => {
+    const descriptor = syntheticListDescriptor();
+    delete (descriptor.output as Record<string, unknown>).selection;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.selection"/);
+  });
+
+  it("rule 8b — refuses a selection with an empty formDataKey", () => {
+    const descriptor = syntheticListDescriptor();
+    (descriptor.output as { selection: Record<string, unknown> }).selection.formDataKey = "";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"output\.selection\.formDataKey"/);
   });
 });
 

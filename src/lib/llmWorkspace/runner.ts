@@ -28,7 +28,7 @@
 // module scope.
 // ---------------------------------------------------------------------------
 
-import type { EntityKind, OperationDescriptor, VariableId } from "./types";
+import type { EntityKind, ListItemField, OperationDescriptor, VariableId } from "./types";
 import {
   assembleDescriptorMessages,
   type RenderFreeText,
@@ -80,9 +80,15 @@ export type PromptResolutionResult =
 // `commitBenchProposal`, forced by the same type change) is narrowed by
 // `kind === "object"` before reading `.values` — `tsc` enforces it, on
 // purpose (§3.2 of the ticket).
+//
+// LLMW.OUTPUT.LIST.2 (B7b), §2.3: list items widen from `Record<string,
+// string>` to `Record<string, string | number>` — the point B7a's own
+// comment signalled without being able to model: a plain `string` record
+// cannot honestly carry `duration_seconds` or `order_index`. The `"object"`
+// variant is untouched.
 export type RunOperationResult =
   | { ok: true; kind: "object"; values: Record<string, string> }
-  | { ok: true; kind: "list"; items: Array<Record<string, string>> }
+  | { ok: true; kind: "list"; items: Array<Record<string, string | number>> }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
@@ -463,6 +469,52 @@ function parseObjectOutput(
 // at all.
 // ---------------------------------------------------------------------------
 
+// LLMW.OUTPUT.LIST.2 (B7b), §3.1: reading a raw field value off the parsed
+// item object. `??`, not `||` — `assetExtraction.ts:41,52,56,57`
+// (`r.assetType ?? r.asset_type`) lets an empty string on the primary key
+// win over the fallback; that nuance is observable and is reproduced as-is,
+// not "improved".
+function readRawField(obj: Record<string, unknown>, jsonKey: string, jsonKeyFallback: string | undefined): unknown {
+  return jsonKeyFallback != null ? (obj[jsonKey] ?? obj[jsonKeyFallback]) : obj[jsonKey];
+}
+
+// §3.2 — `type: "string"`, unchanged from B7a except for the fallback read.
+function readStringField(rawValue: unknown, truncateTo: number | undefined): string {
+  let value = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (truncateTo != null) {
+    value = value.slice(0, truncateTo);
+  }
+  return value;
+}
+
+// §3.3 — `type: "number"`. `fallbackIndex` is the item's position in the
+// raw, *unfiltered* array (`sequenceGeneration.ts:88,189`'s
+// `.map((item, i) => normalizeSequence(item, i))`), not in the filtered
+// output — a descriptor whose first item is invalid must give the second
+// item `order_index: 1`, not `0`.
+function readNumberField(
+  rawValue: unknown,
+  field: Extract<ListItemField, { type: "number" }>,
+  fallbackIndex: number
+): { present: true; value: number } | { present: false } {
+  const valid =
+    typeof rawValue === "number" &&
+    Number.isFinite(rawValue) &&
+    (field.exclusiveMin == null || rawValue > field.exclusiveMin) &&
+    (field.max == null || rawValue <= field.max);
+  if (valid) return { present: true, value: rawValue as number };
+  if (field.fallback === "index") return { present: true, value: fallbackIndex };
+  return { present: false }; // "omit" — the key is absent, not "" or 0
+}
+
+// §3.4 — `type: "enum"`. No `trim()`: `normalizeAssetType`
+// (`assetExtraction.ts:22-27`) and its `sourceLevel` sibling compare the raw
+// value by identity, so `" hero "` is not `"hero"` and falls back to the
+// default. Trimming first would change an observable behaviour.
+function readEnumField(rawValue: unknown, field: Extract<ListItemField, { type: "enum" }>): string {
+  return typeof rawValue === "string" && field.values.includes(rawValue) ? rawValue : field.default;
+}
+
 function parseListOutput(
   raw: string,
   output: Extract<OperationDescriptor["output"], { kind: "list" }>
@@ -485,47 +537,56 @@ function parseListOutput(
   }
 
   const { fields: validityFields, require } = output.item.validity;
-  const items: Array<Record<string, string>> = [];
+  const items: Array<Record<string, string | number>> = [];
 
-  for (const rawItem of arr) {
+  arr.forEach((rawItem, fallbackIndex) => {
     // Matches every one of the four `normalizeXxx(raw: unknown)` functions'
     // own `if (!raw || typeof raw !== "object") return null;` guard — an
-    // invalid item is filtered, not refused.
-    if (!rawItem || typeof rawItem !== "object") continue;
+    // invalid item is filtered, not refused. The fallback index is taken
+    // from the raw array's own position (§3.3), before this filter runs.
+    if (!rawItem || typeof rawItem !== "object") return;
     const obj = rawItem as Record<string, unknown>;
 
-    const values: Record<string, string> = {};
+    const values: Record<string, string | number> = {};
     for (const field of output.item.fields) {
-      const rawValue = obj[field.jsonKey];
-      let value = typeof rawValue === "string" ? rawValue.trim() : "";
-      // Every one of the four parsers' `str(value, maxLen)` helper always
-      // trims to `maxLen` — none of them ever refuses an oversized item
-      // field, so there is no reject variant here (contrast `ObjectOutput`'s
-      // `maxLength`).
-      if (field.truncateTo != null) {
-        value = value.slice(0, field.truncateTo);
+      const rawValue = readRawField(obj, field.jsonKey, field.jsonKeyFallback);
+      if (field.type === "string") {
+        values[field.field] = readStringField(rawValue, field.truncateTo);
+      } else if (field.type === "number") {
+        const result = readNumberField(rawValue, field, fallbackIndex);
+        if (result.present) values[field.field] = result.value;
+      } else {
+        values[field.field] = readEnumField(rawValue, field);
       }
-      values[field.field] = value;
     }
 
-    const satisfied =
-      require === "all"
-        ? validityFields.every((f) => (values[f] ?? "").length > 0)
-        : validityFields.some((f) => (values[f] ?? "").length > 0);
-    if (!satisfied) continue;
+    // §3.5 — validity only gates on declared string fields; written totally
+    // (no `as string`) even though the validator (§4, rule 6) makes a
+    // non-string validity field unreachable in practice.
+    const isFieldSatisfied = (f: string) => {
+      const v = values[f];
+      return typeof v === "string" && v.length > 0;
+    };
+    const satisfied = require === "all" ? validityFields.every(isFieldSatisfied) : validityFields.some(isFieldSatisfied);
+    if (!satisfied) return;
 
     items.push(values);
-  }
+  });
 
   // Matches all four parsers: the "no valid items" refusal is checked
-  // against the filtered array, *before* `maxItems` truncation — moot in
-  // practice (truncating a non-empty array cannot make it empty), but kept
-  // in the same order for fidelity.
+  // against the filtered array, *before* `sort` and `maxItems` (§3.6).
   if (items.length === 0) {
     return { ok: false, error: output.errors.empty };
   }
 
-  const truncated = output.maxItems != null ? items.slice(0, output.maxItems) : items;
+  // §3.6 — sort after the empty-refusal, before `maxItems`. Not evidenced by
+  // any single parser combining both (none does): truncating first would
+  // discard items the sort would otherwise have brought to the front, so
+  // sort-then-truncate is the decision taken here, not an observed fact.
+  const sortSpec = output.sort;
+  const sorted = sortSpec != null ? [...items].sort((a, b) => (a[sortSpec.field] as number) - (b[sortSpec.field] as number)) : items;
+
+  const truncated = output.maxItems != null ? sorted.slice(0, output.maxItems) : sorted;
   return { ok: true, kind: "list", items: truncated };
 }
 
