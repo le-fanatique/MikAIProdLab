@@ -36,14 +36,17 @@ import {
   type RenderParameter,
   type RenderVariable,
   type RenderVariables,
+  type RenderVariablesParameters,
 } from "./assembleDescriptorMessages";
 import {
   FREE_TEXT_RENDER_FORMS,
   MODE_RENDER_FORMS,
   MULTI_VARIABLE_RENDER_FORMS,
   PARAMETER_RENDER_FORMS,
+  VARIABLE_PARAMETER_RENDER_FORMS,
   VARIABLE_REGISTRY,
   VARIABLE_RENDER_FORMS,
+  type VariableParameterRenderInput,
 } from "./variables/registry";
 import type { LLMConfig, LLMPrompt } from "@/types/llm";
 
@@ -308,15 +311,17 @@ function resolveSelectedMode(
 
 // ---------------------------------------------------------------------------
 // Step 5 — assemble {system, user}. `assembleDescriptorMessages` (moved to
-// production by the previous round) takes four render dispatchers; this
+// production by the previous round) takes seven render dispatchers; this
 // section builds them generically from the resolved variable data plus
-// `variables/registry.ts`'s four render-form tables
+// `variables/registry.ts`'s five render-form tables
 // (`VARIABLE_RENDER_FORMS`, `MULTI_VARIABLE_RENDER_FORMS`,
-// `PARAMETER_RENDER_FORMS`, `MODE_RENDER_FORMS`) — the runner imports no
-// operation's module and holds no local table of its own (§3.1's
-// correction, reported by the previous round and fixed here: mode and
-// parameter render forms now live beside the resolvers, on the same model
-// as the two variable tables that already did).
+// `PARAMETER_RENDER_FORMS`, `MODE_RENDER_FORMS`,
+// `VARIABLE_PARAMETER_RENDER_FORMS` — the last added by
+// LLMW.BLOCK.VARPARAM.1, B7c-n4) — the runner imports no operation's module
+// and holds no local table of its own (§3.1's correction, reported by the
+// previous round and fixed here: mode and parameter render forms now live
+// beside the resolvers, on the same model as the two variable tables that
+// already did).
 // ---------------------------------------------------------------------------
 
 /**
@@ -391,6 +396,45 @@ function buildFreeTextDispatcher(freeText: string | undefined): { renderFreeText
   };
 
   return { renderFreeText };
+}
+
+/**
+ * `{variables, parameters, render}` dispatcher — LLMW.BLOCK.VARPARAM.1
+ * (B7c-n4). Unlike `buildVariableDispatchers` / `buildIntentDispatchers`
+ * above, `VARIABLE_PARAMETER_RENDER_FORMS` takes one object argument
+ * (`VariableParameterRenderInput`), built here from exactly what the block
+ * declares: the variables named in `variableIds`, looked up in `resolved`
+ * (undefined when not resolved — a declared-but-absent variable is passed
+ * through as `undefined`, same as `buildVariableDispatchers`'s
+ * `resolved[variableId]` above, never a thrown error); the parameters named
+ * in `parameterIds`, looked up in `parameters` (undefined when not supplied,
+ * same as `buildIntentDispatchers`'s `parameters?.[parameterId]` — the render
+ * form owns its own default, e.g. `?? 6`); and the operation's selected
+ * mode.
+ */
+function buildVariableParameterDispatcher(
+  resolved: Partial<Record<VariableId, unknown>>,
+  parameters: Record<string, number | string> | undefined,
+  selectedMode: string | undefined
+): { renderVariablesParameters: RenderVariablesParameters } {
+  const renderVariablesParameters: RenderVariablesParameters = (variableIds, parameterIds, render) => {
+    const table = VARIABLE_PARAMETER_RENDER_FORMS as unknown as Record<
+      string,
+      (input: VariableParameterRenderInput) => string
+    >;
+    const fn = table[render];
+    if (!fn) throw new Error(`runner: no variable-parameter render form ${render}`);
+
+    const variables: Partial<Record<VariableId, unknown>> = {};
+    for (const id of variableIds) variables[id] = resolved[id];
+
+    const params: Record<string, number | string | undefined> = {};
+    for (const id of parameterIds) params[id] = parameters?.[id];
+
+    return fn({ variables, parameters: params, mode: selectedMode });
+  };
+
+  return { renderVariablesParameters };
 }
 
 // ---------------------------------------------------------------------------
@@ -663,13 +707,15 @@ async function resolvePromptInternal(
   const { renderVariable, renderVariables } = buildVariableDispatchers(resolved, selectedMode);
   const { renderParameter, renderMode } = buildIntentDispatchers(intent.parameters, selectedMode);
   const { renderFreeText } = buildFreeTextDispatcher(intent.freeText);
+  const { renderVariablesParameters } = buildVariableParameterDispatcher(resolved, intent.parameters, selectedMode);
   const prompt = assembleDescriptorMessages(
     descriptor,
     renderVariable,
     renderParameter,
     renderMode,
     renderVariables,
-    renderFreeText
+    renderFreeText,
+    renderVariablesParameters
   );
 
   return { ok: true, prompt, config: config ?? null, resolved };

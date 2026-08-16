@@ -1,65 +1,27 @@
 // ---------------------------------------------------------------------------
-// descriptors/shotsFromSequence.ts — LLMW.DESCRIPTOR.LIST.1 (B7c)
+// descriptors/shotsFromSequence.ts — LLMW.DESCRIPTOR.LIST.1 (B7c), registered
+// by LLMW.BLOCK.VARPARAM.1 (B7c-n4)
 //
 // Descriptor for `shots.fromSequence`, matching `generateShotsFromSequenceDraft`
 // (`src/actions/llm/sequenceShots.ts`) and its builder
 // (`src/lib/prompts/shots-from-sequence.ts`, `buildShotsFromSequencePrompt`)
-// — the first `kind: "list"` descriptor (LLMW.OUTPUT.LIST.1/2, B7a/B7b) and
-// the first of the ticket's three candidate list-creating operations to
-// actually ship (§0 of the ticket: `sequences-from-outline` and asset
-// extraction both wait on a missing brick, named there but not built here).
+// — the first `kind: "list"` descriptor (LLMW.OUTPUT.LIST.1/2, B7a/B7b).
 //
-// THIS DESCRIPTOR IS DELIBERATELY NOT REGISTERED IN `DESCRIPTORS`
-// (`descriptors/index.ts`), and this is not a leftover — it is the point of
-// the B7c review correction. `DESCRIPTORS` is the table the runner and the
-// `/settings/llm-workflows` test bench actually execute. Wiring this
-// descriptor into it today would not fail loudly: it would silently produce
-// a wrong prompt every time a user picks a `targetCount` other than 6.
-//
-// Why: `buildVariableDispatchers` (`runner.ts:347-353`) calls
-// `fn(...args, selectedMode)` — every `{variables, render}` block's render
-// form receives the resolved variables, then `selectedMode` as its trailing
-// argument, never `intent.parameters`. This descriptor declares no
-// `intent.mode`, so `selectedMode` is always `undefined`. The four render
-// forms this descriptor relies on
-// (`shotsFromSequence.systemPathABody` / `systemPathBBody` /
-// `templatePathA` / `templatePathB`, in `variables/registry.ts`) all take
-// `targetCount` as that same trailing slot, and all fall back with
-// `targetCount ?? 6` when it is missing. Ran through the real runner as-is,
-// every one of them would receive `undefined` in that slot and silently
-// render a prompt asking for exactly 6 shots, regardless of what the user
-// actually requested via `intent.parameters.targetCount` — no error, no
-// warning, just a wrong number baked into the prompt text.
-//
-// `buildShotsFromSequencePrompt` branches entirely on
-// `sequence.sequencePrompt` (`shots-from-sequence.ts:71-72`,
-// `hasSequencePrompt`), not on a user-selected `intent.mode`: Path A (an
-// Approved Sequence Prompt exists) and Path B (it does not) produce two
-// structurally different `{system, user}` pairs, both still needing
-// `targetCount` throughout. The frozen `Block` union (`types.ts`) lets a
-// `{variables, render}` block see resolved variable data, and a `{mode,
-// render}` block see the selected `intent.mode`, but no block sees both
-// resolved variable data *and* an `intent.parameters` value at once. A
-// plain per-branch split into separate blocks cannot route around this
-// either: the wording itself depends on the branch (Path A says "Your task
-// is to generate exactly N shots for the given sequence.", Path B says
-// "Your task is to break a production sequence into exactly N individual
-// shots." — `variables/registry.ts`'s `renderShotsFromSequenceSystemPathABody`
-// / `...PathBBody`), so a bare `{parameter: "targetCount"}` block, which
-// has no notion of which branch is active, cannot stand in for either
-// wording. The missing brick is therefore a `Block` variant that carries
-// both variables and parameters together — a real contract change to
-// `types.ts` and `runner.ts`, out of this ticket's scope, and named here so
-// whoever builds it does not have to rediscover this wall from scratch.
-//
-// What IS proven here: `assembleDescriptorMessages`, fed this descriptor's
-// blocks through a hand-built test dispatcher that threads `targetCount`
-// directly (same pattern as
-// `tests/llmWorkspace/outline.generate.render.test.ts`), reproduces
-// `buildShotsFromSequencePrompt`'s output byte for byte — see
-// `tests/llmWorkspace/shotsFromSequence.render.test.ts`. The descriptor's
-// *content* is correct and tested; only its production wiring through the
-// generic runner is what remains unbuilt.
+// B7c delivered this descriptor deliberately unregistered: `buildVariableDispatchers`
+// (`runner.ts`) called every `{variables, render}` block positionally
+// (`fn(...resolvedVariables, selectedMode)`), with no channel from
+// `intent.parameters` into a render form — and the four render forms this
+// descriptor needs (`shotsFromSequence.systemPathABody` / `systemPathBBody` /
+// `templatePathA` / `templatePathB`, in `variables/registry.ts`) all need
+// both a resolved variable's data (`sequence.sequencePrompt`, to pick a
+// branch) *and* `intent.parameters.targetCount` (the number embedded in that
+// branch's wording) at once. Registering it as-is would have silently baked
+// a wrong shot count into the prompt for any `targetCount` other than 6, no
+// error, no warning. B7c-n4 builds the missing `Block` variant this needed
+// (`{variables, parameters, render}`, `types.ts`) and moves the four render
+// forms onto it (`VARIABLE_PARAMETER_RENDER_FORMS`, `variables/registry.ts`)
+// — see that table's own header for the calling convention. This descriptor
+// is now registered in `DESCRIPTORS` (`descriptors/index.ts`).
 //
 // `context.variables` widens from the two the ticket's §2.1 names
 // (`PROJECT.IDENTITY`, `SEQ.CONTEXT`) to three: `SEQ.CURRENT_PROMPT` is
@@ -101,9 +63,12 @@ export const shotsFromSequenceDescriptor: OperationDescriptor = {
       blocks: [
         // Exactly one of these two is ever non-empty — gated on
         // `sequence.sequencePrompt`'s presence
-        // (`shots-from-sequence.ts:71-72`), not on a mode.
-        { variables: ["SEQ.CURRENT_PROMPT"], render: "shotsFromSequence.systemPathABody" },
-        { variables: ["SEQ.CURRENT_PROMPT"], render: "shotsFromSequence.systemPathBBody" },
+        // (`shots-from-sequence.ts:71-72`), not on a mode. Both need
+        // `targetCount` too (the number embedded in each branch's wording),
+        // hence the `{variables, parameters, render}` variant
+        // (LLMW.BLOCK.VARPARAM.1, B7c-n4).
+        { variables: ["SEQ.CURRENT_PROMPT"], parameters: ["targetCount"], render: "shotsFromSequence.systemPathABody" },
+        { variables: ["SEQ.CURRENT_PROMPT"], parameters: ["targetCount"], render: "shotsFromSequence.systemPathBBody" },
         // `CONTINUITY_RULES` (`shots-from-sequence.ts:58-67`) — identical
         // in both paths, own leading `"\n"` reopening the blank line
         // (§4.1 correction 4's device, as `outline.ts`'s tail block uses).
@@ -134,9 +99,18 @@ CONTINUITY RULES:
       // Exactly one of these two is ever non-empty — same gate as the
       // system blocks above, over the full user message
       // (`shots-from-sequence.ts:90-121` for Path A,
-      // `shots-from-sequence.ts:131-151` for Path B).
-      { variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT", "SEQ.CURRENT_PROMPT"], render: "shotsFromSequence.templatePathA" },
-      { variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT", "SEQ.CURRENT_PROMPT"], render: "shotsFromSequence.templatePathB" },
+      // `shots-from-sequence.ts:131-151` for Path B). Both also need
+      // `targetCount`.
+      {
+        variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT", "SEQ.CURRENT_PROMPT"],
+        parameters: ["targetCount"],
+        render: "shotsFromSequence.templatePathA",
+      },
+      {
+        variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT", "SEQ.CURRENT_PROMPT"],
+        parameters: ["targetCount"],
+        render: "shotsFromSequence.templatePathB",
+      },
     ],
     separator: "\n",
   },

@@ -9,7 +9,9 @@ import {
   type ProjectIdentityData,
   type SeqContextData,
   type SeqCurrentPromptData,
+  type VariableParameterRenderInput,
 } from "@/lib/llmWorkspace/variables/registry";
+import type { VariableId } from "@/lib/llmWorkspace/types";
 import { buildShotsFromSequencePrompt } from "@/lib/prompts/shots-from-sequence";
 import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
@@ -18,12 +20,13 @@ import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescripto
 // `shotsFromSequenceDescriptor`'s blocks must equal, byte-for-byte, what
 // `buildShotsFromSequencePrompt` produces for the same input.
 //
-// The dispatcher below threads `targetCount` into the Path-selecting
-// multi-variable render forms directly via closure, the same way the
-// production `runner.ts` cannot yet (see `descriptors/shotsFromSequence.ts`'s
-// header comment and `.agents/executor_report.md`) — this proves the
-// descriptor's render forms produce the right text for a given input, not
-// that `runner.ts`'s generic dispatch can supply that input today.
+// The dispatcher below builds the same `VariableParameterRenderInput` object
+// the real `runner.ts` dispatch (`buildVariableParameterDispatcher`) builds
+// — subsetting the resolved variables and parameters down to what each block
+// actually declares — so this level-1 proof exercises the render forms'
+// real (post-B7c-n4) calling convention, not a hand-threaded stand-in.
+// `tests/llmWorkspace/shotsFromSequence.runner.test.ts` is the level-2 proof
+// that the real runner dispatch produces the same result end to end.
 // ---------------------------------------------------------------------------
 
 function assemble(
@@ -32,6 +35,13 @@ function assemble(
   currentPrompt: SeqCurrentPromptData,
   targetCount: number | undefined
 ) {
+  const allVariables: Partial<Record<VariableId, unknown>> = {
+    "PROJECT.IDENTITY": project,
+    "SEQ.CONTEXT": seq,
+    "SEQ.CURRENT_PROMPT": currentPrompt,
+  };
+  const allParameters: Record<string, number | string | undefined> = { targetCount };
+
   return assembleDescriptorMessages(
     shotsFromSequenceDescriptor,
     (variableId, render) => {
@@ -45,19 +55,21 @@ function assemble(
     },
     undefined,
     (variableIds, render) => {
-      if (render === "shotsFromSequence.systemPathABody") {
-        return renderShotsFromSequenceSystemPathABody(currentPrompt, targetCount);
-      }
-      if (render === "shotsFromSequence.systemPathBBody") {
-        return renderShotsFromSequenceSystemPathBBody(currentPrompt, targetCount);
-      }
-      if (render === "shotsFromSequence.templatePathA") {
-        return renderShotsFromSequenceTemplatePathA(project, seq, currentPrompt, targetCount);
-      }
-      if (render === "shotsFromSequence.templatePathB") {
-        return renderShotsFromSequenceTemplatePathB(project, seq, currentPrompt, targetCount);
-      }
       throw new Error(`unexpected multi-variable block ${variableIds.join(",")}::${render}`);
+    },
+    undefined,
+    (variableIds, parameterIds, render) => {
+      const variables: Partial<Record<VariableId, unknown>> = {};
+      for (const id of variableIds) variables[id] = allVariables[id];
+      const parameters: Record<string, number | string | undefined> = {};
+      for (const id of parameterIds) parameters[id] = allParameters[id];
+      const input: VariableParameterRenderInput = { variables, parameters, mode: undefined };
+
+      if (render === "shotsFromSequence.systemPathABody") return renderShotsFromSequenceSystemPathABody(input);
+      if (render === "shotsFromSequence.systemPathBBody") return renderShotsFromSequenceSystemPathBBody(input);
+      if (render === "shotsFromSequence.templatePathA") return renderShotsFromSequenceTemplatePathA(input);
+      if (render === "shotsFromSequence.templatePathB") return renderShotsFromSequenceTemplatePathB(input);
+      throw new Error(`unexpected variables-parameters block ${variableIds.join(",")}/${parameterIds.join(",")}::${render}`);
     }
   );
 }

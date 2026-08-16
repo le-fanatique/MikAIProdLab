@@ -42,6 +42,11 @@ type Props = {
 function describeBlock(block: Block): string {
   if ("text" in block) return `text: "${block.text}"`;
   if ("variable" in block) return `variable: ${block.variable} :: ${block.render}`;
+  // "parameters" must be tested before "variables": the mixed variant carries both
+  // keys, and testing "variables" first would hide the parameters it also reads.
+  if ("parameters" in block) {
+    return `variables: [${block.variables.join(", ")}], parameters: [${block.parameters.join(", ")}] :: ${block.render}`;
+  }
   if ("variables" in block) return `variables: [${block.variables.join(", ")}] :: ${block.render}`;
   if ("parameter" in block) return `parameter: ${block.parameter} :: ${block.render}`;
   if ("mode" in block) return `mode :: ${block.render}`;

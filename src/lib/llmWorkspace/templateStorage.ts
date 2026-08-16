@@ -15,8 +15,9 @@
 //      is a known `VariableId`, every `commit` entry a declared `ActionId`,
 //      every `anchor.entity` / `output.target.entity` an `EntityKind`, and
 //      every render form referenced by a block in `expertise.system.blocks`
-//      or `template.blocks` actually exists in one of the four render-form
-//      tables of `./variables/registry.ts`.
+//      or `template.blocks` actually exists in one of the five render-form
+//      tables of `./variables/registry.ts` (widened from four by
+//      LLMW.BLOCK.VARPARAM.1, B7c-n4's `VARIABLE_PARAMETER_RENDER_FORMS`).
 //
 // `runner.ts:307-341` throws on an unknown render form (§3 of the ticket) —
 // this is the one place that refusal happens before Run, provable without a
@@ -41,6 +42,7 @@ import {
   MODE_RENDER_FORMS,
   MULTI_VARIABLE_RENDER_FORMS,
   PARAMETER_RENDER_FORMS,
+  VARIABLE_PARAMETER_RENDER_FORMS,
   VARIABLE_REGISTRY,
   VARIABLE_RENDER_FORMS,
 } from "./variables/registry";
@@ -96,6 +98,31 @@ function validateBlock(block: unknown, path: string): string | null {
     return null;
   }
 
+  // Checked before the plain `"variables" in block` branch below: the
+  // `{variables, parameters, render}` variant (LLMW.BLOCK.VARPARAM.1,
+  // B7c-n4) also carries a `variables` key, so it must be discriminated on
+  // its unique key (`parameters`) first — the same order
+  // `assembleDescriptorMessages.ts`'s runtime dispatch uses, for the same
+  // reason (see that file's own comment).
+  if ("parameters" in block) {
+    if (!Array.isArray(block.variables) || block.variables.length === 0) {
+      return `${path}: "variables" must be a non-empty array.`;
+    }
+    for (const id of block.variables) {
+      if (!isVariableId(id)) return `${path}: unknown variable id "${String(id)}".`;
+    }
+    if (!Array.isArray(block.parameters) || block.parameters.length === 0) {
+      return `${path}: "parameters" must be a non-empty array.`;
+    }
+    for (const p of block.parameters) {
+      if (typeof p !== "string") return `${path}: "parameters" entries must be strings.`;
+    }
+    if (typeof block.render !== "string") return `${path}: "render" must be a string.`;
+    const table = VARIABLE_PARAMETER_RENDER_FORMS as unknown as Record<string, unknown>;
+    if (!table[block.render]) return `${path}: unknown variable-parameter render form "${block.render}".`;
+    return null;
+  }
+
   if ("variables" in block) {
     if (!Array.isArray(block.variables) || block.variables.length === 0) {
       return `${path}: "variables" must be a non-empty array.`;
@@ -133,7 +160,7 @@ function validateBlock(block: unknown, path: string): string | null {
     return null;
   }
 
-  return `${path}: block matches none of the known shapes (text/variable/variables/parameter/mode/freeText).`;
+  return `${path}: block matches none of the known shapes (text/variable/variables/variables+parameters/parameter/mode/freeText).`;
 }
 
 function validateBlockList(value: unknown, path: string): string | null {

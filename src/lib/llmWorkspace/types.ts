@@ -419,11 +419,21 @@ export type OperationDescriptor = {
  * `intent.freeText` has no owning variable, no parameter id and is not the
  * selected mode, so it needs its own block shape rather than borrowing one
  * of the other four's).
+ *
+ * A seventh variant, `{variables, parameters, render}` (LLMW.BLOCK.VARPARAM.1,
+ * B7c-n4), declares both a set of variables and a set of `intent.parameters`
+ * entries a render form reads together — needed when the wording itself
+ * branches on a variable's data (e.g. whether an Approved Sequence Prompt
+ * exists) while also embedding a parameter value (the target shot count) in
+ * that same branch's text, as `shots.fromSequence` does. Declares every
+ * variable and parameter it reads by name, on the same principle as
+ * `{variables, render}` above.
  */
 export type Block =
   | { text: string }
   | { variable: VariableId; render: string }
   | { variables: VariableId[]; render: string } // a render form that reads more than one variable — declares all of them
+  | { variables: VariableId[]; parameters: string[]; render: string } // a render form that reads variables AND intent.parameters together
   | { parameter: string; render: string } // an intent parameter, e.g. targetSections
   | { mode: true; render: string } // the operation's selected intent.mode
   | { freeText: true; render: string }; // the operation's free-text director's note (intent.freeText)

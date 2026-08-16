@@ -1082,44 +1082,27 @@ export function renderShotRetakeFreeTextDirective(freeText: string | undefined):
 }
 
 // ---------------------------------------------------------------------------
-// `shots.fromSequence` render forms — LLMW.DESCRIPTOR.LIST.1 (B7c). Read
-// verbatim off `buildShotsFromSequencePrompt`
-// (`src/lib/prompts/shots-from-sequence.ts`), which branches entirely on
-// `sequence.sequencePrompt`'s presence (`hasSequencePrompt`,
-// `shots-from-sequence.ts:71-72`) rather than on a mode. The four functions
-// below (two system-path bodies, two template paths) are the first render
-// forms in this registry to need both a resolved variable's data *and* the
-// operation's `targetCount` — see `descriptors/shotsFromSequence.ts`'s own
-// header comment for why that combination has no clean home in the frozen
-// `Block` union, and for the production-wiring gap it leaves for B7e. Every
-// one of the four is exclusive with its Path sibling: exactly one renders
-// non-empty for any given `sequence.sequencePrompt`.
-//
-// WARNING — their second parameter, `targetCount`, is NOT yet fed by
-// `runner.ts`. `buildVariableDispatchers` (`runner.ts:347-353`) calls every
-// `{variables, render}` form as `fn(...resolvedVariables, selectedMode)` —
-// there is no channel from `intent.parameters` into this slot. Below,
-// `MULTI_VARIABLE_RENDER_FORMS` (and `PARAMETER_RENDER_FORMS`, for
-// `shotsFromSequence.jsonSchemaBlock`) carry no `satisfies` constraint
-// against these functions' real signatures, so the compiler cannot catch
-// this mismatch either — `tsc` accepts `fn(...args, selectedMode)` against
-// a function typed `(data, targetCount: number | undefined) => string`
-// without complaint. `shots.fromSequence` is kept out of `DESCRIPTORS`
-// (`descriptors/index.ts`) precisely because of this: today, the only
-// caller that invokes these four functions correctly is
-// `tests/llmWorkspace/shotsFromSequence.render.test.ts`, via a hand-built
-// dispatcher that threads `targetCount` directly instead of through
-// `runner.ts`.
+// `shots.fromSequence` render forms — LLMW.DESCRIPTOR.LIST.1 (B7c), rewired by
+// LLMW.BLOCK.VARPARAM.1 (B7c-n4). Read verbatim off
+// `buildShotsFromSequencePrompt` (`src/lib/prompts/shots-from-sequence.ts`),
+// which branches entirely on `sequence.sequencePrompt`'s presence
+// (`hasSequencePrompt`, `shots-from-sequence.ts:71-72`) rather than on a
+// mode. The four functions below (two system-path bodies, two template
+// paths) are the first render forms in this registry to need both a resolved
+// variable's data *and* the operation's `targetCount` at once — the gap B7c
+// named and left unbuilt (see its own git history) — and now take the single
+// `VariableParameterRenderInput` object the new `{variables, parameters,
+// render}` block variant dispatches through, instead of positional
+// arguments. Every one of the four is exclusive with its Path sibling:
+// exactly one renders non-empty for any given `sequence.sequencePrompt`.
 // ---------------------------------------------------------------------------
 
 /** System, Path A (Approved Sequence Prompt present) — `shots-from-sequence.ts:91-102`, up to (not including) the blank line before `CONTINUITY_RULES`. Empty when there is no Approved Sequence Prompt. */
-export function renderShotsFromSequenceSystemPathABody(
-  currentPrompt: SeqCurrentPromptData,
-  targetCount: number | undefined
-): string {
+export function renderShotsFromSequenceSystemPathABody(input: VariableParameterRenderInput): string {
+  const currentPrompt = input.variables["SEQ.CURRENT_PROMPT"] as SeqCurrentPromptData;
   const hasSequencePrompt = (currentPrompt.sequencePrompt ?? "").trim().length > 0;
   if (!hasSequencePrompt) return "";
-  const count = targetCount ?? 6;
+  const count = input.parameters.targetCount ?? 6;
   return `You are a professional cinematographer and storyboard supervisor.
 Your task is to generate exactly ${count} shots for the given sequence.
 Each shot is a single uninterrupted camera take.
@@ -1134,13 +1117,11 @@ AUTHORITY RULES:
 }
 
 /** System, Path B (no Approved Sequence Prompt) — `shots-from-sequence.ts:132-137`, up to (not including) the blank line before `CONTINUITY_RULES`. Empty when an Approved Sequence Prompt exists. */
-export function renderShotsFromSequenceSystemPathBBody(
-  currentPrompt: SeqCurrentPromptData,
-  targetCount: number | undefined
-): string {
+export function renderShotsFromSequenceSystemPathBBody(input: VariableParameterRenderInput): string {
+  const currentPrompt = input.variables["SEQ.CURRENT_PROMPT"] as SeqCurrentPromptData;
   const hasSequencePrompt = (currentPrompt.sequencePrompt ?? "").trim().length > 0;
   if (hasSequencePrompt) return "";
-  const count = targetCount ?? 6;
+  const count = input.parameters.targetCount ?? 6;
   return `You are a professional cinematographer and storyboard supervisor.
 Your task is to break a production sequence into exactly ${count} individual shots.
 Each shot is a single uninterrupted camera take.
@@ -1175,15 +1156,13 @@ shot_prompt must be a dense, cinematic visual description suitable for AI image/
 }
 
 /** Template, Path A (Approved Sequence Prompt present) — `shots-from-sequence.ts:74-121`. Empty when there is no Approved Sequence Prompt. */
-export function renderShotsFromSequenceTemplatePathA(
-  project: ProjectIdentityData,
-  seq: SeqContextData,
-  currentPrompt: SeqCurrentPromptData,
-  targetCount: number | undefined
-): string {
+export function renderShotsFromSequenceTemplatePathA(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const seq = input.variables["SEQ.CONTEXT"] as SeqContextData;
+  const currentPrompt = input.variables["SEQ.CURRENT_PROMPT"] as SeqCurrentPromptData;
   const approvedPrompt = (currentPrompt.sequencePrompt ?? "").trim();
   if (!approvedPrompt) return "";
-  const count = targetCount ?? 6;
+  const count = input.parameters.targetCount ?? 6;
 
   const seqContext = [
     `Title: ${seq.title}`,
@@ -1220,15 +1199,13 @@ Generate exactly ${count} shots. Every shot must follow the subject, location, v
 }
 
 /** Template, Path B (no Approved Sequence Prompt) — `shots-from-sequence.ts:124-151`. Empty when an Approved Sequence Prompt exists. */
-export function renderShotsFromSequenceTemplatePathB(
-  project: ProjectIdentityData,
-  seq: SeqContextData,
-  currentPrompt: SeqCurrentPromptData,
-  targetCount: number | undefined
-): string {
+export function renderShotsFromSequenceTemplatePathB(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const seq = input.variables["SEQ.CONTEXT"] as SeqContextData;
+  const currentPrompt = input.variables["SEQ.CURRENT_PROMPT"] as SeqCurrentPromptData;
   const approvedPrompt = (currentPrompt.sequencePrompt ?? "").trim();
   if (approvedPrompt) return "";
-  const count = targetCount ?? 6;
+  const count = input.parameters.targetCount ?? 6;
 
   const projectLines: string[] = [`Project: ${project.name}`];
   if (project.pitch?.trim()) projectLines.push(`Pitch: ${project.pitch}`);
@@ -1329,10 +1306,6 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "shotPrompt.generateContextLines": renderShotPromptGenerateContextLines,
   "shotPrompt.transformBlock": renderShotCurrentPromptTransformBlock,
   "shotRetake.otherShotsLines": renderSeqShotsOtherShotsLines,
-  "shotsFromSequence.systemPathABody": renderShotsFromSequenceSystemPathABody,
-  "shotsFromSequence.systemPathBBody": renderShotsFromSequenceSystemPathBBody,
-  "shotsFromSequence.templatePathA": renderShotsFromSequenceTemplatePathA,
-  "shotsFromSequence.templatePathB": renderShotsFromSequenceTemplatePathB,
 } as const;
 
 /**
@@ -1348,6 +1321,51 @@ export const PARAMETER_RENDER_FORMS = {
   "outline.sectionInstructionBullet": renderOutlineTargetSectionsBullet,
   "shotsFromSequence.jsonSchemaBlock": renderShotsFromSequenceJsonSchemaBlock,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Render forms referenced by `{variables, parameters, render}` blocks
+// (LLMW.BLOCK.VARPARAM.1, B7c-n4) — a render form that needs both a set of
+// resolved variables and a set of `intent.parameters` values in the same
+// call, keyed by its `render` string alone, same model as
+// `MULTI_VARIABLE_RENDER_FORMS` / `PARAMETER_RENDER_FORMS` above.
+//
+// Deliberate convention divergence (§1 of the ticket): every other
+// render-form table above is called *positionally* by `runner.ts`
+// (`fn(...resolvedVariables, selectedMode)`), against tables typed as
+// `Record<string, (...args: unknown[]) => string>` — an untyped cast that
+// leaves a wrong argument order or count uncaught by `tsc`, exactly the class
+// of defect B7c almost shipped (see the runner's own dispatch comment).
+// `VARIABLE_PARAMETER_RENDER_FORMS` instead takes **one object argument**
+// (`VariableParameterRenderInput`) and is declared `satisfies Record<string,
+// (input: VariableParameterRenderInput) => string>` — a wrong signature here
+// fails `tsc`, not a silent runtime mismatch. The five existing tables keep
+// their positional convention unchanged: their forms are shipped and proven
+// in production, and rewriting them is a chantier of its own, out of this
+// ticket's scope.
+// ---------------------------------------------------------------------------
+
+/**
+ * The one-object calling convention every `VARIABLE_PARAMETER_RENDER_FORMS`
+ * entry receives: every variable the block declares in `variables` (resolved
+ * data, keyed by `VariableId`, exactly as the runner already keys `resolved`
+ * elsewhere), every parameter the block declares in `parameters` (from
+ * `intent.parameters`, absent when the caller did not supply it — the render
+ * form is responsible for its own default, on the same model every other
+ * parameter/mode render form already follows), and the operation's selected
+ * `intent.mode`, when it has one.
+ */
+export type VariableParameterRenderInput = {
+  variables: Partial<Record<VariableId, unknown>>;
+  parameters: Record<string, number | string | undefined>;
+  mode: string | undefined;
+};
+
+export const VARIABLE_PARAMETER_RENDER_FORMS = {
+  "shotsFromSequence.systemPathABody": renderShotsFromSequenceSystemPathABody,
+  "shotsFromSequence.systemPathBBody": renderShotsFromSequenceSystemPathBBody,
+  "shotsFromSequence.templatePathA": renderShotsFromSequenceTemplatePathA,
+  "shotsFromSequence.templatePathB": renderShotsFromSequenceTemplatePathB,
+} as const satisfies Record<string, (input: VariableParameterRenderInput) => string>;
 
 /**
  * Render forms referenced by `{mode: true, render}` blocks — the
