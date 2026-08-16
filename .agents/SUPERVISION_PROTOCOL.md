@@ -143,6 +143,24 @@ Supervisor: independent review + independent re-run of the checks
 - **The supervisor never commits on its own verdict alone.** A commit requires
   either the user's explicit go, or a Codex verdict, per the option the user
   chose for the current phase.
+
+  **Option in force for the Chantier 1 queue — decided by the user 2026-08-17.**
+  A **standing go**: the supervisor commits and pushes each ticket it approves,
+  after re-running the checks itself. It stops and asks the user only for:
+
+  1. a known regression that would ship with the commit;
+  2. a product decision (behaviour, naming, repository policy);
+  3. a schema, migration or dependency authorization;
+  4. two failed corrective rounds, or a blocker that changes the ticket's scope.
+
+  Paid browser validation is **not** on that list: the user authorized it in
+  advance, on the condition that it always runs against a **throwaway project
+  the supervisor creates and deletes**, with the cost reported. Engine-only
+  tickets need none.
+
+  This standing go covers the Chantier 1 queue (`docs/LLM_WORKSPACE_ARCHITECTURE.md`
+  §11.3). It is not a blanket authorization for anything else, and it lapses
+  when that queue ends.
 - **Never `git add .`.** Explicit paths only.
 - **No schema, migration or dependency change** without written authorization
   in the ticket body.
