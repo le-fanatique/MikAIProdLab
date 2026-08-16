@@ -1112,12 +1112,33 @@ cases.** This list supersedes the ordering written earlier the same day: B7a
 proved there are three list migrations and not four, and the user's challenge
 established that nothing in the queue served UC1/UC2/UC3.
 
+### The governing rule — a node library, decided by the user on 2026-08-16
+
+**When an operation needs something the workspace cannot express, build the
+missing brick. Do not drop the operation.** The user stated it in the terms he
+works in: this is a nodal system. You want an action, you look for a node that
+does it; if none exists you develop the node, and your library has grown.
+
+This settles a question that had been answered the wrong way twice. B7a met
+`castingSuggestions` and recorded it as "not representable"; B7c's preparation
+met two more operations and first framed them as "excluded". Both framings are
+dead ends — an operation the workspace never learns to express keeps its
+hand-written code forever, and Phase C's deletion never completes for it.
+
+Two consequences. A gap is a **ticket to write a brick**, not a reason to
+exclude. And a brick is worth building when more than one operation waits on it:
+the post-response stage below is wanted by two, which is what turns it from a
+special case into library growth.
+
 ### Chantier 1 — finishing the workspace
 
 | # | Ticket | Delivers | UC impact |
 | --- | --- | --- | --- |
 | ~~B7b~~ | ~~Format extensions~~ | **Delivered 2026-08-16, commit `12fdcc7`.** The five declarative gaps plus the selection declaration. Item fields are now a union discriminated on `type` (`string` / `number` / `enum`), `RunOperationResult` list items carry `string \| number`, and `selection.formDataKey` is mandatory. The three representable parsers are now proven by **complete** field equality, not string-only. See `docs/PROJECT_STATE.md`, section B7b. | none |
-| B7c | The three row-creating descriptors | `shots-from-sequence`, asset extraction, `sequences-from-outline`, with byte-for-byte prompt equality against the existing builders (B1c discipline). | none |
+| B7c | **One** row-creating descriptor | `shots-from-sequence` alone, with byte-for-byte prompt equality against its builder (B1c discipline). The other two were read before the ticket was written and each needs a brick the library does not have yet — see the three rows below. This one needs none, so it ships first and proves the list format end to end on a real operation. | none |
+| B7c-n1 | **Node — boolean and multi-choice inputs** | `intent.parameters[].type` knows `"integer"` and `"string"` only. Asset extraction reads seven booleans from its form (`includeShots` plus six asset-type toggles aggregated into an array, refusing when none is checked). A missing input socket type, not a wall. | none |
+| B7c-n2 | **Node — project-scope collection variables** | All fourteen registry entries resolve *one* entity. Asset extraction needs a project's sequences, shots and existing assets. Wanted again by anything that reasons over a whole project. | none |
+| B7c-n3 | **Node — the post-response stage** | The pipeline has no place between "parse the response" and "show it to the user". `sequences-from-outline` overwrites the model's titles and summaries with the outline's own sections there (`sequenceGeneration.ts:148-155`); `castingSuggestions` verifies there that the ids the model proposed exist in the database, and computes `alreadyAssigned`. **Two operations, one missing stage** — which is what justifies building it rather than special-casing each. Supersedes the framing in B7h below. | none |
 | B7d | List mode in `ProposalPanel` | Propose → **cherry-pick** → approve. The selection is the new primitive; object mode has no equivalent. | none |
 | B7e-g | The three migrations | One at a time, each preserving observable behaviour. | none |
 | B7h | Casting | **Deliberately not decided — user's decision, 2026-08-15.** B7b does not need the answer: it ships the five extensions and the selection declaration either way. Once numeric item fields exist, a validity rule over *typed* fields either falls out of them naturally — making the migration nearly free — or demands a mechanism of its own. The arbitration then rests on a price rather than an intuition, and costs nothing to postpone since casting is last in the queue regardless. Whatever is decided, it still needs **reference hydration**: resolving proposed ids to names for display, the generic need of any reference-producing operation, and the half no format extension solves. | none |
