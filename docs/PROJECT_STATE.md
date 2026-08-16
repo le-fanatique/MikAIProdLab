@@ -755,6 +755,100 @@ B6c1 shipped, so B7d inherits it rather than causing it. Its own ticket.
 Also outstanding, pre-existing: **B7c-w and B7c-w2 have no section here**,
 though both are committed (`85ea5ac`, `e5fa0a4`). Only §11.3 records them.
 
+### B7d-f — the bench's silent Approve (2026-08-17)
+
+`LLMW.BENCH.CONFIRM.1`, commit `f892850`. Approving in the bench created rows
+and said nothing: the panel fell back to its Run state, leaving only a query
+parameter the page never read. Pre-existing and identical for the two
+object-mode `redirectOnly` actions B6c1 shipped — the production surfaces have
+consumed these parameters all along through a `saved` prop.
+
+**A banner alone would have duplicated knowledge.** `BENCH_RETURN_TO_EXCLUDED_KEYS`
+was a hand-written list of the same keys, so the keys become one table,
+`REDIRECT_CONFIRMATION_KEYS`, constrained by
+`satisfies Record<RedirectOnlyActionId, …>`, and both the exclusion list and
+the banner derive from it. **That constraint is the deliverable**: a future
+`redirectOnly` action does not compile until it declares how it reports itself
+— which is to say, until it stops being able to write in silence. Removing an
+entry fails `tsc` with TS1360.
+
+**The supervisor's frozen contract was wrong**, and the executor caught it: the
+table was frozen at three entries where `RedirectOnlyActionId` has five. The
+contract reasoned about which ids `planBenchCommit` can *reach*, where
+`satisfies` is a type-level check over the whole union. `createSelectedAssets`
+and `createGeneratedSequences` were declared from their own actions' redirect
+keys rather than by weakening the constraint, and both render nothing — no
+wording was frozen for them and none was invented.
+
+**A real build constraint, learned here:** `benchRun.ts` is pulled into the
+client bundle through `BenchRunPanel`, so a runtime import from `bench.ts`
+drags `runner → llm → comfy → fs/promises` in and the build fails. Only the
+type is imported; the one-line reader is local, duplicated on purpose.
+
+Validated by forging URLs rather than approving anything — the banner is a pure
+function of the query string, so nine cases were played with no model call and
+no write.
+
+### B7e — the first list migration, and the bound that was decoration (2026-08-17)
+
+`LLMW.MIGRATE.LIST.1`, commit `c6ad874`. `generateShotsFromSequenceDraft`
+becomes a thin adapter over `runOperation`, the gesture the seven object-mode
+operations already made. The four guards it carried are the runner's now, and
+the descriptor's `messages` reproduces all four strings verbatim, so nothing
+the user reads changed.
+
+**`SequenceShotsLLMAssistPanel` was never opened.** The adapter keeps the exact
+return shape, so the panel had no reason to move — and the cherry-pick
+selection stayed a bench capability instead of arriving in production through
+the back door of a migration. The supervisor had floated adding it; the
+migration pattern dissolved the question.
+
+**The contract was indiscernibility, not "it works".** Two gaps stood in the
+way: `readStringField` always produces a value, so `""` arrives where
+`normalizeShot` produced `null`; and an out-of-bounds number is dropped
+entirely by the `omit` fallback where the old code kept the key with `null`.
+Both are bridged, and proven by an equality test against a value computed by
+hand from the pre-migration code, with a comment on every `null` naming the old
+line it came from. B7d's bridge was reused rather than copied —
+`benchListSelection.test.ts` passing **unmodified** is what proves the
+extraction changed nothing.
+
+**It shipped with one reported regression**, closed by the section below: the
+old code pulled an out-of-range shot count back to 6, the new one let it reach
+the prompt. Re-implementing the bound in the adapter would have duplicated a
+rule the descriptor already declares, so it was reported rather than patched
+locally — the user arbitrated to commit and fix it in the runner next.
+
+### B7e-n — the runner enforces what the descriptors declare (2026-08-17)
+
+`LLMW.PARAM.BOUNDS.1`, commit `e67a187`. `intent.parameters` has carried
+`default`, `min` and `max` since B1a and **the runner enforced none of them**;
+the render forms each patched around it with their own `?? 6`.
+
+**The rule was read, not invented.** Both integer parameters the product has
+behaved identically before migration: `targetCount` fell back to its declared
+`6`, `targetSections` — which declares no default — fell back to being omitted.
+One rule reproduces both: valid if it satisfies its type and, for an integer,
+its declared bounds; otherwise the declared `default`, or dropped when there is
+none. **Never clamped to `min`/`max`** — clamping would look smarter and would
+not be what either action did. An undeclared key is dropped.
+
+Applied **once**, in `resolvePromptInternal`, upstream of both dispatchers. That
+single point also covers the bench for free: its parameter control is driven by
+the query string and still accepts any finite number, but every path reaches the
+model through `runOperation`. No bench file was touched.
+
+The proof runs through the real `resolveOperationPrompt`, because the effect
+being fixed is *what the model is asked* — `targetCount: 9999` must produce a
+prompt asking for 6, and an out-of-range `targetSections` must produce a prompt
+identical character for character to one built with no parameter. Removing the
+bounds check fails five of nine cases. **No existing test was modified**, which
+is the whole claim that no observable behaviour moved.
+
+**What it means beyond the bug.** §7.3 of the vision has the author prototyping
+without a dev ticket. A declaration the engine ignores is a trap for exactly
+that author: write `min: 1, max: 30` and watch nothing enforce it.
+
 ### B9a — the plain-language directive becomes real (2026-08-15)
 
 `LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
