@@ -34,7 +34,7 @@ the other two are untouched), the `getPromptCompilerPreset` orphan is deleted,
 and `translationPrompt.ts` stays in `src/lib/llm/` by decision — prompt builder
 location carries no contract. The suite is 100 tests.
 
-## LLM Workspace Phase B — B0 to B9b COMPLETE (2026-08-15)
+## LLM Workspace Phase B — B0 to B9b COMPLETE (2026-08-16)
 
 Delivered, committed, pushed, and validated manually by the user on the real
 application after each production switch.
@@ -544,9 +544,73 @@ server, which rewrites `.next` underneath it. **Do not run a production build
 against a running dev server**, or expect a corrupted chunk and a phantom
 defect.
 
-**This ticket blocks the next one.** B7b was to write four list descriptors.
-There are at most three, and they need the five format extensions first. That
-arbitration is the user's and was open at the time of writing.
+**This ticket blocked the next one.** B7b was to write four list descriptors.
+There are at most three, and they needed the five format extensions first. The
+user arbitrated on 2026-08-15: B7b ships the extensions, the descriptors move to
+B7c. Closed by the section below.
+
+### B7b — the six gaps closed, and the test that was lying (2026-08-16)
+
+`LLMW.OUTPUT.LIST.2`, commit `12fdcc7`. The six declarative gaps B7a found are
+now expressible: numeric item fields, a second JSON-key fallback, an
+enum-with-default, a default seeded from the item's own array position, a
+post-parse sort of the whole list, and **the selection declaration** — which
+`FormData` key carries the subset the user keeps at cherry-pick.
+
+**Item fields became a union discriminated on `type`**, mandatory on every
+entry, with no silent fallback to `"string"` — the principle B7a had already
+applied to `output.kind` itself. `RunOperationResult`'s list items widened to
+`Record<string, string | number>`, the point B7a signalled without being able to
+model.
+
+**Three shapes were read off the source rather than designed.** Numeric bounds
+are `exclusiveMin` and `max` because `sequenceShots` accepts `duration_seconds`
+at `> 0 && <= 120` — one strict bound, one inclusive, and no parser evidences an
+inclusive lower one. A numeric field must declare whether an invalid value is
+omitted or seeded from the index, because both behaviours exist in production
+and differ. `sort.direction` is the literal `"asc"` and nothing else, because
+one parser sorts and it sorts ascending.
+
+**Two observable nuances were reproduced rather than improved**: the dual key
+reads with `??` and not `||`, so an empty string on the primary key still wins
+over the fallback; and enums compare by identity without trimming, so `" hero "`
+falls to the default the way `normalizeAssetType` already makes it.
+
+**`selection` carries only the destination key**, not a second payload shape.
+The four write actions re-parse what they receive through their own
+`normalize*`, so the payload must carry the model's own JSON keys — and B7d can
+rebuild that from the descriptor alone, since re-normalisation is idempotent.
+Recorded in the type itself so B7d does not invent a second mechanism.
+
+**The real deliverable is the proof.** B7a could only compare the *string*
+fields of the three representable parsers. All three equalities against the
+real, unmodified draft actions are now complete — every field of
+`GeneratedSequenceShot`, `GeneratedAssetCandidate` and `GeneratedSequence`
+declared and compared. `castingSuggestions` stays unrepresentable and
+**undecided**, per the user: B7h prices it now that typed item fields exist.
+
+**The defect the green checks did not show — the eighth in a row.** 444 tests
+were passing when the executor first reported, and one of them was lying:
+`it("NaN and Infinity are both invalid")` built its payload with
+`JSON.stringify`, which turns both into `null`. It exercised the
+`typeof === "number"` branch twice and never touched `Number.isFinite` — the
+guard added specifically to match `sequenceGeneration.ts:61`. The first
+correction was still not enough: with `max: 120` declared, `Infinity` is
+rejected by the upper bound whether or not the guard exists. It took a
+**bound-less, index-seeded** field — `order_index`'s own shape — for the guard
+to decide anything, proven by mutation: remove it and that test alone fails.
+
+Suite 414 → 446. Five browser paths, five PASS: a new-format list template
+imports and opens in the bench, an old-format one and a `selection`-less one are
+both refused, object mode is unregressed, and `llm_templates` was left empty.
+
+**Found by that pass, fixed separately.** The validator's precise refusal
+messages never reach the user: `importLlmTemplate` computes `result.error` and
+discards it, redirecting to a generic *"This file is not a valid LLM template."*
+Every one of the eight new rules names its exact path, is tested, and is
+invisible in the product — on the one path by which a user can currently author
+a workflow at all. Out of B7b's authorized files; raised to the user, who
+ordered it fixed as its own ticket (`LLMW.IMPORT.DETAIL.1`).
 
 ### B9a — the plain-language directive becomes real (2026-08-15)
 

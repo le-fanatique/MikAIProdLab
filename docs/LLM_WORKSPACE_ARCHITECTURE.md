@@ -1116,7 +1116,7 @@ established that nothing in the queue served UC1/UC2/UC3.
 
 | # | Ticket | Delivers | UC impact |
 | --- | --- | --- | --- |
-| B7b | Format extensions | The five declarative gaps B7a found (numeric item fields, dual `jsonKey` fallback, enum-with-default, index-dependent default, list-level sort) **plus the selection declaration** — which `FormData` key carries the user's retained subset. No descriptor, no UI. | none |
+| ~~B7b~~ | ~~Format extensions~~ | **Delivered 2026-08-16, commit `12fdcc7`.** The five declarative gaps plus the selection declaration. Item fields are now a union discriminated on `type` (`string` / `number` / `enum`), `RunOperationResult` list items carry `string \| number`, and `selection.formDataKey` is mandatory. The three representable parsers are now proven by **complete** field equality, not string-only. See `docs/PROJECT_STATE.md`, section B7b. | none |
 | B7c | The three row-creating descriptors | `shots-from-sequence`, asset extraction, `sequences-from-outline`, with byte-for-byte prompt equality against the existing builders (B1c discipline). | none |
 | B7d | List mode in `ProposalPanel` | Propose → **cherry-pick** → approve. The selection is the new primitive; object mode has no equivalent. | none |
 | B7e-g | The three migrations | One at a time, each preserving observable behaviour. | none |
