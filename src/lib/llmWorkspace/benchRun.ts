@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { ACTION_REGISTRY } from "./actions/registry";
+import type { BenchSearchParams } from "./bench";
 import type { ActionId, OperationDescriptor } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ import type { ActionId, OperationDescriptor } from "./types";
 // `plan.actionId` (returnValue branch) excludes every `redirectOnly` id,
 // those two case labels are no longer comparable to the switch's own
 // discriminant type (TS2678) — see `.agents/executor_report.md` C.1.
-type RedirectOnlyActionId = {
+export type RedirectOnlyActionId = {
   [K in ActionId]: (typeof ACTION_REGISTRY)[K]["response"] extends "redirectOnly" ? K : never;
 }[ActionId];
 
@@ -163,36 +164,141 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 }
 
 // ---------------------------------------------------------------------------
-// `isBenchReturnToQueryKey` — supervisor review retake (post-B6c1). The
-// bench rebuilds its own `returnTo` from the current query string
-// (`src/app/settings/llm-workflows/[templateId]/page.tsx`), and the two
-// `redirectOnly` commit actions append their own confirmation parameter to
-// that same `returnTo` on redirect, on *both* the success and the error
-// path:
+// `REDIRECT_CONFIRMATION_KEYS` — LLMW.BENCH.CONFIRM.1 (B7d-f). The single
+// source for the query-string parameter each `redirectOnly` commit action
+// appends to its own redirect target, read off the actions themselves:
 //
 //   - `updateShotPrompt` (`src/actions/shots.ts:594,628`):
 //     `shotPromptError`, `shotPromptSaved`
 //   - `updateSequencePrompt` (`src/actions/sequences.ts:283,306`):
 //     `sequencePromptError`, `sequencePromptSaved`
-//   - `createGeneratedShots` (`src/actions/llm/sequenceShots.ts:140,213`),
+//   - `createGeneratedShots` (`src/actions/llm/sequenceShots.ts:141,213`),
 //     wired by LLMW.PROPOSAL.LIST.1 (B7d): `shotsCreateError`, `shotsCreated`
+//
+// `RedirectOnlyActionId` is wider than these three: `ACTION_REGISTRY` also
+// declares `createSelectedAssets` (`src/actions/llm/assetExtraction.ts:207,258`
+// — `assetsCreateError`, `assetsCreated`) and `createGeneratedSequences`
+// (`src/actions/llm/sequenceGeneration.ts:177,241` — `sequencesCreateError`,
+// `sequencesCreated`) as `response: "redirectOnly"`, though neither is wired
+// to any descriptor's `commit` yet (registry.ts's own comment on
+// `createGeneratedShots`: "future tickets"). `planBenchCommit` can therefore
+// never actually produce a `redirectOnly` plan for either today — but the
+// `satisfies` below is a type-level check, not a reachability one, so both
+// still need a real entry to compile. Keys verified against the actions'
+// own `redirect()` calls, not invented; `resolveBenchConfirmation` below
+// deliberately renders nothing for either — the ticket froze wording for
+// only the first three, and this ticket does not invent copy for the other
+// two. Flagged in `.agents/executor_report.md` as a gap the ticket's frozen
+// table did not anticipate.
+//
+// The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
+// ticket buys: a future `redirectOnly` action does not compile into this
+// table until it declares its own two keys here, so it cannot redirect
+// silently the way the bench did before this ticket. Both
+// `BENCH_RETURN_TO_EXCLUDED_KEYS` (below) and `resolveBenchConfirmation`
+// read this one table — neither keeps its own copy.
+// ---------------------------------------------------------------------------
+
+export const REDIRECT_CONFIRMATION_KEYS = {
+  updateShotPrompt: { successKey: "shotPromptSaved", errorKey: "shotPromptError" },
+  updateSequencePrompt: { successKey: "sequencePromptSaved", errorKey: "sequencePromptError" },
+  createGeneratedShots: { successKey: "shotsCreated", errorKey: "shotsCreateError" },
+  createSelectedAssets: { successKey: "assetsCreated", errorKey: "assetsCreateError" },
+  createGeneratedSequences: { successKey: "sequencesCreated", errorKey: "sequencesCreateError" },
+} as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
+
+// ---------------------------------------------------------------------------
+// `isBenchReturnToQueryKey` — supervisor review retake (post-B6c1). The
+// bench rebuilds its own `returnTo` from the current query string
+// (`src/app/settings/llm-workflows/[templateId]/page.tsx`), and the
+// `redirectOnly` commit actions append their own confirmation parameter to
+// that same `returnTo` on redirect, on *both* the success and the error
+// path (see `REDIRECT_CONFIRMATION_KEYS` above for the concrete keys and
+// their source lines).
 //
 // Left unfiltered, that parameter rides along into the *next* `returnTo`
 // the bench builds after the redirect lands — the query string grows by one
 // parameter on every Approve. Excluded here, once, so the page's `returnTo`
 // construction stays a one-line loop over this predicate rather than a
-// hard-coded exclusion list repeated at the call site.
+// hard-coded exclusion list repeated at the call site. Derived from
+// `REDIRECT_CONFIRMATION_KEYS` (B7d-f) rather than kept as its own hand
+// written list, so the two cannot drift apart.
 // ---------------------------------------------------------------------------
 
-const BENCH_RETURN_TO_EXCLUDED_KEYS = [
-  "shotPromptError",
-  "shotPromptSaved",
-  "sequencePromptError",
-  "sequencePromptSaved",
-  "shotsCreateError",
-  "shotsCreated",
-] as const;
+const BENCH_RETURN_TO_EXCLUDED_KEYS: readonly string[] = Object.values(REDIRECT_CONFIRMATION_KEYS).flatMap(
+  ({ successKey, errorKey }) => [successKey, errorKey]
+);
 
 export function isBenchReturnToQueryKey(key: string): boolean {
-  return !(BENCH_RETURN_TO_EXCLUDED_KEYS as readonly string[]).includes(key);
+  return !BENCH_RETURN_TO_EXCLUDED_KEYS.includes(key);
+}
+
+// ---------------------------------------------------------------------------
+// `resolveBenchConfirmation` — LLMW.BENCH.CONFIRM.1 (B7d-f). Decides the
+// bench's confirmation banner from the current query string, for every
+// `redirectOnly` commit action. Pure: no JSX, no component import — the page
+// only renders what this returns.
+//
+// `BenchSearchParams` (`bench.ts`) types every value as
+// `string | string[] | undefined`, because Next.js's `searchParams` allows a
+// repeated query key to arrive as an array. The confirmation keys this
+// function reads are each appended exactly once, by exactly one `redirect()`
+// call, on one code path — but a client could still craft a URL with the key
+// repeated. Read via the local `firstSearchValue` below, resolving a
+// repeated key to its first occurrence rather than silently dropping it or
+// crashing on `.startsWith`/`Number()` of an array — the same behaviour as
+// `bench.ts`'s own `firstBenchParam`, but not reused from there: this file
+// is imported by `BenchRunPanel.tsx` (`"use client"`), and importing a
+// runtime binding from `bench.ts` pulls its whole module graph
+// (`runner.ts` → `llm/index.ts` → `comfy/comfyServerClient.ts` →
+// `comfy/plyArtifact.ts` → Node's `fs/promises`) into the client bundle —
+// confirmed by `npm run build` failing with "Module not found: Can't
+// resolve 'fs/promises'" when this file imported `firstBenchParam` as a
+// value from `bench.ts`. Only `BenchSearchParams` is imported from there,
+// as `import type`, which TypeScript erases entirely.
+//
+// Only the three actions the ticket's frozen table names
+// (`updateShotPrompt`, `updateSequencePrompt`, `createGeneratedShots`) get a
+// rendered message here — `createSelectedAssets` and
+// `createGeneratedSequences` are unreachable from any descriptor today (see
+// `REDIRECT_CONFIRMATION_KEYS` above) and the ticket froze no wording for
+// them; this function returns `null` for both rather than invent copy.
+// ---------------------------------------------------------------------------
+
+function firstSearchValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export function resolveBenchConfirmation(
+  plan: BenchCommitPlan,
+  search: BenchSearchParams
+): { kind: "success"; message: string } | { kind: "error"; message: string } | null {
+  if (plan.kind !== "redirectOnly") return null;
+  if (plan.actionId !== "updateShotPrompt" && plan.actionId !== "updateSequencePrompt" && plan.actionId !== "createGeneratedShots") {
+    return null;
+  }
+
+  const { successKey, errorKey } = REDIRECT_CONFIRMATION_KEYS[plan.actionId];
+  const errorValue = firstSearchValue(search[errorKey]);
+  if (errorValue != null && errorValue !== "") {
+    // Next.js decodes the query string when it builds `searchParams`, so the
+    // `encodeURIComponent`d message each action's `redirect()` call writes
+    // arrives here already decoded — rendered verbatim, no re-decoding.
+    return { kind: "error", message: errorValue };
+  }
+
+  const successValue = firstSearchValue(search[successKey]);
+  if (successValue == null) return null;
+
+  if (plan.actionId === "createGeneratedShots") {
+    const count = Number(successValue);
+    if (!Number.isInteger(count) || count <= 0) return null;
+    return { kind: "success", message: `${count} shot${count === 1 ? "" : "s"} created.` };
+  }
+
+  if (successValue !== "1") return null;
+
+  return plan.actionId === "updateShotPrompt"
+    ? { kind: "success", message: "Shot Prompt saved." }
+    : { kind: "success", message: "Sequence Prompt saved." };
 }

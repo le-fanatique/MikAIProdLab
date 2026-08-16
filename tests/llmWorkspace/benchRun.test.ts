@@ -4,6 +4,8 @@ import {
   isBenchReturnToQueryKey,
   planBenchCommit,
   preservedAssetDetailColumns,
+  resolveBenchConfirmation,
+  type BenchCommitPlan,
 } from "@/lib/llmWorkspace/benchRun";
 import { DESCRIPTORS, assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors";
 import type { OperationDescriptor } from "@/lib/llmWorkspace/types";
@@ -117,5 +119,81 @@ describe("isBenchReturnToQueryKey — supervisor review retake, post-B6c1", () =
     expect(isBenchReturnToQueryKey("assetId")).toBe(true);
     expect(isBenchReturnToQueryKey("mode")).toBe(true);
     expect(isBenchReturnToQueryKey("targetSections")).toBe(true);
+  });
+});
+
+describe("resolveBenchConfirmation — LLMW.BENCH.CONFIRM.1 (B7d-f)", () => {
+  const shotPromptPlan: BenchCommitPlan = { kind: "redirectOnly", actionId: "updateShotPrompt" };
+  const sequencePromptPlan: BenchCommitPlan = { kind: "redirectOnly", actionId: "updateSequencePrompt" };
+  const shotsCreatedPlan: BenchCommitPlan = { kind: "redirectOnly", actionId: "createGeneratedShots" };
+
+  it("renders the plural count for createGeneratedShots", () => {
+    expect(resolveBenchConfirmation(shotsCreatedPlan, { shotsCreated: "2" })).toEqual({
+      kind: "success",
+      message: "2 shots created.",
+    });
+  });
+
+  it("renders the singular count for createGeneratedShots", () => {
+    expect(resolveBenchConfirmation(shotsCreatedPlan, { shotsCreated: "1" })).toEqual({
+      kind: "success",
+      message: "1 shot created.",
+    });
+  });
+
+  it("renders nothing for createGeneratedShots when the count is 0, non-numeric, or absent", () => {
+    expect(resolveBenchConfirmation(shotsCreatedPlan, { shotsCreated: "0" })).toBeNull();
+    expect(resolveBenchConfirmation(shotsCreatedPlan, { shotsCreated: "not-a-number" })).toBeNull();
+    expect(resolveBenchConfirmation(shotsCreatedPlan, {})).toBeNull();
+  });
+
+  it("renders the error for createGeneratedShots verbatim", () => {
+    expect(resolveBenchConfirmation(shotsCreatedPlan, { shotsCreateError: "No valid shots to create." })).toEqual({
+      kind: "error",
+      message: "No valid shots to create.",
+    });
+  });
+
+  it("renders success for updateShotPrompt only when the value is exactly \"1\"", () => {
+    expect(resolveBenchConfirmation(shotPromptPlan, { shotPromptSaved: "1" })).toEqual({
+      kind: "success",
+      message: "Shot Prompt saved.",
+    });
+    expect(resolveBenchConfirmation(shotPromptPlan, { shotPromptSaved: "2" })).toBeNull();
+  });
+
+  it("renders the error for updateShotPrompt verbatim", () => {
+    expect(resolveBenchConfirmation(shotPromptPlan, { shotPromptError: "Shot not found." })).toEqual({
+      kind: "error",
+      message: "Shot not found.",
+    });
+  });
+
+  it("renders success for updateSequencePrompt only when the value is exactly \"1\"", () => {
+    expect(resolveBenchConfirmation(sequencePromptPlan, { sequencePromptSaved: "1" })).toEqual({
+      kind: "success",
+      message: "Sequence Prompt saved.",
+    });
+    expect(resolveBenchConfirmation(sequencePromptPlan, { sequencePromptSaved: "2" })).toBeNull();
+  });
+
+  it("renders the error for updateSequencePrompt verbatim", () => {
+    expect(resolveBenchConfirmation(sequencePromptPlan, { sequencePromptError: "Sequence not found." })).toEqual({
+      kind: "error",
+      message: "Sequence not found.",
+    });
+  });
+
+  it("renders the error alone when both the success and the error key are present", () => {
+    expect(
+      resolveBenchConfirmation(shotsCreatedPlan, { shotsCreated: "2", shotsCreateError: "Partial failure." })
+    ).toEqual({ kind: "error", message: "Partial failure." });
+  });
+
+  it("renders nothing for a returnValue or an unsupported plan", () => {
+    const returnValuePlan: BenchCommitPlan = { kind: "returnValue", actionId: "applyGeneratedStory" };
+    const unsupportedPlan: BenchCommitPlan = { kind: "unsupported", reason: "n/a" };
+    expect(resolveBenchConfirmation(returnValuePlan, { shotPromptSaved: "1" })).toBeNull();
+    expect(resolveBenchConfirmation(unsupportedPlan, { shotPromptSaved: "1" })).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import AutoSubmitSelect from "@/components/AutoSubmitSelect";
 import { loadBenchDescriptor } from "@/lib/llmWorkspace/benchDescriptor";
-import { isBenchReturnToQueryKey, planBenchCommit } from "@/lib/llmWorkspace/benchRun";
+import { isBenchReturnToQueryKey, planBenchCommit, resolveBenchConfirmation } from "@/lib/llmWorkspace/benchRun";
 import { requiredAnchorIdKeys, resolveOperationPreview } from "@/lib/llmWorkspace/runner";
 import { estimateTokens } from "@/lib/llmWorkspace/tokenEstimate";
 import {
@@ -165,6 +165,11 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   // §4.3 — decided once, server-side, and passed down to `BenchRunPanel` as
   // data: whether Approve can write at all, and how.
   const plan = planBenchCommit(descriptor);
+
+  // LLMW.BENCH.CONFIRM.1 (B7d-f) — the confirmation banner for a
+  // `redirectOnly` Approve, decided once from the current query string. Null
+  // for every other plan kind, or when no confirmation parameter is present.
+  const confirmation = resolveBenchConfirmation(plan, search);
 
   // §4.6 — computed server-side from the current query string, so both
   // `redirectOnly` Approve paths (`updateShotPrompt` / `updateSequencePrompt`)
@@ -498,6 +503,14 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
           {complete && preview && !preview.ok && (
             <p className="text-sm text-[#cf7b6b]">
               The context must resolve before this template can run — see Resolved Context.
+            </p>
+          )}
+
+          {confirmation && (
+            <p
+              className={`text-sm mb-3 ${confirmation.kind === "error" ? "text-[#cf7b6b]" : "text-[#6b9e72]"}`}
+            >
+              {confirmation.message}
             </p>
           )}
 
