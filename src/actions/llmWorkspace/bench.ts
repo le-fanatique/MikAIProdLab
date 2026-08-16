@@ -47,7 +47,11 @@ export async function runBenchOperation(input: {
   templateId: string;
   ids: AnchorIds;
   searchParams: BenchSearchParams;
-}): Promise<{ ok: true; values: Record<string, string> } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; kind: "object"; values: Record<string, string> }
+  | { ok: true; kind: "list"; items: Array<Record<string, string | number>> }
+  | { ok: false; error: string }
+> {
   const result = await loadBenchDescriptor(input.templateId);
   if (result.status === "notFound") return { ok: false, error: "Template not found." };
   if (result.status === "invalid") return { ok: false, error: invalidTemplateError(result.reason) };
@@ -58,15 +62,14 @@ export async function runBenchOperation(input: {
   try {
     const result = await runOperation(descriptor, input.ids, intent);
     if (!result.ok) return result;
-    // The bench's Run/Approve surface only knows the object shape today —
-    // list-kind descriptors have no writer yet (B7b) and no bench UI yet
-    // (B7c), forced here by `RunOperationResult`'s `kind` discriminant
-    // (LLMW.OUTPUT.LIST.1, B7a). Never reachable against a real stored or
-    // built-in descriptor as of this ticket.
-    if (result.kind !== "object") {
-      return { ok: false, error: "This template's output kind is not supported by the bench yet." };
-    }
-    return { ok: true, values: result.values };
+    // Mirrors `RunOperationResult`'s own `kind` discriminant
+    // (LLMW.OUTPUT.LIST.1, B7a) — the bench's Run now serves both output
+    // kinds (LLMW.PROPOSAL.LIST.1, B7d); `commitBenchProposal` below is
+    // unaffected, since a list-output descriptor's single commit action is
+    // always `redirectOnly` and never reaches its `returnValue` switch.
+    return result.kind === "object"
+      ? { ok: true, kind: "object", values: result.values }
+      : { ok: true, kind: "list", items: result.items };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

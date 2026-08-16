@@ -104,6 +104,12 @@ describe("isBenchReturnToQueryKey — supervisor review retake, post-B6c1", () =
     expect(isBenchReturnToQueryKey("sequencePromptSaved")).toBe(false);
   });
 
+  it("excludes createGeneratedShots' two confirmation parameters (LLMW.PROPOSAL.LIST.1, B7d)", () => {
+    // src/actions/llm/sequenceShots.ts:140,213 — read off the real action.
+    expect(isBenchReturnToQueryKey("shotsCreateError")).toBe(false);
+    expect(isBenchReturnToQueryKey("shotsCreated")).toBe(false);
+  });
+
   it("keeps every ordinary bench selection/intent key", () => {
     expect(isBenchReturnToQueryKey("projectId")).toBe(true);
     expect(isBenchReturnToQueryKey("sequenceId")).toBe(true);

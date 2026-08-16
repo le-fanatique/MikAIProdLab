@@ -1,39 +1,67 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// BenchRunPanel.tsx — LLMW.BENCH.RUN.1 (B6c1), §4.5
+// BenchRunPanel.tsx — LLMW.BENCH.RUN.1 (B6c1), §4.5; widened to serve a
+// `kind: "list"` descriptor's output by LLMW.PROPOSAL.LIST.1 (B7d), §4.
 //
 // A thin wrapper around `ProposalPanel`: no business logic here — it calls
 // the two Server Actions (`runBenchOperation`, `commitBenchProposal`) and
-// renders the fields `plan` and `outputFields` (both computed server-side)
-// already describe (`.claude/rules/frontend.md`, "Keep business logic and
-// durable decisions out of Client Components").
+// renders the fields `plan` and `output` (both computed server-side) already
+// describe (`.claude/rules/frontend.md`, "Keep business logic and durable
+// decisions out of Client Components"). `ProposalPanel` itself is unchanged
+// (`LLMW.PROPOSAL.LIST.1`, B7d): it is already generic on its own draft type,
+// and its `redirectOnly` branch already renders exactly the hidden-field form
+// `createGeneratedShots` needs.
 //
-// The bench's Approve is `replace` mode only (§3.2 of the ticket): no
-// Append control exists here, and never will for this panel — see the
-// executor report for why.
+// The bench's Approve is `replace`/`insertPerItem` only (§3.2 of B6c1's
+// ticket, extended by B7d to the list case): no Append control exists here,
+// and none is added for the list branch either — a list operation's Approve
+// creates rows, it does not append to an existing field.
 // ---------------------------------------------------------------------------
 
 import { runBenchOperation, commitBenchProposal } from "@/actions/llmWorkspace/bench";
-import { buildBenchDraftFields, type BenchCommitPlan, type ObjectOutputFields } from "@/lib/llmWorkspace/benchRun";
-import { buildUpdateSequencePromptHiddenFields, buildUpdateShotPromptHiddenFields } from "@/lib/llmWorkspace/actions/proposalCommit";
+import {
+  buildBenchDraftFields,
+  buildListSelectionPayload,
+  type BenchCommitPlan,
+  type ListOutputItemFields,
+  type ObjectOutputFields,
+} from "@/lib/llmWorkspace/benchRun";
+import {
+  buildCreateGeneratedShotsHiddenFields,
+  buildUpdateSequencePromptHiddenFields,
+  buildUpdateShotPromptHiddenFields,
+} from "@/lib/llmWorkspace/actions/proposalCommit";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import type { AnchorIds } from "@/lib/llmWorkspace/runner";
 import type { BenchSearchParams } from "@/lib/llmWorkspace/bench";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
 
-type Draft = Record<string, string>;
+type ObjectDraft = Record<string, string>;
+
+// The list draft's identity contract, frozen by the ticket: an item has no
+// identity but its own index into `items` (nothing is persisted, there is no
+// other stable identity), and the default selection is every index — the
+// bench's normal gesture is Run then Approve, unlike
+// `AssetsLLMExtractPanel`'s empty-by-default extraction review.
+type ListDraft = { items: Array<Record<string, string | number>>; selected: number[] };
+
+type Draft = ObjectDraft | ListDraft;
+
+type Output =
+  | { kind: "object"; fields: ObjectOutputFields }
+  | { kind: "list"; itemFields: ListOutputItemFields; formDataKey: string };
 
 type Props = {
   templateId: string;
   ids: AnchorIds;
   searchParams: BenchSearchParams;
   plan: BenchCommitPlan;
-  outputFields: ObjectOutputFields;
+  output: Output;
   returnTo: string;
 };
 
-export default function BenchRunPanel({ templateId, ids, searchParams, plan, outputFields, returnTo }: Props) {
+export default function BenchRunPanel({ templateId, ids, searchParams, plan, output, returnTo }: Props) {
   const trigger: ProposalTrigger<Draft> = {
     id: "run",
     label: "Run",
@@ -41,21 +69,72 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
     run: async () => {
       const result = await runBenchOperation({ templateId, ids, searchParams });
       if (!result.ok) return result;
-      const draft = Object.fromEntries(
-        buildBenchDraftFields(outputFields, result.values).map(({ field, value }) => [field, value])
+
+      if (output.kind === "list") {
+        if (result.kind !== "list") {
+          return { ok: false, error: "This template's Run result does not match its declared list output." };
+        }
+        const draft: ListDraft = { items: result.items, selected: result.items.map((_, index) => index) };
+        return { ok: true, draft };
+      }
+
+      if (result.kind !== "object") {
+        return { ok: false, error: "This template's Run result does not match its declared object output." };
+      }
+      const draft: ObjectDraft = Object.fromEntries(
+        buildBenchDraftFields(output.fields, result.values).map(({ field, value }) => [field, value])
       );
       return { ok: true, draft };
     },
   };
 
-  function approveActions(): ProposalApproveAction<Draft>[] {
+  function approveActions(draft: Draft): ProposalApproveAction<Draft>[] {
+    if (output.kind === "list") {
+      const listDraft = draft as ListDraft;
+
+      if (plan.kind === "redirectOnly" && plan.actionId === "createGeneratedShots") {
+        // `output.formDataKey` names the descriptor's own declared selection
+        // destination (`descriptor.output.selection.formDataKey`); refuse
+        // rather than write the payload under an invented key if it ever
+        // diverges from what `createGeneratedShots` actually reads.
+        if (output.formDataKey !== "shotsJson") {
+          return [];
+        }
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            disabled: listDraft.selected.length === 0,
+            action: ACTION_BINDINGS.createGeneratedShots,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as ListDraft;
+              return buildCreateGeneratedShotsHiddenFields({
+                projectId: ids.projectId as number,
+                sequenceId: ids.sequenceId as number,
+                returnTo,
+                shotsJson: buildListSelectionPayload(output.itemFields, current.items, current.selected),
+              });
+            },
+          },
+        ];
+      }
+
+      // Every other `actionId` a list descriptor could declare
+      // (`createSelectedAssets`, `createGeneratedSequences`) has no descriptor
+      // wired to it yet (out of scope for this ticket — B7e-g), and any
+      // `returnValue`/`unsupported` plan is not a list-commit shape at all.
+      // No Approve button; the reason is rendered under the fields below.
+      return [];
+    }
+
     if (plan.kind === "returnValue") {
       return [
         {
           kind: "returnValue",
           id: "approve",
           label: "Approve",
-          run: (current) => commitBenchProposal({ templateId, ids, values: current }),
+          run: (current) => commitBenchProposal({ templateId, ids, values: current as ObjectDraft }),
         },
       ];
     }
@@ -67,14 +146,16 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
           id: "approve",
           label: "Approve",
           action: ACTION_BINDINGS.updateShotPrompt,
-          hiddenFields: (draft) =>
-            buildUpdateShotPromptHiddenFields({
+          hiddenFields: (currentDraft) => {
+            const current = currentDraft as ObjectDraft;
+            return buildUpdateShotPromptHiddenFields({
               projectId: ids.projectId as number,
               sequenceId: ids.sequenceId as number,
               shotId: ids.shotId as number,
-              shotPrompt: draft.shotPrompt ?? "",
+              shotPrompt: current.shotPrompt ?? "",
               returnTo,
-            }),
+            });
+          },
         },
       ];
     }
@@ -86,19 +167,22 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
           id: "approve",
           label: "Approve",
           action: ACTION_BINDINGS.updateSequencePrompt,
-          hiddenFields: (draft) =>
-            buildUpdateSequencePromptHiddenFields({
+          hiddenFields: (currentDraft) => {
+            const current = currentDraft as ObjectDraft;
+            return buildUpdateSequencePromptHiddenFields({
               projectId: ids.projectId as number,
               sequenceId: ids.sequenceId as number,
-              sequencePrompt: draft.sequencePrompt ?? "",
+              sequencePrompt: current.sequencePrompt ?? "",
               returnTo,
-            }),
+            });
+          },
         },
       ];
     }
 
-    // `plan.kind === "unsupported"` — no Approve action; the refusal reason
-    // is rendered under the fields instead (below).
+    // `plan.kind === "unsupported"`, or a `redirectOnly` action this object
+    // branch does not (yet) know — no Approve action; the refusal reason is
+    // rendered under the fields instead (below).
     return [];
   }
 
@@ -117,29 +201,94 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
       showRegenerate
       regenerateLabel="Redo"
       approveActions={approveActions}
-      renderDraft={(draft, setDraft) => (
-        <div className="flex flex-col gap-4">
-          {outputFields.map((f) => (
-            <div key={f.field} className="flex flex-col gap-2">
-              <label htmlFor={`bench-${f.field}`} className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
-                {f.field}
-              </label>
-              <textarea
-                id={`bench-${f.field}`}
-                value={draft[f.field] ?? ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setDraft((prev) => ({ ...prev, [f.field]: value }));
-                }}
-                rows={5}
-                className={textareaClass}
-              />
-            </div>
-          ))}
+      renderDraft={(draft, setDraft) => {
+        if (output.kind === "list") {
+          const listDraft = draft as ListDraft;
+          return (
+            <div className="flex flex-col gap-4">
+              <p className="text-xs text-[#6e767d]">
+                {listDraft.selected.length} of {listDraft.items.length} selected
+              </p>
+              <div className="flex flex-col gap-3">
+                {listDraft.items.map((item, index) => {
+                  const checked = listDraft.selected.includes(index);
+                  return (
+                    <div
+                      key={index}
+                      className="rounded border border-[#2c3035] bg-[#0d0e10] p-3 flex flex-col gap-2"
+                    >
+                      <label className="flex items-center gap-2 text-xs text-[#a4abb2]">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            setDraft((prev) => {
+                              const p = prev as ListDraft;
+                              const selected = isChecked
+                                ? [...p.selected, index]
+                                : p.selected.filter((i) => i !== index);
+                              return { ...p, selected };
+                            });
+                          }}
+                        />
+                        Item {index + 1}
+                      </label>
+                      <div className="flex flex-col gap-1 pl-6">
+                        {output.itemFields.map((f) => {
+                          const value = item[f.field];
+                          if (value === undefined || value === "") return null;
+                          return (
+                            <p key={f.field} className="text-[11px] text-[#8a8f96] font-mono">
+                              <span className="text-[#6e767d]">{f.field}:</span> {String(value)}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-          {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
-        </div>
-      )}
+              {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
+              {plan.kind !== "unsupported" &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedShots") && (
+                  <p className="text-xs text-[#cf7b6b]">
+                    This template&apos;s commit action has no bench Approve path yet.
+                  </p>
+                )}
+            </div>
+          );
+        }
+
+        const objectDraft = draft as ObjectDraft;
+        return (
+          <div className="flex flex-col gap-4">
+            {output.fields.map((f) => (
+              <div key={f.field} className="flex flex-col gap-2">
+                <label
+                  htmlFor={`bench-${f.field}`}
+                  className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]"
+                >
+                  {f.field}
+                </label>
+                <textarea
+                  id={`bench-${f.field}`}
+                  value={objectDraft[f.field] ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setDraft((prev) => ({ ...(prev as ObjectDraft), [f.field]: value }));
+                  }}
+                  rows={5}
+                  className={textareaClass}
+                />
+              </div>
+            ))}
+
+            {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
+          </div>
+        );
+      }}
     />
   );
 }

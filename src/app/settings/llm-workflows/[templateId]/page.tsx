@@ -90,10 +90,11 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   const descriptor = resolved.descriptor;
   const sourceLabel = resolved.source === "builtin" ? "Built-in" : "Stored";
 
-  // Every built-in and stored descriptor is `output.kind === "object"` today
-  // — list output has no writer (B7b) or bench UI (B7c) yet. Narrowed here,
-  // once, per `OperationDescriptor["output"]`'s discriminant
-  // (LLMW.OUTPUT.LIST.1, B7a).
+  // Narrowed once, per `OperationDescriptor["output"]`'s discriminant
+  // (LLMW.OUTPUT.LIST.1, B7a) — kept only for the Template pane's
+  // object-shaped field listing below, which has no list-output analogue.
+  // `BenchRunPanel` (LLMW.PROPOSAL.LIST.1, B7d) serves both kinds directly
+  // from `descriptor.output` and no longer needs this narrowing.
   const objectOutput = descriptor.output.kind === "object" ? descriptor.output : null;
 
   const anchorEntity = descriptor.anchor.entity;
@@ -500,19 +501,23 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
             </p>
           )}
 
-          {complete && preview && preview.ok && objectOutput && (
+          {complete && preview && preview.ok && (
             <BenchRunPanel
               templateId={templateId}
               ids={selection}
               searchParams={search}
               plan={plan}
-              outputFields={objectOutput.fields}
+              output={
+                descriptor.output.kind === "object"
+                  ? { kind: "object", fields: descriptor.output.fields }
+                  : {
+                      kind: "list",
+                      itemFields: descriptor.output.item.fields,
+                      formDataKey: descriptor.output.selection.formDataKey,
+                    }
+              }
               returnTo={returnTo}
             />
-          )}
-
-          {complete && preview && preview.ok && !objectOutput && (
-            <p className="text-sm text-[#cf7b6b]">List-output templates cannot be run from the bench yet.</p>
           )}
         </Card>
       </div>

@@ -81,8 +81,10 @@ export function planBenchCommit(descriptor: OperationDescriptor): BenchCommitPla
 // own sub-type, not a hand-typed duplicate, so the two stay in lockstep.
 //
 // Narrowed to the `"object"` branch of `output` (LLMW.OUTPUT.LIST.1, B7a):
-// the bench's Run/Approve draft only knows how to render flat fields today —
-// a list-output template has no bench UI yet (B7c).
+// this function only ever builds the flat-field draft. The `"list"` branch
+// has its own selection state and its own rebuild function
+// (`buildListSelectionPayload`, below) — the bench's Run/Approve surface now
+// serves both output kinds (LLMW.PROPOSAL.LIST.1, B7d).
 // ---------------------------------------------------------------------------
 
 export type ObjectOutputFields = Extract<OperationDescriptor["output"], { kind: "object" }>["fields"];
@@ -92,6 +94,53 @@ export function buildBenchDraftFields(
   values: Record<string, string>
 ): Array<{ field: string; value: string }> {
   return fields.map((f) => ({ field: f.field, value: values[f.field] ?? "" }));
+}
+
+// ---------------------------------------------------------------------------
+// `buildListSelectionPayload` — LLMW.PROPOSAL.LIST.1 (B7d). Rebuilds the
+// JSON array a list-kind commit action (`createGeneratedShots` today)
+// expects on its `selection.formDataKey` field, from the bench's own
+// selection state.
+//
+// The runner produces items keyed by entity field name (`shotCode`,
+// `durationSeconds` — `RunOperationResult`'s `kind: "list"` branch,
+// `runner.ts`); the write action re-normalizes via its own `normalizeShot`
+// and expects the model's own JSON keys (`shot_code`, `duration_seconds`,
+// per `descriptor.output.item.fields[].jsonKey`). This function is the one
+// place that bridges the two — driven entirely by `fields`, so no operation
+// name or literal entity-model key ever appears in its body (types.ts:384-394).
+// ---------------------------------------------------------------------------
+
+export type ListOutputItemFields = Extract<OperationDescriptor["output"], { kind: "list" }>["item"]["fields"];
+
+export function buildListSelectionPayload(
+  fields: ListOutputItemFields,
+  items: Array<Record<string, string | number>>,
+  selected: number[]
+): string {
+  // Iterate `selected` in ascending index order, ignoring any out-of-bounds
+  // index — the list's own order is the insertion order
+  // (`ACTION_REGISTRY.createGeneratedShots.writeSemantics: "insertPerItem"`),
+  // so the emitted array's order must be the list's order, not the
+  // selection's own (possibly non-contiguous, unordered) click order.
+  const orderedIndices = [...selected].filter((i) => i >= 0 && i < items.length).sort((a, b) => a - b);
+
+  const payload = orderedIndices.map((index) => {
+    const item = items[index];
+    const entry: Record<string, string | number> = {};
+    for (const field of fields) {
+      // A field absent from the item (an "omit"-fallback numeric field the
+      // model left out, per `readNumberField` in `runner.ts`) is omitted
+      // from the emitted object too — never written as `null` or `""` — so
+      // that `normalizeShot`'s own absence handling applies unchanged.
+      if (field.field in item) {
+        entry[field.jsonKey] = item[field.field];
+      }
+    }
+    return entry;
+  });
+
+  return JSON.stringify(payload);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +174,8 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     `shotPromptError`, `shotPromptSaved`
 //   - `updateSequencePrompt` (`src/actions/sequences.ts:283,306`):
 //     `sequencePromptError`, `sequencePromptSaved`
+//   - `createGeneratedShots` (`src/actions/llm/sequenceShots.ts:140,213`),
+//     wired by LLMW.PROPOSAL.LIST.1 (B7d): `shotsCreateError`, `shotsCreated`
 //
 // Left unfiltered, that parameter rides along into the *next* `returnTo`
 // the bench builds after the redirect lands — the query string grows by one
@@ -138,6 +189,8 @@ const BENCH_RETURN_TO_EXCLUDED_KEYS = [
   "shotPromptSaved",
   "sequencePromptError",
   "sequencePromptSaved",
+  "shotsCreateError",
+  "shotsCreated",
 ] as const;
 
 export function isBenchReturnToQueryKey(key: string): boolean {

@@ -119,6 +119,29 @@ export function buildUpdateShotPromptHiddenFields(input: {
   };
 }
 
+// ── shots.fromSequence → createGeneratedShots (redirectOnly) ──────────────
+//
+// LLMW.PROPOSAL.LIST.1 (B7d). Same model as
+// `buildUpdateShotPromptHiddenFields` above: `createGeneratedShots` stays
+// `(formData: FormData) => Promise<void>` with `redirect()` on every path
+// (registry behaviour 6) — the four hidden field names are read verbatim off
+// `src/actions/llm/sequenceShots.ts:131-136`. `shotsJson` is not built here —
+// that serialization belongs to `buildListSelectionPayload` (`benchRun.ts`),
+// which the caller runs first.
+export function buildCreateGeneratedShotsHiddenFields(input: {
+  projectId: number;
+  sequenceId: number;
+  returnTo: string;
+  shotsJson: string;
+}): Record<string, string> {
+  return {
+    projectId: String(input.projectId),
+    sequenceId: String(input.sequenceId),
+    returnTo: input.returnTo,
+    shotsJson: input.shotsJson,
+  };
+}
+
 // ── shot.retakeDirected → updateShotNarrativeContext (returnValue) ────────
 //
 // LLMW.UC2.RETAKE.1 (B9b), §4.3's piège: `shot.retakeDirected` declares
