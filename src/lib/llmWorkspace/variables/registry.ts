@@ -190,6 +190,11 @@ export type SeqContextData = {
   description: string | null;
   mood: string | null;
   locationHint: string | null;
+  // LLMW.DESCRIPTOR.LIST.1 (B7c), §2.2: `buildShotsFromSequencePrompt`
+  // (`src/lib/prompts/shots-from-sequence.ts`) reads seven Sequence fields,
+  // including `narrativePurpose` — additive, every existing render form
+  // destructures the subset it needs and ignores the rest.
+  narrativePurpose: string | null;
 };
 
 export async function resolveSeqContext(sequenceId: number): Promise<SeqContextData> {
@@ -204,6 +209,7 @@ export async function resolveSeqContext(sequenceId: number): Promise<SeqContextD
     description: sequence.description,
     mood: sequence.mood,
     locationHint: sequence.locationHint,
+    narrativePurpose: sequence.narrativePurpose,
   };
 }
 
@@ -1076,6 +1082,172 @@ export function renderShotRetakeFreeTextDirective(freeText: string | undefined):
 }
 
 // ---------------------------------------------------------------------------
+// `shots.fromSequence` render forms — LLMW.DESCRIPTOR.LIST.1 (B7c). Read
+// verbatim off `buildShotsFromSequencePrompt`
+// (`src/lib/prompts/shots-from-sequence.ts`), which branches entirely on
+// `sequence.sequencePrompt`'s presence (`hasSequencePrompt`,
+// `shots-from-sequence.ts:71-72`) rather than on a mode. The four functions
+// below (two system-path bodies, two template paths) are the first render
+// forms in this registry to need both a resolved variable's data *and* the
+// operation's `targetCount` — see `descriptors/shotsFromSequence.ts`'s own
+// header comment for why that combination has no clean home in the frozen
+// `Block` union, and for the production-wiring gap it leaves for B7e. Every
+// one of the four is exclusive with its Path sibling: exactly one renders
+// non-empty for any given `sequence.sequencePrompt`.
+//
+// WARNING — their second parameter, `targetCount`, is NOT yet fed by
+// `runner.ts`. `buildVariableDispatchers` (`runner.ts:347-353`) calls every
+// `{variables, render}` form as `fn(...resolvedVariables, selectedMode)` —
+// there is no channel from `intent.parameters` into this slot. Below,
+// `MULTI_VARIABLE_RENDER_FORMS` (and `PARAMETER_RENDER_FORMS`, for
+// `shotsFromSequence.jsonSchemaBlock`) carry no `satisfies` constraint
+// against these functions' real signatures, so the compiler cannot catch
+// this mismatch either — `tsc` accepts `fn(...args, selectedMode)` against
+// a function typed `(data, targetCount: number | undefined) => string`
+// without complaint. `shots.fromSequence` is kept out of `DESCRIPTORS`
+// (`descriptors/index.ts`) precisely because of this: today, the only
+// caller that invokes these four functions correctly is
+// `tests/llmWorkspace/shotsFromSequence.render.test.ts`, via a hand-built
+// dispatcher that threads `targetCount` directly instead of through
+// `runner.ts`.
+// ---------------------------------------------------------------------------
+
+/** System, Path A (Approved Sequence Prompt present) — `shots-from-sequence.ts:91-102`, up to (not including) the blank line before `CONTINUITY_RULES`. Empty when there is no Approved Sequence Prompt. */
+export function renderShotsFromSequenceSystemPathABody(
+  currentPrompt: SeqCurrentPromptData,
+  targetCount: number | undefined
+): string {
+  const hasSequencePrompt = (currentPrompt.sequencePrompt ?? "").trim().length > 0;
+  if (!hasSequencePrompt) return "";
+  const count = targetCount ?? 6;
+  return `You are a professional cinematographer and storyboard supervisor.
+Your task is to generate exactly ${count} shots for the given sequence.
+Each shot is a single uninterrupted camera take.
+
+AUTHORITY RULES:
+- The Approved Sequence Prompt is the authoritative creative direction for every shot.
+- The Project Story is background context only. It must never override the Approved Sequence Prompt.
+- Before generating any shot, identify the main subject, location, and visual style from the Approved Sequence Prompt. Every shot must follow them.
+- If the Approved Sequence Prompt introduces a character or subject not present in the Project Story, use that character or subject.
+- If there is any conflict between the Project Story and the Approved Sequence Prompt, always follow the Approved Sequence Prompt.
+- Never substitute a character or location from the Project Story in place of one from the Approved Sequence Prompt.`;
+}
+
+/** System, Path B (no Approved Sequence Prompt) — `shots-from-sequence.ts:132-137`, up to (not including) the blank line before `CONTINUITY_RULES`. Empty when an Approved Sequence Prompt exists. */
+export function renderShotsFromSequenceSystemPathBBody(
+  currentPrompt: SeqCurrentPromptData,
+  targetCount: number | undefined
+): string {
+  const hasSequencePrompt = (currentPrompt.sequencePrompt ?? "").trim().length > 0;
+  if (hasSequencePrompt) return "";
+  const count = targetCount ?? 6;
+  return `You are a professional cinematographer and storyboard supervisor.
+Your task is to break a production sequence into exactly ${count} individual shots.
+Each shot is a single uninterrupted camera take.
+Respect the narrative arc of the sequence. Do not invent characters or locations not mentioned in the story or sequence context.`;
+}
+
+/** System, common tail — `JSON_SCHEMA(count)` (`shots-from-sequence.ts:36-56`), identical on both paths, needs only `targetCount`. Own leading `"\n"` (§4.1 correction 4's device) to reopen the blank line the block-separator alone cannot produce. */
+export function renderShotsFromSequenceJsonSchemaBlock(targetCount: number | undefined): string {
+  const count = targetCount ?? 6;
+  return `
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "shots": [
+    {
+      "title": "string — brief label for the shot",
+      "shot_code": "string or null — production code e.g. SH010, SH020",
+      "description": "string or null — narrative description of the shot",
+      "duration_seconds": number or null — estimated duration 3-8s typical,
+      "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
+      "action_pitch": "string or null — what happens on screen",
+      "camera_pitch": "string or null — camera angle, lens, position",
+      "framing": "string or null — CU / MCU / MS / WS / ECU / OTS / POV",
+      "camera_movement": "string or null — static / pan / tilt / tracking / dolly / handheld",
+      "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
+      "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.
+The array must contain exactly ${count} shots.
+shot_prompt must be a dense, cinematic visual description suitable for AI image/video generation. No labels, no narrative scene references — only visual content.`;
+}
+
+/** Template, Path A (Approved Sequence Prompt present) — `shots-from-sequence.ts:74-121`. Empty when there is no Approved Sequence Prompt. */
+export function renderShotsFromSequenceTemplatePathA(
+  project: ProjectIdentityData,
+  seq: SeqContextData,
+  currentPrompt: SeqCurrentPromptData,
+  targetCount: number | undefined
+): string {
+  const approvedPrompt = (currentPrompt.sequencePrompt ?? "").trim();
+  if (!approvedPrompt) return "";
+  const count = targetCount ?? 6;
+
+  const seqContext = [
+    `Title: ${seq.title}`,
+    seq.summary ? `Summary: ${seq.summary}` : null,
+    seq.description ? `Description: ${seq.description}` : null,
+    seq.mood ? `Mood: ${seq.mood}` : null,
+    seq.locationHint ? `Location: ${seq.locationHint}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const projectBg = [
+    project.pitch?.trim() ? `Pitch: ${project.pitch}` : null,
+    project.story?.trim() ? `Story: ${project.story.slice(0, 300)}` : null,
+    project.outline?.trim() ? `Project Outline Background: ${project.outline.slice(0, 400)}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `TASK
+Generate exactly ${count} shots for this sequence.
+
+APPROVED SEQUENCE PROMPT — primary creative direction, overrides all other context:
+${approvedPrompt.slice(0, 1200)}
+
+SEQUENCE CONTEXT
+${seqContext}${
+    projectBg
+      ? `\n\nPROJECT BACKGROUND — background continuity only, do not use to override the Approved Sequence Prompt:\n${projectBg}`
+      : ""
+  }
+
+Generate exactly ${count} shots. Every shot must follow the subject, location, visual style, and mood of the Approved Sequence Prompt. The shots must form a continuous causal progression from shot 1 to shot ${count}. Avoid resets, contradictions, or repeated starting points.`;
+}
+
+/** Template, Path B (no Approved Sequence Prompt) — `shots-from-sequence.ts:124-151`. Empty when an Approved Sequence Prompt exists. */
+export function renderShotsFromSequenceTemplatePathB(
+  project: ProjectIdentityData,
+  seq: SeqContextData,
+  currentPrompt: SeqCurrentPromptData,
+  targetCount: number | undefined
+): string {
+  const approvedPrompt = (currentPrompt.sequencePrompt ?? "").trim();
+  if (approvedPrompt) return "";
+  const count = targetCount ?? 6;
+
+  const projectLines: string[] = [`Project: ${project.name}`];
+  if (project.pitch?.trim()) projectLines.push(`Pitch: ${project.pitch}`);
+  if (project.story?.trim()) projectLines.push(`Story: ${project.story.slice(0, 400)}`);
+  if (project.outline?.trim()) projectLines.push(`Project Outline Background: ${project.outline.slice(0, 400)}`);
+
+  return `${projectLines.join("\n")}
+
+Sequence: ${seq.title}
+Summary: ${seq.summary ?? "Not provided"}
+Description: ${seq.description ?? "Not provided"}
+Narrative purpose: ${seq.narrativePurpose ?? "Not provided"}
+Mood: ${seq.mood ?? "Not provided"}
+Location: ${seq.locationHint ?? "Not provided"}
+
+Break this sequence into exactly ${count} individual shots. Fill all fields as precisely as possible. The shots must form a continuous causal progression from shot 1 to shot ${count}. Avoid resets, contradictions, or repeated starting points.`;
+}
+
+// ---------------------------------------------------------------------------
 // The registry — one entry per `VariableId`. Resolver signatures differ
 // across variables (project-anchored vs. sequence-anchored vs. shot/asset
 // -anchored), matching the precedent's shape rather than forcing a uniform
@@ -1157,6 +1329,10 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "shotPrompt.generateContextLines": renderShotPromptGenerateContextLines,
   "shotPrompt.transformBlock": renderShotCurrentPromptTransformBlock,
   "shotRetake.otherShotsLines": renderSeqShotsOtherShotsLines,
+  "shotsFromSequence.systemPathABody": renderShotsFromSequenceSystemPathABody,
+  "shotsFromSequence.systemPathBBody": renderShotsFromSequenceSystemPathBBody,
+  "shotsFromSequence.templatePathA": renderShotsFromSequenceTemplatePathA,
+  "shotsFromSequence.templatePathB": renderShotsFromSequenceTemplatePathB,
 } as const;
 
 /**
@@ -1170,6 +1346,7 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
  */
 export const PARAMETER_RENDER_FORMS = {
   "outline.sectionInstructionBullet": renderOutlineTargetSectionsBullet,
+  "shotsFromSequence.jsonSchemaBlock": renderShotsFromSequenceJsonSchemaBlock,
 } as const;
 
 /**

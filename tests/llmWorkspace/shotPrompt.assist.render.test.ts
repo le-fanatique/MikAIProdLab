@@ -127,6 +127,7 @@ describe("shotPrompt.assist descriptor — strict prompt equality", () => {
         description: "Fast cuts, neon reflections.",
         mood: "Tense",
         locationHint: "Downtown rooftops",
+        narrativePurpose: null,
       },
       shot: {
         title: "Rooftop Sprint",
@@ -158,7 +159,7 @@ describe("shotPrompt.assist descriptor — strict prompt equality", () => {
     const fixture: Fixture = {
       mode: "generate",
       project: { name: "Untitled Project", pitch: null, story: null, description: null, outline: null },
-      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null },
+      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null, narrativePurpose: null },
       shot: {
         title: "Untitled Shot",
         shotCode: null,
@@ -189,6 +190,7 @@ describe("shotPrompt.assist descriptor — strict prompt equality", () => {
         description: "Fast cuts.",
         mood: "Tense",
         locationHint: "Downtown rooftops",
+        narrativePurpose: null,
       },
       shot: {
         title: "Rooftop Sprint",
@@ -214,7 +216,7 @@ describe("shotPrompt.assist descriptor — strict prompt equality", () => {
     const fixture: Fixture = {
       mode: "shorten",
       project: { name: "Untitled Project", pitch: null, story: null, description: null, outline: null },
-      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null },
+      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null, narrativePurpose: null },
       shot: {
         title: "Untitled Shot",
         shotCode: null,

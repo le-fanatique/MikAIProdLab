@@ -157,13 +157,18 @@ describe("shotPrompt.assist descriptor — context equality", () => {
       story: "A previously generated story.",
     });
 
-    // SEQ.CONTEXT: all five fields.
+    // SEQ.CONTEXT: all five fields the operation reads, plus
+    // `narrativePurpose` — added additively by LLMW.DESCRIPTOR.LIST.1 (B7c,
+    // §2.2); `shotPrompt.assist` never reads it, but `SeqContextData` itself
+    // now carries it, so this equality must too. Not set by this test's
+    // fixture (`insertSequence` defaults it to `null`).
     expect(seqContext).toEqual({
       title: "Opening sequence",
       summary: "A short summary.",
       description: "A longer description.",
       mood: "Tense",
       locationHint: "Rooftop, dusk",
+      narrativePurpose: null,
     });
 
     // SHOT.CORE: all eight fields.

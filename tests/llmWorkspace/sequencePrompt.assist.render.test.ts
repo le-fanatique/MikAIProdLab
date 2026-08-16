@@ -104,6 +104,7 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
         description: "Fast cuts, neon reflections.",
         mood: "Tense",
         locationHint: "Downtown rooftops",
+        narrativePurpose: null,
       },
       currentPrompt: { sequencePrompt: "An existing prompt that generate mode ignores." },
     };
@@ -117,7 +118,7 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
     const fixture: Fixture = {
       mode: "generate",
       project: { name: "Untitled Project", pitch: null, story: null, description: null, outline: null },
-      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null },
+      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null, narrativePurpose: null },
       currentPrompt: { sequencePrompt: null },
     };
     const expected = buildSequencePromptFromContextPrompt(toBuilderInput(fixture));
@@ -136,6 +137,7 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
         description: "Fast cuts.",
         mood: "Tense",
         locationHint: "Downtown rooftops",
+        narrativePurpose: null,
       },
       currentPrompt: { sequencePrompt: "A courier sprints across rain-slicked rooftops at night." },
     };
@@ -149,7 +151,7 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
     const fixture: Fixture = {
       mode: "rewrite",
       project: { name: "Untitled Project", pitch: null, story: null, description: null, outline: null },
-      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null },
+      seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null, narrativePurpose: null },
       currentPrompt: { sequencePrompt: null },
     };
     const expected = buildSequencePromptFromContextPrompt(toBuilderInput(fixture));

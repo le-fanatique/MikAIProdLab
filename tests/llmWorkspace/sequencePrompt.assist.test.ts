@@ -95,13 +95,17 @@ describe("sequencePrompt.assist descriptor — context equality", () => {
       story: project.story,
     });
 
-    // SEQ.CONTEXT: all five fields.
+    // SEQ.CONTEXT: all five fields the operation reads, plus
+    // `narrativePurpose` — added additively by LLMW.DESCRIPTOR.LIST.1 (B7c,
+    // §2.2); `sequencePrompt.assist` never reads it, but `SeqContextData`
+    // itself now carries it, so this equality must too.
     expect(seqContext).toEqual({
       title: sequence.title,
       summary: sequence.summary,
       description: sequence.description,
       mood: sequence.mood,
       locationHint: sequence.locationHint,
+      narrativePurpose: sequence.narrativePurpose,
     });
 
     // SEQ.CURRENT_PROMPT.
