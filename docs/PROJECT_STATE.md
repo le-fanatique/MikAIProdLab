@@ -700,6 +700,61 @@ empty, so nothing can be approved. The write side is the next lock, and the
 three remaining bricks (§11.3) are what the other two row-creating operations
 still wait on.
 
+### B7d — the selection, and a title that was wrong (2026-08-16)
+
+`LLMW.PROPOSAL.LIST.1`, commit `4e550d9`. The bench runs and approves a
+list-output operation: propose, cherry-pick, approve.
+
+**The queued title was wrong, and that was the finding.** B7d was written as
+"list mode in `ProposalPanel`". `ProposalPanel` is generic on its own draft
+type and its `redirectOnly` branch already renders exactly the hidden-field
+form `createGeneratedShots` needs — it took **zero lines of change**. What was
+missing was the **selection**, which existed nowhere in the workspace, and the
+bench's list branch. The §11.3 row now says so, so a cold session does not
+re-derive the wrong scope.
+
+**The one thing that could have been wrong in silence** is the payload. The
+runner produces items keyed by entity field name; the write action
+re-normalizes through its own `normalizeShot`, which expects the model's own
+JSON keys. `buildListSelectionPayload` bridges the two, driven entirely by the
+descriptor's declared item fields — no operation name, no literal model key in
+its body. An absent field is omitted rather than written `null`, so the write
+action's own absence handling still applies, and selected indexes are emitted
+in **list order**, never click order, because list order is insertion order and
+therefore `orderIndex` order.
+
+**The proof does not stop at the parser.** Neither `normalizeShot` nor
+`parseShotsResult` is exported and `sequenceShots.ts` was out of scope, so
+rather than widen scope the executor ran the real `createGeneratedShots` end to
+end against a disposable database and asserted field by field on the rows
+actually written — a stricter oracle than the ticket asked for. It also pins
+that a reversed, non-contiguous selection comes out in list order, and that
+`shotCode` is regenerated from the nomenclature template rather than passed
+through by an accidental key match. Mutating `jsonKey` to `field` fails 2 of 3
+tests, re-run by the supervisor rather than believed.
+
+Suite 456 → 238 in `tests/llmWorkspace/` alone, all green; `tsc`, targeted
+lint, `npm run build` and `git diff --check` clean. Browser-validated against a
+real model call on a throwaway project since deleted: all checkboxes ticked by
+default, `N of M selected` coherent, Approve disabled at zero, item fields
+read-only, exactly the two ticked shots created in display order.
+
+**Two supervisor errors worth keeping.** The validation checklist expected a
+redirect to the sequence page; the bench passes its **own** URL as `returnTo`,
+so returning to the bench is correct and the checklist was wrong. And the
+mutation control was first reverted with `git checkout --`, which discarded the
+executor's uncommitted work — restored from a copy taken before mutating. On an
+uncommitted tree, a mutation control is reverted from a copy, never from git.
+
+**What this leaves.** The bench renders **no confirmation after any
+`redirectOnly` Approve** — `page.tsx` reads none of `shotsCreated`,
+`shotPromptSaved`, `sequencePromptSaved`. Two shots are created and the panel
+silently returns to its Run state. Identical for the two object-mode actions
+B6c1 shipped, so B7d inherits it rather than causing it. Its own ticket.
+
+Also outstanding, pre-existing: **B7c-w and B7c-w2 have no section here**,
+though both are committed (`85ea5ac`, `e5fa0a4`). Only §11.3 records them.
+
 ### B9a — the plain-language directive becomes real (2026-08-15)
 
 `LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
