@@ -1,18 +1,17 @@
 "use server";
 
 import { db } from "@/db";
-import { projects, sequences, shots } from "@/db/schema";
+import { sequences, shots } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { callLLMJson } from "@/lib/llm";
-import {
-  buildShotsFromSequencePrompt,
-  type GeneratedSequenceShot,
-} from "@/lib/prompts/shots-from-sequence";
-import { getLLMConfig, getNomenclatureSettings } from "@/lib/settings";
+import type { GeneratedSequenceShot } from "@/lib/prompts/shots-from-sequence";
+import { getNomenclatureSettings } from "@/lib/settings";
 import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 import { generateSequentialCodes } from "@/lib/nomenclature";
+import { runOperation } from "@/lib/llmWorkspace/runner";
+import { shotsFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/shotsFromSequence";
+import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 
 function str(value: unknown, maxLen = 1000): string | null {
   if (typeof value !== "string") return null;
@@ -48,25 +47,36 @@ function normalizeShot(raw: unknown): GeneratedSequenceShot | null {
   };
 }
 
-function parseShotsResult(raw: string): GeneratedSequenceShot[] {
-  let parsed: unknown;
-  try {
-    const fenced = raw.trim().match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-    parsed = JSON.parse(fenced ? fenced[1].trim() : raw.trim());
-  } catch {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const arr = (parsed as Record<string, unknown>)?.shots;
-  if (!Array.isArray(arr)) {
-    throw new Error("The model did not return a shots array. Try again.");
-  }
-  const normalized = arr.map(normalizeShot).filter((s): s is GeneratedSequenceShot => s !== null);
-  if (normalized.length === 0) {
-    throw new Error("The model returned no valid shots. Try again.");
-  }
-  return normalized;
-}
-
+/**
+ * Thin adapter over `runOperation(shotsFromSequenceDescriptor, ...)`
+ * (LLMW.MIGRATE.LIST.1, B7e): keeps the exact `{ok:true, shots}` return
+ * shape `SequenceShotsLLMAssistPanel` depends on. The 1-30 bound and the 6
+ * default for `shotCount` are declared on the descriptor's own
+ * `intent.parameters` (`descriptors/shotsFromSequence.ts`), but the runner
+ * does not enforce that bound itself — the render forms
+ * (`variables/registry.ts`) only apply `?? 6` when `targetCount` is
+ * `undefined`, never clamping an out-of-range value back into [1, 30]. That
+ * gap is reported, not papered over here with a re-implemented bound check
+ * (see `.agents/executor_report.md`): an absent/non-integer `shotCount`
+ * still defaults to 6 (parameters omitted entirely), matching the old
+ * behaviour; an out-of-range integer now reaches the prompt unclamped, which
+ * the old code never allowed.
+ *
+ * `result.items` are keyed by entity field name (`shotCode`,
+ * `durationSeconds`); `mapListItemToModelKeys` (`benchRun.ts`, B7d's bridge
+ * extracted for reuse) translates each item to the model's own JSON keys
+ * (`shot_code`, `duration_seconds`), matching `GeneratedSequenceShot`'s own
+ * field names one for one. Two gaps remain after that translation, both
+ * named in the ticket's own risk section: `readStringField` (`runner.ts`)
+ * always produces a value — `""` where the old `normalizeShot` produced
+ * `null` for an absent or blank field — and `readNumberField`'s
+ * `fallback: "omit"` drops an out-of-bounds `duration_seconds` from the
+ * object entirely, where the old code kept the key with a `null` value. Both
+ * are filled back to `null` below so this adapter's output is indiscernible
+ * from the pre-migration `parseShotsResult` + `normalizeShot` chain
+ * (`tests/llmWorkspace/shotsFromSequence.migration.test.ts`). `title` is
+ * never `null` — `item.validity` already filtered out any item missing it.
+ */
 export async function generateShotsFromSequenceDraft(
   formData: FormData
 ): Promise<{ ok: true; shots: GeneratedSequenceShot[] } | { ok: false; error: string }> {
@@ -75,51 +85,37 @@ export async function generateShotsFromSequenceDraft(
     const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
     const shotCountRaw = parseInt(formData.get("shotCount") as string, 10);
 
-    if (
-      !Number.isInteger(projectId) || projectId <= 0 ||
-      !Number.isInteger(sequenceId) || sequenceId <= 0
-    ) {
-      return { ok: false, error: "Invalid request." };
+    const result = await runOperation(
+      shotsFromSequenceDescriptor,
+      { projectId, sequenceId },
+      { parameters: Number.isInteger(shotCountRaw) ? { targetCount: shotCountRaw } : {} }
+    );
+    if (!result.ok) return { ok: false, error: result.error };
+    // `shotsFromSequenceDescriptor.output.kind` is always `"list"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "list") {
+      throw new Error("generateShotsFromSequenceDraft: expected a list-kind result.");
+    }
+    if (shotsFromSequenceDescriptor.output.kind !== "list") {
+      throw new Error("generateShotsFromSequenceDraft: descriptor output is not list-kind.");
     }
 
-    const shotCount = Number.isInteger(shotCountRaw) && shotCountRaw >= 1 && shotCountRaw <= 30
-      ? shotCountRaw
-      : 6;
-
-    const config = await getLLMConfig();
-    if (!config) {
-      return { ok: false, error: "LLM not configured. Go to Settings to set up Ollama." };
-    }
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) return { ok: false, error: "Project not found." };
-
-    const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sequenceId));
-    if (!sequence || sequence.projectId !== projectId) {
-      return { ok: false, error: "Sequence not found." };
-    }
-
-    const llmPrompt = buildShotsFromSequencePrompt({
-      project: {
-        name: project.name,
-        pitch: project.pitch,
-        story: project.story,
-        outline: project.outline,
-      },
-      sequence: {
-        title: sequence.title,
-        summary: sequence.summary,
-        description: sequence.description,
-        narrativePurpose: sequence.narrativePurpose,
-        mood: sequence.mood,
-        locationHint: sequence.locationHint,
-        sequencePrompt: sequence.sequencePrompt,
-      },
-      targetCount: shotCount,
+    const fields = shotsFromSequenceDescriptor.output.item.fields;
+    const generatedShots: GeneratedSequenceShot[] = result.items.map((item) => {
+      const mapped = mapListItemToModelKeys(fields, item);
+      const shot: Record<string, string | number | null> = {};
+      for (const field of fields) {
+        const key = field.jsonKey;
+        if (!(key in mapped)) {
+          shot[key] = null;
+          continue;
+        }
+        const value = mapped[key];
+        shot[key] = value === "" ? null : value;
+      }
+      return shot as unknown as GeneratedSequenceShot;
     });
-
-    const raw = await callLLMJson(llmPrompt, config);
-    const generatedShots = parseShotsResult(raw);
 
     return { ok: true, shots: generatedShots };
   } catch (err) {

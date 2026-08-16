@@ -114,6 +114,29 @@ export function buildBenchDraftFields(
 
 export type ListOutputItemFields = Extract<OperationDescriptor["output"], { kind: "list" }>["item"]["fields"];
 
+// `mapListItemToModelKeys` — LLMW.MIGRATE.LIST.1 (B7e). The per-item
+// translation `buildListSelectionPayload` (below) already did inline,
+// extracted so `generateShotsFromSequenceDraft`
+// (`src/actions/llm/sequenceShots.ts`) can reuse the same runner-item ->
+// model-key mapping in object form (it serializes its own array itself, per
+// its return type, rather than taking a pre-serialized JSON string).
+export function mapListItemToModelKeys(
+  fields: ListOutputItemFields,
+  item: Record<string, string | number>
+): Record<string, string | number> {
+  const entry: Record<string, string | number> = {};
+  for (const field of fields) {
+    // A field absent from the item (an "omit"-fallback numeric field the
+    // model left out, per `readNumberField` in `runner.ts`) is omitted
+    // from the emitted object too — never written as `null` or `""` — so
+    // that `normalizeShot`'s own absence handling applies unchanged.
+    if (field.field in item) {
+      entry[field.jsonKey] = item[field.field];
+    }
+  }
+  return entry;
+}
+
 export function buildListSelectionPayload(
   fields: ListOutputItemFields,
   items: Array<Record<string, string | number>>,
@@ -126,20 +149,7 @@ export function buildListSelectionPayload(
   // selection's own (possibly non-contiguous, unordered) click order.
   const orderedIndices = [...selected].filter((i) => i >= 0 && i < items.length).sort((a, b) => a - b);
 
-  const payload = orderedIndices.map((index) => {
-    const item = items[index];
-    const entry: Record<string, string | number> = {};
-    for (const field of fields) {
-      // A field absent from the item (an "omit"-fallback numeric field the
-      // model left out, per `readNumberField` in `runner.ts`) is omitted
-      // from the emitted object too — never written as `null` or `""` — so
-      // that `normalizeShot`'s own absence handling applies unchanged.
-      if (field.field in item) {
-        entry[field.jsonKey] = item[field.field];
-      }
-    }
-    return entry;
-  });
+  const payload = orderedIndices.map((index) => mapListItemToModelKeys(fields, items[index]));
 
   return JSON.stringify(payload);
 }
