@@ -612,6 +612,94 @@ invisible in the product — on the one path by which a user can currently autho
 a workflow at all. Out of B7b's authorized files; raised to the user, who
 ordered it fixed as its own ticket (`LLMW.IMPORT.DETAIL.1`).
 
+### The import says what is wrong (2026-08-16)
+
+`LLMW.IMPORT.DETAIL.1`, commit `d628a5b`. The reason now travels on the query
+string — the only channel a `redirect()` leaves open — and renders as a second
+line under the human sentence, React-escaped. **On the `invalid_json` path
+only**, arbitrated by the user: the other error codes already say enough, and a
+browser path proves that submitting with no file still shows its own message
+with no detail beneath it.
+
+The two new tests decode through `URL` and assert the detail by **equality**
+rather than containment, so a message arriving truncated or half-encoded fails.
+Two pre-existing tests asserted the exact redirect target on this path and were
+updated — an observable contract change, recorded as such.
+
+**The executor corrected the ticket, and was right to.** The ticket said
+`result.error`; the real field is `reason`. It used the correct one and flagged
+the divergence instead of matching a wrong specification.
+
+### B7c — one descriptor of three, and the wall the other two hit (2026-08-16)
+
+`LLMW.DESCRIPTOR.LIST.1`, commit `e1ac26d`. §11.3 announced **three**
+row-creating descriptors. Reading the three sources before writing the ticket
+found only one describable with the bricks that existed — the same discovery
+B7a made about "four" list operations, except made *before* an execution round
+rather than after.
+
+**This is where the user settled the governing rule** (§11.3, "The governing
+rule"): a gap is a brick to build, never a reason to drop an operation. The two
+excluded descriptors became three brick tickets instead of three refusals.
+
+**The defect the green checks did not show — the ninth.** The executor reported
+that `runner.ts` could not feed its render forms a `targetCount`. Checking that
+report found worse: `buildVariableDispatchers` calls `fn(...args, selectedMode)`,
+so the slot the forms read as `targetCount` receives `selectedMode` — always
+`undefined` here — and every `targetCount ?? 6` falls back to 6. Registered, the
+descriptor would have rendered a prompt asking for exactly 6 shots whatever the
+user picked. No error. Invisible to `tsc`, the render-form tables carrying no
+`satisfies` constraint; invisible to the equality test, which hand-builds its own
+dispatcher.
+
+Verified against the builder that this was a missing brick and not a botched
+block split: every occurrence of the count sits in prose whose wording depends on
+the branch, and the branch is chosen by sequence data, so a `{parameter}` block
+cannot know which one it is in. **The descriptor therefore shipped deliberately
+unregistered**, with a header stating what the runner would do if it were not.
+
+`SEQ.CONTEXT` gained `narrativePurpose`, additively; four tests asserted the
+resolver's exact shape and were updated. `commit` is deliberately empty:
+`createGeneratedShots` **inserts** rows while all eight declared `ActionId`s
+update, and `ACTION_REGISTRY`'s vocabulary was written for updates.
+
+### B7c-n4 — the first brick, and the proof that goes through the real runner (2026-08-16)
+
+`LLMW.BLOCK.VARPARAM.1`, commit `a419e89`. The seventh `Block` variant carries
+variables **and** intent parameters into one render call, and
+`shots.fromSequence` is registered as its acceptance proof.
+
+**It takes one object argument**, against the five older variants' positional
+convention, and its table carries a real `satisfies` constraint. That is the
+point, not a style preference: B7c's near-miss came from positional dispatch
+against a table cast to `(...args: unknown[]) => string`. The runner now
+assembles the input from exactly what the block names, so declaration order
+cannot mislead a render form. The older variants keep their convention — their
+forms are shipped and proven, and rewriting them is its own chantier.
+
+**The proof runs through the real runner** (`resolveOperationPrompt`), not a
+hand-built dispatcher — precisely what B7c could not do, and precisely why the
+defect got through. Five cases over both branches, each asserting byte-for-byte
+equality against the builder *and* explicitly that the prompt says twelve shots
+and never six. Confirmed by mutation: drop the parameter channel and the test
+fails with 6; restore it and all five pass.
+
+**A third block-shape check existed that the ticket's file list had missed** —
+`describeBlock` on the bench page, testing `"variables"` with no `"parameters"`
+branch. Registering the descriptor made that page reachable for it, where it
+would have shown four blocks reading only `[SEQ.CURRENT_PROMPT]` while they also
+read `targetCount`. Found by grepping every block-shape check in `src/`, not by
+a test. **That one was the supervisor's own scoping error**, not the executor's.
+
+Suite 448 → 456. Four browser paths, four PASS, including the one no automated
+test could produce: the bench page now reads
+`variables: [SEQ.CURRENT_PROMPT], parameters: [targetCount] :: …`.
+
+**What this leaves.** `shots.fromSequence` runs in the bench but its `commit` is
+empty, so nothing can be approved. The write side is the next lock, and the
+three remaining bricks (§11.3) are what the other two row-creating operations
+still wait on.
+
 ### B9a — the plain-language directive becomes real (2026-08-15)
 
 `LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
