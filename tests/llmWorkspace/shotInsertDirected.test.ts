@@ -210,6 +210,109 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
     expect(result.prompt.system).toContain('"continuity_in"');
     expect(result.prompt.system).toContain('"continuity_out"');
   });
+
+  // LLMW.UC1.TUNE.1 (S7), défaut 1 et 2 — the two rule tunings, checked in
+  // the rendered system message itself, not just recited from the ticket.
+  it("the system message enumerates framing and camera_movement as closed sets and forbids intervals/combinations (défaut 1)", async () => {
+    const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.system).toContain("ECU, CU, MCU, MS, MLS, WS, EWS, OTS, POV");
+    expect(result.prompt.system).toContain("static, pan, tilt, dolly in, dolly out, track, crane, handheld, zoom");
+    expect(result.prompt.system).toMatch(/never an interval/i);
+    expect(result.prompt.system).toMatch(/never a combination/i);
+  });
+
+  it("the system message scopes continuity_out to this shot's own ending, not the next shot's progress (défaut 2)", async () => {
+    const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.system).toContain(
+      "continuity_out describes the state of the world at the end of this shot, and only this shot — never what the following shot goes on to accomplish."
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LLMW.UC1.TUNE.1 (S7), défaut 3 — `shotInsert.shotListLines` neighbor
+// selection. A six-shot sequence, every field long enough that the previous
+// 200/150/100-char slicing would have cut it mid-word, to prove the new form
+// carries neighbors whole and everyone else title-only.
+// ---------------------------------------------------------------------------
+describe("shot.insertDirected — shot list rendering (LLMW.UC1.TUNE.1, défaut 3)", () => {
+  let longSequenceId: number;
+  let longShotIds: number[];
+  const longField =
+    "Alpha alpha alpha alpha alpha bravo bravo bravo bravo bravo charlie charlie charlie charlie charlie delta delta delta delta delta echo echo echo echo echo.";
+
+  function shotLine(prompt: string, id: number): string {
+    const line = prompt.split("\n").find((l) => l.startsWith(`[ID: ${id}]`));
+    if (line === undefined) throw new Error(`no rendered line for shot id ${id}`);
+    return line;
+  }
+
+  beforeAll(async () => {
+    longSequenceId = await insertSequence(ctx, projectId, { title: "Long sequence" });
+    longShotIds = [];
+    for (let i = 0; i < 6; i++) {
+      const id = await insertShot(ctx, longSequenceId, {
+        title: `Shot ${i}`,
+        shotCode: `SH${i}00`,
+        orderIndex: i,
+        description: longField,
+        actionPitch: longField,
+        continuityIn: longField,
+        continuityOut: longField,
+      });
+      longShotIds.push(id);
+    }
+  });
+
+  it("the four shots framing the insertion point render in full, with no truncation anywhere", async () => {
+    // afterShotId = longShotIds[2] -> insertionIndex 3 -> neighbors {1,2,3,4}
+    const result = await resolveOperationPrompt(
+      shotInsertDirectedDescriptor,
+      { projectId, sequenceId: longSequenceId },
+      { parameters: { afterShotId: longShotIds[2] } }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    for (const index of [1, 2, 3, 4]) {
+      const line = shotLine(result.prompt.user, longShotIds[index]);
+      expect(line).toContain(longField);
+    }
+    expect(result.prompt.user).not.toContain("…");
+  });
+
+  it("a shot outside the neighbor window renders only as [ID] Code — Title, none of its other fields", async () => {
+    const result = await resolveOperationPrompt(
+      shotInsertDirectedDescriptor,
+      { projectId, sequenceId: longSequenceId },
+      { parameters: { afterShotId: longShotIds[2] } }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    // index 0 and 5 are outside {1,2,3,4}
+    expect(shotLine(result.prompt.user, longShotIds[0])).toBe(`[ID: ${longShotIds[0]}] SH000 — Shot 0`);
+    expect(shotLine(result.prompt.user, longShotIds[5])).toBe(`[ID: ${longShotIds[5]}] SH500 — Shot 5`);
+  });
+
+  it("afterShotId absent renders the first two shots of the sequence as the neighbors", async () => {
+    const result = await resolveOperationPrompt(
+      shotInsertDirectedDescriptor,
+      { projectId, sequenceId: longSequenceId },
+      {}
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(shotLine(result.prompt.user, longShotIds[0])).toContain(longField);
+    expect(shotLine(result.prompt.user, longShotIds[1])).toContain(longField);
+    // every other shot is title-only
+    for (const index of [2, 3, 4, 5]) {
+      const line = shotLine(result.prompt.user, longShotIds[index]);
+      expect(line).toBe(`[ID: ${longShotIds[index]}] SH${index}00 — Shot ${index}`);
+    }
+  });
 });
 
 describe("shot.insertDirected — chain refusal", () => {

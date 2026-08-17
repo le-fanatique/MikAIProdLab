@@ -1964,18 +1964,57 @@ export function renderShotInsertSequenceLines(seq: SeqContextData): string {
   return lines.join("\n");
 }
 
-/** Template: the Sequence's shots, addressable and carrying their own continuity — what the model reads to leave the preceding shot and arrive at the following one. Always printed, even for an empty sequence (same "always print the header" precedent as `castingFromSequence.shotsLines`), so the model still receives the insertion instruction below with a coherent context. */
-export function renderShotInsertShotListLines(shotTargets: SeqShotTargetEntry[]): string {
+/**
+ * Template: the Sequence's shots, addressable and carrying their own
+ * continuity — what the model reads to leave the preceding shot and arrive
+ * at the following one. Always printed, even for an empty sequence (same
+ * "always print the header" precedent as `castingFromSequence.shotsLines`),
+ * so the model still receives the insertion instruction below with a
+ * coherent context.
+ *
+ * LLMW.UC1.TUNE.1 (S7), défaut 3 — this render form now knows the insertion
+ * point (`afterShotId`), so it can render fully only the shots the model
+ * actually has to raccorder against, and everything else as a single title
+ * line — a 14-shot sequence went from ~2477 to a bounded cost with no
+ * mid-word truncation anywhere (see `.agents/executor_report.md` for the
+ * before/after count). `SEQ.SHOT_TARGETS` itself carries no bound and none is
+ * added here: `casting.fromSequence` holds a frozen byte-for-byte proof
+ * against the same variable, and this ticket's own text names bounding it as
+ * the trap to avoid. Only this render form — the shape that belongs to
+ * `shot.insertDirected` alone — narrows what is shown.
+ *
+ * Neighbor selection: `afterShotId` names the insertion index (one past the
+ * named shot, or `0` when absent/foreign — `renderShotInsertPositionLine`'s
+ * own fallback). The four indices `insertionIndex - 2 .. insertionIndex + 1`
+ * (clipped to the sequence's bounds) are the "two shots framing the
+ * insertion point, plus one more on each side" the ticket names — up to four
+ * shots, fewer at either end of the sequence. Those render in full, with no
+ * truncation of any field. Every other shot renders as `[ID: <id>] <code> —
+ * <title>` only.
+ */
+export function renderShotInsertShotListLines(input: VariableParameterRenderInput): string {
+  const shotTargets = input.variables["SEQ.SHOT_TARGETS"] as SeqShotTargetEntry[];
   if (shotTargets.length === 0) {
     return "\nSHOTS IN THIS SEQUENCE: (none yet — this will be the first shot)";
   }
-  const lines = shotTargets.map((s) => {
+  const afterShotId = input.parameters.afterShotId as number | undefined;
+  const anchorIndex = afterShotId != null ? shotTargets.findIndex((s) => s.id === afterShotId) : -1;
+  const insertionIndex = anchorIndex === -1 ? 0 : anchorIndex + 1;
+  const neighborIndices = new Set(
+    [insertionIndex - 2, insertionIndex - 1, insertionIndex, insertionIndex + 1].filter(
+      (i) => i >= 0 && i < shotTargets.length
+    )
+  );
+  const lines = shotTargets.map((s, index) => {
     const label = s.shotCode ? `${s.shotCode} — ${s.title}` : s.title;
+    if (!neighborIndices.has(index)) {
+      return `[ID: ${s.id}] ${label}`;
+    }
     const details: string[] = [];
-    if (s.description) details.push(s.description.slice(0, 200));
-    if (s.actionPitch) details.push(`Action: ${s.actionPitch.slice(0, 150)}`);
-    if (s.continuityIn) details.push(`In: ${s.continuityIn.slice(0, 100)}`);
-    if (s.continuityOut) details.push(`Out: ${s.continuityOut.slice(0, 100)}`);
+    if (s.description) details.push(s.description);
+    if (s.actionPitch) details.push(`Action: ${s.actionPitch}`);
+    if (s.continuityIn) details.push(`In: ${s.continuityIn}`);
+    if (s.continuityOut) details.push(`Out: ${s.continuityOut}`);
     const detail = details.join(" | ");
     return `[ID: ${s.id}] ${label}${detail ? ` — ${detail}` : ""}`;
   });
@@ -2298,7 +2337,6 @@ export const VARIABLE_RENDER_FORMS = {
   },
   "SEQ.SHOT_TARGETS": {
     "castingFromSequence.shotsLines": renderCastingFromSequenceShotsLines,
-    "shotInsert.shotListLines": renderShotInsertShotListLines,
   },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
@@ -2424,6 +2462,7 @@ export const VARIABLE_PARAMETER_RENDER_FORMS = {
   "castingFromSequence.systemBody": renderCastingFromSequenceSystemBody,
   "castingFromSequence.closingInstructionLine": renderCastingFromSequenceClosingInstructionLine,
   "shotInsert.positionLine": renderShotInsertPositionLine,
+  "shotInsert.shotListLines": renderShotInsertShotListLines,
 } as const satisfies Record<string, (input: VariableParameterRenderInput) => string>;
 
 /**

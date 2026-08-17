@@ -57,6 +57,31 @@
 // (B11-b3). This descriptor runs at the bench (Run) without being
 // approvable, the same situation the three list descriptors were in before
 // their own wiring tickets.
+//
+// LLMW.UC1.TUNE.1 (S7) — three prompt/render tunings from a real response:
+//
+//   1. framing/cameraMovement rule rewritten to a closed value set with an
+//      explicit ban on intervals ("MS to WS") and combinations ("pan +
+//      tilt") — the model had returned exactly those. The fields stay plain
+//      strings (`output.fields`), not `type: "enum"`: an enum field
+//      substitutes its default for an unrecognized value, the exact
+//      silent-loss shape `casting.fromSequence` already refused for
+//      `targetType` (see that descriptor's own `output.item.fields`
+//      comment). A value that still disobeys after this wording is a
+//      `postResponse` correction, and a separate ticket.
+//   2. A `continuity_out` scope rule added to the same rules bullet list:
+//      the field describes this shot's own ending, never the following
+//      shot's progress — the model had written the next shot's own arrival
+//      into this shot's continuity_out.
+//   3. `shotInsert.shotListLines` (`variables/registry.ts`) now reads
+//      `afterShotId` as well as `SEQ.SHOT_TARGETS` — the block widened from
+//      `{variable, render}` to `{variables, parameters, render}` — so the
+//      render form can tell which shots are the insertion point's own
+//      neighbors. `SEQ.SHOT_TARGETS` itself is untouched: it is
+//      `casting.fromSequence`'s frozen-equality variable too, and bounding
+//      it here would break that descriptor's own proof for no reason of
+//      its own. Only the rendering that is unique to `shot.insertDirected`
+//      changed.
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
@@ -84,7 +109,8 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
         {
           text: `Rules:
 - Write one shot, and only one. It will be inserted at the position the director names, between the shots shown below.
-- Read the shot before and the shot after the insertion point first. Your shot must leave the first and arrive at the second: continuity_in describes what carries over from the preceding shot, continuity_out what the following shot inherits.`,
+- Read the shot before and the shot after the insertion point first. Your shot must leave the first and arrive at the second: continuity_in describes what carries over from the preceding shot, continuity_out what the following shot inherits.
+- continuity_out describes the state of the world at the end of this shot, and only this shot — never what the following shot goes on to accomplish. Stop at the point your own shot reaches; leave the next shot's own progress to its own continuity_out.`,
         },
         // Conditional, dropped entirely with no consigne — see the module
         // header and `renderShotInsertDirectiveRuleLine`'s own comment
@@ -92,7 +118,7 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
         // static rules text above/below it.
         { freeText: true, render: "shotInsert.directiveRuleLine" },
         {
-          text: `- framing and camera_movement are the technical fields: short, conventional notation the team already uses (for framing, values such as CU, MS, WS, ECU, OTS; for camera movement, values such as static, pan, tilt, dolly in, handheld). camera_pitch is prose describing the camera intent behind them.
+          text: `- framing is exactly one value from this set: ECU, CU, MCU, MS, MLS, WS, EWS, OTS, POV. camera_movement is exactly one value from this set: static, pan, tilt, dolly in, dolly out, track, crane, handheld, zoom. Never an interval ("MS to WS") and never a combination ("pan + tilt") — one value, chosen once, in each field. If the shot changes frame or camera behavior partway through, describe that change in camera_pitch, not in framing or camera_movement. camera_pitch is prose describing the camera intent behind them.
 - duration_seconds is a plain number of seconds, sized to the action you describe, never a range and never text.
 - Stay inside the story that already exists. Do not invent characters, locations or plot facts that the sequence and its shots do not already establish.
 - Leave a field empty only when the sequence genuinely gives you nothing to write in it. An empty string means "nothing to say", never "skipped".
@@ -113,7 +139,7 @@ No markdown. No explanation. Only the JSON object.`,
     blocks: [
       { variable: "PROJECT.IDENTITY", render: "shotInsert.projectLines" },
       { variable: "SEQ.CONTEXT", render: "shotInsert.sequenceLines" },
-      { variable: "SEQ.SHOT_TARGETS", render: "shotInsert.shotListLines" },
+      { variables: ["SEQ.SHOT_TARGETS"], parameters: ["afterShotId"], render: "shotInsert.shotListLines" },
       { variables: ["SEQ.SHOT_TARGETS"], parameters: ["afterShotId"], render: "shotInsert.positionLine" },
       { freeText: true, render: "shotInsert.freeTextDirective" },
     ],
