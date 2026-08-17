@@ -43,9 +43,11 @@ import {
   MODE_RENDER_FORMS,
   MULTI_VARIABLE_RENDER_FORMS,
   PARAMETER_RENDER_FORMS,
+  POST_RESPONSE_FORMS,
   VARIABLE_PARAMETER_RENDER_FORMS,
   VARIABLE_REGISTRY,
   VARIABLE_RENDER_FORMS,
+  type PostResponseFormInput,
   type VariableParameterRenderInput,
 } from "./variables/registry";
 import type { LLMConfig, LLMPrompt } from "@/types/llm";
@@ -696,6 +698,40 @@ function parseOutput(raw: string, output: OperationDescriptor["output"]): RunOpe
 }
 
 // ---------------------------------------------------------------------------
+// Step 9 — `postResponse` (LLMW.POSTRESPONSE.1, B7g). Applied after
+// `parseOutput`, only when `result.ok`, `result.kind === "list"` and
+// `descriptor.postResponse` is declared. The variables and parameters passed
+// to the form are exactly the ones the pipeline already resolved/normalized
+// upstream (`resolved`, `normalizedParameters`) — no re-read of the
+// database, no re-run of `normalizeIntentParameters`. A `postResponse.form`
+// absent from `POST_RESPONSE_FORMS` is a programming error, not a user
+// error: it throws, on the same model the block dispatchers above already
+// use for an unknown `render` name.
+// ---------------------------------------------------------------------------
+
+function applyPostResponseForm(
+  postResponse: NonNullable<OperationDescriptor["postResponse"]>,
+  parsed: Extract<RunOperationResult, { ok: true; kind: "list" }>,
+  resolved: Partial<Record<VariableId, unknown>>,
+  normalizedParameters: Record<string, number | string> | undefined
+): RunOperationResult {
+  const table = POST_RESPONSE_FORMS as unknown as Record<
+    string,
+    (input: PostResponseFormInput) => Array<Record<string, string | number>>
+  >;
+  const fn = table[postResponse.form];
+  if (!fn) throw new Error(`runner: no post-response form ${postResponse.form}`);
+
+  const variables: Record<string, unknown> = {};
+  for (const id of postResponse.variables) variables[id] = resolved[id];
+
+  const parameters: Record<string, number | string | undefined> = {};
+  for (const id of postResponse.parameters ?? []) parameters[id] = normalizedParameters?.[id];
+
+  return { ok: true, kind: "list", items: fn({ items: parsed.items, variables, parameters }) };
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -720,6 +756,11 @@ async function resolvePromptInternal(
       prompt: LLMPrompt;
       config: LLMConfig | null;
       resolved: Partial<Record<VariableId, unknown>>;
+      // LLMW.POSTRESPONSE.1 (B7g): the exact value `normalizeIntentParameters`
+      // already produced for this call, carried through so `runOperation`'s
+      // post-response step reads it as-is instead of recomputing it — "the
+      // parameters passed are those already normalized" (ticket §3).
+      normalizedParameters: Record<string, number | string> | undefined;
     }
   | { ok: false; error: string }
 > {
@@ -778,7 +819,7 @@ async function resolvePromptInternal(
     renderVariablesParameters
   );
 
-  return { ok: true, prompt, config: config ?? null, resolved };
+  return { ok: true, prompt, config: config ?? null, resolved, normalizedParameters };
 }
 
 /**
@@ -827,7 +868,13 @@ export async function runOperation(
   const raw = await callLLMJson(resolved.prompt, resolved.config);
 
   // Steps 7-8 — strip the fence, parse, map the error.
-  return parseOutput(raw, descriptor.output);
+  const parsed = parseOutput(raw, descriptor.output);
+
+  // Step 9 — postResponse, only on a successful list result.
+  if (parsed.ok && parsed.kind === "list" && descriptor.postResponse) {
+    return applyPostResponseForm(descriptor.postResponse, parsed, resolved.resolved, resolved.normalizedParameters);
+  }
+  return parsed;
 }
 
 // ---------------------------------------------------------------------------

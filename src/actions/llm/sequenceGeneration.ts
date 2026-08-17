@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { callLLMJson } from "@/lib/llm";
 import { buildSequencesFromOutlinePrompt } from "@/lib/prompts/sequences-from-outline";
-import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
+import { parseOutlineSections } from "@/lib/prompts/outlineSections";
 import { getLLMConfig, getNomenclatureSettings } from "@/lib/settings";
 import type { GeneratedSequence } from "@/types/llm";
 import { generateSequentialCodes } from "@/lib/nomenclature";
@@ -15,29 +15,6 @@ import { generateSequentialCodes } from "@/lib/nomenclature";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function parseOutlineSections(outline: string): OutlineSection[] {
-  const sections: OutlineSection[] = [];
-  const lines = outline.split("\n");
-  let currentTitle: string | null = null;
-  const currentBody: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      if (currentTitle !== null) {
-        sections.push({ title: currentTitle, body: currentBody.join("\n").trim() });
-        currentBody.length = 0;
-      }
-      currentTitle = line.slice(3).trim();
-    } else if (currentTitle !== null) {
-      currentBody.push(line);
-    }
-  }
-  if (currentTitle !== null) {
-    sections.push({ title: currentTitle, body: currentBody.join("\n").trim() });
-  }
-  return sections;
-}
 
 function extractJson(raw: string): string {
   const trimmed = raw.trim();

@@ -41,6 +41,8 @@ import {
 } from "@/db/schema";
 import { asc, eq } from "drizzle-orm";
 import type { VariableId } from "../types";
+import { parseOutlineSections } from "@/lib/prompts/outlineSections";
+import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
 
 // `@/db` is deliberately NOT imported at module scope, directly or
 // transitively. `src/db/index.ts` binds one `better-sqlite3` handle at
@@ -379,6 +381,30 @@ export async function resolveSeqShots(sequenceId: number): Promise<SeqShotEntry[
     .where(eq(shots.sequenceId, sequenceId))
     .orderBy(asc(shots.orderIndex))
     .limit(SEQ_SHOTS_LIMIT);
+}
+
+// ---------------------------------------------------------------------------
+// PROJECT.OUTLINE_SECTIONS — anchors: project. LLMW.POSTRESPONSE.1 (B7g),
+// needed by `sequences.fromOutline`: `generateSequencesFromOutlineDraft`
+// (`src/actions/llm/sequenceGeneration.ts`) parses `project.outline`'s
+// "## " sections both to build the count instruction / per-section prompt
+// block (`sectionCount`, `outlineSections`, `sequenceGeneration.ts:130-143`)
+// and, after the model answers, to pin `title`/`summary` back onto the
+// parsed sections (the post-response form, §4 of the ticket). Returns the
+// typed sections themselves, per the resolver contract (§3.1) — never a
+// formatted string. Empty outline (or no outline at all) resolves to `[]`,
+// matching `sequenceGeneration.ts:130-132`'s own guard, not an error: an
+// absent outline is a normal state for a Project this operation's Path B
+// still has to run against.
+// ---------------------------------------------------------------------------
+
+export async function resolveProjectOutlineSections(projectId: number): Promise<OutlineSection[]> {
+  const { db } = await import("@/db");
+  const [project] = await db.select({ outline: projects.outline }).from(projects).where(eq(projects.id, projectId));
+  if (!project) {
+    throw new Error(`resolveProjectOutlineSections: project ${projectId} not found.`);
+  }
+  return project.outline?.trim() ? parseOutlineSections(project.outline) : [];
 }
 
 /**
@@ -1235,6 +1261,108 @@ Break this sequence into exactly ${count} individual shots. Fill all fields as p
 }
 
 // ---------------------------------------------------------------------------
+// `sequences.fromOutline` render forms — LLMW.POSTRESPONSE.1 (B7g). Read
+// verbatim off `buildSequencesFromOutlinePrompt`
+// (`src/lib/prompts/sequences-from-outline.ts`, the oracle, left untouched),
+// which branches entirely on `outline`'s presence (Path A / Path B), and,
+// within Path A, on a three-way count instruction (`targetCount` provided /
+// `sectionCount` known / neither) plus a section-listing user-message
+// variant when the outline actually parsed into "## " sections. The system
+// bodies below need `targetCount` alongside `PROJECT.OUTLINE_SECTIONS`
+// (for `sectionCount`), so they take the `VariableParameterRenderInput`
+// object like `shots.fromSequence`'s own path bodies; the template bodies
+// need no parameter, so they keep the plain multi-variable positional
+// convention instead.
+// ---------------------------------------------------------------------------
+
+/** The JSON schema tail, identical on both paths (`sequences-from-outline.ts:18-32`) — a plain static `{text}` block in the descriptor itself, not a render form (no interpolation, unlike `shots.fromSequence`'s count-bearing schema). See the descriptor module for its own leading `"\n"`. */
+
+/** System, Path A (outline present) — `sequences-from-outline.ts:41-85`, up to (not including) the blank line before `JSON_SCHEMA`. Empty when the outline is absent. */
+export function renderSequencesFromOutlineSystemPathABody(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const hasOutline = !!project.outline?.trim();
+  if (!hasOutline) return "";
+  const sections = input.variables["PROJECT.OUTLINE_SECTIONS"] as OutlineSection[];
+  const sectionCount = sections.length || null;
+  const targetCount = input.parameters.targetCount as number | undefined;
+
+  const countInstruction =
+    targetCount != null
+      ? `Produce exactly ${targetCount} sequences. When grouping sections: concatenate or lightly condense their bodies for \`summary\`. When splitting: use the relevant portion of the source body.`
+      : sectionCount != null
+        ? `The outline contains ${sectionCount} sections. Generate exactly ${sectionCount} sequences, one per "## " section. Do not merge or split sections.`
+        : "Produce one sequence per ## section in the outline. Do not merge or split sections.";
+
+  return `You are a professional film production designer and story structure expert.
+Your task is to convert a Project Outline into a list of production sequences.
+
+RULES:
+- Each "## " section maps to exactly one sequence (unless targetCount requires grouping or splitting).
+- \`title\` = the section header text, verbatim, without the "## " prefix.
+- \`summary\` = the section body text, verbatim. Do not summarize, paraphrase, or shorten it.
+- \`description\` = enriched production narrative, inferred from the section content.
+- \`narrative_purpose\`, \`mood\`, \`location_hint\` = inferred from the section content.
+- Do not invent characters, locations, or events not present in the outline.
+- Do not use pitch or story to override outline content.
+- ${countInstruction}`;
+}
+
+/** System, Path B (outline absent) — `sequences-from-outline.ts:92-104`, up to (not including) the blank line before `JSON_SCHEMA`. Empty when the outline is present. */
+export function renderSequencesFromOutlineSystemPathBBody(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const hasOutline = !!project.outline?.trim();
+  if (hasOutline) return "";
+  const targetCount = input.parameters.targetCount as number | undefined;
+  const countInstruction =
+    targetCount != null
+      ? `Produce exactly ${targetCount} sequences.`
+      : "Choose a natural number of sequences based on the story structure (typically 4 to 8).";
+
+  return `You are a professional film production designer and story structure expert.
+The project outline is not yet available. Generate production sequences from the project pitch and story instead.
+${countInstruction}`;
+}
+
+/** Template, Path A (outline present) — `sequences-from-outline.ts:48-69`. Internally branches on whether the outline actually parsed into "## " sections (`sectionsBlock`); empty when the outline is absent. */
+export function renderSequencesFromOutlineTemplatePathA(project: ProjectIdentityData, sections: OutlineSection[]): string {
+  const hasOutline = !!project.outline?.trim();
+  if (!hasOutline) return "";
+
+  const bgParts: string[] = [];
+  if (project.pitch?.trim()) bgParts.push(`Pitch: ${project.pitch}`);
+  if (project.story?.trim()) bgParts.push(`Story (background only): ${project.story.slice(0, 400)}`);
+  const bgBlock = bgParts.length > 0 ? `\n\nBackground context (do not override the outline):\n${bgParts.join("\n")}` : "";
+
+  const sectionsBlock =
+    sections.length > 0
+      ? sections
+          .map(
+            (s, i) =>
+              `Section ${String(i + 1).padStart(2, "0")}\n` +
+              `Title (copy verbatim into "title"): ${s.title}\n` +
+              `Body (copy verbatim into "summary"): ${s.body || "(empty)"}`
+          )
+          .join("\n\n")
+      : null;
+
+  return sectionsBlock
+    ? `Project: ${project.name}${bgBlock}\n\nOutline sections (primary source):\n\n${sectionsBlock}\n\nFor each section: set \`title\` = the Title above, set \`summary\` = the Body above verbatim. Infer \`description\`, \`narrative_purpose\`, \`mood\`, and \`location_hint\` from the section body. Do not paraphrase the summary.`
+    : `Project: ${project.name}${bgBlock}\n\nProject Outline (primary source — map this into sequences):\n${project.outline}\n\nFor each "## " section: set \`title\` = the header text without "## ", set \`summary\` = the section body verbatim. Do not paraphrase the summary.`;
+}
+
+/** Template, Path B (outline absent) — `sequences-from-outline.ts:97-110`. Empty when the outline is present. */
+export function renderSequencesFromOutlineTemplatePathB(project: ProjectIdentityData): string {
+  const hasOutline = !!project.outline?.trim();
+  if (hasOutline) return "";
+  const contextLines: string[] = [`Project: ${project.name}`];
+  if (project.pitch?.trim()) contextLines.push(`Pitch: ${project.pitch}`);
+  if (project.story?.trim()) contextLines.push(`Story: ${project.story}`);
+  return `${contextLines.join("\n")}
+
+Break this project into production sequences.`;
+}
+
+// ---------------------------------------------------------------------------
 // The registry — one entry per `VariableId`. Resolver signatures differ
 // across variables (project-anchored vs. sequence-anchored vs. shot/asset
 // -anchored), matching the precedent's shape rather than forcing a uniform
@@ -1316,6 +1444,8 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "shotPrompt.generateContextLines": renderShotPromptGenerateContextLines,
   "shotPrompt.transformBlock": renderShotCurrentPromptTransformBlock,
   "shotRetake.otherShotsLines": renderSeqShotsOtherShotsLines,
+  "sequencesFromOutline.templatePathA": renderSequencesFromOutlineTemplatePathA,
+  "sequencesFromOutline.templatePathB": renderSequencesFromOutlineTemplatePathB,
 } as const;
 
 /**
@@ -1375,6 +1505,8 @@ export const VARIABLE_PARAMETER_RENDER_FORMS = {
   "shotsFromSequence.systemPathBBody": renderShotsFromSequenceSystemPathBBody,
   "shotsFromSequence.templatePathA": renderShotsFromSequenceTemplatePathA,
   "shotsFromSequence.templatePathB": renderShotsFromSequenceTemplatePathB,
+  "sequencesFromOutline.systemPathABody": renderSequencesFromOutlineSystemPathABody,
+  "sequencesFromOutline.systemPathBBody": renderSequencesFromOutlineSystemPathBBody,
 } as const satisfies Record<string, (input: VariableParameterRenderInput) => string>;
 
 /**
@@ -1421,4 +1553,58 @@ export const VARIABLE_REGISTRY = {
   "ASSET.SHOT_APPEARANCES": resolveAssetShotAppearances,
   "ASSET.REFERENCES": resolveAssetReferences,
   "SEQ.SHOTS": resolveSeqShots,
+  "PROJECT.OUTLINE_SECTIONS": resolveProjectOutlineSections,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
+
+// ---------------------------------------------------------------------------
+// `postResponse` forms — LLMW.POSTRESPONSE.1 (B7g). A named transformation
+// applied to a `kind: "list"` operation's already-parsed items, on the same
+// one-object calling convention as `VARIABLE_PARAMETER_RENDER_FORMS` above
+// (§1 of the ticket, following `VARIABLE_PARAMETER_RENDER_FORMS`'s own
+// header): a wrong signature here fails `tsc`, not a silent runtime
+// mismatch. `items`/`variables`/`parameters` are exactly what the runner has
+// already produced by this stage — parsed by `output`, resolved by
+// `resolveVariables`, normalized by `normalizeIntentParameters` — never
+// re-read from the database and never re-normalized here.
+// ---------------------------------------------------------------------------
+
+export type PostResponseFormInput = {
+  items: Array<Record<string, string | number>>;
+  variables: Record<string, unknown>;
+  parameters: Record<string, number | string | undefined>;
+};
+
+/**
+ * `sequences.fromOutline`'s post-response form. Reproduces
+ * `generateSequencesFromOutlineDraft`'s deterministic override verbatim
+ * (`src/actions/llm/sequenceGeneration.ts:148-158`, before the extraction
+ * this ticket makes): when `targetCount` is absent/null *and* the outline
+ * parsed into at least one section *and* the parsed item count equals the
+ * section count, pin every item's `title` to the matching section's title,
+ * and its `summary` to the matching section's body — but only when that
+ * body is non-empty; an empty body deliberately leaves the model's own
+ * `summary` in place. All three conditions are conjoined; none is optional,
+ * and none is "improved" here. Does not filter — unlike the casting
+ * consumer this brick is proven against (B7h, out of this ticket's scope).
+ */
+export function renderSequencesFromOutlinePinTitlesToSections(
+  input: PostResponseFormInput
+): Array<Record<string, string | number>> {
+  const outlineSections = input.variables["PROJECT.OUTLINE_SECTIONS"] as OutlineSection[];
+  const targetCount = input.parameters.targetCount;
+  if (targetCount != null || outlineSections.length === 0 || input.items.length !== outlineSections.length) {
+    return input.items;
+  }
+  return input.items.map((item, i) => {
+    const section = outlineSections[i];
+    const updated: Record<string, string | number> = { ...item, title: section.title };
+    if (section.body) {
+      updated.summary = section.body;
+    }
+    return updated;
+  });
+}
+
+export const POST_RESPONSE_FORMS = {
+  "sequencesFromOutline.pinTitlesToSections": renderSequencesFromOutlinePinTitlesToSections,
+} as const satisfies Record<string, (input: PostResponseFormInput) => Array<Record<string, string | number>>>;

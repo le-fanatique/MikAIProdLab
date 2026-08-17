@@ -18,6 +18,7 @@ import { assetDescriptionBatchDescriptor } from "./assetDescriptionBatch";
 import { shotPromptAssistDescriptor } from "./shotPrompt";
 import { shotRetakeDirectedDescriptor } from "./shotRetakeDirected";
 import { shotsFromSequenceDescriptor } from "./shotsFromSequence";
+import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 
 export const DESCRIPTORS = {
   "story.generate": storyGenerateDescriptor,
@@ -30,6 +31,7 @@ export const DESCRIPTORS = {
   "shotPrompt.assist": shotPromptAssistDescriptor,
   "shot.retakeDirected": shotRetakeDirectedDescriptor,
   "shots.fromSequence": shotsFromSequenceDescriptor,
+  "sequences.fromOutline": sequencesFromOutlineDescriptor,
 } as const satisfies Record<string, OperationDescriptor>;
 
 export {
@@ -43,4 +45,5 @@ export {
   shotPromptAssistDescriptor,
   shotRetakeDirectedDescriptor,
   shotsFromSequenceDescriptor,
+  sequencesFromOutlineDescriptor,
 };

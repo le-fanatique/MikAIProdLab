@@ -90,7 +90,14 @@ export type VariableId =
   // descriptor that needs sibling-shot continuity (`shot.retakeDirected`, and
   // UC1's future insertion descriptor). See `variables/registry.ts` for the
   // resolver and its bound.
-  | "SEQ.SHOTS";
+  | "SEQ.SHOTS"
+  // LLMW.POSTRESPONSE.1 (B7g) — the outline's parsed "## " sections, typed
+  // (never a formatted string, per the resolver contract), needed both by
+  // `sequences.fromOutline`'s own builder branches and by its post-response
+  // form (`postResponse` below). See `variables/registry.ts` for the
+  // resolver, which shares its parsing with `sequenceGeneration.ts` through
+  // the extracted `parseOutlineSections` (`src/lib/prompts/outlineSections.ts`).
+  | "PROJECT.OUTLINE_SECTIONS";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque
@@ -405,6 +412,20 @@ export type OperationDescriptor = {
           empty: string; // every item was filtered out by `item.validity`
         };
       };
+
+  /** LLMW.POSTRESPONSE.1 (B7c-n3). A named transformation applied to the parsed
+   * list, after `output` parsing and before the result reaches the caller — the
+   * stage the pipeline had no place for. Declares every variable and every
+   * intent parameter its form reads, on the same principle as the
+   * `{variables, parameters, render}` block (B7c-n4): a form that reads
+   * something it did not declare is a bug the declaration is meant to prevent.
+   * Only meaningful for `output.kind === "list"`; no object-mode operation
+   * evidences a need for it. */
+  postResponse?: {
+    form: string;
+    variables: VariableId[];
+    parameters?: string[];
+  };
 
   commit: ActionId[]; // section 3.2
 
