@@ -1157,7 +1157,8 @@ special case into library growth.
 | **S2** | **The asset-type filter becomes a real filter** | **Decided by the user 2026-08-17.** A post-response form drops a candidate whose type was not requested — possible only since B7c-n3. **A deliberate change in observable behaviour**, the first of the chantier: it must say so, and must not be mixed with a migration. | none |
 | **S3** | **Bench controls for boolean and multi-choice** | **Decided by the user 2026-08-17.** `parseIntentInputFromSearchParams` reads numbers and strings only, so `casting.fromSequence` runs there with `includeSequenceLevel` stuck at `false`. A parameter that cannot be varied in the bench defeats the surface. | none |
 | **S4** | **UC3 on the Asset page** | Not scheduled. `asset.retakeDirected` is bench-only by the user's choice (2026-08-17), pending his judgement of the answers' quality. | **surfaces UC3** |
-| B8 | Text mode + its two migrations | `promptCompiler`, `translation`. | none |
+| **S5** | **Field translation becomes a read-only popup** | **Decided by the user 2026-08-17.** `TextFieldTranslationButton` offers Replace and Append today, which write the translated text back into the field across nine call sites; the user wants a visible, non-editable translation instead — the current shape exists only because it was the cheaper thing to build at the time. Independent of everything else. | none |
+| B8 | Text mode + `promptCompiler` | **Rescoped and deferred by the user 2026-08-17** — see "B8 rescoped" below. `translation` is permanently out, so `promptCompiler` is the only text-mode consumer left, and it is the heaviest operation in the repository. Deferred behind B11, B6c2 and C0, which it no longer blocks. | none |
 | B6c2 | The variable library (§5.2) | Browse the registry filtered by anchor, resolved value and token cost per variable. Read-only. | prepares all three |
 | ~~B9~~ | ~~`intent.freeText` + the UC2 descriptor~~ | **Delivered 2026-08-15, commits `865ae59` (B9a, the primitive) and `6aa8cbf` (B9b, `shot.retakeDirected`).** The first tickets of the phase to deliver a new capability rather than reorganise one. `intent.freeText` had been declared since B1a and deferred by B6b and B6c1 — each time on correct local reasoning, cumulatively deferring the one primitive all three founding use cases need. | **UC2 delivered** |
 | ~~B10~~ | ~~The UC3 descriptor~~ | **Delivered 2026-08-17, commit `41d16b8`.** Two rounds: the first left « Respond to the director's direction below » standing unconditionally in the *system* message — the B9b defect one message higher. Writing `description` alone means **no preservation trap at all**. No oracle: the prompt is written, so its quality is a human judgement, not a test result. | **delivers UC3** |
@@ -1205,6 +1206,62 @@ therefore starts after the migrations, not before.
 2026-08-15: they stay exactly as they are and do not join the registry. The
 earlier "may never belong at all, being conversational rather than anchored"
 is now settled rather than open. No ticket, no migration, no descriptor.
+
+**Field translation is out too, permanently — decided by the user 2026-08-17.**
+`translateTextField` (`src/actions/llm/translation.ts`) joins chat and image
+generation rather than the registry. The user described the feature in his own
+terms: there are two translation affordances, and both are conveniences around
+the same free service — one is a stored system-prompt template inside the chat,
+the other is the button under a field, and what he actually wants from the
+latter is *a visible translation on demand, in a popup, not editable*. Nothing
+about that is an assistant proposing entity field values for approval.
+
+The technical facts agreed with him, which is why this is recorded rather than
+argued: the operation has **no anchor at all** (`EntityKind` is closed to four,
+and `loadAndVerifyChain` always starts from a project), its input is not a
+variable but whatever text the user clicked, it uses `getChatLLMConfig()` — the
+*chat* provider, separately configurable — and it declares per-call model
+options (`temperature: 0`, `numPredict`, `think: false`) the descriptor format
+cannot express. Four bricks, for one operation that would still have no write
+action.
+
+**The consequence is accepted explicitly:** `src/actions/llm/translation.ts`
+will never be deleted by Phase C and stays hand-written. That is precisely what
+the governing rule above warns about — but it is the same status chat and image
+generation already hold, and it is the user's call about what the workspace is
+*for*, not a gap in what it can express.
+
+### B8 rescoped — deferred 2026-08-17
+
+With `translation` out, `promptCompiler` is the **only** remaining text-mode
+consumer, so text mode no longer unblocks anything else and B8 stops being
+"a mode plus two migrations". It becomes a family of tickets around the single
+heaviest operation in the repository, and the user deferred it behind B11,
+B6c2 and C0.
+
+Two things make it heavy, both established by reading the code on 2026-08-17:
+
+1. **The action does no database access at all.** The calling page assembles the
+   context and passes it in (`GeneratePromptCompilerDraftInput.contextInput`),
+   which is the opposite of the workspace's premise. Migrating it properly means
+   new variables for reference images and their roles, cast assets, Asset
+   Bibles, prompt segments and shot duration.
+2. **The fingerprint.** `computePromptCompilerFingerprint` is a `JSON.stringify`
+   of the whole assembled context, stored with a draft and recomputed later from
+   live data by `evaluatePromptCompilerHandoff` to warn that a draft has gone
+   stale. If the runner assembles the context internally, the adapter no longer
+   holds the object to fingerprint — and the *checking* side calls
+   `buildPromptCompilationContext` directly, so both sides must move together or
+   they compare different things and produce false staleness warnings.
+
+**The user chose the resolution in advance (2026-08-17): the runner exposes its
+resolved context so the same fingerprint stays computable, rather than
+redefining the fingerprint over the effective prompt.** The alternative was
+rejected because it would invalidate every stored handoff on the day it ships.
+The rejected shortcut — leaving the operation its externally-assembled context
+and moving only the prompt build and the model call — is recorded as refused
+too: it would create a second class of descriptor, "context handed in" beside
+"context resolved by variables", contradicting §3.2 of the vision.
 
 Two consequences worth stating. Phase C cannot start before steps 1 and 2: a
 panel that still serves an unmigrated operation cannot be deleted. And the
