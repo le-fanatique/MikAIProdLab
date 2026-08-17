@@ -1862,6 +1862,10 @@ const SHOT_RETAKE_FREE_TEXT_MAX_LENGTH = 500;
 export const SHOT_RETAKE_SYSTEM_INTRO =
   "You are a story and shot-direction supervisor helping a director retake a single shot.";
 
+/** System: fixed role text for `shot.insertDirected` (LLMW.UC1.INSERT.1, B11-b2) — the ticket's own literal wording, reproduced verbatim. */
+export const SHOT_INSERT_SYSTEM_INTRO =
+  "You are a storyboard supervisor on an animation production. You write single shots that slot into an existing sequence without breaking its continuity, using the professional vocabulary a layout or animation team can act on.";
+
 /** Template: the Shot being retaken — its own narrative fields, not its camera/movement (§0bis: framing/cameraMovement are never read or written by this operation). */
 export function renderShotCoreRetakeLines(shot: ShotCoreData): string {
   const label = shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title;
@@ -1905,6 +1909,89 @@ export function renderShotRetakeFreeTextDirective(freeText: string | undefined):
   const trimmed = freeText?.trim();
   if (!trimmed) return "";
   return `\nDirector's direction: ${trimmed.slice(0, SHOT_RETAKE_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+// ---------------------------------------------------------------------------
+// `shot.insertDirected` render forms — LLMW.UC1.INSERT.1 (B11-b2). Same "no
+// oracle" situation as `shot.retakeDirected` (B9b) and `asset.retakeDirected`
+// (B10): every block below is authored for this ticket, not transcribed from
+// a pre-existing builder. Proof is unit-level assembly plus the
+// human-readable resolved prompt in `.agents/executor_report.md`.
+//
+// The system-message "Answer the director's direction below" bullet is its
+// own conditional block (`renderShotInsertDirectiveRuleLine`, dispatched
+// through `FREE_TEXT_RENDER_FORMS` like `assetRetake.directorRuleLine`
+// already is), not folded into the static rules text the ticket's own
+// literal wording shows: with an empty consigne, that line would tell the
+// model to read a direction that is not in the prompt at all — the exact
+// piège named by the ticket (§ "Validation attendue" point 2), already sent
+// B9b and B10 back once each, at the user-message and system-message level
+// respectively. With a consigne present, this block's own text plus the
+// surrounding blocks reproduce the ticket's literal wording byte-for-byte.
+// ---------------------------------------------------------------------------
+
+const SHOT_INSERT_FREE_TEXT_MAX_LENGTH = 500;
+
+/** System: the conditional "Answer the director's direction below" rule — empty (and dropped) with no consigne, present only then. See the section header above for why this is not folded into the static rules text. */
+export function renderShotInsertDirectiveRuleLine(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return "- Answer the director's direction below. It is the brief, not a suggestion — if it names a camera height, an entrance, an exit or an intent, your shot must show it.";
+}
+
+/** Template: the director's free-text direction — same "absent/empty/blank -> empty string" contract as every other `intent.freeText` render form in this file. */
+export function renderShotInsertFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's direction: ${trimmed.slice(0, SHOT_INSERT_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+/** Template: the Project's identity — name always, pitch/story where present, on the same "always print a minimal header" precedent as `castingFromSequence.projectBackgroundLines`. */
+export function renderShotInsertProjectLines(project: ProjectIdentityData): string {
+  const lines: string[] = [`Project: ${project.name}`];
+  if (project.pitch?.trim()) lines.push(`Pitch: ${project.pitch.trim()}`);
+  if (project.story?.trim()) lines.push(`Story: ${project.story.trim().slice(0, 400)}`);
+  return lines.join("\n");
+}
+
+/** Template: the Sequence's own narrative context — title always, the rest where present. */
+export function renderShotInsertSequenceLines(seq: SeqContextData): string {
+  const lines: string[] = [`\nSequence: ${seq.title}`];
+  if (seq.summary?.trim()) lines.push(`Summary: ${seq.summary.trim()}`);
+  if (seq.narrativePurpose?.trim()) lines.push(`Purpose: ${seq.narrativePurpose.trim()}`);
+  if (seq.mood?.trim()) lines.push(`Mood: ${seq.mood.trim()}`);
+  if (seq.locationHint?.trim()) lines.push(`Location: ${seq.locationHint.trim()}`);
+  return lines.join("\n");
+}
+
+/** Template: the Sequence's shots, addressable and carrying their own continuity — what the model reads to leave the preceding shot and arrive at the following one. Always printed, even for an empty sequence (same "always print the header" precedent as `castingFromSequence.shotsLines`), so the model still receives the insertion instruction below with a coherent context. */
+export function renderShotInsertShotListLines(shotTargets: SeqShotTargetEntry[]): string {
+  if (shotTargets.length === 0) {
+    return "\nSHOTS IN THIS SEQUENCE: (none yet — this will be the first shot)";
+  }
+  const lines = shotTargets.map((s) => {
+    const label = s.shotCode ? `${s.shotCode} — ${s.title}` : s.title;
+    const details: string[] = [];
+    if (s.description) details.push(s.description.slice(0, 200));
+    if (s.actionPitch) details.push(`Action: ${s.actionPitch.slice(0, 150)}`);
+    if (s.continuityIn) details.push(`In: ${s.continuityIn.slice(0, 100)}`);
+    if (s.continuityOut) details.push(`Out: ${s.continuityOut.slice(0, 100)}`);
+    const detail = details.join(" | ");
+    return `[ID: ${s.id}] ${label}${detail ? ` — ${detail}` : ""}`;
+  });
+  return `\nSHOTS IN THIS SEQUENCE:\n${lines.join("\n")}`;
+}
+
+/** Template: the insertion position, named in clear text — `{variables: ["SEQ.SHOT_TARGETS"], parameters: ["afterShotId"], render}`. `afterShotId` absent, or naming a shot this sequence does not have, both render "at the very start" — `createShotAtPosition`'s own contract (§2 of the ticket) for an absent `afterShotId`; a stale/foreign id degrades to the same safe text rather than a broken sentence, though only the two cases the ticket names are proven by test. */
+export function renderShotInsertPositionLine(input: VariableParameterRenderInput): string {
+  const shotTargets = input.variables["SEQ.SHOT_TARGETS"] as SeqShotTargetEntry[];
+  const afterShotId = input.parameters.afterShotId as number | undefined;
+  const target = afterShotId != null ? shotTargets.find((s) => s.id === afterShotId) : undefined;
+  if (!target) {
+    return "\nInsert the new shot at the very start of the sequence.";
+  }
+  const label = target.shotCode ? `${target.shotCode} — ${target.title}` : target.title;
+  return `\nInsert the new shot after ${label}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2193,6 +2280,7 @@ export const VARIABLE_RENDER_FORMS = {
     "assetsFromProject.backgroundLines": renderAssetsFromProjectBackgroundLines,
     "assetsFromProject.outlineOrStoryBlock": renderAssetsFromProjectOutlineOrStoryBlock,
     "castingFromSequence.projectBackgroundLines": renderCastingFromSequenceProjectBackgroundLines,
+    "shotInsert.projectLines": renderShotInsertProjectLines,
   },
   "PROJECT.SEQUENCES": {
     "assetsFromProject.sequencesBlock": renderAssetsFromProjectSequencesBlock,
@@ -2206,9 +2294,11 @@ export const VARIABLE_RENDER_FORMS = {
   "SEQ.CONTEXT": {
     "sequencePrompt.generateSequenceLines": renderSeqContextSequencePromptGenerateLines,
     "shotRetake.sequenceLines": renderSeqContextRetakeLines,
+    "shotInsert.sequenceLines": renderShotInsertSequenceLines,
   },
   "SEQ.SHOT_TARGETS": {
     "castingFromSequence.shotsLines": renderCastingFromSequenceShotsLines,
+    "shotInsert.shotListLines": renderShotInsertShotListLines,
   },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
@@ -2333,6 +2423,7 @@ export const VARIABLE_PARAMETER_RENDER_FORMS = {
   "assetsFromProject.shotsBlock": renderAssetsFromProjectShotsBlock,
   "castingFromSequence.systemBody": renderCastingFromSequenceSystemBody,
   "castingFromSequence.closingInstructionLine": renderCastingFromSequenceClosingInstructionLine,
+  "shotInsert.positionLine": renderShotInsertPositionLine,
 } as const satisfies Record<string, (input: VariableParameterRenderInput) => string>;
 
 /**
@@ -2364,6 +2455,8 @@ export const FREE_TEXT_RENDER_FORMS = {
   "shotRetake.freeTextDirective": renderShotRetakeFreeTextDirective,
   "assetRetake.freeTextDirective": renderAssetRetakeFreeTextDirective,
   "assetRetake.directorRuleLine": renderAssetRetakeDirectorRuleLine,
+  "shotInsert.freeTextDirective": renderShotInsertFreeTextDirective,
+  "shotInsert.directiveRuleLine": renderShotInsertDirectiveRuleLine,
 } as const;
 
 export const VARIABLE_REGISTRY = {

@@ -18,6 +18,7 @@ import { assetDescriptionBatchDescriptor } from "./assetDescriptionBatch";
 import { shotPromptAssistDescriptor } from "./shotPrompt";
 import { shotRetakeDirectedDescriptor } from "./shotRetakeDirected";
 import { assetRetakeDirectedDescriptor } from "./assetRetakeDirected";
+import { shotInsertDirectedDescriptor } from "./shotInsertDirected";
 import { shotsFromSequenceDescriptor } from "./shotsFromSequence";
 import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 import { assetsFromProjectDescriptor } from "./assetsFromProject";
@@ -34,6 +35,7 @@ export const DESCRIPTORS = {
   "shotPrompt.assist": shotPromptAssistDescriptor,
   "shot.retakeDirected": shotRetakeDirectedDescriptor,
   "asset.retakeDirected": assetRetakeDirectedDescriptor,
+  "shot.insertDirected": shotInsertDirectedDescriptor,
   "shots.fromSequence": shotsFromSequenceDescriptor,
   "sequences.fromOutline": sequencesFromOutlineDescriptor,
   "assets.fromProject": assetsFromProjectDescriptor,
@@ -51,6 +53,7 @@ export {
   shotPromptAssistDescriptor,
   shotRetakeDirectedDescriptor,
   assetRetakeDirectedDescriptor,
+  shotInsertDirectedDescriptor,
   shotsFromSequenceDescriptor,
   sequencesFromOutlineDescriptor,
   assetsFromProjectDescriptor,
