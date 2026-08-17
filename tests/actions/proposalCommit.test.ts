@@ -266,6 +266,25 @@ describe("buildUpdateShotPromptHiddenFields — shotPrompt.assist → updateShot
   });
 });
 
+describe("buildApplySelectedCastingSuggestionsHiddenFields — casting.fromSequence → applySelectedCastingSuggestions (redirectOnly)", () => {
+  it("produces exactly the field names applySelectedCastingSuggestions reads off its FormData (src/actions/llm/castingSuggestions.ts)", () => {
+    const fields = proposalCommit.buildApplySelectedCastingSuggestionsHiddenFields({
+      projectId: 1,
+      sequenceId: 2,
+      returnTo: "/projects/1/sequences/2",
+      selectedJson: "[]",
+    });
+
+    expect(Object.keys(fields).sort()).toEqual(
+      ["projectId", "sequenceId", "returnTo", "selectedJson"].sort()
+    );
+    expect(fields.projectId).toBe("1");
+    expect(fields.sequenceId).toBe("2");
+    expect(fields.returnTo).toBe("/projects/1/sequences/2");
+    expect(fields.selectedJson).toBe("[]");
+  });
+});
+
 describe("buildUpdateSequencePromptHiddenFields — sequencePrompt.assist → updateSequencePrompt (redirectOnly)", () => {
   it("produces exactly the field names updateSequencePrompt reads off its FormData (src/actions/sequences.ts)", () => {
     const fields = proposalCommit.buildUpdateSequencePromptHiddenFields({

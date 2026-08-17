@@ -29,6 +29,7 @@ import {
   type ObjectOutputFields,
 } from "@/lib/llmWorkspace/benchRun";
 import {
+  buildApplySelectedCastingSuggestionsHiddenFields,
   buildCreateGeneratedSequencesHiddenFields,
   buildCreateGeneratedShotsHiddenFields,
   buildCreateSelectedAssetsHiddenFields,
@@ -193,6 +194,35 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
         ];
       }
 
+      if (plan.kind === "redirectOnly" && plan.actionId === "applySelectedCastingSuggestions") {
+        // `output.formDataKey` names the descriptor's own declared selection
+        // destination (`descriptor.output.selection.formDataKey`); refuse
+        // rather than write the payload under an invented key if it ever
+        // diverges from what `applySelectedCastingSuggestions` actually
+        // reads.
+        if (output.formDataKey !== "selectedJson") {
+          return [];
+        }
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            disabled: listDraft.selected.length === 0,
+            action: ACTION_BINDINGS.applySelectedCastingSuggestions,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as ListDraft;
+              return buildApplySelectedCastingSuggestionsHiddenFields({
+                projectId: ids.projectId as number,
+                sequenceId: ids.sequenceId as number,
+                returnTo,
+                selectedJson: buildListSelectionPayload(output.itemFields, current.items, current.selected),
+              });
+            },
+          },
+        ];
+      }
+
       // Any other `actionId` a list descriptor could declare has no
       // descriptor wired to it, and any `returnValue`/`unsupported` plan is
       // not a list-commit shape at all. No Approve button; the reason is
@@ -341,15 +371,16 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
               </div>
 
               {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
-              {/* LLMW.MIGRATE.LIST.3 (B7f-m): all three list-kind descriptors
+              {/* LLMW.MIGRATE.LIST.4 (B7h-m): all four list-kind descriptors
                   declared today (`shotsFromSequence`, `sequencesFromOutline`,
-                  `assetsFromProject`) commit through one of the three
-                  branches above — but this fallback is not proven dead, and
-                  is kept rather than removed. `OperationDescriptor.commit`
-                  (`types.ts:486`) is `ActionId[]`, not narrowed to the three
-                  list-shaped `redirectOnly` actions by `output.kind` — a
-                  future list descriptor could still name `updateShotPrompt`
-                  / `updateSequencePrompt` (the two other `RedirectOnlyActionId`
+                  `assetsFromProject`, `castingFromSequence`) commit through
+                  one of the four branches above — but this fallback is not
+                  proven dead, and is kept rather than removed.
+                  `OperationDescriptor.commit` (`types.ts:486`) is
+                  `ActionId[]`, not narrowed to the four list-shaped
+                  `redirectOnly` actions by `output.kind` — a future list
+                  descriptor could still name `updateShotPrompt` /
+                  `updateSequencePrompt` (the two other `RedirectOnlyActionId`
                   members, both `"update"`/object-shaped in the registry, not
                   wired to any list branch here) or any `response:
                   "returnValue"` action (e.g. `updateAssetDetailsInline`) as
@@ -360,7 +391,8 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
               {plan.kind !== "unsupported" &&
                 !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedShots") &&
                 !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedSequences") &&
-                !(plan.kind === "redirectOnly" && plan.actionId === "createSelectedAssets") && (
+                !(plan.kind === "redirectOnly" && plan.actionId === "createSelectedAssets") &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "applySelectedCastingSuggestions") && (
                   <p className="text-xs text-[#cf7b6b]">
                     This template&apos;s commit action has no bench Approve path yet.
                   </p>

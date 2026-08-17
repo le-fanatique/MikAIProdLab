@@ -203,22 +203,16 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     `assetsFromProjectDescriptor.commit` names it: `assetsCreateError`,
 //     `assetsCreated`
 //   - `applySelectedCastingSuggestions`
-//     (`src/actions/llm/castingSuggestions.ts:293,356`), declared by
-//     LLMW.ACTION.CASTING.1 (B7h-a): `castingsError`, `castingsApplied`.
-//     Present here only because `satisfies Record<RedirectOnlyActionId, …>`
-//     forces every `redirectOnly` `ActionId` to declare its two keys — no
-//     descriptor commits through this action yet (`casting.fromSequence` is
-//     B7h-b), so it is unreached from `BenchRunPanel.tsx` and
-//     `resolveBenchConfirmation` below deliberately gives it no wording (see
-//     that function's own guard clause) rather than invent copy for an
-//     operation that cannot be reached from the bench.
+//     (`src/actions/llm/castingSuggestions.ts:284-289,295`), declared by
+//     LLMW.ACTION.CASTING.1 (B7h-a): `castingsError`, `castingsApplied`. Wired
+//     to `casting.fromSequence`'s own `commit` and reachable from
+//     `BenchRunPanel.tsx` since LLMW.MIGRATE.LIST.4 (B7h-m) —
+//     `resolveBenchConfirmation` below now renders real wording for it too.
 //
-// `RedirectOnlyActionId` has exactly these six members — five of them are
+// `RedirectOnlyActionId` has exactly these six members, and all six are now
 // wired to a descriptor's `commit` and reach a bench Approve branch
-// (`BenchRunPanel.tsx`), so `resolveBenchConfirmation` below renders real
-// wording for those five, none of them the deliberate `null` an unreached
-// action used to get. The sixth, `applySelectedCastingSuggestions`, is that
-// deliberate `null` again — described above.
+// (`BenchRunPanel.tsx`) — `resolveBenchConfirmation` below renders real
+// wording for every one of them.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
 // ticket buys: a future `redirectOnly` action does not compile into this
@@ -298,16 +292,20 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // now that `assetsFromProjectDescriptor` commits through it — same rules
 // again: `N assets created.`, singular `1 asset created.`.
 //
-// LLMW.ACTION.CASTING.1 (B7h-a) adds `applySelectedCastingSuggestions` to
-// `RedirectOnlyActionId` (`REDIRECT_CONFIRMATION_KEYS` above must declare
-// its two keys or `tsc` refuses to compile), but deliberately not to the
-// guard clause below: no descriptor's `commit` names it yet
-// (`casting.fromSequence` is B7h-b), so it is inatteignable from the bench
-// today, and this function gives it no wording for the same reason B7d-f
-// gave none to `createSelectedAssets` before it was wired — inventing copy
-// for an operation nothing can reach is not this function's job. It falls
-// through the guard below like any other `ActionId` this function does not
-// yet recognise, and returns `null`.
+// LLMW.MIGRATE.LIST.4 (B7h-m) adds a sixth and last, `applySelectedCastingSuggestions`,
+// now that `casting.fromSequence` is wired to a bench Approve branch
+// (`BenchRunPanel.tsx`) — deliberately *not* the same rule as the three
+// `create*` actions above. For them, a count of `0` is unreachable (Approve
+// is `disabled` when nothing is selected, and every selected item creates a
+// row), so rendering nothing on `<= 0` only ever guards a non-integer or
+// negative value. Here `0` is a normal outcome: the user can select
+// suggestions already present in the database, the unique constraint on
+// `shotAssets`/`sequenceAssets` rejects the insert, `applySelectedCastingSuggestions`'s
+// own empty `catch` swallows it (`castingSuggestions.ts:341-352`), and
+// `inserted` stays `0`. Silence on that path is exactly the "Approve went
+// nowhere" gap B7d-f (`f892850`) paid to close for the object case — so this
+// one action alone renders `No castings applied.` on a `0` count, not
+// nothing.
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {
@@ -324,7 +322,8 @@ export function resolveBenchConfirmation(
     plan.actionId !== "updateSequencePrompt" &&
     plan.actionId !== "createGeneratedShots" &&
     plan.actionId !== "createGeneratedSequences" &&
-    plan.actionId !== "createSelectedAssets"
+    plan.actionId !== "createSelectedAssets" &&
+    plan.actionId !== "applySelectedCastingSuggestions"
   ) {
     return null;
   }
@@ -357,6 +356,16 @@ export function resolveBenchConfirmation(
     const count = Number(successValue);
     if (!Number.isInteger(count) || count <= 0) return null;
     return { kind: "success", message: `${count} asset${count === 1 ? "" : "s"} created.` };
+  }
+
+  if (plan.actionId === "applySelectedCastingSuggestions") {
+    const count = Number(successValue);
+    // Deliberately `< 0`, not `<= 0` (see this function's own header
+    // comment): `0` is a normal outcome for this action alone, and renders
+    // its own message below rather than nothing.
+    if (!Number.isInteger(count) || count < 0) return null;
+    if (count === 0) return { kind: "success", message: "No castings applied." };
+    return { kind: "success", message: `${count} casting${count === 1 ? "" : "s"} applied.` };
   }
 
   if (successValue !== "1") return null;

@@ -1,13 +1,13 @@
 "use server";
 
 import { db } from "@/db";
-import { projects, sequences, shots, assets, shotAssets, sequenceAssets } from "@/db/schema";
-import { eq, inArray, asc } from "drizzle-orm";
+import { sequences, shots, assets, shotAssets, sequenceAssets } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { callLLMJson } from "@/lib/llm";
-import { buildCastingFromSequencePrompt } from "@/lib/prompts/casting-from-sequence";
-import { getLLMConfig } from "@/lib/settings";
 import type { GeneratedCastingSuggestion } from "@/types/llm";
+import { runOperation } from "@/lib/llmWorkspace/runner";
+import { castingFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/castingFromSequence";
+import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 
 const VALID_ASSET_TYPES = [
   "character",
@@ -84,27 +84,75 @@ function normalizeRawSuggestion(raw: unknown): RawSuggestion | null {
   };
 }
 
-function parseSuggestionsResult(raw: string): RawSuggestion[] {
-  let parsed: unknown;
-  try {
-    const fenced = raw.trim().match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-    parsed = JSON.parse(fenced ? fenced[1].trim() : raw.trim());
-  } catch {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const arr = (parsed as Record<string, unknown>)?.suggestions;
-  if (!Array.isArray(arr)) {
-    throw new Error("The model did not return a suggestions array. Try again.");
-  }
-  const normalized = arr
-    .map(normalizeRawSuggestion)
-    .filter((s): s is RawSuggestion => s !== null);
-  if (normalized.length === 0) {
-    throw new Error("The model returned no valid suggestions. Try again.");
-  }
-  return normalized.slice(0, 60);
-}
-
+/**
+ * Thin adapter over `runOperation(castingFromSequenceDescriptor, ...)`
+ * (LLMW.MIGRATE.LIST.4, B7h-m), on the same model
+ * `generateShotsFromSequenceDraft` (`src/actions/llm/sequenceShots.ts`,
+ * post-B7e) and `generateAssetCandidatesDraft`
+ * (`src/actions/llm/assetExtraction.ts`, post-B7f-m) already reproduce: keeps
+ * the exact `{ok:true, suggestions}` return shape `CastingSuggestionsPanel`
+ * depends on. The panel sends three form fields
+ * (`CastingSuggestionsPanel.tsx:56-59`); converting the one boolean the
+ * descriptor declares (`includeSequenceLevel`) is this adapter's own job —
+ * the panel is not touched.
+ *
+ * PIÈGE 1 (A.2 of the ticket): `alreadyAssigned` is a `postResponse`-computed
+ * boolean (`castingFromSequence.filterAndEnrich`, `variables/registry.ts`),
+ * never declared on `castingFromSequenceDescriptor.output.item.fields` — so
+ * `mapListItemToModelKeys`, which only translates declared fields, silently
+ * drops it. Read directly off the runner's own item instead, and refuse
+ * loudly if it is ever not the boolean the form always attaches — the same
+ * "impossible input throws" discipline `generateShotsFromSequenceDraft`
+ * already applies to an unexpected boolean it does *not* expect.
+ *
+ * PIÈGE 2 (A.3): `readStringField` (`runner.ts`) renders `""` where the old
+ * `str()` rendered `null`. Unlike `generateAssetCandidatesDraft`'s blanket
+ * loop over every `type: "string"` field, that fill-back applies to `reason`
+ * alone here: `GeneratedCastingSuggestion` declares `targetLabel: string` and
+ * `assetName: string` — non-nullable — and the old chain's own enriched
+ * value (never `str()`) rendered `""` for a titleless, code-less shot
+ * (`castingSuggestions.ts:252-258` pre-migration), not `null`. Only `reason`
+ * is declared `string | null`. `assetType`/`confidence` are `type: "enum"`
+ * fields with a mandatory `default` — `readEnumField` always returns one of
+ * their valid members, never `""`, so neither needs filling. `targetId`/
+ * `assetId` are `fallback: "omit"`, but every item that survives the
+ * `postResponse` form already carries both (the form filters on their
+ * existence, `variables/registry.ts:939-942`) — read directly, and throw if
+ * either is somehow missing rather than guess a value with no oracle to
+ * justify one.
+ *
+ * PIÈGE 3 (A.4): `normalizeRawSuggestion` and its dependencies stay — they
+ * are read by `applySelectedCastingSuggestions` below, the write side this
+ * adapter does not touch.
+ *
+ * A.5 — the declared divergence (corrected LLMW.MIGRATE.LIST.4-R1): the old
+ * chain's rejection gate lived in `normalizeRawSuggestion`, before its own
+ * "empty" refusal (`parseSuggestionsResult`, pre-migration lines 99-104) —
+ * it dropped an item whose `targetType` was not exactly `"shot"`/`"sequence"`
+ * (lines 62-64), or whose `targetId`/`assetId` failed `num()`, "integer and
+ * > 0" (lines 41-44, 66-70) — before "no valid suggestions" could ever fire.
+ * The runner's own gate for the equivalent checks lives in the
+ * `postResponse` form, which always runs *after* the descriptor's own
+ * `output.errors.empty` refusal (`runner.ts`), and its own item-level parse
+ * gate, `output.item.validity`, only requires `targetType` to be a
+ * *non-empty* string (`descriptors/castingFromSequence.ts`) — it does not
+ * check that the value is recognised, nor that `targetId`/`assetId` (both
+ * `fallback: "omit"`) are present. A response whose items all satisfy that
+ * looser gate but would have been rejected by the old chain's tighter one —
+ * an unrecognised `targetType`, or an id that is not a positive integer —
+ * therefore passes the empty-refusal (the parsed, pre-filter array is
+ * non-empty) and only becomes `[]` once the `postResponse` form drops every
+ * item — this adapter then returns `{ ok: true, suggestions: [] }` where the
+ * old chain threw the `empty` message. This is distinct from a well-formed
+ * but non-existent id (e.g. a hallucinated `999999`): `num()` accepts that
+ * value too, so the old chain lets it through just as far, and both chains
+ * agree on `{ ok: true, suggestions: [] }` there. Arbitrated by the user on
+ * 2026-08-17: accepted as-is, asserted by name in
+ * `tests/llmWorkspace/casting.migration.test.ts`, not "fixed" here — folding
+ * the `empty` message onto a post-filter empty array would instead corrupt
+ * the far more common case of well-formed but hallucinated ids, where the old
+ * chain legitimately returns `{ ok: true, suggestions: [] }` today.
+ */
 export async function generateCastingSuggestionsDraft(
   formData: FormData
 ): Promise<
@@ -115,160 +163,61 @@ export async function generateCastingSuggestionsDraft(
     const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
     const includeSequenceLevel = formData.get("includeSequenceLevel") === "true";
 
-    if (
-      !Number.isInteger(projectId) || projectId <= 0 ||
-      !Number.isInteger(sequenceId) || sequenceId <= 0
-    ) {
-      return { ok: false, error: "Invalid request." };
-    }
-
-    const config = await getLLMConfig();
-    if (!config) {
-      return { ok: false, error: "LLM not configured. Go to Settings to set up Ollama." };
-    }
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) return { ok: false, error: "Project not found." };
-
-    const [sequence] = await db
-      .select()
-      .from(sequences)
-      .where(eq(sequences.id, sequenceId));
-    if (!sequence || sequence.projectId !== projectId) {
-      return { ok: false, error: "Sequence not found." };
-    }
-
-    const shotList = await db
-      .select()
-      .from(shots)
-      .where(eq(shots.sequenceId, sequenceId))
-      .orderBy(asc(shots.orderIndex));
-
-    const assetLibrary = await db
-      .select()
-      .from(assets)
-      .where(eq(assets.projectId, projectId))
-      .orderBy(asc(assets.orderIndex));
-
-    if (shotList.length === 0) {
-      return { ok: false, error: "No shots in this sequence. Add shots first." };
-    }
-    if (assetLibrary.length === 0) {
-      return {
-        ok: false,
-        error: "No assets in the project library. Extract or create assets first.",
-      };
-    }
-
-    // Fetch existing shot castings for shots in this sequence
-    const shotIds = shotList.map((s) => s.id);
-    const existingShotCastingRows =
-      shotIds.length > 0
-        ? await db
-            .select({ shotId: shotAssets.shotId, assetId: shotAssets.assetId })
-            .from(shotAssets)
-            .where(inArray(shotAssets.shotId, shotIds))
-        : [];
-
-    // Fetch existing sequence castings
-    const existingSeqCastingRows = await db
-      .select({ assetId: sequenceAssets.assetId })
-      .from(sequenceAssets)
-      .where(eq(sequenceAssets.sequenceId, sequenceId));
-
-    const llmPrompt = buildCastingFromSequencePrompt({
-      project: {
-        name: project.name,
-        pitch: project.pitch,
-        story: project.story,
-        outline: project.outline,
-      },
-      sequence: {
-        id: sequence.id,
-        title: sequence.title,
-        summary: sequence.summary,
-        description: sequence.description,
-        narrativePurpose: sequence.narrativePurpose,
-        mood: sequence.mood,
-        locationHint: sequence.locationHint,
-      },
-      shots: shotList.map((s) => ({
-        id: s.id,
-        shotCode: s.shotCode,
-        title: s.title,
-        description: s.description,
-        actionPitch: s.actionPitch,
-        continuityIn: s.continuityIn,
-        continuityOut: s.continuityOut,
-      })),
-      assets: assetLibrary.map((a) => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        description: a.description,
-        notes: a.notes,
-      })),
-      existingShotCastings: existingShotCastingRows,
-      existingSequenceCastings: existingSeqCastingRows,
-      includeSequenceLevel,
-    });
-
-    const raw = await callLLMJson(llmPrompt, config);
-    const rawSuggestions = parseSuggestionsResult(raw);
-
-    // Server-side validation — filter hallucinated IDs
-    const validShotIds = new Set(shotIds);
-    const validAssetIds = new Set(assetLibrary.map((a) => a.id));
-
-    // Existing castings sets for alreadyAssigned calculation
-    const existingShotCastingSet = new Set(
-      existingShotCastingRows.map((c) => `${c.shotId}:${c.assetId}`)
+    const result = await runOperation(
+      castingFromSequenceDescriptor,
+      { projectId, sequenceId },
+      { parameters: { includeSequenceLevel } }
     );
-    const existingSeqCastingSet = new Set(
-      existingSeqCastingRows.map((c) => `${sequenceId}:${c.assetId}`)
-    );
+    if (!result.ok) return { ok: false, error: result.error };
+    // `castingFromSequenceDescriptor.output.kind` is always `"list"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "list") {
+      throw new Error("generateCastingSuggestionsDraft: expected a list-kind result.");
+    }
+    if (castingFromSequenceDescriptor.output.kind !== "list") {
+      throw new Error("generateCastingSuggestionsDraft: descriptor output is not list-kind.");
+    }
 
-    const suggestions: GeneratedCastingSuggestion[] = [];
-    for (const raw of rawSuggestions) {
-      // Validate targetId
-      if (raw.targetType === "shot" && !validShotIds.has(raw.targetId)) continue;
-      if (raw.targetType === "sequence" && raw.targetId !== sequenceId) continue;
-      // Validate assetId
-      if (!validAssetIds.has(raw.assetId)) continue;
-
-      // Calculate alreadyAssigned server-side
-      let alreadyAssigned = false;
-      if (raw.targetType === "shot") {
-        alreadyAssigned = existingShotCastingSet.has(`${raw.targetId}:${raw.assetId}`);
-      } else {
-        alreadyAssigned = existingSeqCastingSet.has(`${sequenceId}:${raw.assetId}`);
+    const fields = castingFromSequenceDescriptor.output.item.fields;
+    const suggestions: GeneratedCastingSuggestion[] = result.items.map((item) => {
+      // PIÈGE 1 — read directly off the runner item, never through
+      // `mapListItemToModelKeys` (see the function's own header comment).
+      const alreadyAssignedRaw = item.alreadyAssigned;
+      if (typeof alreadyAssignedRaw !== "boolean") {
+        throw new Error(
+          "generateCastingSuggestionsDraft: expected a boolean \"alreadyAssigned\" on every item."
+        );
       }
 
-      // Enrich display fields from local data (don't trust LLM names)
-      const assetRecord = assetLibrary.find((a) => a.id === raw.assetId);
-      const shotRecord =
-        raw.targetType === "shot" ? shotList.find((s) => s.id === raw.targetId) : null;
-      const targetLabel =
-        raw.targetType === "shot"
-          ? shotRecord
-            ? shotRecord.shotCode
-              ? `${shotRecord.shotCode} — ${shotRecord.title}`
-              : shotRecord.title
-            : raw.targetLabel
-          : sequence.title;
+      const mapped = mapListItemToModelKeys(fields, item);
+      const targetIdValue = mapped.targetId;
+      const assetIdValue = mapped.assetId;
+      if (typeof targetIdValue !== "number") {
+        throw new Error("generateCastingSuggestionsDraft: expected a numeric \"targetId\" on every item.");
+      }
+      if (typeof assetIdValue !== "number") {
+        throw new Error("generateCastingSuggestionsDraft: expected a numeric \"assetId\" on every item.");
+      }
 
-      suggestions.push({
-        targetType: raw.targetType,
-        targetId: raw.targetId,
-        targetLabel,
-        assetId: raw.assetId,
-        assetName: assetRecord?.name ?? raw.assetName,
-        assetType: assetRecord ? normalizeAssetType(assetRecord.type) : raw.assetType,
-        reason: raw.reason,
-        confidence: raw.confidence,
-        alreadyAssigned,
-      });
-    }
+      const reasonValue = mapped.reason;
+      if (typeof reasonValue !== "string") {
+        throw new Error("generateCastingSuggestionsDraft: expected a string \"reason\" on every item.");
+      }
+
+      return {
+        targetType: mapped.targetType as GeneratedCastingSuggestion["targetType"],
+        targetId: targetIdValue,
+        targetLabel: mapped.targetLabel as string,
+        assetId: assetIdValue,
+        assetName: mapped.assetName as string,
+        assetType: mapped.assetType as GeneratedCastingSuggestion["assetType"],
+        // PIÈGE 2 — `reason` alone is filled back to `null`.
+        reason: reasonValue === "" ? null : reasonValue,
+        confidence: mapped.confidence as GeneratedCastingSuggestion["confidence"],
+        alreadyAssigned: alreadyAssignedRaw,
+      };
+    });
 
     return { ok: true, suggestions };
   } catch (err) {
