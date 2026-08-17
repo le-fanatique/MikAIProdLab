@@ -97,7 +97,18 @@ export type VariableId =
   // form (`postResponse` below). See `variables/registry.ts` for the
   // resolver, which shares its parsing with `sequenceGeneration.ts` through
   // the extracted `parseOutlineSections` (`src/lib/prompts/outlineSections.ts`).
-  | "PROJECT.OUTLINE_SECTIONS";
+  | "PROJECT.OUTLINE_SECTIONS"
+  // LLMW.VAR.PROJECT_SCOPE.1 (B7c-n2) — the first project-scope collections:
+  // every Sequence, every Shot (across every Sequence), and every Asset of a
+  // Project, needed by `assetExtraction.ts`'s three project-wide reads
+  // (`:118-127`, `:151-164`). No descriptor references any of the three yet
+  // — declared and proven against a real database, per this ticket's own
+  // reasoning for going first. See `variables/registry.ts` for the three
+  // resolvers and their bounds (none — the action's own reads carry none
+  // either).
+  | "PROJECT.SEQUENCES"
+  | "PROJECT.SHOTS"
+  | "PROJECT.ASSETS";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque

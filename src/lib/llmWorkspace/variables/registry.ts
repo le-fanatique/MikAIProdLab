@@ -407,6 +407,126 @@ export async function resolveProjectOutlineSections(projectId: number): Promise<
   return project.outline?.trim() ? parseOutlineSections(project.outline) : [];
 }
 
+// ---------------------------------------------------------------------------
+// PROJECT.SEQUENCES — anchors: project. LLMW.VAR.PROJECT_SCOPE.1 (B7c-n2).
+// Fields and ordering (`orderBy(asc(sequences.orderIndex))`) copied verbatim
+// from `assetExtraction.ts`'s `seqs` query (`:118-122`), which projects the
+// full row but is only ever read for these six fields
+// (`buildAssetsFromProjectPrompt`'s `sequences` mapping, `:173-180`) — the
+// projection this resolver declares. No bound: the action's own query
+// carries none either (§2 of the ticket's frozen decisions).
+// ---------------------------------------------------------------------------
+
+export type ProjectSequenceEntry = {
+  title: string;
+  summary: string | null;
+  description: string | null;
+  narrativePurpose: string | null;
+  mood: string | null;
+  locationHint: string | null;
+};
+
+export async function resolveProjectSequences(projectId: number): Promise<ProjectSequenceEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({
+      title: sequences.title,
+      summary: sequences.summary,
+      description: sequences.description,
+      narrativePurpose: sequences.narrativePurpose,
+      mood: sequences.mood,
+      locationHint: sequences.locationHint,
+    })
+    .from(sequences)
+    .where(eq(sequences.projectId, projectId))
+    .orderBy(asc(sequences.orderIndex));
+}
+
+// ---------------------------------------------------------------------------
+// PROJECT.SHOTS — anchors: project. LLMW.VAR.PROJECT_SCOPE.1 (B7c-n2).
+// Fields and ordering (`orderBy(asc(shots.orderIndex))`) copied verbatim from
+// `assetExtraction.ts`'s `shotRows` query (`:151-164`,
+// `inArray(shots.sequenceId, seqIds)`), reproduced here as a direct join on
+// `sequences.projectId` — a Shot carries no `projectId` column of its own, so
+// project isolation is enforced through its parent Sequence, exactly as the
+// action's own two-query shape (`seqs` then `inArray(shots.sequenceId,
+// seqIds)`) does. No bound: the action's own query carries none either.
+//
+// The action gates this read behind `includeShots` (`:151`) — an
+// intent-level choice this resolver does not and cannot see. `PROJECT.SHOTS`
+// therefore always resolves, unconditionally: a resolver cannot be
+// conditioned by an intent parameter (this ticket does not invent that
+// mechanism), so a future descriptor that declares `PROJECT.SHOTS` pays its
+// query even on a run where the block that would render it renders empty.
+// The conditionality belongs to the `{variables, parameters, render}` block
+// that will consume this variable (B7c-n4's variant), not to the resolver —
+// see `.agents/executor_report.md`.
+// ---------------------------------------------------------------------------
+
+export type ProjectShotEntry = {
+  title: string;
+  description: string | null;
+  actionPitch: string | null;
+  continuityIn: string | null;
+  continuityOut: string | null;
+};
+
+export async function resolveProjectShots(projectId: number): Promise<ProjectShotEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({
+      title: shots.title,
+      description: shots.description,
+      actionPitch: shots.actionPitch,
+      continuityIn: shots.continuityIn,
+      continuityOut: shots.continuityOut,
+    })
+    .from(shots)
+    .innerJoin(sequences, eq(shots.sequenceId, sequences.id))
+    .where(eq(sequences.projectId, projectId))
+    .orderBy(asc(shots.orderIndex));
+}
+
+// ---------------------------------------------------------------------------
+// PROJECT.ASSETS — anchors: project. LLMW.VAR.PROJECT_SCOPE.1 (B7c-n2).
+// Fields (`name`, `type`) copied verbatim from `assetExtraction.ts`'s
+// `existingAssets` query (`:124-127`). Ordering deviates deliberately: the
+// action's own query carries no `orderBy` at all (implicit rowid order,
+// which happens to track insertion but is not a declared sort key). This
+// resolver orders by `asc(assets.orderIndex)` instead — the column that
+// already backs the Asset library's own user-facing order (drag-reorder),
+// unlike the action's incidental rowid order, and the only ordering that
+// stays correct once a Project's assets are reordered by the user after
+// insertion. See `.agents/executor_report.md` for this deviation, made
+// explicit rather than silently copying an unordered read.
+// ---------------------------------------------------------------------------
+
+export type ProjectAssetEntry = {
+  name: string;
+  type: string;
+};
+
+export async function resolveProjectAssets(projectId: number): Promise<ProjectAssetEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({ name: assets.name, type: assets.type })
+    .from(assets)
+    .where(eq(assets.projectId, projectId))
+    // Ordered by `id`, not by `orderIndex` — supervisor correction during the
+    // B7c-n2 review. `assetExtraction.ts:124-127`, the source this variable
+    // reproduces, issues its `existingAssets` query with **no** `ORDER BY` at
+    // all, and SQLite answers a plain table scan in rowid order, which `id`
+    // aliases. Sorting by `orderIndex` would have diverged from that de-facto
+    // production order, and B7f's byte-for-byte proof against
+    // `buildAssetsFromProjectPrompt` could easily have missed the divergence,
+    // since a fixture usually inserts rows in `orderIndex` order anyway.
+    // It would also have bought no determinism where it matters:
+    // `orderIndex` defaults to `0` for every row (`src/db/schema/assets.ts`),
+    // so on a project that never reordered its assets the sort is one large
+    // tie and the real order falls back to the scan order regardless.
+    .orderBy(asc(assets.id));
+}
+
 /**
  * `shotRetake.otherShotsLines` — `shot.retakeDirected`'s render form for
  * `SEQ.SHOTS`, combined with `SHOT.CORE` in a `{variables: [...]}` block
@@ -1554,6 +1674,9 @@ export const VARIABLE_REGISTRY = {
   "ASSET.REFERENCES": resolveAssetReferences,
   "SEQ.SHOTS": resolveSeqShots,
   "PROJECT.OUTLINE_SECTIONS": resolveProjectOutlineSections,
+  "PROJECT.SEQUENCES": resolveProjectSequences,
+  "PROJECT.SHOTS": resolveProjectShots,
+  "PROJECT.ASSETS": resolveProjectAssets,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
 
 // ---------------------------------------------------------------------------
