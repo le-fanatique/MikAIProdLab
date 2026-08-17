@@ -127,7 +127,7 @@ No markdown outside the JSON string. No explanation. No text before or after. On
   output: {
     kind: "object",
     target: { entity: "project" },
-    fields: [{ field: "outline", jsonKey: "outline" }],
+    fields: [{ type: "string", field: "outline", jsonKey: "outline" }],
     require: "all",
     errors: {
       unparsable: "The model returned an unexpected format. Try again or use a different model.",

@@ -126,8 +126,8 @@ No markdown. No explanation. Only the JSON object.`,
     kind: "object",
     target: { entity: "asset" },
     fields: [
-      { field: "description", jsonKey: "description_draft" },
-      { field: "notes", jsonKey: "notes_draft" },
+      { type: "string", field: "description", jsonKey: "description_draft" },
+      { type: "string", field: "notes", jsonKey: "notes_draft" },
     ],
     require: "any",
     errors: {

@@ -94,7 +94,7 @@ No markdown. No explanation. Only the JSON object.`,
   output: {
     kind: "object",
     target: { entity: "project" },
-    fields: [{ field: "story", jsonKey: "story" }],
+    fields: [{ type: "string", field: "story", jsonKey: "story" }],
     require: "all",
     errors: {
       unparsable: "The model returned an unexpected format. Try again or use a different model.",

@@ -39,7 +39,19 @@ async function generateSingleField(
     if (result.kind !== "object") {
       throw new Error("generateSingleField: expected an object-kind result.");
     }
-    return { ok: true, draft: field === "description" ? result.values.description : result.values.notes };
+    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but both
+    // `assetDescriptionGenerateDescriptor` and `assetNotesGenerateDescriptor`
+    // declare their one field `type: "string"`, so a number can never
+    // actually arrive here. Refused loudly rather than silently returned as
+    // this function's own `draft: string`, on the same discipline
+    // `generateAssetCandidatesDraft` (`src/actions/llm/assetExtraction.ts`)
+    // already applies to an unexpected boolean.
+    const draft = field === "description" ? result.values.description : result.values.notes;
+    if (typeof draft === "number") {
+      throw new Error("generateSingleField: unexpected numeric value in a string field.");
+    }
+    return { ok: true, draft };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";
     return { ok: false, error: message };
@@ -161,13 +173,27 @@ export async function generateBatchAssetDescriptionDrafts(
           throw new Error("generateBatchAssetDescriptionDrafts: expected an object-kind result.");
         }
 
+        // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+        // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but
+        // `assetDescriptionBatchDescriptor` declares both its fields
+        // `type: "string"`, so a number can never actually arrive here.
+        // Refused loudly rather than silently assigned to
+        // `GeneratedAssetDescriptionDraft`'s `string` fields, on the same
+        // discipline `generateAssetCandidatesDraft`
+        // (`src/actions/llm/assetExtraction.ts`) already applies to an
+        // unexpected boolean.
+        const { description, notes } = result.values;
+        if (typeof description === "number" || typeof notes === "number") {
+          throw new Error("generateBatchAssetDescriptionDrafts: unexpected numeric value in a string field.");
+        }
+
         results.push({
           assetId,
           assetName: assetRow.name,
           assetType: assetRow.type,
           hasExistingDescription: Boolean(assetRow.description?.trim()),
           hasExistingNotes: Boolean(assetRow.notes?.trim()),
-          draft: { descriptionDraft: result.values.description, notesDraft: result.values.notes },
+          draft: { descriptionDraft: description, notesDraft: notes },
         });
       } catch (err) {
         const [assetRow] = await db

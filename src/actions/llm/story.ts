@@ -28,7 +28,19 @@ export async function generateStory(
     if (result.kind !== "object") {
       throw new Error("generateStory: expected an object-kind result.");
     }
-    return { ok: true, story: result.values.story };
+    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but
+    // `storyGenerateDescriptor` declares its one field `type: "string"`, so a
+    // number can never actually arrive here. Refused loudly rather than
+    // silently returned as this function's own `story: string`, on the same
+    // discipline `generateAssetCandidatesDraft`
+    // (`src/actions/llm/assetExtraction.ts`) already applies to an
+    // unexpected boolean.
+    const { story } = result.values;
+    if (typeof story === "number") {
+      throw new Error("generateStory: unexpected numeric value in a string field.");
+    }
+    return { ok: true, story };
   } catch (err) {
     const message =
       err instanceof Error

@@ -185,7 +185,12 @@ describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
     expect(assetBibleGenerateDescriptor.output.kind).toBe("object");
     const objectOutput = assetBibleGenerateDescriptor.output;
     if (objectOutput.kind !== "object") throw new Error("unreachable");
-    expect(objectOutput.fields.map((f) => f.truncateTo)).toEqual([
+    // LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): `output.fields` is a union
+    // discriminated on `type`, and `truncateTo` belongs to the `"string"`
+    // variant alone. Narrowed rather than relaxed — a field that ever became
+    // numeric would map to `null` here and fail this assertion, which is the
+    // behaviour wanted: this descriptor's three fields are text.
+    expect(objectOutput.fields.map((f) => (f.type === "string" ? f.truncateTo : null))).toEqual([
       MAX_ASSET_BIBLE_FIELD_LENGTH,
       MAX_ASSET_BIBLE_FIELD_LENGTH,
       MAX_ASSET_BIBLE_FIELD_LENGTH,

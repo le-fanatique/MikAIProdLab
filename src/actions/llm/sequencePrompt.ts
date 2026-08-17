@@ -31,7 +31,19 @@ export async function generateSequencePromptDraft(
     if (result.kind !== "object") {
       throw new Error("generateSequencePromptDraft: expected an object-kind result.");
     }
-    return { ok: true, draft: result.values.sequencePrompt };
+    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but
+    // `sequencePromptAssistDescriptor` declares its one field
+    // `type: "string"`, so a number can never actually arrive here. Refused
+    // loudly rather than silently returned as this function's own
+    // `draft: string`, on the same discipline `generateAssetCandidatesDraft`
+    // (`src/actions/llm/assetExtraction.ts`) already applies to an
+    // unexpected boolean.
+    const { sequencePrompt } = result.values;
+    if (typeof sequencePrompt === "number") {
+      throw new Error("generateSequencePromptDraft: unexpected numeric value in a string field.");
+    }
+    return { ok: true, draft: sequencePrompt };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";
     return { ok: false, error: message };

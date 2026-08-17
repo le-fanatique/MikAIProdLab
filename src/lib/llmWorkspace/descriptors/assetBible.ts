@@ -141,9 +141,9 @@ No markdown. No explanation. Only the JSON object.`,
     kind: "object",
     target: { entity: "asset" },
     fields: [
-      { field: "visualIdentity", jsonKey: "visual_identity", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
-      { field: "usageRules", jsonKey: "usage_rules", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
-      { field: "forbiddenVariations", jsonKey: "forbidden_variations", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
+      { type: "string", field: "visualIdentity", jsonKey: "visual_identity", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
+      { type: "string", field: "usageRules", jsonKey: "usage_rules", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
+      { type: "string", field: "forbiddenVariations", jsonKey: "forbidden_variations", truncateTo: MAX_ASSET_BIBLE_FIELD_LENGTH },
     ],
     require: "any",
     errors: {

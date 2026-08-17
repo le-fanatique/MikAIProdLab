@@ -131,7 +131,7 @@ No markdown. No explanation. Only the JSON object.`,
     // bound `SINGLE_FIELD_DRAFT_MAX_LENGTH` that
     // `updateAssetDescriptionFieldInline`'s only other production caller
     // already respects for this column.
-    fields: [{ field: "description", jsonKey: "description", maxLength: 4000 }],
+    fields: [{ type: "string", field: "description", jsonKey: "description", maxLength: 4000 }],
     require: "all",
     errors: {
       unparsable: "The model returned an unexpected format. Try again.",

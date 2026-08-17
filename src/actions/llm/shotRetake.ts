@@ -34,13 +34,21 @@ export async function generateShotRetakeDraft(
     if (result.kind !== "object") {
       throw new Error("generateShotRetakeDraft: expected an object-kind result.");
     }
+    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but
+    // `shotRetakeDirectedDescriptor` declares all three fields
+    // `type: "string"`, so a number can never actually arrive here. Refused
+    // loudly rather than silently assigned to `GeneratedShotRetakeDraft`'s
+    // `string` fields, on the same discipline `generateAssetCandidatesDraft`
+    // (`src/actions/llm/assetExtraction.ts`) already applies to an
+    // unexpected boolean.
+    const { description, actionPitch, cameraPitch } = result.values;
+    if (typeof description === "number" || typeof actionPitch === "number" || typeof cameraPitch === "number") {
+      throw new Error("generateShotRetakeDraft: unexpected numeric value in a string field.");
+    }
     return {
       ok: true,
-      draft: {
-        description: result.values.description,
-        actionPitch: result.values.actionPitch,
-        cameraPitch: result.values.cameraPitch,
-      },
+      draft: { description, actionPitch, cameraPitch },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";

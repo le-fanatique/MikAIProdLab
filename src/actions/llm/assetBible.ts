@@ -31,13 +31,21 @@ export async function generateAssetBibleDraft(
     if (result.kind !== "object") {
       throw new Error("generateAssetBibleDraft: expected an object-kind result.");
     }
+    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but
+    // `assetBibleGenerateDescriptor.output.fields` declares all three fields
+    // `type: "string"`, so a number can never actually arrive here. Refused
+    // loudly rather than silently assigned to `GeneratedAssetBibleDraft`'s
+    // `string` fields, on the same discipline `generateAssetCandidatesDraft`
+    // (`src/actions/llm/assetExtraction.ts`) already applies to an
+    // unexpected boolean.
+    const { visualIdentity, usageRules, forbiddenVariations } = result.values;
+    if (typeof visualIdentity === "number" || typeof usageRules === "number" || typeof forbiddenVariations === "number") {
+      throw new Error("generateAssetBibleDraft: unexpected numeric value in a string field.");
+    }
     return {
       ok: true,
-      draft: {
-        visualIdentity: result.values.visualIdentity,
-        usageRules: result.values.usageRules,
-        forbiddenVariations: result.values.forbiddenVariations,
-      },
+      draft: { visualIdentity, usageRules, forbiddenVariations },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";

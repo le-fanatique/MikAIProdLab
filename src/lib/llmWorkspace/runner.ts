@@ -28,7 +28,7 @@
 // module scope.
 // ---------------------------------------------------------------------------
 
-import type { EntityKind, ListItemField, OperationDescriptor, PreconditionRef, VariableId } from "./types";
+import type { EntityKind, ListItemField, ObjectOutputField, OperationDescriptor, PreconditionRef, VariableId } from "./types";
 import {
   assembleDescriptorMessages,
   type RenderFreeText,
@@ -102,8 +102,15 @@ export type PromptResolutionResult =
 // the first case). `parseListOutput`'s own items are still only ever `string
 // | number` at the moment they leave `output` parsing — this widening is
 // entirely about what a `postResponse` form is allowed to hand back.
+//
+// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): the `"object"` branch's `values`
+// widens the same way the `"list"` branch's `items` already did for the same
+// reason — `output.fields` now admits `ObjectOutputField`'s `"number"`
+// variant (`types.ts`), so a parsed object value can honestly be a number,
+// not just a string. Still no `boolean` here: unlike the list branch, no
+// `postResponse` form runs over an `"object"` result.
 export type RunOperationResult =
-  | { ok: true; kind: "object"; values: Record<string, string> }
+  | { ok: true; kind: "object"; values: Record<string, string | number> }
   | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
   | { ok: false; error: string };
 
@@ -624,9 +631,23 @@ function parseObjectOutput(
   const obj: Record<string, unknown> =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
 
-  const values: Record<string, string> = {};
+  // LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): dispatches on `field.type` now that
+  // `output.fields` is `ObjectOutputField[]`. `"string"` keeps exactly its
+  // pre-existing behaviour and order of operations (`truncateTo` before
+  // `maxLength`'s refusal) — nothing below this comment changed for it.
+  // `"number"` is new: a present, in-bounds numeric value is stored as a
+  // `number`; an absent/invalid/out-of-bounds one is omitted from `values`
+  // entirely (`fallback: "omit"` is the only value the type admits — see
+  // `ObjectOutputField` in `types.ts`), and — like every existing
+  // `"string"` field — never counts as satisfying `require` when omitted.
+  const values: Record<string, string | number> = {};
   for (const field of output.fields) {
     const rawValue = obj[field.jsonKey];
+    if (field.type === "number") {
+      const result = readObjectNumberField(rawValue, field);
+      if (result.present) values[field.field] = result.value;
+      continue;
+    }
     let value = typeof rawValue === "string" ? rawValue.trim() : "";
     // `truncateTo` (§4.1): silently cut, distinct from `maxLength`'s reject.
     // Generic — no branch names an operation. 800 on the Asset Bible
@@ -642,7 +663,13 @@ function parseObjectOutput(
     values[field.field] = value;
   }
 
-  const nonEmptyCount = Object.values(values).filter((v) => v.length > 0).length;
+  // `require`'s own "non-empty" rule is unchanged for `"string"` fields
+  // (length > 0) and, by the same standard, a present `"number"` field is
+  // always non-empty — an omitted one (never `0`, per `fallback: "omit"`)
+  // is not. No existing descriptor declares a `"number"` field yet (§2 of
+  // `.agents/supervised_task.md`), so this only changes behaviour for a
+  // future descriptor that does.
+  const nonEmptyCount = Object.values(values).filter((v) => (typeof v === "number" ? true : v.length > 0)).length;
   const satisfied = output.require === "all" ? nonEmptyCount === output.fields.length : nonEmptyCount > 0;
   if (!satisfied) {
     return { ok: false, error: output.errors.empty };
@@ -678,6 +705,30 @@ function readStringField(rawValue: unknown, truncateTo: number | undefined): str
   return value;
 }
 
+// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1) — the numeric validation shared by
+// `ListItemField`'s `"number"` variant (§3.3 below) and `ObjectOutputField`'s
+// `"number"` variant (`parseObjectOutput`): `typeof === "number"`,
+// `Number.isFinite`, `exclusiveMin` exclusive, `max` inclusive. Neither
+// caller's own type (`Extract<ListItemField, {type:"number"}>` /
+// `Extract<ObjectOutputField, {type:"number"}>`) is reused directly — both
+// already carry `exclusiveMin?`/`max?` and nothing else this function reads,
+// so a small structural type (`NumericFieldBounds`) is the shared surface,
+// not `readNumberField`'s own signature. `readNumberField`'s `fallbackIndex`
+// parameter has no meaning for an `"object"` output (no item position to
+// seed from — `ObjectOutputField`'s `"number"` variant only ever declares
+// `fallback: "omit"`), so it stays local to `readNumberField` rather than
+// becoming a third parameter every caller must pass and only one ever uses.
+type NumericFieldBounds = { exclusiveMin?: number; max?: number };
+
+function isValidNumericValue(rawValue: unknown, bounds: NumericFieldBounds): rawValue is number {
+  return (
+    typeof rawValue === "number" &&
+    Number.isFinite(rawValue) &&
+    (bounds.exclusiveMin == null || rawValue > bounds.exclusiveMin) &&
+    (bounds.max == null || rawValue <= bounds.max)
+  );
+}
+
 // §3.3 — `type: "number"`. `fallbackIndex` is the item's position in the
 // raw, *unfiltered* array (`sequenceGeneration.ts:88,189`'s
 // `.map((item, i) => normalizeSequence(item, i))`), not in the filtered
@@ -688,14 +739,22 @@ function readNumberField(
   field: Extract<ListItemField, { type: "number" }>,
   fallbackIndex: number
 ): { present: true; value: number } | { present: false } {
-  const valid =
-    typeof rawValue === "number" &&
-    Number.isFinite(rawValue) &&
-    (field.exclusiveMin == null || rawValue > field.exclusiveMin) &&
-    (field.max == null || rawValue <= field.max);
-  if (valid) return { present: true, value: rawValue as number };
+  if (isValidNumericValue(rawValue, field)) return { present: true, value: rawValue };
   if (field.fallback === "index") return { present: true, value: fallbackIndex };
   return { present: false }; // "omit" — the key is absent, not "" or 0
+}
+
+// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1) — the `"object"`-output counterpart of
+// `readNumberField` above, sharing `isValidNumericValue` rather than
+// re-deriving the same four rules. No `fallbackIndex`: `ObjectOutputField`'s
+// `"number"` variant only ever declares `fallback: "omit"` (`types.ts`), so
+// there is exactly one outcome on an invalid/absent/out-of-bounds value — the
+// key is omitted from `values`, never `"index"`, never `0`, never `""`.
+function readObjectNumberField(
+  rawValue: unknown,
+  field: Extract<ObjectOutputField, { type: "number" }>
+): { present: true; value: number } | { present: false } {
+  return isValidNumericValue(rawValue, field) ? { present: true, value: rawValue } : { present: false };
 }
 
 // §3.4 — `type: "enum"`. No `trim()`: `normalizeAssetType`

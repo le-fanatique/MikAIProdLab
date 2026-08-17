@@ -109,9 +109,9 @@ No markdown. No explanation. Only the JSON object.`,
     kind: "object",
     target: { entity: "shot" },
     fields: [
-      { field: "description", jsonKey: "description" },
-      { field: "actionPitch", jsonKey: "action_pitch" },
-      { field: "cameraPitch", jsonKey: "camera_pitch" },
+      { type: "string", field: "description", jsonKey: "description" },
+      { type: "string", field: "actionPitch", jsonKey: "action_pitch" },
+      { type: "string", field: "cameraPitch", jsonKey: "camera_pitch" },
     ],
     // §4.3 of the ticket: the model may legitimately leave a field empty —
     // the retake only has to touch what the director actually complained

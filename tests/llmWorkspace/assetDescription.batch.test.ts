@@ -111,8 +111,11 @@ describe("assetDescription.batch descriptor — context equality", () => {
       kind: "object",
       target: { entity: "asset" },
       fields: [
-        { field: "description", jsonKey: "description_draft" },
-        { field: "notes", jsonKey: "notes_draft" },
+        // `type: "string"` added by LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1) —
+        // the discriminant is part of the declared structure this assertion
+        // records. Nothing else moved.
+        { type: "string", field: "description", jsonKey: "description_draft" },
+        { type: "string", field: "notes", jsonKey: "notes_draft" },
       ],
       require: "any",
       errors: {

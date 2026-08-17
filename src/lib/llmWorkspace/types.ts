@@ -60,6 +60,22 @@
 // destination. `castingSuggestions` is still not representable — its gate
 // needs a validity rule on non-string fields, which `item.validity` (§3.5 of
 // this ticket) still does not express — and is not decided here (B7h).
+//
+// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1) closes the gap `LLMW.OUTPUT.LIST.2`'s
+// own comment above named ("The `"object"` variant is untouched.") — UC1
+// needs `durationSeconds` on an `"object"`-kind result (the insertion
+// descriptor, B11-bd), and the object field shape was plain text only.
+// `ObjectOutputField` is a portage of `ListItemField`'s own union, not an
+// invention: `"string"` carries every member the flat shape already had
+// (`field`, `jsonKey`, `maxLength?`, `truncateTo?`), unchanged; `"number"`
+// carries `exclusiveMin?`/`max?`, the same bounds `ListItemField`'s own
+// `"number"` variant uses, and a mandatory `fallback` — but only `"omit"`,
+// never `"index"`: `ListItemField`'s `"index"` fallback seeds a numeric field
+// from the item's position in a list, and there is no such position outside
+// a list. `output.fields` is retyped from the flat shape to
+// `ObjectOutputField[]`; all ten existing descriptors gain `type: "string"`
+// mechanically on every field (fifteen fields total), no other value
+// changing.
 // ---------------------------------------------------------------------------
 
 /**
@@ -292,6 +308,42 @@ export type ListItemField =
     };
 
 /**
+ * A single field of a `kind: "object"` output, discriminated on `type` —
+ * closed by LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1), a portage of
+ * `ListItemField` above rather than a new invention. `type` is mandatory on
+ * every entry, on the same "no silent fallback" principle `ListItemField`
+ * and `output.kind` itself already apply.
+ *
+ * `"string"` carries exactly what the pre-B11-b1 flat shape carried:
+ * `maxLength` refuses an over-length value, `truncateTo` cuts it silently —
+ * both unchanged in `parseObjectOutput` (`runner.ts`).
+ *
+ * `"number"` carries `exclusiveMin`/`max`, the same bounds `ListItemField`'s
+ * own `"number"` variant uses, validated the same way
+ * (`typeof === "number"`, `Number.isFinite`, `exclusiveMin` exclusive, `max`
+ * inclusive — see `runner.ts`'s shared validation). `fallback` is mandatory,
+ * as on `ListItemField`, but admits only `"omit"`: `ListItemField`'s
+ * `"index"` fallback seeds a numeric field from the item's position in a
+ * list, and an `"object"` output has no such position to seed from.
+ */
+export type ObjectOutputField =
+  | {
+      type: "string";
+      field: string;
+      jsonKey: string;
+      maxLength?: number;
+      truncateTo?: number;
+    }
+  | {
+      type: "number";
+      field: string;
+      jsonKey: string;
+      exclusiveMin?: number; // value accepted if > exclusiveMin (strict)
+      max?: number; // value accepted if <= max (inclusive bound)
+      fallback: "omit"; // mandatory, never implicit — "index" has no meaning outside a list
+    };
+
+/**
  * The frozen descriptor shape — copied verbatim from §4.1, substituting the
  * auxiliary types above for their placeholders.
  */
@@ -446,17 +498,17 @@ export type OperationDescriptor = {
     | {
         kind: "object";
         target: { entity: EntityKind };
-        fields: Array<{
-          field: string; // entity field, e.g. "shotPrompt"
-          jsonKey: string; // model key,   e.g. "shot_prompt"
-          maxLength?: number; // 4000 on the single-field asset parsers: reject
-          truncateTo?: number; // 800 on the Asset Bible fields: silently cut.
-          // Distinct from maxLength — one refuses, the other keeps a shortened
-          // value. B3b first reproduced this in the adapter, which left
-          // operation-specific output logic outside the descriptor: a stored
-          // descriptor (§4.2) would then be incomplete, and B4's registry would
-          // describe an operation that quietly does more than it declares.
-        }>;
+        // Widened from a flat `{field, jsonKey, maxLength?, truncateTo?}`
+        // shape to `ObjectOutputField[]` (§2.1 above) by
+        // LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1) — every existing descriptor's
+        // fields gain `type: "string"` mechanically, no other value
+        // changing. `maxLength` (reject) and `truncateTo` (silently cut) stay
+        // exactly where they were, now on the `"string"` variant only. B3b
+        // first reproduced this in the adapter, which left operation-specific
+        // output logic outside the descriptor: a stored descriptor (§4.2)
+        // would then be incomplete, and B4's registry would describe an
+        // operation that quietly does more than it declares.
+        fields: Array<ObjectOutputField>;
         require: "all" | "any"; // every declared field non-empty, or at least one
         exactKeysOnly?: boolean; // reject any key not declared — the strict
         // single-field asset parsers, which refuse a stray draft for the other

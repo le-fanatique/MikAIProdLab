@@ -94,7 +94,7 @@ No markdown. No explanation. Only the JSON object.`,
   output: {
     kind: "object",
     target: { entity: "asset" },
-    fields: [{ field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
+    fields: [{ type: "string", field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
     require: "all",
     exactKeysOnly: true,
     errors: {

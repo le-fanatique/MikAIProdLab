@@ -157,10 +157,25 @@ describe("asset.retakeDirected — end-to-end commit (§4.3 / §5 of the ticket)
     });
     if (!draft.ok || draft.kind !== "object") throw new Error("unreachable");
 
+    // LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): `RunOperationResult`'s object
+    // branch now carries `string | number`, while `commitBenchProposal` still
+    // takes `Record<string, string>` — it refuses numeric object values until
+    // a descriptor declares one (`assertStringValues`, `bench.ts`). This
+    // descriptor declares none, so the narrowing below is checked rather than
+    // asserted away: a numeric value appearing here fails the test loudly
+    // instead of being coerced into a string.
+    const values: Record<string, string> = {};
+    for (const [field, value] of Object.entries(draft.values)) {
+      if (typeof value !== "string") {
+        throw new Error(`asset.retakeDirected returned a non-string value for "${field}".`);
+      }
+      values[field] = value;
+    }
+
     const result = await commitBenchProposal({
       templateId: "asset.retakeDirected",
       ids: { projectId, assetId },
-      values: draft.values,
+      values,
     });
 
     expect(result).toEqual({ ok: true });

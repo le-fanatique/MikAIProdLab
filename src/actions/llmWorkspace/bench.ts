@@ -37,6 +37,38 @@ function invalidTemplateError(reason: string): string {
   return `This template's stored JSON is not a valid operation descriptor and cannot be run: ${reason}`;
 }
 
+// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): `RunOperationResult`'s `"object"`
+// branch now carries `Record<string, string | number>` (`runner.ts`), but
+// this action's own return type keeps `values: Record<string, string>` —
+// widening it here, without deciding what the bench would *do* with a
+// number, is exactly the "repair by widening" the ticket forbids
+// (`.agents/supervised_task.md`). None of the ten built-in descriptors
+// declares an `ObjectOutputField` of `type: "number"` yet (the first is
+// UC1's insertion descriptor, B11-bd, not shipped by this ticket), so this
+// branch is unreachable today for every descriptor `loadBenchDescriptor`
+// resolves from the closed registry. It throws rather than silently
+// stringifying, on the same discipline `generateAssetCandidatesDraft`
+// applies to an unexpected boolean (`src/actions/llm/assetExtraction.ts`).
+//
+// Known limitation, reported rather than fixed here (out of this ticket's
+// file scope): a *custom, imported* template can already declare
+// `type: "number"` and reach this function, because
+// `validateObjectOutput` (`src/lib/llmWorkspace/templateStorage.ts`) does
+// not inspect individual `output.fields[]` entries at all — unlike its own
+// `validateListItemField` sibling for the list branch. That gap pre-dates
+// this ticket (it never validated `maxLength`/`truncateTo` either) and is
+// not touched here; see `.agents/executor_report.md`.
+function assertStringValues(values: Record<string, string | number>): Record<string, string> {
+  for (const [field, value] of Object.entries(values)) {
+    if (typeof value === "number") {
+      throw new Error(
+        `runBenchOperation: unexpected numeric value for field "${field}" — no built-in descriptor declares an ObjectOutputField of type "number" yet.`
+      );
+    }
+  }
+  return values as Record<string, string>;
+}
+
 // ---------------------------------------------------------------------------
 // `runBenchOperation` — never writes. The intention is re-parsed server-side
 // from `searchParams` with `bench.ts`'s own pure `parseIntentInputFromSearchParams`
@@ -71,7 +103,7 @@ export async function runBenchOperation(input: {
     // unaffected, since a list-output descriptor's single commit action is
     // always `redirectOnly` and never reaches its `returnValue` switch.
     return result.kind === "object"
-      ? { ok: true, kind: "object", values: result.values }
+      ? { ok: true, kind: "object", values: assertStringValues(result.values) }
       : { ok: true, kind: "list", items: result.items };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

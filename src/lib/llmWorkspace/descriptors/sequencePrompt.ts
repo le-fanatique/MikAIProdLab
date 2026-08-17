@@ -133,7 +133,7 @@ export const sequencePromptAssistDescriptor: OperationDescriptor = {
   output: {
     kind: "object",
     target: { entity: "sequence" },
-    fields: [{ field: "sequencePrompt", jsonKey: "sequence_prompt" }],
+    fields: [{ type: "string", field: "sequencePrompt", jsonKey: "sequence_prompt" }],
     require: "all",
     errors: {
       unparsable: "The model returned an unexpected format. Try again.",

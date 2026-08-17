@@ -76,7 +76,11 @@ describe("assetNotes.generate descriptor — context equality", () => {
     expect(assetNotesGenerateDescriptor.output).toEqual({
       kind: "object",
       target: { entity: "asset" },
-      fields: [{ field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
+      // `type: "string"` added by LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): object
+      // fields are a union discriminated on `type`, so the discriminant is
+      // part of the declared structure this assertion records. Nothing else
+      // moved, and this descriptor's own prompt-equality proof is untouched.
+      fields: [{ type: "string", field: "notes", jsonKey: "notes_draft", maxLength: 4000 }],
       require: "all",
       exactKeysOnly: true,
       errors: {

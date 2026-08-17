@@ -167,7 +167,7 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
   output: {
     kind: "object",
     target: { entity: "shot" },
-    fields: [{ field: "shotPrompt", jsonKey: "shot_prompt" }],
+    fields: [{ type: "string", field: "shotPrompt", jsonKey: "shot_prompt" }],
     require: "all",
     errors: {
       unparsable: "The model returned an unexpected format. Try again.",

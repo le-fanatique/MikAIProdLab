@@ -39,7 +39,19 @@ export async function generateOutlineDraft(
     if (result.kind !== "object") {
       throw new Error("generateOutlineDraft: expected an object-kind result.");
     }
-    return { ok: true, outline: result.values.outline };
+    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
+    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but
+    // `outlineGenerateDescriptor` declares its one field `type: "string"`, so
+    // a number can never actually arrive here. Refused loudly rather than
+    // silently returned as this function's own `outline: string`, on the
+    // same discipline `generateAssetCandidatesDraft`
+    // (`src/actions/llm/assetExtraction.ts`) already applies to an
+    // unexpected boolean.
+    const { outline } = result.values;
+    if (typeof outline === "number") {
+      throw new Error("generateOutlineDraft: unexpected numeric value in a string field.");
+    }
+    return { ok: true, outline };
   } catch (err) {
     const message =
       err instanceof Error
