@@ -30,6 +30,13 @@ import { applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
 import { createGeneratedShots } from "@/actions/llm/sequenceShots";
 import { createSelectedAssets } from "@/actions/llm/assetExtraction";
 import { createGeneratedSequences } from "@/actions/llm/sequenceGeneration";
+// LLMW.ACTION.CASTING.1 (B7h-a) — same shape as the three insert entries
+// above: (formData: FormData) => Promise<void>, response observable only
+// through redirect(). Added because `ActionId` grew and this module's own
+// `satisfies Record<ActionId, …>` (below) forces every member to resolve to
+// a real callable — the same mechanical consequence B7c-w's three entries
+// had here, not a new decision of this ticket's own.
+import { applySelectedCastingSuggestions } from "@/actions/llm/castingSuggestions";
 import type { ActionId } from "../types";
 
 export const ACTION_BINDINGS = {
@@ -44,4 +51,5 @@ export const ACTION_BINDINGS = {
   createGeneratedShots,
   createSelectedAssets,
   createGeneratedSequences,
+  applySelectedCastingSuggestions,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

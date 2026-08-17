@@ -51,6 +51,18 @@
 // distinguishes the two; `columns.written` and `writeSemantics` (new value
 // `"insertPerItem"`) carry a different sense for an `"insert"` entry, each
 // field's own comment says which.
+//
+// LLMW.ACTION.CASTING.1 (B7h-a) adds one more `"insert"` entry,
+// `applySelectedCastingSuggestions` — the write side of the casting
+// suggestions' Approve step (`src/actions/llm/castingSuggestions.ts`). Unlike
+// every entry above, it does not always write the same table: it inserts
+// into `shot_assets` or `sequence_assets` depending on each item's own
+// `targetType`. `target` (`{ entity }` -> `{ entity } | { entities }`) and
+// `columns.written`'s `writesUpdatedAt` (`true` -> `boolean`) are widened for
+// this one entry alone; every other entry keeps its original, narrower
+// value. Not yet wired to a descriptor's `commit` (`casting.fromSequence` is
+// B7h-b) — declared ahead of being reachable, the same discipline B7c-w
+// applied to its own three entries.
 // ---------------------------------------------------------------------------
 
 import type { ActionId, EntityKind } from "../types";
@@ -71,8 +83,12 @@ export type ActionRegistryEntry = {
    * matters — most importantly `columns.written`. */
   operation: "update" | "insert";
 
-  /** The entity whose row(s) the action writes. */
-  target: { entity: EntityKind };
+  /** The entity whose row(s) the action writes. `entities` (plural) for an
+   * action whose target depends on its input — `applySelectedCastingSuggestions`
+   * inserts into `shot_assets` or `sequence_assets` depending on each item's
+   * own `targetType` (LLMW.ACTION.CASTING.1, B7h-a). Documentation only: no
+   * code reads this field. */
+  target: { entity: EntityKind } | { entities: EntityKind[] };
 
   /** How the caller receives the outcome. `"returnValue"` — an `{ ok }`
    * object; `"redirectOnly"` — the action's return type is `Promise<void>`
@@ -130,9 +146,24 @@ export type ActionRegistryEntry = {
      * `shot_code`; every insert entry's own `orderIndex`, computed from the
      * scope's current max). The row's primary key and `createdAt` are never
      * listed (schema-assigned, not action-computed); the anchor foreign key
-     * is listed because the action itself supplies its value on every call. */
+     * is listed because the action itself supplies its value on every call.
+     * For `applySelectedCastingSuggestions` (`LLMW.ACTION.CASTING.1`,
+     * B7h-a), which targets two different tables: both foreign key columns
+     * (`shotId`, `sequenceId`) are listed because both are reachable — one
+     * column set is written per created row depending on the item's own
+     * `targetType`, the same "both listed, only one written per call"
+     * convention as `updateAssetDescriptionFieldInline` above. */
     written: string[];
-    writesUpdatedAt: true;
+    /** `true` on every entry so far: every table an existing entry targets
+     * has an `updated_at` column, and every one of those actions writes it.
+     * `false` for `applySelectedCastingSuggestions` (`LLMW.ACTION.CASTING.1`,
+     * B7h-a) — `shot_assets` and `sequence_assets`
+     * (`src/db/schema/assets.ts:32-66`) have no `updated_at` column at all
+     * (only `created_at`, schema-assigned, never rewritten), so there is
+     * nothing to write. Widened from the literal `true` to `boolean` for
+     * this one fact, the same way `target` above is widened for the same
+     * entry — every other entry keeps `true` unchanged. */
+    writesUpdatedAt: boolean;
   };
 
   /** `"replace"` — every declared column is written on every successful
@@ -401,6 +432,35 @@ export const ACTION_REGISTRY = {
       "The model's `order_index` (`normalizeSequence`, sequenceGeneration.ts:60-63,72) is used only to sort the candidate array before insertion (sequenceGeneration.ts:196-199, `.sort((a,b) => a.order_index - b.order_index)`) — the stored `orderIndex` column is `max(sequences.orderIndex) for this projectId, then +1, then +i` in that sorted order (sequenceGeneration.ts:208-213,235), never the model's own number. Proven by registry.test.ts alongside orderIndex continuation.",
       "`sequencePrompt`, `rowBackgroundImagePath`, `rowBackgroundOpacity` are never written by this action — proven null on the created row by registry.test.ts.",
       "`revalidatePath(\"/\", \"layout\")` is called before the success redirect (src/actions/llm/sequenceGeneration.ts:239) — present, like `createGeneratedShots`.",
+    ],
+  },
+
+  // LLMW.ACTION.CASTING.1 (B7h-a) — the write side of the casting
+  // suggestions' Approve step. The first `"insert"` entry whose target is
+  // not one table: each retained item is inserted into `shot_assets` or
+  // `sequence_assets`, chosen per item by its own `targetType`, hence
+  // `target: { entities: [...] }` rather than `{ entity: ... }`.
+  applySelectedCastingSuggestions: {
+    id: "applySelectedCastingSuggestions",
+    operation: "insert",
+    source: { module: "@/actions/llm/castingSuggestions", export: "applySelectedCastingSuggestions" },
+    target: { entities: ["shot", "sequence"] },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["shotId", "sequenceId", "assetId"],
+      writesUpdatedAt: false,
+    },
+    writeSemantics: "insertPerItem",
+    notes: [
+      "Writes one of two tables per item, chosen by the item's own `targetType` (src/actions/llm/castingSuggestions.ts:342-348): `db.insert(shotAssets).values({ shotId, assetId })` for `\"shot\"`, `db.insert(sequenceAssets).values({ sequenceId, assetId })` for `\"sequence\"` — never both columns on the same row, and never `notes` (schema-allowed on both tables, always left null by this action).",
+      "An item whose `assetId` does not exist in the current project, whose `targetId` (`targetType: \"shot\"`) does not belong to the current sequence, or whose `targetId` (`targetType: \"sequence\"`) is not the current sequence, is dropped silently before the insert attempt (src/actions/llm/castingSuggestions.ts:337-339) — `continue`, no error, no counter, no message. Reported as a fact, not repaired: the same discipline B7c-w applied to its own three insert entries.",
+      "A duplicate (the tables' own unique constraint on (shotId|sequenceId, assetId)) is swallowed by an empty `catch` (src/actions/llm/castingSuggestions.ts:350-352) and does not increment `inserted` — no error surfaces to the caller for that item either.",
+      "Not atomic: one independent insert per item inside a plain for-loop (src/actions/llm/castingSuggestions.ts:334-353), no enclosing `db.transaction`. Arbitrated 2026-08-16 (LLMW.ACTION.INSERT.2, B7c-w2), cited rather than reopened: the risk is a race between two concurrent Approve calls on the same sequence — not reachable on a single-connection, single-process, local SQLite application.",
+      "Ownership check: `sequences` is selected by `sequenceId` and `sequence.projectId !== projectId` is verified (src/actions/llm/castingSuggestions.ts:303-309) before any insert, redirecting with \"Sequence not found.\" if the chain is broken — not atomic with the insert loop that follows (separate statements, no db.transaction). Refusal writes no row.",
+      "`writesUpdatedAt: false` — unlike every entry above, because neither `shot_assets` nor `sequence_assets` (`src/db/schema/assets.ts:32-66`) has an `updated_at` column at all; both only have `created_at` (schema-assigned, never rewritten by this action).",
+      "Redirects on every path (`Promise<void>`), never a return value: `castingsError` on refusal (src/actions/llm/castingSuggestions.ts:293) or `castingsApplied=<inserted count>` on success (src/actions/llm/castingSuggestions.ts:356) — the same shape as `createGeneratedShots`/`createSelectedAssets`/`createGeneratedSequences` above.",
+      "Unlike the three `createGenerated*`/`createSelectedAssets` insert entries above, this action calls no `revalidatePath` on any path (verified absent from src/actions/llm/castingSuggestions.ts) — reported, not fixed.",
     ],
   },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;

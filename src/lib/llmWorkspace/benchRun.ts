@@ -192,12 +192,23 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     wired by LLMW.MIGRATE.LIST.3 (B7f-m), now that
 //     `assetsFromProjectDescriptor.commit` names it: `assetsCreateError`,
 //     `assetsCreated`
+//   - `applySelectedCastingSuggestions`
+//     (`src/actions/llm/castingSuggestions.ts:293,356`), declared by
+//     LLMW.ACTION.CASTING.1 (B7h-a): `castingsError`, `castingsApplied`.
+//     Present here only because `satisfies Record<RedirectOnlyActionId, …>`
+//     forces every `redirectOnly` `ActionId` to declare its two keys — no
+//     descriptor commits through this action yet (`casting.fromSequence` is
+//     B7h-b), so it is unreached from `BenchRunPanel.tsx` and
+//     `resolveBenchConfirmation` below deliberately gives it no wording (see
+//     that function's own guard clause) rather than invent copy for an
+//     operation that cannot be reached from the bench.
 //
-// `RedirectOnlyActionId` has exactly these five members — every one of them
-// is now wired to a descriptor's `commit` and reaches a bench Approve
-// branch (`BenchRunPanel.tsx`), so `resolveBenchConfirmation` below renders
-// real wording for all five, none of them the deliberate `null` an
-// unreached action used to get.
+// `RedirectOnlyActionId` has exactly these six members — five of them are
+// wired to a descriptor's `commit` and reach a bench Approve branch
+// (`BenchRunPanel.tsx`), so `resolveBenchConfirmation` below renders real
+// wording for those five, none of them the deliberate `null` an unreached
+// action used to get. The sixth, `applySelectedCastingSuggestions`, is that
+// deliberate `null` again — described above.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
 // ticket buys: a future `redirectOnly` action does not compile into this
@@ -213,6 +224,7 @@ export const REDIRECT_CONFIRMATION_KEYS = {
   createGeneratedShots: { successKey: "shotsCreated", errorKey: "shotsCreateError" },
   createSelectedAssets: { successKey: "assetsCreated", errorKey: "assetsCreateError" },
   createGeneratedSequences: { successKey: "sequencesCreated", errorKey: "sequencesCreateError" },
+  applySelectedCastingSuggestions: { successKey: "castingsApplied", errorKey: "castingsError" },
 } as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
 
 // ---------------------------------------------------------------------------
@@ -275,6 +287,17 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // LLMW.MIGRATE.LIST.3 (B7f-m) adds a fifth and last, `createSelectedAssets`,
 // now that `assetsFromProjectDescriptor` commits through it — same rules
 // again: `N assets created.`, singular `1 asset created.`.
+//
+// LLMW.ACTION.CASTING.1 (B7h-a) adds `applySelectedCastingSuggestions` to
+// `RedirectOnlyActionId` (`REDIRECT_CONFIRMATION_KEYS` above must declare
+// its two keys or `tsc` refuses to compile), but deliberately not to the
+// guard clause below: no descriptor's `commit` names it yet
+// (`casting.fromSequence` is B7h-b), so it is inatteignable from the bench
+// today, and this function gives it no wording for the same reason B7d-f
+// gave none to `createSelectedAssets` before it was wired — inventing copy
+// for an operation nothing can reach is not this function's job. It falls
+// through the guard below like any other `ActionId` this function does not
+// yet recognise, and returns `null`.
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {

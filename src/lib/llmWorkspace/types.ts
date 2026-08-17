@@ -151,7 +151,16 @@ export type ActionId =
   // tickets).
   | "createGeneratedShots"
   | "createSelectedAssets"
-  | "createGeneratedSequences";
+  | "createGeneratedSequences"
+  // LLMW.ACTION.CASTING.1 (B7h-a) — the write side of the casting
+  // suggestions' Approve step. `INSERT`s one row per retained item, like the
+  // three above, but into one of *two* different link tables depending on
+  // the item's own `targetType` — `actions/registry.ts`'s `target` field is
+  // widened (`{ entity }` -> `{ entity } | { entities }`) for this one entry
+  // to say so. Not yet reachable from a descriptor's `commit` (its own
+  // descriptor, `casting.fromSequence`, is B7h-b) — declared for the same
+  // reason B7c-w's three insert entries were declared ahead of being wired.
+  | "applySelectedCastingSuggestions";
 
 /**
  * Names a field on the operation's anchor entity, for a `messages.chainNotFound`

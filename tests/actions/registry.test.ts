@@ -61,6 +61,7 @@ let outlineActions: typeof import("@/actions/llm/outlineGeneration");
 let sequenceShotsActions: typeof import("@/actions/llm/sequenceShots");
 let assetExtractionActions: typeof import("@/actions/llm/assetExtraction");
 let sequenceGenerationActions: typeof import("@/actions/llm/sequenceGeneration");
+let castingSuggestionsActions: typeof import("@/actions/llm/castingSuggestions");
 let projectId: number;
 
 beforeAll(async () => {
@@ -73,6 +74,7 @@ beforeAll(async () => {
   sequenceShotsActions = await import("@/actions/llm/sequenceShots");
   assetExtractionActions = await import("@/actions/llm/assetExtraction");
   sequenceGenerationActions = await import("@/actions/llm/sequenceGeneration");
+  castingSuggestionsActions = await import("@/actions/llm/castingSuggestions");
   projectId = await insertProject(ctx, "Registry project");
 });
 
@@ -612,5 +614,188 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
 
     const after = await ctx.db.select().from(ctx.schema.sequences);
     expect(after).toHaveLength(before.length);
+  });
+});
+
+describe("action registry — applySelectedCastingSuggestions (LLMW.ACTION.CASTING.1, B7h-a)", () => {
+  // The action's own two owned tables — read directly, the same way the
+  // insert-entries suite above reads ctx.schema.shots/assets/sequences
+  // directly rather than through a dedicated helper.
+  async function shotAssetRows(shotId: number) {
+    return ctx.db.select().from(ctx.schema.shotAssets).where(eq(ctx.schema.shotAssets.shotId, shotId));
+  }
+  async function sequenceAssetRows(sequenceId: number) {
+    return ctx.db
+      .select()
+      .from(ctx.schema.sequenceAssets)
+      .where(eq(ctx.schema.sequenceAssets.sequenceId, sequenceId));
+  }
+
+  it("1. a valid shot-targeted suggestion inserts one row in shot_assets, none in sequence_assets", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotId = await insertShot(ctx, sequenceId);
+    const assetId = await insertAsset(ctx, projectId);
+
+    const target = await captureRedirect(() =>
+      castingSuggestionsActions.applySelectedCastingSuggestions(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          selectedJson: JSON.stringify([{ targetType: "shot", targetId: shotId, assetId }]),
+        })
+      )
+    );
+    expect(target).toContain("castingsApplied=1");
+
+    const shotRows = await shotAssetRows(shotId);
+    expect(shotRows).toHaveLength(1);
+    expect(shotRows[0].shotId).toBe(shotId);
+    expect(shotRows[0].assetId).toBe(assetId);
+    // Declared columns (shotId, assetId) are populated; the undeclared
+    // `notes` column stays at its schema default — proof #7.
+    expect(shotRows[0].notes).toBeNull();
+
+    const seqRows = await sequenceAssetRows(sequenceId);
+    expect(seqRows).toHaveLength(0);
+  });
+
+  it("2. a valid sequence-targeted suggestion inserts one row in sequence_assets, none in shot_assets", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotId = await insertShot(ctx, sequenceId);
+    const assetId = await insertAsset(ctx, projectId);
+
+    const target = await captureRedirect(() =>
+      castingSuggestionsActions.applySelectedCastingSuggestions(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          selectedJson: JSON.stringify([{ targetType: "sequence", targetId: sequenceId, assetId }]),
+        })
+      )
+    );
+    expect(target).toContain("castingsApplied=1");
+
+    const seqRows = await sequenceAssetRows(sequenceId);
+    expect(seqRows).toHaveLength(1);
+    expect(seqRows[0].sequenceId).toBe(sequenceId);
+    expect(seqRows[0].assetId).toBe(assetId);
+    // Declared columns (sequenceId, assetId) are populated; the undeclared
+    // `notes` column stays at its schema default — proof #7.
+    expect(seqRows[0].notes).toBeNull();
+
+    const shotRows = await shotAssetRows(shotId);
+    expect(shotRows).toHaveLength(0);
+  });
+
+  it("3. a nonexistent assetId is ignored silently: no row, no error, and the redirect count excludes it", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotId = await insertShot(ctx, sequenceId);
+
+    const target = await captureRedirect(() =>
+      castingSuggestionsActions.applySelectedCastingSuggestions(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          selectedJson: JSON.stringify([{ targetType: "shot", targetId: shotId, assetId: 999999 }]),
+        })
+      )
+    );
+    expect(target).toContain("castingsApplied=0");
+    expect(target).not.toContain("castingsError");
+
+    const shotRows = await shotAssetRows(shotId);
+    expect(shotRows).toHaveLength(0);
+  });
+
+  it("4. a shot targetId belonging to another sequence is ignored the same way", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const otherSequenceId = await insertSequence(ctx, projectId);
+    const otherShotId = await insertShot(ctx, otherSequenceId);
+    const assetId = await insertAsset(ctx, projectId);
+
+    const target = await captureRedirect(() =>
+      castingSuggestionsActions.applySelectedCastingSuggestions(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          selectedJson: JSON.stringify([{ targetType: "shot", targetId: otherShotId, assetId }]),
+        })
+      )
+    );
+    expect(target).toContain("castingsApplied=0");
+
+    const shotRows = await shotAssetRows(otherShotId);
+    expect(shotRows).toHaveLength(0);
+  });
+
+  it("5. a duplicate does not add a row and does not increment the redirect count", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotId = await insertShot(ctx, sequenceId);
+    const assetId = await insertAsset(ctx, projectId);
+    await ctx.db.insert(ctx.schema.shotAssets).values({ shotId, assetId });
+
+    const target = await captureRedirect(() =>
+      castingSuggestionsActions.applySelectedCastingSuggestions(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          selectedJson: JSON.stringify([{ targetType: "shot", targetId: shotId, assetId }]),
+        })
+      )
+    );
+    expect(target).toContain("castingsApplied=0");
+
+    const shotRows = await shotAssetRows(shotId);
+    expect(shotRows).toHaveLength(1);
+  });
+
+  it("6. a sequence belonging to another project writes nothing and redirects with \"Sequence not found.\"", async () => {
+    const otherProjectId = await insertProject(ctx, "Foreign project (casting)");
+    const otherSequenceId = await insertSequence(ctx, otherProjectId);
+    const otherShotId = await insertShot(ctx, otherSequenceId);
+    const assetId = await insertAsset(ctx, otherProjectId);
+
+    const beforeShotAssets = await ctx.db.select().from(ctx.schema.shotAssets);
+    const beforeSequenceAssets = await ctx.db.select().from(ctx.schema.sequenceAssets);
+
+    const target = await captureRedirect(() =>
+      castingSuggestionsActions.applySelectedCastingSuggestions(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(otherSequenceId),
+          selectedJson: JSON.stringify([{ targetType: "shot", targetId: otherShotId, assetId }]),
+        })
+      )
+    );
+    expect(target).toContain(`castingsError=${encodeURIComponent("Sequence not found.")}`);
+
+    const afterShotAssets = await ctx.db.select().from(ctx.schema.shotAssets);
+    const afterSequenceAssets = await ctx.db.select().from(ctx.schema.sequenceAssets);
+    expect(afterShotAssets).toHaveLength(beforeShotAssets.length);
+    expect(afterSequenceAssets).toHaveLength(beforeSequenceAssets.length);
+  });
+
+  it("no db.transaction, at least one SELECT and one INSERT — behaviour 4, structural fact", async () => {
+    const entry = ACTION_REGISTRY.applySelectedCastingSuggestions;
+    expect(entry.ownership.transactional).toBe(false);
+
+    const filePath = path.join(process.cwd(), "src/actions/llm/castingSuggestions.ts");
+    const src = readFileSync(filePath, "utf8");
+    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true);
+    let body: string | undefined;
+    sourceFile.forEachChild((node) => {
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name?.text === "applySelectedCastingSuggestions" &&
+        node.body
+      ) {
+        body = node.body.getFullText(sourceFile);
+      }
+    });
+    if (body === undefined) throw new Error("applySelectedCastingSuggestions not found");
+
+    expect(body).not.toContain("db.transaction");
+    expect(body).toMatch(/db\s*\.\s*select/);
+    expect(body).toMatch(/db\s*\.\s*insert/);
   });
 });
