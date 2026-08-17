@@ -391,57 +391,6 @@ export async function resolveSeqShots(sequenceId: number): Promise<SeqShotEntry[
 }
 
 // ---------------------------------------------------------------------------
-// SEQ.SHOT_CONTINUITY — anchors: sequence. LLMW.VAR.CONTINUITY.1 (B11-c),
-// prepares UC1's insertion descriptor (B11-bd, not yet declared): "the
-// continuity with the preceding Shots, the continuity with the following
-// Shots" (§4 of the vision doc) needs `continuityIn`/`continuityOut`, which
-// `SEQ.SHOTS` above deliberately does not carry (its own comment explains
-// why: UC2's "other Shots" context only asks for story and action). Kept as
-// its own variable rather than a widening — `shot.retakeDirected` reads
-// `SEQ.SHOTS` and its rendered prompt would change.
-//
-// Fields: `shotCode` (the human identifier, never the DB primary key, same
-// rule `SEQ.SHOTS` already applies), `orderIndex` (so B11-bd can situate
-// "preceding"/"following" around its insertion point), `continuityIn`,
-// `continuityOut`. `title`/`description` are not repeated here: `SEQ.SHOTS`
-// already carries them, and a descriptor needing both declares both — the
-// composition the variable library exists to allow, rather than paying for
-// the same tokens twice.
-//
-// Bound: `SEQ_SHOTS_LIMIT` (20), same constant as `SEQ.SHOTS` — both
-// variables describe the same collection from two angles, and two different
-// bounds would produce two misaligned windows over the same sequence for a
-// descriptor reading both. See `.agents/executor_report.md` for the executor's
-// note on this reuse.
-// ---------------------------------------------------------------------------
-
-export type SeqShotContinuityEntry = {
-  shotCode: string | null;
-  orderIndex: number;
-  continuityIn: string | null;
-  continuityOut: string | null;
-};
-
-export async function resolveSeqShotContinuity(sequenceId: number): Promise<SeqShotContinuityEntry[]> {
-  const { db } = await import("@/db");
-  const [sequence] = await db.select({ id: sequences.id }).from(sequences).where(eq(sequences.id, sequenceId));
-  if (!sequence) {
-    throw new Error(`resolveSeqShotContinuity: sequence ${sequenceId} not found.`);
-  }
-  return db
-    .select({
-      shotCode: shots.shotCode,
-      orderIndex: shots.orderIndex,
-      continuityIn: shots.continuityIn,
-      continuityOut: shots.continuityOut,
-    })
-    .from(shots)
-    .where(eq(shots.sequenceId, sequenceId))
-    .orderBy(asc(shots.orderIndex))
-    .limit(SEQ_SHOTS_LIMIT);
-}
-
-// ---------------------------------------------------------------------------
 // PROJECT.OUTLINE_SECTIONS — anchors: project. LLMW.POSTRESPONSE.1 (B7g),
 // needed by `sequences.fromOutline`: `generateSequencesFromOutlineDraft`
 // (`src/actions/llm/sequenceGeneration.ts`) parses `project.outline`'s
@@ -2440,7 +2389,6 @@ export const VARIABLE_REGISTRY = {
   "PROJECT.ASSET_LIBRARY": resolveProjectAssetLibrary,
   "SEQ.EXISTING_CASTINGS": resolveSeqExistingCastings,
   "SEQ.IDENTITY": resolveSeqIdentity,
-  "SEQ.SHOT_CONTINUITY": resolveSeqShotContinuity,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
 
 // ---------------------------------------------------------------------------
