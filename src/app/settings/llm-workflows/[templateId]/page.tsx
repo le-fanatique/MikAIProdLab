@@ -530,6 +530,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
                     }
               }
               returnTo={returnTo}
+              commitAdvisory={descriptor.commitAdvisory}
             />
           )}
         </Card>

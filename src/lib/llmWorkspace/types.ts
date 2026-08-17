@@ -485,6 +485,13 @@ export type OperationDescriptor = {
 
   commit: ActionId[]; // section 3.2
 
+  /** LLMW.COMMIT.ADVISORY.1 (B10-f). What approving this operation leaves
+   * stale, in the user's terms — shown after a successful commit, never
+   * before. Declared by the operation because the operation is what knows;
+   * the surfaces only render it. Optional: an operation that makes nothing
+   * stale declares nothing, and an absent advisory renders nothing. */
+  commitAdvisory?: string;
+
   executor: "inProcess" | "n8n";
   variation?: { seed: boolean };
 };

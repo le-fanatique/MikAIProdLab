@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { generateAssetDescriptionOnlyDraft, generateAssetNotesOnlyDraft } from "@/actions/llm/assetDescription";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildAssetDescriptionFieldCommitArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
@@ -14,6 +15,11 @@ type Props = {
   hasExisting: boolean;
   isConfigured: boolean;
   hasUsageContext: boolean;
+  /** LLMW.COMMIT.ADVISORY.1 (B10-f). `descriptor.commitAdvisory`, resolved
+   * server-side by the Asset Detail page and passed down as a plain string —
+   * this client component never imports a descriptor itself. Shown after a
+   * successful Approve, via `ProposalPanel`'s `onApproved`. */
+  commitAdvisory?: string;
 };
 
 const FIELD_LABEL: Record<Field, string> = { description: "Description", notes: "Notes" };
@@ -34,7 +40,9 @@ const FIELD_ACTION: Record<Field, string> = { description: "Enhance Description"
  * and `handleApprove` (apply) the same way, applied once inside the shared
  * engine instead of duplicated per panel.
  */
-function FieldEnhancePanel({ field, projectId, assetId, hasExisting, isConfigured, hasUsageContext }: Props & { field: Field }) {
+function FieldEnhancePanel({ field, projectId, assetId, hasExisting, isConfigured, hasUsageContext, commitAdvisory }: Props & { field: Field }) {
+  const [showAdvisory, setShowAdvisory] = useState(false);
+
   const trigger: ProposalTrigger<Draft> = {
     id: field,
     label: FIELD_ACTION[field],
@@ -65,6 +73,8 @@ function FieldEnhancePanel({ field, projectId, assetId, hasExisting, isConfigure
         {`Generate ${FIELD_LABEL[field].toLowerCase()} from this asset's story, outline, sequence, and shot context.`}
       </p>
 
+      {showAdvisory && commitAdvisory && <p className="text-xs text-[#b89a5a]">{commitAdvisory}</p>}
+
       <ProposalPanel<Draft>
         isConfigured={isConfigured}
         notConfiguredMessage={`LLM is not configured. Configure it in Settings to generate asset ${FIELD_LABEL[field].toLowerCase()}.`}
@@ -72,6 +82,7 @@ function FieldEnhancePanel({ field, projectId, assetId, hasExisting, isConfigure
         showRegenerate
         cancelLabel="Discard"
         approveActions={approveActions}
+        onApproved={commitAdvisory ? () => setShowAdvisory(true) : undefined}
         hints={
           isConfigured && !hasUsageContext ? (
             <p className="text-xs text-[#b89a5a]">

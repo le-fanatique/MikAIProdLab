@@ -19,6 +19,7 @@
 // creates rows, it does not append to an existing field.
 // ---------------------------------------------------------------------------
 
+import { useState } from "react";
 import { runBenchOperation, commitBenchProposal } from "@/actions/llmWorkspace/bench";
 import {
   buildBenchDraftFields,
@@ -61,9 +62,22 @@ type Props = {
   plan: BenchCommitPlan;
   output: Output;
   returnTo: string;
+  /** LLMW.COMMIT.ADVISORY.1 (B10-f). `descriptor.commitAdvisory`, resolved
+   * server-side by the page and passed down as a plain string — this
+   * component never imports a descriptor itself (see `resolveBenchConfirmation`'s
+   * comment in `benchRun.ts` for why that already broke the build once).
+   * Shown after a successful `returnValue` Approve, via `ProposalPanel`'s
+   * `onApproved`, on the same transient-confirmation model `AssetBibleEnhancePanel`
+   * uses for "Asset Bible updated." A `redirectOnly` Approve navigates away
+   * before `onApproved` would run, so this only ever surfaces for the
+   * `returnValue` branch below — which is exactly the branch the three
+   * advisory-bearing Asset descriptors commit through. */
+  commitAdvisory?: string;
 };
 
-export default function BenchRunPanel({ templateId, ids, searchParams, plan, output, returnTo }: Props) {
+export default function BenchRunPanel({ templateId, ids, searchParams, plan, output, returnTo, commitAdvisory }: Props) {
+  const [showAdvisory, setShowAdvisory] = useState(false);
+
   const trigger: ProposalTrigger<Draft> = {
     id: "run",
     label: "Run",
@@ -252,7 +266,13 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
       // it here too, not only after a Run that already paid for a real model
       // call, so the user learns Approve is impossible without spending one.
       // Run itself stays offered either way (§3.2 of the ticket).
-      hints={plan.kind === "unsupported" ? <p className="text-xs text-[#cf7b6b]">{plan.reason}</p> : undefined}
+      hints={
+        <>
+          {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
+          {showAdvisory && commitAdvisory && <p className="text-xs text-[#b89a5a]">{commitAdvisory}</p>}
+        </>
+      }
+      onApproved={commitAdvisory ? () => setShowAdvisory(true) : undefined}
       showRegenerate
       regenerateLabel="Redo"
       approveActions={approveActions}

@@ -141,5 +141,10 @@ No markdown. No explanation. Only the JSON object.`,
 
   commit: ["updateAssetDescriptionFieldInline"],
 
+  // LLMW.COMMIT.ADVISORY.1 (B10-f). This writes `description`, one of the
+  // two fields `assetBible.generate` reads to keep the Asset Bible in sync
+  // (`registry.ts:723-735`) — approving this leaves that bible stale.
+  commitAdvisory: "The Asset Bible is written from Description and Notes — regenerate it to keep it in sync.",
+
   executor: "inProcess",
 };

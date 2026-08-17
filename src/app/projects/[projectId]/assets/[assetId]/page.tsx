@@ -18,6 +18,8 @@ import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/act
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/AssetDescriptionEnhancePanel";
+import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
+import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
 import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 import AssetAlignmentPanel from "@/components/AssetAlignmentPanel";
@@ -331,6 +333,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             hasExistingDescription={Boolean(asset.description?.trim())}
             isConfigured={!!llmSettings.model.trim()}
             hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
+            commitAdvisory={assetDescriptionGenerateDescriptor.commitAdvisory}
           />
         </Card>
       </Collapsible>
@@ -346,6 +349,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             hasExistingNotes={Boolean(asset.notes?.trim())}
             isConfigured={!!llmSettings.model.trim()}
             hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
+            commitAdvisory={assetNotesGenerateDescriptor.commitAdvisory}
           />
         </Card>
       </Collapsible>
