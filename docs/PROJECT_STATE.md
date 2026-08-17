@@ -919,6 +919,60 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B7h-m — the eighth migration, and the first that is not indiscernible (2026-08-17)
+
+`LLMW.MIGRATE.LIST.4`, commit `ba1e435`. **All eight list operations are now
+migrated**, so Phase C's prerequisite on the list side is met. The bench also
+gains its fourth Approve branch: `applySelectedCastingSuggestions` had sat in
+`REDIRECT_CONFIRMATION_KEYS` since B7h-a, forced there by a `satisfies` clause
+but reachable from no button.
+
+**Three migrations were held to indiscernibility; this one could not be.** The
+old chain's id gate lived in `normalizeRawSuggestion`, *before* its own empty
+refusal. `item.validity` is frozen and gates only on non-empty **string**
+fields, so the runner's equivalent gate lives in the `postResponse` form, which
+always runs *after* that refusal. Consequence: a response whose items all carry
+an unrecognised `targetType`, or an id that is not a positive integer, now
+yields `{ ok: true, suggestions: [] }` where the old chain threw « The model
+returned no valid suggestions. Try again. »
+
+**The repair was refused on purpose**, and the reason matters more than the
+divergence. Folding the `empty` message onto a post-filter empty array would
+corrupt the *far more common* case — the model invents ids that are well formed
+but do not exist — where the old chain already returns an empty list. A rare
+divergence was preferred to a frequent one. That agreement case is now asserted
+under its own name, so the next reader does not mistake it for the divergence.
+
+**What the supervision loop caught, and what no check would have.** The first
+round's divergence test used well-formed but non-existent ids (`999999`) — an
+input on which **both chains agree**, because `num()` only checks « integer and
+`> 0` ». The test passed, claimed to prove a divergence, and contained two
+comments contradicting each other on what the old chain did. A corrective round
+replaced it with the two families that genuinely disagree. The ambiguity came
+from the ticket, which said « id invalide » meaning invalid per `num()` — the
+same class of error as B7h-b2's frozen table: a supervisor's shorthand, read
+literally by an executor who cannot see what was meant.
+
+**A second divergence of the same family** was found by the executor and left
+unrepaired by design: mixing an unrecognised `targetType` into a >60-item
+response shifts the `maxItems` truncation boundary by one item between the two
+chains, because the old chain dropped such an item before its own `.slice(0,
+60)`. It refused to write a test that would have asserted a false equality, and
+proved truncation on a uniformly valid array instead.
+
+**`No castings applied.` on 0 breaks the precedent deliberately.** The three
+`create*` actions render nothing on a count `<= 0`, which is safe because 0 is
+unreachable for them — Approve is disabled with an empty selection, and every
+selected item creates a row. For casting, 0 is ordinary: re-select a pairing
+that already exists, the unique constraint rejects it, an empty `catch` swallows
+it. Silence there is the Approve-went-nowhere gap B7d-f paid to close.
+
+604 tests, 87 files. Eight browser paths PASS on a throwaway project. One state
+was **not** reachable in the browser and is recorded as such: `alreadyAssigned:
+true` never fired, because the prompt tells the model which pairings already
+exist and it complied on all three runs — it is proven instead at the action and
+runner levels, and by a mutation control.
+
 ### B9a — the plain-language directive becomes real (2026-08-15)
 
 `LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
