@@ -188,18 +188,16 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     wired by LLMW.MIGRATE.LIST.2 (B7g-m), now that
 //     `sequencesFromOutlineDescriptor.commit` names it: `sequencesCreateError`,
 //     `sequencesCreated`
+//   - `createSelectedAssets` (`src/actions/llm/assetExtraction.ts:180,231`),
+//     wired by LLMW.MIGRATE.LIST.3 (B7f-m), now that
+//     `assetsFromProjectDescriptor.commit` names it: `assetsCreateError`,
+//     `assetsCreated`
 //
-// `RedirectOnlyActionId` is wider than these four: `ACTION_REGISTRY` also
-// declares `createSelectedAssets` (`src/actions/llm/assetExtraction.ts:207,258`
-// — `assetsCreateError`, `assetsCreated`) as `response: "redirectOnly"`,
-// though it is not wired to any descriptor's `commit` yet (registry.ts's own
-// comment on `createGeneratedShots`: "future tickets") — out of this
-// ticket's scope (§ "Hors scope"). `planBenchCommit` can therefore never
-// actually produce a `redirectOnly` plan for it today — but the `satisfies`
-// below is a type-level check, not a reachability one, so it still needs a
-// real entry to compile. Keys verified against the action's own `redirect()`
-// calls, not invented; `resolveBenchConfirmation` below deliberately renders
-// nothing for it — no ticket has frozen wording for it yet.
+// `RedirectOnlyActionId` has exactly these five members — every one of them
+// is now wired to a descriptor's `commit` and reaches a bench Approve
+// branch (`BenchRunPanel.tsx`), so `resolveBenchConfirmation` below renders
+// real wording for all five, none of them the deliberate `null` an
+// unreached action used to get.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
 // ticket buys: a future `redirectOnly` action does not compile into this
@@ -274,9 +272,9 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // `createGeneratedShots`: `N sequences created.`, singular
 // `1 sequence created.`, a non-integer or `<= 0` count renders nothing, and
 // an error takes precedence over a success value (checked first, above).
-// `createSelectedAssets` remains unreachable from any descriptor (see
-// `REDIRECT_CONFIRMATION_KEYS` above) and the ticket froze no wording for
-// it; this function returns `null` for it rather than invent copy.
+// LLMW.MIGRATE.LIST.3 (B7f-m) adds a fifth and last, `createSelectedAssets`,
+// now that `assetsFromProjectDescriptor` commits through it — same rules
+// again: `N assets created.`, singular `1 asset created.`.
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {
@@ -292,7 +290,8 @@ export function resolveBenchConfirmation(
     plan.actionId !== "updateShotPrompt" &&
     plan.actionId !== "updateSequencePrompt" &&
     plan.actionId !== "createGeneratedShots" &&
-    plan.actionId !== "createGeneratedSequences"
+    plan.actionId !== "createGeneratedSequences" &&
+    plan.actionId !== "createSelectedAssets"
   ) {
     return null;
   }
@@ -319,6 +318,12 @@ export function resolveBenchConfirmation(
     const count = Number(successValue);
     if (!Number.isInteger(count) || count <= 0) return null;
     return { kind: "success", message: `${count} sequence${count === 1 ? "" : "s"} created.` };
+  }
+
+  if (plan.actionId === "createSelectedAssets") {
+    const count = Number(successValue);
+    if (!Number.isInteger(count) || count <= 0) return null;
+    return { kind: "success", message: `${count} asset${count === 1 ? "" : "s"} created.` };
   }
 
   if (successValue !== "1") return null;

@@ -163,6 +163,27 @@ export function buildCreateGeneratedSequencesHiddenFields(input: {
   };
 }
 
+// ── assets.fromProject → createSelectedAssets (redirectOnly) ──────────────
+//
+// LLMW.MIGRATE.LIST.3 (B7f-m). Same model as
+// `buildCreateGeneratedSequencesHiddenFields` above: `createSelectedAssets`
+// stays `(formData: FormData) => Promise<void>` with `redirect()` on every
+// path (registry behaviour 6) — the three hidden field names are read
+// verbatim off `src/actions/llm/assetExtraction.ts:172,176`.
+// `selectedJson` is not built here — that serialization belongs to
+// `buildListSelectionPayload` (`benchRun.ts`), which the caller runs first.
+export function buildCreateSelectedAssetsHiddenFields(input: {
+  projectId: number;
+  returnTo: string;
+  selectedJson: string;
+}): Record<string, string> {
+  return {
+    projectId: String(input.projectId),
+    returnTo: input.returnTo,
+    selectedJson: input.selectedJson,
+  };
+}
+
 // ── shot.retakeDirected → updateShotNarrativeContext (returnValue) ────────
 //
 // LLMW.UC2.RETAKE.1 (B9b), §4.3's piège: `shot.retakeDirected` declares

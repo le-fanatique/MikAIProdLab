@@ -30,6 +30,7 @@ import {
 import {
   buildCreateGeneratedSequencesHiddenFields,
   buildCreateGeneratedShotsHiddenFields,
+  buildCreateSelectedAssetsHiddenFields,
   buildUpdateSequencePromptHiddenFields,
   buildUpdateShotPromptHiddenFields,
 } from "@/lib/llmWorkspace/actions/proposalCommit";
@@ -148,11 +149,37 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
         ];
       }
 
-      // Every other `actionId` a list descriptor could declare
-      // (`createSelectedAssets`) has no descriptor wired to it yet (out of
-      // scope — no descriptor commits through it), and any
-      // `returnValue`/`unsupported` plan is not a list-commit shape at all.
-      // No Approve button; the reason is rendered under the fields below.
+      if (plan.kind === "redirectOnly" && plan.actionId === "createSelectedAssets") {
+        // `output.formDataKey` names the descriptor's own declared selection
+        // destination (`descriptor.output.selection.formDataKey`); refuse
+        // rather than write the payload under an invented key if it ever
+        // diverges from what `createSelectedAssets` actually reads.
+        if (output.formDataKey !== "selectedJson") {
+          return [];
+        }
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            disabled: listDraft.selected.length === 0,
+            action: ACTION_BINDINGS.createSelectedAssets,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as ListDraft;
+              return buildCreateSelectedAssetsHiddenFields({
+                projectId: ids.projectId as number,
+                returnTo,
+                selectedJson: buildListSelectionPayload(output.itemFields, current.items, current.selected),
+              });
+            },
+          },
+        ];
+      }
+
+      // Any other `actionId` a list descriptor could declare has no
+      // descriptor wired to it, and any `returnValue`/`unsupported` plan is
+      // not a list-commit shape at all. No Approve button; the reason is
+      // rendered under the fields below.
       return [];
     }
 
@@ -279,9 +306,26 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
               </div>
 
               {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
+              {/* LLMW.MIGRATE.LIST.3 (B7f-m): all three list-kind descriptors
+                  declared today (`shotsFromSequence`, `sequencesFromOutline`,
+                  `assetsFromProject`) commit through one of the three
+                  branches above — but this fallback is not proven dead, and
+                  is kept rather than removed. `OperationDescriptor.commit`
+                  (`types.ts:486`) is `ActionId[]`, not narrowed to the three
+                  list-shaped `redirectOnly` actions by `output.kind` — a
+                  future list descriptor could still name `updateShotPrompt`
+                  / `updateSequencePrompt` (the two other `RedirectOnlyActionId`
+                  members, both `"update"`/object-shaped in the registry, not
+                  wired to any list branch here) or any `response:
+                  "returnValue"` action (e.g. `updateAssetDetailsInline`) as
+                  its own `commit`, and nothing at the type level rejects
+                  that. `planBenchCommit` (`benchRun.ts`) would still resolve
+                  such a descriptor to a `redirectOnly` or `returnValue` plan,
+                  and this line is exactly the path that would render for it. */}
               {plan.kind !== "unsupported" &&
                 !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedShots") &&
-                !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedSequences") && (
+                !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedSequences") &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "createSelectedAssets") && (
                   <p className="text-xs text-[#cf7b6b]">
                     This template&apos;s commit action has no bench Approve path yet.
                   </p>

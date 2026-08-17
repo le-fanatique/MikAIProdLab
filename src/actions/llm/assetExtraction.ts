@@ -1,14 +1,18 @@
 "use server";
 
 import { db } from "@/db";
-import { projects, sequences, shots, assets } from "@/db/schema";
-import { eq, max, inArray, asc } from "drizzle-orm";
+import { projects, assets } from "@/db/schema";
+import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { callLLMJson } from "@/lib/llm";
-import { buildAssetsFromProjectPrompt } from "@/lib/prompts/assets-from-project";
-import { getLLMConfig } from "@/lib/settings";
 import type { GeneratedAssetCandidate } from "@/types/llm";
+import { runOperation } from "@/lib/llmWorkspace/runner";
+import { assetsFromProjectDescriptor } from "@/lib/llmWorkspace/descriptors/assetsFromProject";
+import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 const VALID_ASSET_TYPES = [
   "character",
@@ -59,35 +63,58 @@ function normalizeCandidate(raw: unknown): GeneratedAssetCandidate | null {
   };
 }
 
-function parseAssetsResult(raw: string): GeneratedAssetCandidate[] {
-  let parsed: unknown;
-  try {
-    const fenced = raw.trim().match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-    parsed = JSON.parse(fenced ? fenced[1].trim() : raw.trim());
-  } catch {
-    throw new Error("The model returned an unexpected format. Try again.");
-  }
-  const arr = (parsed as Record<string, unknown>)?.assets;
-  if (!Array.isArray(arr)) {
-    throw new Error("The model did not return an assets array. Try again.");
-  }
-  const normalized = arr
-    .map(normalizeCandidate)
-    .filter((c): c is GeneratedAssetCandidate => c !== null);
-  if (normalized.length === 0) {
-    throw new Error("The model returned no valid assets. Try again.");
-  }
-  return normalized.slice(0, 20);
-}
+// ---------------------------------------------------------------------------
+// Server Actions
+// ---------------------------------------------------------------------------
 
+/**
+ * Thin adapter over `runOperation(assetsFromProjectDescriptor, ...)`
+ * (LLMW.MIGRATE.LIST.3, B7f-m), on the same model
+ * `generateSequencesFromOutlineDraft` (`src/actions/llm/sequenceGeneration.ts`,
+ * post-B7g-m) already reproduces: keeps the exact `{ok:true, assets}` return
+ * shape `AssetsLLMExtractPanel` depends on.
+ *
+ * The form sends seven booleans (`includeShots` plus six `include*` type
+ * flags, `AssetsLLMExtractPanel.tsx:63-69` / `assetExtraction.ts` pre-
+ * migration lines 92-101); the descriptor declares two `intent.parameters`:
+ * `includeShots` (`"boolean"`) and `assetTypes` (`"multiEnum"`). Converting
+ * the seven form booleans into these two parameters is this adapter's own
+ * job — the panel is not touched. The six `if` below are read verbatim off
+ * the pre-migration source (`assetExtraction.ts:96-101`, `git show
+ * bd38db5:src/actions/llm/assetExtraction.ts`) and kept in that exact order
+ * (`character, environment, prop, vehicle, crowd, other`): the prompt
+ * builder joins `assetTypes` as-is (`assets-from-project.ts:52`, `typesStr`),
+ * so the array's member order is observable in the rendered prompt.
+ *
+ * An empty `assetTypes` array is passed through unchanged, not omitted: a
+ * `"multiEnum"` value of `[]` is valid per `isValidIntentParameterValue`
+ * (`runner.ts`), so `normalizeIntentParameters` never substitutes the
+ * descriptor's default (`["character", "environment", "prop"]`) for it. The
+ * descriptor's own `preconditions[0]` (`refs: [{parameter: "assetTypes"}]`)
+ * then reproduces "Select at least one asset type." on that empty array
+ * exactly as the pre-migration guard did. Falling back to the default here
+ * would silently defeat that guard and run an extraction the user refused —
+ * proven by the mutation control in `tests/llmWorkspace/assetsFromProject.migration.test.ts`
+ * (see `.agents/executor_report.md`).
+ *
+ * `result.items` are keyed by entity field name (`assetType`); the same
+ * `mapListItemToModelKeys` bridge `generateSequencesFromOutlineDraft` uses
+ * translates each item back to the model's own JSON keys, matching
+ * `GeneratedAssetCandidate`'s own field names. Only the five `type: "string"`
+ * fields (`name`, `description`, `notes`, `sourceExcerpt`,
+ * `duplicateWarning`) need the `"" -> null` fill-back `readStringField`
+ * (`runner.ts`) does not do itself. `assetType` and `sourceLevel` are the
+ * two `type: "enum"` fields, each with a mandatory `default`
+ * (`assetsFromProjectDescriptor.output.item.fields`), so `readEnumField`
+ * always produces one of their valid members, never `""` — they need no
+ * fill. `name` is never `null` — `item.validity` already filtered out any
+ * item missing it.
+ */
 export async function generateAssetCandidatesDraft(
   formData: FormData
 ): Promise<{ ok: true; assets: GeneratedAssetCandidate[] } | { ok: false; error: string }> {
   try {
     const projectId = parseInt(formData.get("projectId") as string, 10);
-    if (!Number.isInteger(projectId) || projectId <= 0) {
-      return { ok: false, error: "Invalid request." };
-    }
 
     const bool = (key: string) => formData.get(key) === "true";
     const includeShots = bool("includeShots");
@@ -100,94 +127,40 @@ export async function generateAssetCandidatesDraft(
     if (bool("includeCrowds")) assetTypes.push("crowd");
     if (bool("includeOther")) assetTypes.push("other");
 
-    if (assetTypes.length === 0) {
-      return { ok: false, error: "Select at least one asset type." };
+    const result = await runOperation(
+      assetsFromProjectDescriptor,
+      { projectId },
+      { parameters: { includeShots, assetTypes } }
+    );
+    if (!result.ok) return { ok: false, error: result.error };
+    // `assetsFromProjectDescriptor.output.kind` is always `"list"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "list") {
+      throw new Error("generateAssetCandidatesDraft: expected a list-kind result.");
+    }
+    if (assetsFromProjectDescriptor.output.kind !== "list") {
+      throw new Error("generateAssetCandidatesDraft: descriptor output is not list-kind.");
     }
 
-    const config = await getLLMConfig();
-    if (!config) {
-      return {
-        ok: false,
-        error: "LLM not configured. Go to Settings to set up Ollama.",
-      };
-    }
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) return { ok: false, error: "Project not found." };
-
-    const seqs = await db
-      .select()
-      .from(sequences)
-      .where(eq(sequences.projectId, projectId))
-      .orderBy(asc(sequences.orderIndex));
-
-    const existingAssets = await db
-      .select({ name: assets.name, type: assets.type })
-      .from(assets)
-      .where(eq(assets.projectId, projectId));
-
-    const hasNarrative =
-      project.outline?.trim() ||
-      project.story?.trim() ||
-      project.pitch?.trim() ||
-      seqs.length > 0;
-
-    if (!hasNarrative) {
-      return {
-        ok: false,
-        error:
-          "No narrative content found. Add a pitch, story, outline, or sequences first.",
-      };
-    }
-
-    let shotRows: Array<{
-      title: string;
-      description: string | null;
-      actionPitch: string | null;
-      continuityIn: string | null;
-      continuityOut: string | null;
-    }> = [];
-
-    if (includeShots && seqs.length > 0) {
-      const seqIds = seqs.map((s) => s.id);
-      shotRows = await db
-        .select({
-          title: shots.title,
-          description: shots.description,
-          actionPitch: shots.actionPitch,
-          continuityIn: shots.continuityIn,
-          continuityOut: shots.continuityOut,
-        })
-        .from(shots)
-        .where(inArray(shots.sequenceId, seqIds))
-        .orderBy(asc(shots.orderIndex));
-    }
-
-    const llmPrompt = buildAssetsFromProjectPrompt({
-      project: {
-        name: project.name,
-        pitch: project.pitch,
-        story: project.story,
-        outline: project.outline,
-      },
-      sequences: seqs.map((s) => ({
-        title: s.title,
-        summary: s.summary,
-        description: s.description,
-        narrativePurpose: s.narrativePurpose,
-        mood: s.mood,
-        locationHint: s.locationHint,
-      })),
-      shots: shotRows,
-      existingAssets,
-      includeShots,
-      assetTypes,
+    const fields = assetsFromProjectDescriptor.output.item.fields;
+    const stringFields = new Set(fields.filter((f) => f.type === "string").map((f) => f.field));
+    const generatedAssets: GeneratedAssetCandidate[] = result.items.map((item) => {
+      const mapped = mapListItemToModelKeys(fields, item);
+      const candidate: Record<string, string | number | null> = {};
+      for (const field of fields) {
+        const key = field.jsonKey;
+        if (!(key in mapped)) {
+          candidate[key] = null;
+          continue;
+        }
+        const value = mapped[key];
+        candidate[key] = stringFields.has(field.field) && value === "" ? null : value;
+      }
+      return candidate as unknown as GeneratedAssetCandidate;
     });
 
-    const raw = await callLLMJson(llmPrompt, config);
-    const candidates = parseAssetsResult(raw);
-
-    return { ok: true, assets: candidates };
+    return { ok: true, assets: generatedAssets };
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Unexpected error. Please try again.";
