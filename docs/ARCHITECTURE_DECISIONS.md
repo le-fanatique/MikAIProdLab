@@ -397,3 +397,67 @@ disproved.
 
 See `docs/LLM_WORKSPACE_ARCHITECTURE.md` §9 and the "Scope limitation" section
 of `docs/LLM_OPERATIONS_INVENTORY.md`.
+
+## LLM Workspace — Four Arbitrations Taken 2026-08-17
+
+Recorded here rather than left in conversation, because three of the four
+change what a later ticket is allowed to do, and one is a schema
+authorization. Asked and answered in one pass, before a session reset.
+
+### 1. Schema authorized — Asset Bible freshness, and asset sourcing metadata
+
+Two durable needs are **authorized**, each in its own ticket, and neither is
+implemented yet.
+
+**Asset Bible freshness.** `LLMW.COMMIT.ADVISORY.1` (`9266d64`) ships an
+advisory that fires on every approved Description or Notes write, whether or
+not a Bible exists — an invitation as often as a warning. The precise version
+is the device `asset_style_alignments` already uses for Project Style
+(`src/db/schema/assets.ts:140-183`): a deterministic fingerprint of the fields
+the Bible is written from, captured when the Bible is generated, compared
+against live content to derive "stale" or "current". Same model, same
+discipline: informational only, never the source of truth for content.
+
+**Asset sourcing metadata.** `createSelectedAssets` drops `sourceLevel`,
+`sourceExcerpt` and `duplicateWarning` — the model produces them, the write
+discards them (reported by `LLMW.ACTION.INSERT.1`, B7c-w, deferred by the user
+on 2026-08-16 for want of a surface to show them). The authorization covers the
+columns; **a ticket must not add them without also adding the surface that
+displays them**, or it would recreate the same silent loss one layer down.
+
+Both follow the migration rules at the top of this document: additive,
+generated through the repository's tooling, tested against a backup.
+
+### 2. The asset-type filter becomes a real filter
+
+`assets.fromProject` asks the model for the ticked types, and the model
+sometimes answers with another — its output schema lists all six, and a bench
+run asking for three returned a `vehicle` (`9fdda6a`). The prompt builder said
+the same before migration, byte for byte, so this is pre-existing behaviour and
+not a regression.
+
+**Decided: filter for real, in a post-response form.** A candidate whose type
+was not requested is dropped. This is possible only since B7c-n3 gave the
+pipeline a post-response stage, which is why the question is answerable now and
+was not before.
+
+**This is a deliberate change in observable behaviour**, and the first in the
+chantier: every migration so far was held to indiscernibility. The ticket that
+implements it must say so in its own terms rather than present it as a fix, and
+must not be mixed with a migration.
+
+### 3. The bench learns boolean and multi-choice controls
+
+`parseIntentInputFromSearchParams` reads numbers and strings only, so
+`assets.fromProject` and `casting.fromSequence` run in the bench with their
+declared defaults and cannot be varied there — `includeSequenceLevel` is stuck
+at `false`. **Decided: a small ticket adds the two controls and the matching
+URL reading.** The bench is where the author is meant to prototype; a parameter
+that cannot be varied there defeats the surface's purpose.
+
+### 4. The two untracked `.agents/` files stay untracked
+
+`b6b_user_feedback.md` and `user_feedback_pending.md` are pre-existing drift.
+**Decided: leave them, never stage them, and do not `.gitignore` them** —
+ignoring would make them invisible and therefore forgettable. Every ticket's
+baseline names them as excluded, and that stays the convention.

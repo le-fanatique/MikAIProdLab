@@ -849,6 +849,76 @@ is the whole claim that no observable behaviour moved.
 without a dev ticket. A declaration the engine ignores is a trap for exactly
 that author: write `min: 1, max: 30` and watch nothing enforce it.
 
+### B7g → B7h-b2 — nine tickets, and what each one cost to learn (2026-08-17)
+
+Written as one section rather than nine: the commits carry the detail, and what
+a cold session needs is the handful of things it would otherwise re-derive
+wrong. Queue rows and commits are in `docs/LLM_WORKSPACE_ARCHITECTURE.md`
+§11.3, all struck through.
+
+**The three bricks are built.** The post-response stage (`e867636`), boolean and
+multi-choice inputs (`bd38db5`), project-scope collection variables
+(`95d2a3c`). With them, **all four list operations have a descriptor** and three
+of the four are migrated — only casting still carries its own engine.
+
+**The rule that decided every split.** A variable proves itself through its
+resolver, alone. A pipeline stage, a parameter type or a format extension
+proves nothing until a descriptor consumes it. So variables ship early and
+alone; bricks ship **with** their first consumer. Learned by paying for it: the
+post-response stage had no consumer of its own, and shipping it bare would have
+been code no honest test could exercise.
+
+**Three defects that no test could have caught, found by reading.**
+`sequences.fromOutline`'s migration inherited a second copy of the override the
+runner had just taken over — idempotent, so nothing looked wrong, and the
+mutation control proves the suite was blind to it. `assets.fromProject`'s
+adapter had to pass an **empty** `multiEnum` through untouched, because
+substituting the default there would have silently defeated the "Select at
+least one asset type." gate and run an extraction the user had refused. And
+`PROJECT.ASSETS` was first sorted by `orderIndex`, which buys no determinism
+(every row defaults to `0`) and diverges from a source query that has no
+`ORDER BY` — a divergence a fixture would naturally have hidden.
+
+**Two supervisor errors worth keeping.** A frozen table was written with three
+entries where the type demanded five, because the supervisor reasoned about
+which action ids are *reachable* where `satisfies` checks the whole union; the
+executor caught it and declared the missing two from their real sources rather
+than weakening the constraint. And the phrase "one new source file" in a ticket
+budget made an executor delete its own tests after running them — *source* means
+`src/`, never `tests/`. Both are now written into the tickets that follow.
+
+**UC3 is delivered** (`41d16b8`), and its retake (`9266d64`). Writing
+`description` alone means there is **no preservation trap** in it at all, unlike
+UC2. There is also no oracle: the prompt is written rather than transcribed, so
+its quality is a human judgement and the resolved prompt goes in the report
+instead of into a test. The first round left "Respond to the director's
+direction below" standing unconditionally in the *system* message — the same
+defect that sent UC2 back, one message higher, because the check had only looked
+at the closing line.
+
+**Casting stopped being unrepresentable** (`d89ee87`), and the way it happened
+is the chantier's method working. An executor returned **blocked without writing
+a file**: the builder embeds the sequence's own id, and no variable carried it.
+Verified line by line — it is the **first builder in the repository needing its
+own anchor's id** rather than a child's. `SEQ.IDENTITY` answers it. Enrichment
+**replaces** the model's names rather than completing them ("don't trust LLM
+names"), and `ListItemField` gains no boolean type: `alreadyAssigned` is
+computed after parsing, never parsed, so only a post-response form's output
+widens.
+
+**Two things that are true and not defects.** `alreadyAssigned` is computed and
+asserted but invisible in the bench, whose list renderer shows declared item
+fields; production reads it from the returned object. And the asset-type filter
+is a prompt instruction, so a model asked for three types may still answer with
+a fourth — pre-existing, proven byte for byte against the builder, and now
+scheduled to become a real filter (queue row S2).
+
+**Four arbitrations were taken on 2026-08-17** and recorded in
+`docs/ARCHITECTURE_DECISIONS.md`: schema authorized for Asset Bible freshness
+and asset sourcing metadata, the asset-type filter becomes real, the bench gains
+boolean and multi-choice controls, and the two untracked `.agents/` files stay
+untracked on purpose.
+
 ### B9a — the plain-language directive becomes real (2026-08-15)
 
 `LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
