@@ -140,7 +140,11 @@ export const sequencesFromOutlineDescriptor: OperationDescriptor = {
   // refuses only when BOTH fields are empty — "at least one of two", the
   // same `require: "any"` shape `assetBible.generate`'s precedent already
   // uses for `description`/`notes` (§4.1 of `types.ts`).
-  preconditions: [{ fields: ["outline", "pitch"], require: "any", message: "Add a project pitch or outline first." }],
+  // `fields: [x, y]` -> `refs: [{anchorField: x}, {anchorField: y}]`
+  // (LLMW.DESCRIPTOR.ASSETS.1, B7f) — mechanical, no behaviour change.
+  preconditions: [
+    { refs: [{ anchorField: "outline" }, { anchorField: "pitch" }], require: "any", message: "Add a project pitch or outline first." },
+  ],
 
   // Reproduces `normalizeSequence` (`sequenceGeneration.ts:54-74`) field by
   // field, in its own declaration order (matching `GeneratedSequence`,

@@ -211,9 +211,16 @@ describe("shotPrompt.assist descriptor — context equality", () => {
     // Migrated off `intent.mode.modes[].requiresNonEmpty` (§4.1 correction
     // 6): the precondition is now a `preconditions` entry, restricted to
     // the four transform modes via `modes`.
+    // `fields` became `refs` in LLMW.DESCRIPTOR.ASSETS.1 (B7f), so a gate can
+    // name a parameter or a resolved variable and not only an anchor field.
+    // Updated by the supervisor during review: this assertion pins the
+    // *declared shape*, and the shape moved by decision — the behaviour it
+    // guards (the refusal actually firing, with this message, on these four
+    // modes) is proven independently in
+    // `shotPrompt.assist.runner.test.ts:245,258` and did not change.
     expect(shotPromptAssistDescriptor.preconditions).toEqual([
       {
-        fields: ["shotPrompt"],
+        refs: [{ anchorField: "shotPrompt" }],
         require: "all",
         modes: ["enhance", "rewrite", "shorten", "expand"],
         message: "A Shot Prompt is required for this assist mode.",

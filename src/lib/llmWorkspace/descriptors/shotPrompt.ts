@@ -145,9 +145,11 @@ export const shotPromptAssistDescriptor: OperationDescriptor = {
     },
   },
 
+  // `fields: [x]` -> `refs: [{anchorField: x}]` (LLMW.DESCRIPTOR.ASSETS.1,
+  // B7f) — mechanical, no behaviour change.
   preconditions: [
     {
-      fields: ["shotPrompt"],
+      refs: [{ anchorField: "shotPrompt" }],
       require: "all",
       modes: ["enhance", "rewrite", "shorten", "expand"],
       message: "A Shot Prompt is required for this assist mode.",

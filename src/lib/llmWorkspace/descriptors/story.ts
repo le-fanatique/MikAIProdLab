@@ -84,8 +84,9 @@ No markdown. No explanation. Only the JSON object.`,
   // `project.pitch`, verbatim, unconditionally (no `intent.mode` on this
   // operation, so no `modes` restriction). Single field, so `require: "all"`
   // and `require: "any"` are equivalent — `"all"` chosen per B2b's migration
-  // note in `types.ts`.
-  preconditions: [{ fields: ["pitch"], require: "all", message: "Add a pitch first." }],
+  // note in `types.ts`. `fields: [x]` -> `refs: [{anchorField: x}]`
+  // (LLMW.DESCRIPTOR.ASSETS.1, B7f) — mechanical, no behaviour change.
+  preconditions: [{ refs: [{ anchorField: "pitch" }], require: "all", message: "Add a pitch first." }],
 
   // Correction 5 (§4.1), read verbatim from `parseStoryResult`
   // (`src/actions/llm/story.ts`): one key, tolerant of extra keys (no

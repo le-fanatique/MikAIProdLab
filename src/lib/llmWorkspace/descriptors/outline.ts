@@ -116,8 +116,10 @@ No markdown outside the JSON string. No explanation. No text before or after. On
   // Same precondition as `story.generate`, verbatim identical text —
   // `generateOutlineDraft` runs the exact same `!project.pitch?.trim()`
   // check with the exact same message, unconditionally. Single field, so
-  // `require: "all"` and `require: "any"` are equivalent.
-  preconditions: [{ fields: ["pitch"], require: "all", message: "Add a pitch first." }],
+  // `require: "all"` and `require: "any"` are equivalent. `fields: [x]` ->
+  // `refs: [{anchorField: x}]` (LLMW.DESCRIPTOR.ASSETS.1, B7f) — mechanical,
+  // no behaviour change.
+  preconditions: [{ refs: [{ anchorField: "pitch" }], require: "all", message: "Add a pitch first." }],
 
   // Correction 5 (§4.1), read verbatim from `parseOutlineResult`
   // (`src/actions/llm/outlineGeneration.ts`): one key, tolerant of extra

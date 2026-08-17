@@ -116,9 +116,11 @@ export const sequencePromptAssistDescriptor: OperationDescriptor = {
   // `intent.mode.modes[].requiresNonEmpty` (see the header note above) —
   // message read verbatim from `generateSequencePromptDraft`'s
   // `if (mode !== "generate" && !sequence.sequencePrompt?.trim())` guard.
+  // `fields: [x]` -> `refs: [{anchorField: x}]` (LLMW.DESCRIPTOR.ASSETS.1,
+  // B7f) — mechanical, no behaviour change.
   preconditions: [
     {
-      fields: ["sequencePrompt"],
+      refs: [{ anchorField: "sequencePrompt" }],
       require: "all",
       modes: ["enhance", "rewrite", "shorten", "expand"],
       message: "A Sequence Prompt is required for this assist mode.",

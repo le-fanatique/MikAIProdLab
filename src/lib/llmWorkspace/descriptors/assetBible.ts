@@ -113,9 +113,11 @@ No markdown. No explanation. Only the JSON object.`,
   // single-field entries would each wrongly refuse whenever *their own*
   // field alone is empty, which is not the real rule (a non-empty
   // `description` with empty `notes` must not be refused).
+  // `fields: [x, y]` -> `refs: [{anchorField: x}, {anchorField: y}]`
+  // (LLMW.DESCRIPTOR.ASSETS.1, B7f) — mechanical, no behaviour change.
   preconditions: [
     {
-      fields: ["description", "notes"],
+      refs: [{ anchorField: "description" }, { anchorField: "notes" }],
       require: "any",
       message: "Add a Description or Notes to this asset before generating an Asset Bible draft.",
     },

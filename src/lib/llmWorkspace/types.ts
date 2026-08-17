@@ -154,12 +154,42 @@ export type ActionId =
   | "createGeneratedSequences";
 
 /**
- * Names a field on the operation's anchor entity, for a `preconditions`
- * entry (§4.1, correction 6) or a `messages.chainNotFound` level. The entity
- * is already known from `anchor.entity`, so the reference only needs to name
- * the field.
+ * Names a field on the operation's anchor entity, for a `messages.chainNotFound`
+ * level, or for the `anchorField` variant of `PreconditionRef` below. The
+ * entity is already known from `anchor.entity`, so the reference only needs
+ * to name the field.
  */
 export type FieldRef = string;
+
+/**
+ * LLMW.DESCRIPTOR.ASSETS.1 (B7f). What a `preconditions` entry's `refs` array
+ * names: a field on the anchor entity (the only form B2b's `fields:
+ * FieldRef[]` used to allow), a normalized `intent.parameters` entry, or a
+ * declared context variable's resolved data. Replaces `fields: FieldRef[]`
+ * outright — no coexistence of the two shapes — because `assetsFromProject`'s
+ * own two guards need a reference `fields` could not express: "Select at
+ * least one asset type" gates on `intent.parameters.assetTypes` (not a field
+ * of the `project` anchor at all), and "No narrative content found" needs
+ * `PROJECT.SEQUENCES` alongside `pitch`/`story`/`outline` in the same `"any"`
+ * rule (`assetExtraction.ts:129-133`'s `hasNarrative`).
+ *
+ * "Non-empty" is defined per variant, not by one shared rule:
+ *   - `anchorField`: `isFieldNonEmpty`'s existing rule, unchanged (a
+ *     non-blank string);
+ *   - `parameter`: present after `normalizeIntentParameters` **and**
+ *     non-empty — `false` is empty, `""` is empty, `[]` is empty, `0` is
+ *     **not** empty (a declared numeric parameter of `0` is a real,
+ *     meaningful value, not an absence);
+ *   - `variable`: the resolved value must be an array, and "non-empty" means
+ *     that array's own length — the only shape a `preconditions` consumer
+ *     needs today (`PROJECT.SEQUENCES`). No other resolved shape has a
+ *     consumer; the runner refuses loudly (`throw`) rather than guess a rule
+ *     for one.
+ */
+export type PreconditionRef =
+  | { anchorField: FieldRef }
+  | { parameter: string }
+  | { variable: VariableId };
 
 /**
  * A single field of a `kind: "list"` item, discriminated on `type` — closed
@@ -236,13 +266,21 @@ export type OperationDescriptor = {
       modes: Array<{ id: string }>;
       defaultMode: string;
     };
+    // LLMW.DESCRIPTOR.ASSETS.1 (B7f) adds `"boolean"` and `"multiEnum"` —
+    // `assetsFromProject`'s `includeShots` checkbox and `assetTypes`
+    // multi-select, the panel's own controls
+    // (`AssetsLLMExtractPanel.tsx:63-69`), the first descriptor to need
+    // either. `values` is `"multiEnum"`-only: the closed set of members a
+    // provided array must be a subset of (see `normalizeIntentParameters`'s
+    // own rule in `runner.ts` for what "valid" means per type).
     parameters?: Array<{
       id: string;
-      type: "integer" | "string";
+      type: "integer" | "string" | "boolean" | "multiEnum";
       label: string;
-      default?: number | string;
-      min?: number;
-      max?: number;
+      default?: number | string | boolean | string[];
+      min?: number; // "integer" only
+      max?: number; // "integer" only
+      values?: readonly string[]; // "multiEnum" only — the closed set of members
     }>;
   };
 
@@ -288,9 +326,16 @@ export type OperationDescriptor = {
   // second one. Every existing single-field precondition migrates to
   // `fields: [x], require: "all"` — identical to `"any"` when there is only
   // one field, so no observable behaviour changes.
+  //
+  // `fields: FieldRef[]` -> `refs: PreconditionRef[]`, LLMW.DESCRIPTOR.ASSETS.1
+  // (B7f). No coexistence of the two shapes: every existing entry (five
+  // descriptors) migrates mechanically to `refs: [{anchorField: x}, ...]`,
+  // same `require`, same message, same `modes` — an observable no-op. See
+  // `PreconditionRef` above for what each ref variant means and how its own
+  // "non-empty" is defined.
   preconditions?: Array<{
-    fields: FieldRef[]; // on the anchor entity
-    require: "all" | "any"; // every declared field non-empty, or at least one
+    refs: PreconditionRef[];
+    require: "all" | "any"; // every declared ref non-empty, or at least one
     modes?: string[]; // absent = every mode
     message: string;
   }>;

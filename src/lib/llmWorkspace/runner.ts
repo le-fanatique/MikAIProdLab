@@ -28,7 +28,7 @@
 // module scope.
 // ---------------------------------------------------------------------------
 
-import type { EntityKind, ListItemField, OperationDescriptor, VariableId } from "./types";
+import type { EntityKind, ListItemField, OperationDescriptor, PreconditionRef, VariableId } from "./types";
 import {
   assembleDescriptorMessages,
   type RenderFreeText,
@@ -72,7 +72,10 @@ export type AnchorIds = {
 export type OperationIntentInput = {
   freeText?: string;
   mode?: string;
-  parameters?: Record<string, number | string>;
+  // Widened `number | string` -> `number | string | boolean | string[]`
+  // (LLMW.DESCRIPTOR.ASSETS.1, B7f) for `"boolean"` / `"multiEnum"`
+  // `intent.parameters` entries — see `types.ts`'s own widening note.
+  parameters?: Record<string, number | string | boolean | string[]>;
 };
 
 export type PromptResolutionResult =
@@ -249,18 +252,68 @@ function mergeAnchorFields(resolved: Partial<Record<VariableId, unknown>>): Reco
 }
 
 // ---------------------------------------------------------------------------
-// `preconditions` (§4.1 correction 6) — checked after variable resolution,
-// before assembly, using the anchor fields resolution already produced.
+// `preconditions` (§4.1 correction 6) — checked after variable resolution and
+// parameter normalization, before assembly, using the anchor-field merge, the
+// raw resolved variables, and the already-normalized parameters the pipeline
+// has by this point. Widened from `fields: FieldRef[]` to `refs:
+// PreconditionRef[]` by LLMW.DESCRIPTOR.ASSETS.1 (B7f) — see `PreconditionRef`
+// (`types.ts`) for what each ref variant means and how its own "non-empty" is
+// defined.
 // ---------------------------------------------------------------------------
 
-function isFieldNonEmpty(mergedAnchorFields: Record<string, unknown>, field: string): boolean {
+function isAnchorFieldNonEmpty(mergedAnchorFields: Record<string, unknown>, field: string): boolean {
   const value = mergedAnchorFields[field];
   return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
+ * `parameter` ref: present after normalization AND non-empty. `false` is
+ * empty, `""` is empty, `[]` is empty; `0` is **not** empty (a declared
+ * numeric parameter of `0` is a real value, not an absence) — the exact rule
+ * frozen by the ticket (§3 of `.agents/supervised_task.md`).
+ */
+function isParameterNonEmpty(
+  normalizedParameters: NormalizedIntentParameters | undefined,
+  parameterId: string
+): boolean {
+  const value = normalizedParameters?.[parameterId];
+  if (value === undefined) return false;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true; // number, including 0
+}
+
+/**
+ * `variable` ref: the resolved value must be an array — the only shape a
+ * `preconditions` consumer has today (`PROJECT.SEQUENCES`). Any other shape
+ * has no consumer and is refused loudly rather than guessed at, per the
+ * ticket (§3).
+ */
+function isVariableNonEmpty(resolved: Partial<Record<VariableId, unknown>>, variableId: VariableId): boolean {
+  const value = resolved[variableId];
+  if (!Array.isArray(value)) {
+    throw new Error(`checkPreconditions: variable ref "${variableId}" did not resolve to an array.`);
+  }
+  return value.length > 0;
+}
+
+function isPreconditionRefSatisfied(
+  ref: PreconditionRef,
+  mergedAnchorFields: Record<string, unknown>,
+  resolved: Partial<Record<VariableId, unknown>>,
+  normalizedParameters: NormalizedIntentParameters | undefined
+): boolean {
+  if ("anchorField" in ref) return isAnchorFieldNonEmpty(mergedAnchorFields, ref.anchorField);
+  if ("parameter" in ref) return isParameterNonEmpty(normalizedParameters, ref.parameter);
+  return isVariableNonEmpty(resolved, ref.variable);
 }
 
 function checkPreconditions(
   preconditions: OperationDescriptor["preconditions"],
   mergedAnchorFields: Record<string, unknown>,
+  resolved: Partial<Record<VariableId, unknown>>,
+  normalizedParameters: NormalizedIntentParameters | undefined,
   selectedMode: string | undefined
 ): { ok: true } | { ok: false; error: string } {
   for (const precondition of preconditions ?? []) {
@@ -268,14 +321,13 @@ function checkPreconditions(
       continue;
     }
     // `require` mirrors `output.require`'s own vocabulary (§4.1 correction
-    // 5): every declared field non-empty, or at least one. A single-field
-    // entry behaves identically under either value, which is why migrating
-    // every existing precondition to `require: "all"` changes nothing
-    // observable.
+    // 5): every declared ref non-empty, or at least one. A single-ref entry
+    // behaves identically under either value, which is why migrating every
+    // existing precondition to `require: "all"` changes nothing observable.
     const satisfied =
       precondition.require === "all"
-        ? precondition.fields.every((field) => isFieldNonEmpty(mergedAnchorFields, field))
-        : precondition.fields.some((field) => isFieldNonEmpty(mergedAnchorFields, field));
+        ? precondition.refs.every((ref) => isPreconditionRefSatisfied(ref, mergedAnchorFields, resolved, normalizedParameters))
+        : precondition.refs.some((ref) => isPreconditionRefSatisfied(ref, mergedAnchorFields, resolved, normalizedParameters));
     if (!satisfied) {
       return { ok: false, error: precondition.message };
     }
@@ -384,32 +436,60 @@ function buildVariableDispatchers(
 // provided key not named by any declared entry is dropped: the descriptor is
 // the whole contract of what it accepts.
 //
+// LLMW.DESCRIPTOR.ASSETS.1 (B7f) extends the rule with two more types,
+// exactly the same shape ("valid -> kept; invalid or absent -> the declared
+// default, or omission; never a partial correction"):
+//   - `"boolean"`: valid iff `typeof value === "boolean"`;
+//   - `"multiEnum"`: valid iff `value` is an **array** and **every** member
+//     belongs to the declared `values`. An empty array is valid (an empty
+//     choice, not a mistyped value). An array containing even one unknown
+//     member is invalid **in its entirety** — no silent filtering of the
+//     unknown members, which would mask a caller bug instead of surfacing
+//     it. Order is preserved exactly as received: no sort, no dedup (the
+//     builder joins members in the order it receives them).
+//
 // Called exactly once, in `resolvePromptInternal` below, before either
-// dispatcher is built — not inside `buildIntentDispatchers` or
-// `buildVariableParameterDispatcher`, so the rule is applied a single time
-// per resolution, not once per dispatcher.
+// dispatcher is built and before `checkPreconditions` (moved ahead of it by
+// this same ticket, §3: a `{parameter: ...}` precondition ref needs the
+// already-normalized value) — so the rule is applied a single time per
+// resolution, not once per dispatcher.
 // ---------------------------------------------------------------------------
+
+export type NormalizedIntentParameters = Record<string, number | string | boolean | string[]>;
+
+function isValidIntentParameterValue(
+  entry: NonNullable<OperationDescriptor["intent"]["parameters"]>[number],
+  value: number | string | boolean | string[] | undefined
+): boolean {
+  if (value === undefined) return false;
+  switch (entry.type) {
+    case "integer":
+      return (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        (entry.min == null || value >= entry.min) &&
+        (entry.max == null || value <= entry.max)
+      );
+    case "string":
+      return typeof value === "string";
+    case "boolean":
+      return typeof value === "boolean";
+    case "multiEnum":
+      return Array.isArray(value) && value.every((member) => (entry.values ?? []).includes(member));
+  }
+}
 
 export function normalizeIntentParameters(
   declared: NonNullable<OperationDescriptor["intent"]["parameters"]> | undefined,
-  provided: Record<string, number | string> | undefined
-): Record<string, number | string> | undefined {
+  provided: Record<string, number | string | boolean | string[]> | undefined
+): NormalizedIntentParameters | undefined {
   if (!declared || declared.length === 0) return undefined;
 
-  const normalized: Record<string, number | string> = {};
+  const normalized: NormalizedIntentParameters = {};
   for (const entry of declared) {
     const value = provided?.[entry.id];
-    const isValid =
-      value !== undefined &&
-      (entry.type === "integer"
-        ? typeof value === "number" &&
-          Number.isInteger(value) &&
-          (entry.min == null || value >= entry.min) &&
-          (entry.max == null || value <= entry.max)
-        : typeof value === "string");
-
-    if (isValid) {
-      normalized[entry.id] = value as number | string;
+    if (isValidIntentParameterValue(entry, value)) {
+      normalized[entry.id] = value as number | string | boolean | string[];
     } else if (entry.default !== undefined) {
       normalized[entry.id] = entry.default;
     }
@@ -420,7 +500,7 @@ export function normalizeIntentParameters(
 }
 
 function buildIntentDispatchers(
-  parameters: Record<string, number | string> | undefined,
+  parameters: NormalizedIntentParameters | undefined,
   selectedMode: string | undefined
 ): { renderParameter: RenderParameter; renderMode: RenderMode } {
   const renderParameter: RenderParameter = (parameterId, render) => {
@@ -473,7 +553,7 @@ function buildFreeTextDispatcher(freeText: string | undefined): { renderFreeText
  */
 function buildVariableParameterDispatcher(
   resolved: Partial<Record<VariableId, unknown>>,
-  parameters: Record<string, number | string> | undefined,
+  parameters: NormalizedIntentParameters | undefined,
   selectedMode: string | undefined
 ): { renderVariablesParameters: RenderVariablesParameters } {
   const renderVariablesParameters: RenderVariablesParameters = (variableIds, parameterIds, render) => {
@@ -487,7 +567,7 @@ function buildVariableParameterDispatcher(
     const variables: Partial<Record<VariableId, unknown>> = {};
     for (const id of variableIds) variables[id] = resolved[id];
 
-    const params: Record<string, number | string | undefined> = {};
+    const params: Record<string, number | string | boolean | string[] | undefined> = {};
     for (const id of parameterIds) params[id] = parameters?.[id];
 
     return fn({ variables, parameters: params, mode: selectedMode });
@@ -713,7 +793,7 @@ function applyPostResponseForm(
   postResponse: NonNullable<OperationDescriptor["postResponse"]>,
   parsed: Extract<RunOperationResult, { ok: true; kind: "list" }>,
   resolved: Partial<Record<VariableId, unknown>>,
-  normalizedParameters: Record<string, number | string> | undefined
+  normalizedParameters: NormalizedIntentParameters | undefined
 ): RunOperationResult {
   const table = POST_RESPONSE_FORMS as unknown as Record<
     string,
@@ -725,7 +805,7 @@ function applyPostResponseForm(
   const variables: Record<string, unknown> = {};
   for (const id of postResponse.variables) variables[id] = resolved[id];
 
-  const parameters: Record<string, number | string | undefined> = {};
+  const parameters: Record<string, number | string | boolean | string[] | undefined> = {};
   for (const id of postResponse.parameters ?? []) parameters[id] = normalizedParameters?.[id];
 
   return { ok: true, kind: "list", items: fn({ items: parsed.items, variables, parameters }) };
@@ -760,7 +840,7 @@ async function resolvePromptInternal(
       // already produced for this call, carried through so `runOperation`'s
       // post-response step reads it as-is instead of recomputing it — "the
       // parameters passed are those already normalized" (ticket §3).
-      normalizedParameters: Record<string, number | string> | undefined;
+      normalizedParameters: NormalizedIntentParameters | undefined;
     }
   | { ok: false; error: string }
 > {
@@ -798,13 +878,25 @@ async function resolvePromptInternal(
   // Step 4 — resolve variables declared via the registry.
   const resolved = await resolveVariables(descriptor, ids);
 
-  const precondition = checkPreconditions(descriptor.preconditions, mergeAnchorFields(resolved), selectedMode);
+  // `intent.parameters` is normalized here, once, before `checkPreconditions`
+  // — reordered ahead of it by LLMW.DESCRIPTOR.ASSETS.1 (B7f): a
+  // `{parameter: id}` precondition ref (new in this ticket) reads the
+  // already-normalized value, not the caller's raw, unvalidated one, on the
+  // same "normalize once" discipline this function's header already states.
+  // No observable change for any of the five pre-existing descriptors: none
+  // of their preconditions references a parameter.
+  const normalizedParameters = normalizeIntentParameters(descriptor.intent.parameters, intent.parameters);
+
+  const precondition = checkPreconditions(
+    descriptor.preconditions,
+    mergeAnchorFields(resolved),
+    resolved,
+    normalizedParameters,
+    selectedMode
+  );
   if (!precondition.ok) return precondition;
 
-  // Step 5 — assemble {system, user} from blocks. `intent.parameters` is
-  // normalized exactly once here, before either dispatcher reads it (see
-  // `normalizeIntentParameters`'s own header above).
-  const normalizedParameters = normalizeIntentParameters(descriptor.intent.parameters, intent.parameters);
+  // Step 5 — assemble {system, user} from blocks.
   const { renderVariable, renderVariables } = buildVariableDispatchers(resolved, selectedMode);
   const { renderParameter, renderMode } = buildIntentDispatchers(normalizedParameters, selectedMode);
   const { renderFreeText } = buildFreeTextDispatcher(intent.freeText);

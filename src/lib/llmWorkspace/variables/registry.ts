@@ -527,6 +527,156 @@ export async function resolveProjectAssets(projectId: number): Promise<ProjectAs
     .orderBy(asc(assets.id));
 }
 
+// ---------------------------------------------------------------------------
+// `assetsFromProject` render forms — LLMW.DESCRIPTOR.ASSETS.1 (B7f). Read
+// verbatim off `buildAssetsFromProjectPrompt`
+// (`src/lib/prompts/assets-from-project.ts`) — the oracle, left untouched.
+// `typesStr` is `input.assetTypes.join(", ")` on the oracle's own
+// `AssetType[]`; every render form below recomputes it the same way from the
+// normalized `assetTypes` parameter (a `"multiEnum"` value — always an array
+// once normalized, never `undefined`, since the descriptor declares a
+// `default`).
+//
+// The system message is one continuous static template — no branch at all,
+// only two interpolation points (`project.name` once, `typesStr` twice) — so
+// it is reproduced as a single `{variables, parameters, render}` block rather
+// than split across several: splitting a template with no seam would only
+// invite a join-separator mismatch for no reproduction benefit.
+//
+// The user message *does* branch, exactly mirroring `parts: string[]` in the
+// oracle: five blocks — background (always non-empty), outline-or-story
+// (mutually exclusive, possibly neither), sequences, shots (gated on both
+// `includeShots` and a non-empty `PROJECT.SHOTS`), existing assets — joined
+// with the oracle's own `"\n\n"` separator (not the `"\n"` every other
+// descriptor uses), plus a sixth, always-non-empty closing-line block. Since
+// `parts` always has at least the background line, `parts.join("\n\n") +
+// "\n\n" + finalLine` (the oracle's own construction) is algebraically
+// `[...parts, finalLine].join("\n\n")` — exactly what the block list, filtered
+// of empties and joined by `"\n\n"`, produces.
+// ---------------------------------------------------------------------------
+
+const ASSETS_FROM_PROJECT_JSON_SCHEMA = `Always respond with a valid JSON object matching exactly this schema:
+{
+  "assets": [
+    {
+      "name": "string — concise production name, 1–4 words",
+      "assetType": "character | environment | prop | vehicle | crowd | other",
+      "description": "string or null — visual and production description: appearance, physical characteristics, visual style",
+      "notes": "string or null — narrative role, story context, design constraints, usage context",
+      "sourceLevel": "outline | sequence | shot | story — which level of narrative this was extracted from",
+      "sourceExcerpt": "string or null — short verbatim quote (max 100 chars) from the source material, or null",
+      "duplicateWarning": "string or null — exact name of a matching existing asset if this is likely a duplicate, otherwise null"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.`;
+
+function assetsFromProjectTypesStr(assetTypes: unknown): string {
+  return Array.isArray(assetTypes) ? (assetTypes as string[]).join(", ") : "";
+}
+
+/** System: the entire message — no branch, only `project.name` and `typesStr` interpolated. */
+export function renderAssetsFromProjectSystemBody(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const typesStr = assetsFromProjectTypesStr(input.parameters.assetTypes);
+  return `You are a production asset supervisor and art department coordinator for the project "${project.name}".
+
+Your task is to extract a list of production assets from the provided narrative material.
+Production assets are reusable elements that must be designed, cast, or visually generated: named characters, key locations and environments, significant props, vehicles, crowd scenes.
+
+EXTRACTION RULES:
+- Extract only significant, named, or recurring assets — not every incidental detail.
+- Favor assets that appear across multiple sequences, drive the narrative, or require dedicated visual design.
+- Do not invent assets not mentioned or strongly implied by the narrative.
+- Maximum 20 assets total.
+- Asset types to extract: ${typesStr}
+
+DUPLICATE DETECTION:
+- The existing project asset list is provided. Compare each candidate against it.
+- If a candidate closely matches an existing asset (same name, very similar name, or clearly the same entity), set "duplicateWarning" to the exact name of the matching existing asset.
+- Otherwise, set "duplicateWarning" to null.
+
+FIELD MAPPING:
+- name: concise production name (1–4 words)
+- assetType: one of ${typesStr}
+- description: visual/production description — appearance, physical traits, visual style. String or null.
+- notes: narrative role, story context, design constraints, usage context. String or null.
+- sourceLevel: "outline" if found in outline, "sequence" if found in sequences only, "shot" if found in shots only, "story" if found in story/pitch only.
+- sourceExcerpt: short verbatim quote (max 100 chars) from the source material where this asset appears. String or null.
+- duplicateWarning: name of matching existing asset if likely duplicate, otherwise null.
+
+${ASSETS_FROM_PROJECT_JSON_SCHEMA}`;
+}
+
+/** Template, block 1: `Project: ...` / conditional `Pitch:` / conditional `Story:` (only when no outline). Always non-empty. */
+export function renderAssetsFromProjectBackgroundLines(data: ProjectIdentityData): string {
+  const hasOutline = !!data.outline?.trim();
+  const lines: string[] = [`Project: ${data.name}`];
+  if (data.pitch?.trim()) lines.push(`Pitch: ${data.pitch.trim()}`);
+  if (!hasOutline && data.story?.trim()) lines.push(`Story: ${data.story.trim().slice(0, 400)}`);
+  return lines.join("\n");
+}
+
+/** Template, block 2: the outline block when present, else the story block when present, else empty — mutually exclusive, matching the oracle's `if (hasOutline) {...} else if (story) {...}`. */
+export function renderAssetsFromProjectOutlineOrStoryBlock(data: ProjectIdentityData): string {
+  const hasOutline = !!data.outline?.trim();
+  if (hasOutline) {
+    return `PROJECT OUTLINE (primary narrative source):\n${data.outline!.trim().slice(0, 1500)}`;
+  }
+  if (data.story?.trim()) {
+    return `PROJECT STORY (use as narrative background):\n${data.story.trim().slice(0, 400)}`;
+  }
+  return "";
+}
+
+/** Template, block 3: `SEQUENCES:\n...`, one `- title | ...` line per entry, sliced to 2000 chars. Empty when there are none. */
+export function renderAssetsFromProjectSequencesBlock(entries: ProjectSequenceEntry[]): string {
+  if (entries.length === 0) return "";
+  const seqLines: string[] = [];
+  for (const seq of entries) {
+    const line: string[] = [`- ${seq.title}`];
+    if (seq.summary) line.push(`Summary: ${seq.summary}`);
+    if (seq.description) line.push(`Description: ${seq.description}`);
+    if (seq.narrativePurpose) line.push(`Purpose: ${seq.narrativePurpose}`);
+    if (seq.mood) line.push(`Mood: ${seq.mood}`);
+    if (seq.locationHint) line.push(`Location: ${seq.locationHint}`);
+    seqLines.push(line.join(" | "));
+  }
+  const seqBlock = `SEQUENCES:\n${seqLines.join("\n")}`;
+  return seqBlock.slice(0, 2000);
+}
+
+/** Template, block 4: `SHOTS:\n...`, gated on both `includeShots` and a non-empty `PROJECT.SHOTS`, sliced to 1500 chars. */
+export function renderAssetsFromProjectShotsBlock(input: VariableParameterRenderInput): string {
+  const includeShots = input.parameters.includeShots === true;
+  const shotsData = input.variables["PROJECT.SHOTS"] as ProjectShotEntry[];
+  if (!includeShots || shotsData.length === 0) return "";
+  const shotLines: string[] = [];
+  for (const shot of shotsData) {
+    const line: string[] = [`- ${shot.title}`];
+    if (shot.description) line.push(shot.description);
+    if (shot.actionPitch) line.push(`Action: ${shot.actionPitch}`);
+    if (shot.continuityIn) line.push(`In: ${shot.continuityIn}`);
+    if (shot.continuityOut) line.push(`Out: ${shot.continuityOut}`);
+    shotLines.push(line.join(" | "));
+  }
+  const shotBlock = `SHOTS:\n${shotLines.join("\n")}`;
+  return shotBlock.slice(0, 1500);
+}
+
+/** Template, block 5: `EXISTING ASSETS (...):\n...`, one `- name (type)` line per entry. Empty when there are none. */
+export function renderAssetsFromProjectExistingAssetsBlock(entries: ProjectAssetEntry[]): string {
+  if (entries.length === 0) return "";
+  const existingLines = entries.map((a) => `- ${a.name} (${a.type})`).join("\n");
+  return `EXISTING ASSETS (for duplicate detection — do not re-create these unless significantly different):\n${existingLines}`;
+}
+
+/** Template, block 6: the closing instruction line, interpolating `typesStr`. Always non-empty. */
+export function renderAssetsFromProjectFinalInstructionLine(assetTypes: unknown): string {
+  const typesStr = assetsFromProjectTypesStr(assetTypes);
+  return `Extract up to 20 production assets from the above narrative material. Asset types to include: ${typesStr}.`;
+}
+
 /**
  * `shotRetake.otherShotsLines` — `shot.retakeDirected`'s render form for
  * `SEQ.SHOTS`, combined with `SHOT.CORE` in a `{variables: [...]}` block
@@ -1510,6 +1660,14 @@ export const VARIABLE_RENDER_FORMS = {
     "assetContext.identityLines": renderProjectIdentityAssetContextLines,
     "sequencePrompt.generateProjectLines": renderProjectIdentitySequencePromptGenerateLines,
     "shotRetake.projectLines": renderProjectIdentityRetakeLines,
+    "assetsFromProject.backgroundLines": renderAssetsFromProjectBackgroundLines,
+    "assetsFromProject.outlineOrStoryBlock": renderAssetsFromProjectOutlineOrStoryBlock,
+  },
+  "PROJECT.SEQUENCES": {
+    "assetsFromProject.sequencesBlock": renderAssetsFromProjectSequencesBlock,
+  },
+  "PROJECT.ASSETS": {
+    "assetsFromProject.existingAssetsBlock": renderAssetsFromProjectExistingAssetsBlock,
   },
   "SEQ.CONTEXT": {
     "sequencePrompt.generateSequenceLines": renderSeqContextSequencePromptGenerateLines,
@@ -1580,6 +1738,7 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
 export const PARAMETER_RENDER_FORMS = {
   "outline.sectionInstructionBullet": renderOutlineTargetSectionsBullet,
   "shotsFromSequence.jsonSchemaBlock": renderShotsFromSequenceJsonSchemaBlock,
+  "assetsFromProject.finalInstructionLine": renderAssetsFromProjectFinalInstructionLine,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -1616,7 +1775,9 @@ export const PARAMETER_RENDER_FORMS = {
  */
 export type VariableParameterRenderInput = {
   variables: Partial<Record<VariableId, unknown>>;
-  parameters: Record<string, number | string | undefined>;
+  // Widened `number | string` -> `number | string | boolean | string[]`
+  // (LLMW.DESCRIPTOR.ASSETS.1, B7f) — see `types.ts`'s own widening note.
+  parameters: Record<string, number | string | boolean | string[] | undefined>;
   mode: string | undefined;
 };
 
@@ -1627,6 +1788,8 @@ export const VARIABLE_PARAMETER_RENDER_FORMS = {
   "shotsFromSequence.templatePathB": renderShotsFromSequenceTemplatePathB,
   "sequencesFromOutline.systemPathABody": renderSequencesFromOutlineSystemPathABody,
   "sequencesFromOutline.systemPathBBody": renderSequencesFromOutlineSystemPathBBody,
+  "assetsFromProject.systemBody": renderAssetsFromProjectSystemBody,
+  "assetsFromProject.shotsBlock": renderAssetsFromProjectShotsBlock,
 } as const satisfies Record<string, (input: VariableParameterRenderInput) => string>;
 
 /**
@@ -1694,7 +1857,9 @@ export const VARIABLE_REGISTRY = {
 export type PostResponseFormInput = {
   items: Array<Record<string, string | number>>;
   variables: Record<string, unknown>;
-  parameters: Record<string, number | string | undefined>;
+  // Widened `number | string` -> `number | string | boolean | string[]`
+  // (LLMW.DESCRIPTOR.ASSETS.1, B7f) — see `types.ts`'s own widening note.
+  parameters: Record<string, number | string | boolean | string[] | undefined>;
 };
 
 /**
