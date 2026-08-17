@@ -919,6 +919,63 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B11 — UC1 delivered, and two predictions that were wrong (2026-08-17)
+
+`LLMW.ACTION.INSERT_AT.1`, `LLMW.OUTPUT.OBJECT_NUMBER.1`, `LLMW.UC1.INSERT.1`,
+`LLMW.UC1.BENCH.1` — commits `548e8e9`, `0895907`, `78ccc14`, `b560cf9`. **The
+three founding use cases are now all delivered**, UC1 last and bench-only, like
+UC3.
+
+**The queue row for B11 predicted three things and two were wrong.** It said
+`insertionPoint` had to be really implemented in the runner: it does not, and
+will not be. An insertion point is not an anchor identity — it changes with
+every request — so the position is an `intent.parameters` entry and the
+operation is anchored on the sequence, exactly as `shots.fromSequence` already
+is while creating shots. That deleted a whole ticket's worth of runner work. It
+said twelve output fields: there are ten, because "Production Details" in §4 of
+the vision is a **form section heading**, not a column, and `shotCode` is
+generated from the nomenclature template like every other generated row rather
+than taken from the model. Only the third prediction held, and only in the
+user's own reading of it: "re-run with another seed" is Redo, decided by him on
+2026-08-17 — `src/lib/llm/` has no seed plumbing at all, and the bench's Run
+plus `ProposalPanel`'s Redo already provide what he meant.
+
+**The one real brick was numbers in object mode.** `durationSeconds` could not
+be declared: object fields were text-only. The runner's own comment had already
+named the gap when B7b widened list items — "a plain `string` record cannot
+honestly carry `duration_seconds`… the `"object"` variant is untouched" — so
+this was a port, not an invention. Widening `RunOperationResult` broke eight
+consumers on purpose, each given a throwing guard rather than a coercion.
+
+**Three supervisor errors, all paid for in this series.** First, a redundant
+variable: `SEQ.SHOT_CONTINUITY` was specified, built, shipped and removed the
+same day, because `SEQ.SHOT_TARGETS` (B7h-b1) already projected both continuity
+fields *and* the `id` UC1 needs. The overlap was visible in the diff that was
+approved — the new variable's own comment argued for the distinction — and the
+argument did not survive contact with the resolver, which already orders by
+`orderIndex`. Second, a ticket rule written too wide: "no existing test may be
+modified" protects byte-for-byte prompt proofs, not structural assertions on a
+descriptor object, and an executor obeyed it into leaving the tree red rather
+than adjusting four mechanical assertions. Third, a false claim in a commit
+message: B11-b2 said `shot.insertDirected` was runnable at the bench while a
+guard from B11-b1 still threw on any numeric value — true only after B11-b3.
+
+**The trap the serializer could have hidden.** The bench edits every field in a
+textarea, so a duration returns as text; emitting `"4"` instead of `4` makes the
+write action drop it in silence, since it requires `typeof === "number"`. The
+two halves are therefore proven *together* — a bench draft serialized, fed to
+the real action against a disposable database, and the created row checked to
+carry duration 4 at the right index. Mutating the serializer to emit a string
+fails that test and two others.
+
+**Browser validation is partial, and stated as such.** The resolved prompt was
+verified in the real bench on a throwaway project: the position named in clear
+("Insert the new shot after SH020 — Vex gives chase."), the director's direction
+in place, ~746 estimated tokens. **The model round trip did not complete** — the
+OpenRouter call was still pending after several minutes with no server-side
+error — so the Approve button's own click path is unproven in a browser. What it
+would do is proven at the action level end to end. 650 tests, 89 files.
+
 ### B7h-m — the eighth migration, and the first that is not indiscernible (2026-08-17)
 
 `LLMW.MIGRATE.LIST.4`, commit `ba1e435`. **All eight list operations are now
