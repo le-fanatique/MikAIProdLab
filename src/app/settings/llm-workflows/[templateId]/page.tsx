@@ -15,6 +15,8 @@ import { estimateTokens } from "@/lib/llmWorkspace/tokenEstimate";
 import {
   buildVariablePreviewRows,
   firstBenchParam,
+  multiEnumBenchParam,
+  multiEnumPresenceParamName,
   normalizeBenchSelection,
   parseIntentInputFromSearchParams,
   parseSelectionFromSearchParams,
@@ -289,20 +291,81 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
             </div>
           )}
 
-          {descriptor.intent.parameters?.map((p) => (
-            <div key={p.id} className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">{p.label}</label>
-              <input
-                type={p.type === "integer" ? "number" : "text"}
-                name={p.id}
-                min={p.min}
-                max={p.max}
-                defaultValue={firstBenchParam(search[p.id]) ?? ""}
-                placeholder={p.default != null ? String(p.default) : undefined}
-                className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 w-32 focus:outline-none focus:border-[#3a4046]"
-              />
-            </div>
-          ))}
+          {descriptor.intent.parameters?.map((p) => {
+            // LLMW.BENCH.CONTROLS.1 (S3) — "boolean" is a checkbox, "multiEnum"
+            // a checkbox per member. Both need a hidden marker: a GET form
+            // sends nothing for an unchecked box, which would otherwise be
+            // indistinguishable from "this parameter was never submitted".
+            if (p.type === "boolean") {
+              const raw = firstBenchParam(search[p.id]);
+              const checked = raw === "true" ? true : raw === "false" ? false : Boolean(p.default);
+              return (
+                <div key={p.id} className="flex items-center gap-2">
+                  {/* Piège A — unchecked sends only the hidden "false"
+                      below; the checkbox must come first in document order
+                      so a *checked* box's "true" is the value
+                      `firstBenchParam` picks (form fields serialize in DOM
+                      order: checked -> ["true","false"], unchecked ->
+                      "false" alone). */}
+                  <input
+                    type="checkbox"
+                    id={`param-${p.id}`}
+                    name={p.id}
+                    value="true"
+                    defaultChecked={checked}
+                    className="h-3.5 w-3.5"
+                  />
+                  <input type="hidden" name={p.id} value="false" />
+                  <label htmlFor={`param-${p.id}`} className="text-[10px] uppercase tracking-wide text-[#6e767d]">
+                    {p.label}
+                  </label>
+                </div>
+              );
+            }
+
+            if (p.type === "multiEnum") {
+              const selected = multiEnumBenchParam(search[p.id]);
+              return (
+                <div key={p.id} className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-[#6e767d]">{p.label}</span>
+                  {/* Piège B — this marker is what tells the parser "the
+                      group was on the page, nothing checked" (a valid,
+                      significant empty selection) apart from "the group was
+                      never submitted" (the declared default applies). */}
+                  <input type="hidden" name={multiEnumPresenceParamName(p.id)} value="1" />
+                  <div className="flex flex-wrap gap-3">
+                    {(p.values ?? []).map((v) => (
+                      <label key={v} className="flex items-center gap-1 text-xs text-[#a4abb2]">
+                        <input
+                          type="checkbox"
+                          name={p.id}
+                          value={v}
+                          defaultChecked={selected.includes(v)}
+                          className="h-3.5 w-3.5"
+                        />
+                        {v}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={p.id} className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">{p.label}</label>
+                <input
+                  type={p.type === "integer" ? "number" : "text"}
+                  name={p.id}
+                  min={p.min}
+                  max={p.max}
+                  defaultValue={firstBenchParam(search[p.id]) ?? ""}
+                  placeholder={p.default != null ? String(p.default) : undefined}
+                  className="rounded border border-[#2c3035] bg-[#141618] text-xs text-[#a4abb2] px-2 py-1.5 w-32 focus:outline-none focus:border-[#3a4046]"
+                />
+              </div>
+            );
+          })}
 
           {descriptor.intent.freeText && (
             <div className="flex flex-col gap-1">

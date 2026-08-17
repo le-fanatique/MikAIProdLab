@@ -106,6 +106,37 @@ export function firstBenchParam(value: string | string[] | undefined): string | 
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * LLMW.BENCH.CONTROLS.1 (S3) — `firstBenchParam`'s multi-value counterpart:
+ * a `"multiEnum"` control is a checkbox per member, so a repeated query key
+ * must become the *whole* array, not just its first entry. Exported for the
+ * page's own redisplay: which member checkboxes come back checked after
+ * Apply reads the same "single value or array, either way an array" rule as
+ * the parser below, rather than a second, divergent one.
+ */
+export function multiEnumBenchParam(value: string | string[] | undefined): string[] {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * LLMW.BENCH.CONTROLS.1 (S3) — piège B. A `"multiEnum"` param's query key
+ * (`param.id`) is absent both when the param was never submitted *and* when
+ * every member checkbox is unchecked (a GET form sends nothing for an
+ * unchecked checkbox) — yet those two states must produce different
+ * intentions: the first omits the parameter (its declared default applies),
+ * the second must produce an explicit empty array (`normalizeIntentParameters`
+ * treats `[]` as a valid, significant selection — B7f-m). The form carries an
+ * always-rendered hidden marker under this derived name, independent of
+ * `param.id` itself, so the parser can tell "the group was on the page" from
+ * "the group was never on the page" without touching the checkboxes' own
+ * query key. Exported so the page's marker `name` and the parser's lookup
+ * can never drift apart.
+ */
+export function multiEnumPresenceParamName(parameterId: string): string {
+  return `${parameterId}__present`;
+}
+
 function parsePositiveIntParam(value: string | string[] | undefined): number | undefined {
   const raw = firstBenchParam(value);
   if (raw == null || raw === "") return undefined;
@@ -153,13 +184,32 @@ export function parseIntentInputFromSearchParams(
   }
 
   if (descriptor.intent.parameters && descriptor.intent.parameters.length > 0) {
-    const parameters: Record<string, number | string> = {};
+    const parameters: Record<string, number | string | boolean | string[]> = {};
     for (const param of descriptor.intent.parameters) {
+      if (param.type === "multiEnum") {
+        // Piège B: a raw value present means at least one member was
+        // checked; the presence marker means the group was on the page at
+        // all, checked or not. Neither present -> the param was never
+        // submitted, and stays omitted so the declared default applies.
+        const raw = searchParams[param.id];
+        const present = searchParams[multiEnumPresenceParamName(param.id)] != null;
+        if (raw == null && !present) continue;
+        parameters[param.id] = multiEnumBenchParam(raw);
+        continue;
+      }
+
       const raw = firstBenchParam(searchParams[param.id]);
       if (raw == null || raw === "") continue;
       if (param.type === "integer") {
         const n = Number(raw);
         if (Number.isFinite(n)) parameters[param.id] = n;
+      } else if (param.type === "boolean") {
+        // Piège A's other half: only "true"/"false" convert here. Any other
+        // string is left as-is for `normalizeIntentParameters` to reject,
+        // exactly like an out-of-range integer.
+        if (raw === "true") parameters[param.id] = true;
+        else if (raw === "false") parameters[param.id] = false;
+        else parameters[param.id] = raw;
       } else {
         parameters[param.id] = raw;
       }

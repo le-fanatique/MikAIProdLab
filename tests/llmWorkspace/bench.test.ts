@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   buildVariablePreviewRows,
+  multiEnumPresenceParamName,
   normalizeBenchSelection,
   parseIntentInputFromSearchParams,
   parseSelectionFromSearchParams,
   parseTemplateRef,
 } from "@/lib/llmWorkspace/bench";
+import { assetsFromProjectDescriptor } from "@/lib/llmWorkspace/descriptors/assetsFromProject";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
 import { sequencePromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/sequencePrompt";
 import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotPrompt";
@@ -216,6 +218,117 @@ describe("parseIntentInputFromSearchParams", () => {
       freeText: ["first", "second"],
     });
     expect(intent.freeText).toBe("first");
+  });
+
+  // LLMW.BENCH.CONTROLS.1 (S3) — an "integer" and a "string" param declared
+  // side by side in the same descriptor still read exactly as before this
+  // ticket. `outlineGenerateDescriptor` only declares "targetSections"
+  // ("integer"); a "string" neighbor is appended here rather than reused
+  // from elsewhere, since no built-in descriptor happens to declare both.
+  const integerAndStringDescriptor = {
+    ...outlineGenerateDescriptor,
+    intent: {
+      ...outlineGenerateDescriptor.intent,
+      parameters: [...outlineGenerateDescriptor.intent.parameters!, { id: "note", type: "string" as const, label: "Note" }],
+    },
+  };
+
+  it("an integer param and a string param, declared side by side, both read as before", () => {
+    const intent = parseIntentInputFromSearchParams(integerAndStringDescriptor, {
+      targetSections: "6",
+      note: "a note",
+    });
+    expect(intent.parameters).toEqual({ targetSections: 6, note: "a note" });
+  });
+
+  it("the string neighbor is omitted when blank, the integer neighbor is parsed, independently", () => {
+    const intent = parseIntentInputFromSearchParams(integerAndStringDescriptor, {
+      targetSections: "6",
+      note: "",
+    });
+    expect(intent.parameters).toEqual({ targetSections: 6 });
+  });
+});
+
+describe("parseIntentInputFromSearchParams — \"boolean\" (LLMW.BENCH.CONTROLS.1, S3)", () => {
+  it('"true" converts to the boolean true', () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "true" });
+    expect(intent.parameters).toEqual({ includeShots: true });
+  });
+
+  it('"false" converts to the boolean false', () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "false" });
+    expect(intent.parameters).toEqual({ includeShots: false });
+  });
+
+  it("absent stays absent — the declared default is normalizeIntentParameters's job, not this parser's", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {});
+    expect(intent.parameters).toBeUndefined();
+  });
+
+  // Piège A, proven end to end at the type this parser actually receives:
+  // an unchecked checkbox with the page's own hidden-fallback control sends
+  // only the hidden field's "false" (a single string); a checked one sends
+  // both, in DOM order [checkbox "true", hidden "false"] — the shape
+  // `firstBenchParam` (and so this parser) must resolve to `true`.
+  it("piège A — unchecked (hidden fallback alone, a single string) resolves to false", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "false" });
+    expect(intent.parameters).toEqual({ includeShots: false });
+  });
+
+  it("piège A — checked (checkbox + hidden fallback, in DOM order) resolves to true, not the hidden field's false", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {
+      includeShots: ["true", "false"],
+    });
+    expect(intent.parameters).toEqual({ includeShots: true });
+  });
+
+  it("an unrecognized value is left un-converted, for normalizeIntentParameters to reject", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "yes" });
+    expect(intent.parameters).toEqual({ includeShots: "yes" });
+  });
+});
+
+describe('parseIntentInputFromSearchParams — "multiEnum" (LLMW.BENCH.CONTROLS.1, S3)', () => {
+  it("a single checked value becomes a one-member array", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { assetTypes: "character" });
+    expect(intent.parameters).toEqual({ assetTypes: ["character"] });
+  });
+
+  it("a repeated query key becomes a multi-member array, in the order received", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {
+      assetTypes: ["prop", "character", "vehicle"],
+    });
+    expect(intent.parameters).toEqual({ assetTypes: ["prop", "character", "vehicle"] });
+  });
+
+  // Piège B — the three states a bench-forged URL can actually produce, and
+  // they must produce three different intentions.
+  it("piège B, state 1 — absent (no marker, no value): the parameter is omitted entirely, the declared default applies downstream", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {});
+    expect(intent.parameters).toBeUndefined();
+  });
+
+  it("piège B, state 2 — present and empty (marker present, no value): an explicit empty array, not an omission", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {
+      [multiEnumPresenceParamName("assetTypes")]: "1",
+    });
+    expect(intent.parameters).toEqual({ assetTypes: [] });
+  });
+
+  it("piège B, state 3 — present with members (marker present, values present): the members, marker or not", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {
+      [multiEnumPresenceParamName("assetTypes")]: "1",
+      assetTypes: ["character", "prop"],
+    });
+    expect(intent.parameters).toEqual({ assetTypes: ["character", "prop"] });
+  });
+
+  it("the marker's own key never leaks into intent.parameters", () => {
+    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {
+      [multiEnumPresenceParamName("assetTypes")]: "1",
+    });
+    expect(Object.keys(intent.parameters ?? {})).toEqual(["assetTypes"]);
   });
 });
 
