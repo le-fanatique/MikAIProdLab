@@ -47,7 +47,10 @@ type ObjectDraft = Record<string, string>;
 // other stable identity), and the default selection is every index — the
 // bench's normal gesture is Run then Approve, unlike
 // `AssetsLLMExtractPanel`'s empty-by-default extraction review.
-type ListDraft = { items: Array<Record<string, string | number>>; selected: number[] };
+// `Record<string, string | number>` -> `Record<string, string | number |
+// boolean>` (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1), mirroring
+// `runBenchOperation`'s own widened return type.
+type ListDraft = { items: Array<Record<string, string | number | boolean>>; selected: number[] };
 
 type Draft = ObjectDraft | ListDraft;
 
@@ -313,6 +316,18 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
                         {output.itemFields.map((f) => {
                           const value = item[f.field];
                           if (value === undefined || value === "") return null;
+                          // `value` is now typed `string | number | boolean`
+                          // (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1), but
+                          // `output.itemFields` iterates only
+                          // `descriptor.output.item.fields` — the fields the
+                          // model itself fills — and no `ListItemField`
+                          // variant is ever boolean-typed (frozen contract).
+                          // A `postResponse`-computed boolean field (e.g.
+                          // `alreadyAssigned`) is never declared there, so
+                          // this branch is unreached today. Explicit decision
+                          // for the day it is not: `String(value)` renders a
+                          // boolean the same way it already renders a number
+                          // ("true" / "false"), not a special-cased label.
                           return (
                             <p key={f.field} className="text-[11px] text-[#8a8f96] font-mono">
                               <span className="text-[#6e767d]">{f.field}:</span> {String(value)}

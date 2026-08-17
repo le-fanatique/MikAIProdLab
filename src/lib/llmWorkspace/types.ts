@@ -121,7 +121,21 @@ export type VariableId =
   // `src/lib/prompts/casting-from-sequence.ts`).
   | "SEQ.SHOT_TARGETS"
   | "PROJECT.ASSET_LIBRARY"
-  | "SEQ.EXISTING_CASTINGS";
+  | "SEQ.EXISTING_CASTINGS"
+  // LLMW.DESCRIPTOR.CASTING.1 (B7h-b2), §3bis. The sequence's own identity —
+  // `id` and `title` — needed because `buildCastingFromSequencePrompt`
+  // embeds the sequence anchor's own numeric id in four places
+  // (`casting-from-sequence.ts:82,108,145,154`), which no existing variable
+  // projects: `SEQ.CONTEXT` deliberately never carries `id` (narrative
+  // context, not identity), and `SEQ.SHOT_TARGETS` / `PROJECT.ASSET_LIBRARY`
+  // carry a *child* entity's id, never the parent sequence's own. Kept
+  // separate from `SEQ.CONTEXT` rather than widening it — an anchor's own
+  // identifier is a different concern from its narrative context, same
+  // reasoning `SEQ.SHOT_TARGETS` already applied to "addressable" vs.
+  // "descriptive". The overlap with `SEQ.CONTEXT.title` is accepted: each
+  // serves a different phrase of the prompt. See `variables/registry.ts` for
+  // the resolver.
+  | "SEQ.IDENTITY";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque

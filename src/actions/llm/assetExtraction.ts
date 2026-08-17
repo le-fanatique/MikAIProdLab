@@ -155,6 +155,18 @@ export async function generateAssetCandidatesDraft(
           continue;
         }
         const value = mapped[key];
+        // `mapListItemToModelKeys` now returns `string | number | boolean`
+        // (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1) — but
+        // `assetsFromProjectDescriptor.output.item.fields` declares no
+        // boolean-typed field, so `value` can never actually be a `boolean`
+        // here. Explicit rather than left to an invented fallback: refuse
+        // loudly, on the same "impossible input throws" discipline
+        // `anchorIdForVariable` (`runner.ts`) already uses, rather than
+        // silently coerce a boolean into `GeneratedAssetCandidate`'s
+        // `string | number | null` fields with no oracle to say how.
+        if (typeof value === "boolean") {
+          throw new Error(`generateAssetCandidatesDraft: unexpected boolean value for field "${key}".`);
+        }
         candidate[key] = stringFields.has(field.field) && value === "" ? null : value;
       }
       return candidate as unknown as GeneratedAssetCandidate;

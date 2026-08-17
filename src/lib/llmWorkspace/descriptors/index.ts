@@ -21,6 +21,7 @@ import { assetRetakeDirectedDescriptor } from "./assetRetakeDirected";
 import { shotsFromSequenceDescriptor } from "./shotsFromSequence";
 import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 import { assetsFromProjectDescriptor } from "./assetsFromProject";
+import { castingFromSequenceDescriptor } from "./castingFromSequence";
 
 export const DESCRIPTORS = {
   "story.generate": storyGenerateDescriptor,
@@ -36,6 +37,7 @@ export const DESCRIPTORS = {
   "shots.fromSequence": shotsFromSequenceDescriptor,
   "sequences.fromOutline": sequencesFromOutlineDescriptor,
   "assets.fromProject": assetsFromProjectDescriptor,
+  "casting.fromSequence": castingFromSequenceDescriptor,
 } as const satisfies Record<string, OperationDescriptor>;
 
 export {
@@ -52,4 +54,5 @@ export {
   shotsFromSequenceDescriptor,
   sequencesFromOutlineDescriptor,
   assetsFromProjectDescriptor,
+  castingFromSequenceDescriptor,
 };

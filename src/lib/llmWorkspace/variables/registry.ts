@@ -43,6 +43,13 @@ import { asc, eq } from "drizzle-orm";
 import type { VariableId } from "../types";
 import { parseOutlineSections } from "@/lib/prompts/outlineSections";
 import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
+// Type-only: `runner.ts` imports value bindings from this module (the five
+// render-form tables, `VARIABLE_REGISTRY`, `POST_RESPONSE_FORMS`), so a
+// runtime import in the other direction would cycle. `import type` is erased
+// entirely by `tsc` (`resolveBenchConfirmation`'s own comment in
+// `benchRun.ts` documents the same discipline for a different pair of
+// modules) — `AnchorIds` is a type only, never a value, so this is safe.
+import type { AnchorIds } from "../runner";
 
 // `@/db` is deliberately NOT imported at module scope, directly or
 // transitively. `src/db/index.ts` binds one `better-sqlite3` handle at
@@ -528,6 +535,36 @@ export async function resolveProjectAssets(projectId: number): Promise<ProjectAs
 }
 
 // ---------------------------------------------------------------------------
+// SEQ.IDENTITY — anchors: sequence. LLMW.DESCRIPTOR.CASTING.1 (B7h-b2), §3bis
+// of the ticket. The sequence anchor's own `id` and `title` — distinct from
+// `SEQ.CONTEXT`, which projects `title` too (the overlap is accepted, each
+// serves a different phrase) but never `id` (narrative context, not
+// identity). Needed because `buildCastingFromSequencePrompt` embeds
+// `input.sequence.id` in four places
+// (`casting-from-sequence.ts:82,108,145,154`) and no existing variable
+// carries an anchor's own id — `SEQ.SHOT_TARGETS` / `PROJECT.ASSET_LIBRARY`
+// carry a *child* entity's id, never the parent's own. Same resolver
+// contract as every other variable: reads the database, receives the
+// already-verified anchor id, returns typed data, refuses loudly (`throw`)
+// on a sequence not found — the same refusal shape `resolveSeqContext` and
+// `resolveSeqCurrentPrompt` already use for the same anchor.
+// ---------------------------------------------------------------------------
+
+export type SeqIdentityData = {
+  id: number;
+  title: string;
+};
+
+export async function resolveSeqIdentity(sequenceId: number): Promise<SeqIdentityData> {
+  const { db } = await import("@/db");
+  const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sequenceId));
+  if (!sequence) {
+    throw new Error(`resolveSeqIdentity: sequence ${sequenceId} not found.`);
+  }
+  return { id: sequence.id, title: sequence.title };
+}
+
+// ---------------------------------------------------------------------------
 // SEQ.SHOT_TARGETS — anchors: sequence. LLMW.VAR.CASTING.1 (B7h-b1). The
 // sequence's shots, **addressable** — carrying their own `id`, unlike
 // `SEQ.SHOTS` (`:358-364` above), which never projects it. Fields copied
@@ -652,6 +689,287 @@ export async function resolveSeqExistingCastings(sequenceId: number): Promise<Se
     .from(sequenceAssets)
     .where(eq(sequenceAssets.sequenceId, sequenceId));
   return { shotCastings, sequenceCastings };
+}
+
+// ---------------------------------------------------------------------------
+// `castingFromSequence` render forms — LLMW.DESCRIPTOR.CASTING.1 (B7h-b2).
+// Read verbatim off `buildCastingFromSequencePrompt`
+// (`src/lib/prompts/casting-from-sequence.ts`) — the oracle, left untouched.
+//
+// The system message is one continuous template literal — no `parts` array,
+// unlike the user message below — with two points that vary on
+// `includeSequenceLevel` (an inline clause, and a whole bullet line) plus
+// `JSON_SCHEMA(includeSeq)` itself, a function of that same boolean
+// (`casting-from-sequence.ts:45-62`). Reproduced as a single
+// `{variables, parameters, render}` block, on `assetsFromProject.systemBody`'s
+// own precedent ("one continuous static template... reproduced as a single
+// block rather than split") — here the block's *content* branches
+// (`includeSequenceLevel`), not its shape, so one render form is still
+// correct: `JSON_SCHEMA`'s own branch lives inside
+// `castingFromSequenceJsonSchema` below, called with the same boolean the
+// block already received, exactly mirroring the oracle's own
+// `JSON_SCHEMA(includeSequenceLevel)` call. No branch of the builder is left
+// unrepresented.
+//
+// The user message *does* branch by omission, exactly mirroring `parts:
+// string[]` in the oracle: five blocks always pushed (background, sequence
+// context, asset library, shots) or conditionally empty (existing castings,
+// dropped when there are none) plus a sixth, always-non-empty closing
+// instruction line — joined with the oracle's own `"\n\n"` separator. Since
+// `parts` always has at least the background line, `parts.join("\n\n") +
+// "\n\n" + targetInstruction...` (the oracle's own construction,
+// `casting-from-sequence.ts:157-159`) is algebraically
+// `[...parts, closingLine].join("\n\n")` — exactly what the block list,
+// filtered of empties and joined by `"\n\n"`, produces.
+// ---------------------------------------------------------------------------
+
+const CASTING_VALID_ASSET_TYPES = ["character", "environment", "prop", "vehicle", "crowd", "other"] as const;
+
+/** `JSON_SCHEMA` (`casting-from-sequence.ts:45-62`), verbatim — a function of
+ * `includeSequenceLevel`, called from `renderCastingFromSequenceSystemBody`
+ * exactly where the oracle calls it. Not exported: this render form's own
+ * concern, not a shared building block. */
+function castingFromSequenceJsonSchema(includeSeq: boolean): string {
+  return `Always respond with a valid JSON object matching exactly this schema:
+{
+  "suggestions": [
+    {
+      "targetType": "${includeSeq ? "shot | sequence" : "shot"}",
+      "targetId": <number — exact ID from the provided lists>,
+      "targetLabel": "string — shot code + title, or sequence title",
+      "assetId": <number — exact ID from the provided asset list>,
+      "assetName": "string — asset name",
+      "assetType": "character | environment | prop | vehicle | crowd | other",
+      "reason": "string or null — one sentence explaining why this asset fits this shot",
+      "confidence": "high | medium | low"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.
+Maximum 60 suggestions total.`;
+}
+
+/** System: the entire message — `{variables: ["PROJECT.IDENTITY",
+ * "SEQ.IDENTITY"], parameters: ["includeSequenceLevel"], render}`. */
+export function renderCastingFromSequenceSystemBody(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const seqIdentity = input.variables["SEQ.IDENTITY"] as SeqIdentityData;
+  const includeSequenceLevel = input.parameters.includeSequenceLevel as boolean;
+
+  return `You are a casting director and production supervisor for the project "${project.name}".
+
+Your task is to suggest which assets from the project's asset library should be cast into the provided shots${includeSequenceLevel ? " and optionally into the sequence itself" : ""}.
+
+CASTING RULES:
+- Use ONLY the asset IDs and shot IDs provided below. Never invent IDs or names.
+- Prioritize: characters visible or implied in the action; environments matching the location; props, vehicles, or crowds clearly present or useful.
+- Do not cast every asset into every shot. Be selective and production-relevant.
+- Do not suggest castings that are already assigned (listed under "Already assigned").
+- Make suggestions that will help the shot generation pipeline: cast assets that will appear in the visual output.${
+    includeSequenceLevel
+      ? "\n- Sequence-level casting: use targetType=\"sequence\" and targetId=" +
+        seqIdentity.id +
+        " only for assets that are thematically relevant to the full sequence (e.g., the main character or primary location)."
+      : ""
+  }
+- confidence must be "high", "medium", or "low".
+- reason must be one short sentence or null.
+- Maximum 60 suggestions total.
+
+${castingFromSequenceJsonSchema(includeSequenceLevel)}`;
+}
+
+/** Template block 1 — project background, always non-empty. `{variable:
+ * "PROJECT.IDENTITY", render}`. Distinct from `assetsFromProject.backgroundLines`:
+ * this oracle truncates `story`/`outline` to 200 chars and labels both
+ * "(background)", which the Assets builder does not. */
+export function renderCastingFromSequenceProjectBackgroundLines(data: ProjectIdentityData): string {
+  const bgLines: string[] = [`Project: ${data.name}`];
+  if (data.pitch?.trim()) bgLines.push(`Pitch: ${data.pitch.trim()}`);
+  if (data.story?.trim()) bgLines.push(`Story (background): ${data.story.trim().slice(0, 200)}`);
+  if (data.outline?.trim()) bgLines.push(`Outline (background): ${data.outline.trim().slice(0, 200)}`);
+  return bgLines.join("\n");
+}
+
+/** Template block 2 — sequence context, always non-empty. `{variables:
+ * ["SEQ.IDENTITY", "SEQ.CONTEXT"], render}`. The header line's id and title
+ * come from `SEQ.IDENTITY` (this is exactly the case §3bis of the ticket
+ * exists for); the five optional narrative lines come from `SEQ.CONTEXT`,
+ * unchanged. */
+export function renderCastingFromSequenceSequenceContextLines(
+  seqIdentity: SeqIdentityData,
+  seqContext: SeqContextData
+): string {
+  const seqLines: string[] = [`SEQUENCE [ID: ${seqIdentity.id}]: ${seqIdentity.title}`];
+  if (seqContext.summary) seqLines.push(`Summary: ${seqContext.summary}`);
+  if (seqContext.description) seqLines.push(`Description: ${seqContext.description}`);
+  if (seqContext.narrativePurpose) seqLines.push(`Purpose: ${seqContext.narrativePurpose}`);
+  if (seqContext.mood) seqLines.push(`Mood: ${seqContext.mood}`);
+  if (seqContext.locationHint) seqLines.push(`Location: ${seqContext.locationHint}`);
+  return seqLines.join("\n");
+}
+
+/** Template block 3 — asset library, always non-empty (even with zero
+ * assets: the oracle still prints the "ASSET LIBRARY:" header). `{variable:
+ * "PROJECT.ASSET_LIBRARY", render}`. */
+export function renderCastingFromSequenceAssetLibraryLines(assetLibrary: ProjectAssetLibraryEntry[]): string {
+  const assetLines = assetLibrary.slice(0, 30).map((a) => {
+    const desc = a.description?.trim().slice(0, 150) ?? null;
+    const notes = a.notes?.trim().slice(0, 80) ?? null;
+    const detail = [desc, notes].filter(Boolean).join(" | ");
+    return `[ASSET ID: ${a.id}] ${a.name} — ${a.type}${detail ? ` — ${detail}` : ""}`;
+  });
+  return `ASSET LIBRARY:\n${assetLines.join("\n")}`;
+}
+
+/** Template block 4 — shots, always non-empty (same "always print the
+ * header" shape as the asset library block). `{variable: "SEQ.SHOT_TARGETS",
+ * render}`. */
+export function renderCastingFromSequenceShotsLines(shotTargets: SeqShotTargetEntry[]): string {
+  const shotLines = shotTargets.slice(0, 15).map((s) => {
+    const label = s.shotCode ? `${s.shotCode} — ${s.title}` : s.title;
+    const details: string[] = [];
+    if (s.description) details.push(s.description.slice(0, 120));
+    if (s.actionPitch) details.push(`Action: ${s.actionPitch.slice(0, 120)}`);
+    if (s.continuityIn) details.push(`In: ${s.continuityIn.slice(0, 60)}`);
+    if (s.continuityOut) details.push(`Out: ${s.continuityOut.slice(0, 60)}`);
+    const detail = details.join(" | ");
+    return `[SHOT ID: ${s.id}] ${label}${detail ? ` — ${detail}` : ""}`;
+  });
+  return `SHOTS:\n${shotLines.join("\n")}`;
+}
+
+/** Template block 5 — existing castings, empty (and dropped by
+ * `assembleDescriptorMessages`) when there are none, matching the oracle's
+ * own conditional `parts.push`. `{variables: ["SEQ.IDENTITY",
+ * "SEQ.EXISTING_CASTINGS"], render}` — the sequence-level lines need the
+ * current sequence's own id, from `SEQ.IDENTITY`. */
+export function renderCastingFromSequenceExistingCastingsBlock(
+  seqIdentity: SeqIdentityData,
+  existing: SeqExistingCastingsData
+): string {
+  const existingLines: string[] = [];
+  for (const c of existing.shotCastings) {
+    existingLines.push(`Shot ${c.shotId} ← Asset ${c.assetId}`);
+  }
+  for (const c of existing.sequenceCastings) {
+    existingLines.push(`Sequence ${seqIdentity.id} ← Asset ${c.assetId}`);
+  }
+  if (existingLines.length === 0) return "";
+  return `ALREADY ASSIGNED (do not suggest these again):\n${existingLines.join("\n")}`;
+}
+
+/** Template block 6 — closing instruction line, always non-empty.
+ * `{variables: ["SEQ.IDENTITY"], parameters: ["includeSequenceLevel"],
+ * render}` — the sequence-level targetId in the instruction text comes from
+ * `SEQ.IDENTITY`. */
+export function renderCastingFromSequenceClosingInstructionLine(input: VariableParameterRenderInput): string {
+  const seqIdentity = input.variables["SEQ.IDENTITY"] as SeqIdentityData;
+  const includeSequenceLevel = input.parameters.includeSequenceLevel as boolean;
+
+  const targetInstruction = includeSequenceLevel
+    ? `Suggest which assets should be cast into each shot. You may also suggest sequence-level castings (targetType="sequence", targetId=${seqIdentity.id}) for assets that are central to the whole sequence.`
+    : "Suggest which assets should be cast into each shot.";
+
+  return `${targetInstruction} Use only the exact IDs provided above. Do not invent IDs, asset names, or shot names.`;
+}
+
+// ---------------------------------------------------------------------------
+// `castingFromSequence.filterAndEnrich` — the `postResponse` form
+// (LLMW.POSTRESPONSE.1, B7g's mechanism), reproducing
+// `generateCastingSuggestionsDraft`'s own filter/enrich pass
+// (`castingSuggestions.ts:231-271`) verbatim, in the same order (§3 of the
+// ticket): filter on existence, compute `alreadyAssigned`, enrich display
+// fields from local data — never from what the model proposed ("don't trust
+// LLM names"). This is where the `RunOperationResult`/`PostResponseFormInput`
+// boolean widening (§1 of the ticket) is actually used: `alreadyAssigned` is
+// never parsed by `output.item.fields` (the write side does not read it
+// either, per the ticket's own measurement) — it exists only as this form's
+// own computed output.
+//
+// `targetType`/`targetId`/`assetId` are declared `"string"`/`"number"` (not
+// `"enum"`/dropped) on the descriptor's `output.item.fields` — `item.validity`
+// (frozen, §4.1 of `types.ts`) can only gate on non-empty *string* fields, so
+// it cannot express `normalizeRawSuggestion`'s own "unknown targetType, or a
+// non-positive-integer id, drops the whole item" gate. That gate is
+// reproduced here instead: an item whose `targetType` is neither `"shot"`
+// nor `"sequence"` is dropped, on the same principle as the three existence
+// rules the ticket names explicitly — not "improving" the oracle, just
+// relocating its equivalent gate to the one pipeline stage that can express
+// it. `targetId`/`assetId` use `fallback: "omit"` (`readNumberField`,
+// `runner.ts`), so a model-omitted or out-of-range id is simply absent from
+// the item here — treated as "not found" by the same existence checks below,
+// which is the observable behaviour the oracle's own drop already produces.
+// ---------------------------------------------------------------------------
+
+function castingFromSequenceNormalizeAssetType(raw: unknown): (typeof CASTING_VALID_ASSET_TYPES)[number] {
+  if (typeof raw === "string" && (CASTING_VALID_ASSET_TYPES as readonly string[]).includes(raw)) {
+    return raw as (typeof CASTING_VALID_ASSET_TYPES)[number];
+  }
+  return "other";
+}
+
+export function renderCastingFromSequenceFilterAndEnrich(
+  input: PostResponseFormInput
+): Array<Record<string, string | number | boolean>> {
+  const shotTargets = input.variables["SEQ.SHOT_TARGETS"] as SeqShotTargetEntry[];
+  const assetLibrary = input.variables["PROJECT.ASSET_LIBRARY"] as ProjectAssetLibraryEntry[];
+  const existing = input.variables["SEQ.EXISTING_CASTINGS"] as SeqExistingCastingsData;
+  const seqIdentity = input.variables["SEQ.IDENTITY"] as SeqIdentityData;
+  // The frozen contract (§2 of the ticket): the current sequence's id comes
+  // from the operation's own already-validated anchor, not from a variable —
+  // this is the one comparison `PostResponseFormInput.anchorIds` exists for.
+  const sequenceId = input.anchorIds.sequenceId as number;
+
+  const shotById = new Map(shotTargets.map((s) => [s.id, s] as const));
+  const assetById = new Map(assetLibrary.map((a) => [a.id, a] as const));
+  const shotCastingKeys = new Set(existing.shotCastings.map((c) => `${c.shotId}:${c.assetId}`));
+  const sequenceCastingAssetIds = new Set(existing.sequenceCastings.map((c) => c.assetId));
+
+  const result: Array<Record<string, string | number | boolean>> = [];
+
+  for (const item of input.items) {
+    const targetType = item.targetType;
+    // `fallback: "omit"` numeric fields may be absent from `item` entirely —
+    // read defensively, matching `mapListItemToModelKeys`'s own documented
+    // "absent, not present-as-empty" contract (`benchRun.ts`).
+    const targetId = item.targetId as number | undefined;
+    const assetId = item.assetId as number | undefined;
+
+    if (targetType !== "shot" && targetType !== "sequence") continue;
+    if (assetId == null || !assetById.has(assetId)) continue;
+    if (targetType === "shot" && (targetId == null || !shotById.has(targetId))) continue;
+    if (targetType === "sequence" && targetId !== sequenceId) continue;
+
+    const assetRecord = assetById.get(assetId)!;
+    // Non-null by construction: the filter above already refused any "shot"
+    // item whose `targetId` is not a real shot of this sequence — matching
+    // the oracle's own dead fallback branch (`castingSuggestions.ts:257`,
+    // `raw.targetLabel`, unreachable once filtering runs first).
+    const shotRecord = targetType === "shot" ? shotById.get(targetId as number) : undefined;
+
+    const alreadyAssigned =
+      targetType === "shot"
+        ? shotCastingKeys.has(`${targetId}:${assetId}`)
+        : sequenceCastingAssetIds.has(assetId);
+
+    const targetLabel =
+      targetType === "shot"
+        ? shotRecord!.shotCode
+          ? `${shotRecord!.shotCode} — ${shotRecord!.title}`
+          : shotRecord!.title
+        : seqIdentity.title;
+
+    result.push({
+      ...item,
+      targetLabel,
+      assetName: assetRecord.name,
+      assetType: castingFromSequenceNormalizeAssetType(assetRecord.type),
+      alreadyAssigned,
+    });
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -1874,6 +2192,7 @@ export const VARIABLE_RENDER_FORMS = {
     "shotRetake.projectLines": renderProjectIdentityRetakeLines,
     "assetsFromProject.backgroundLines": renderAssetsFromProjectBackgroundLines,
     "assetsFromProject.outlineOrStoryBlock": renderAssetsFromProjectOutlineOrStoryBlock,
+    "castingFromSequence.projectBackgroundLines": renderCastingFromSequenceProjectBackgroundLines,
   },
   "PROJECT.SEQUENCES": {
     "assetsFromProject.sequencesBlock": renderAssetsFromProjectSequencesBlock,
@@ -1881,9 +2200,15 @@ export const VARIABLE_RENDER_FORMS = {
   "PROJECT.ASSETS": {
     "assetsFromProject.existingAssetsBlock": renderAssetsFromProjectExistingAssetsBlock,
   },
+  "PROJECT.ASSET_LIBRARY": {
+    "castingFromSequence.assetLibraryLines": renderCastingFromSequenceAssetLibraryLines,
+  },
   "SEQ.CONTEXT": {
     "sequencePrompt.generateSequenceLines": renderSeqContextSequencePromptGenerateLines,
     "shotRetake.sequenceLines": renderSeqContextRetakeLines,
+  },
+  "SEQ.SHOT_TARGETS": {
+    "castingFromSequence.shotsLines": renderCastingFromSequenceShotsLines,
   },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
@@ -1938,6 +2263,8 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "shotRetake.otherShotsLines": renderSeqShotsOtherShotsLines,
   "sequencesFromOutline.templatePathA": renderSequencesFromOutlineTemplatePathA,
   "sequencesFromOutline.templatePathB": renderSequencesFromOutlineTemplatePathB,
+  "castingFromSequence.sequenceContextLines": renderCastingFromSequenceSequenceContextLines,
+  "castingFromSequence.existingCastingsBlock": renderCastingFromSequenceExistingCastingsBlock,
 } as const;
 
 /**
@@ -2004,6 +2331,8 @@ export const VARIABLE_PARAMETER_RENDER_FORMS = {
   "sequencesFromOutline.systemPathBBody": renderSequencesFromOutlineSystemPathBBody,
   "assetsFromProject.systemBody": renderAssetsFromProjectSystemBody,
   "assetsFromProject.shotsBlock": renderAssetsFromProjectShotsBlock,
+  "castingFromSequence.systemBody": renderCastingFromSequenceSystemBody,
+  "castingFromSequence.closingInstructionLine": renderCastingFromSequenceClosingInstructionLine,
 } as const satisfies Record<string, (input: VariableParameterRenderInput) => string>;
 
 /**
@@ -2059,6 +2388,7 @@ export const VARIABLE_REGISTRY = {
   "SEQ.SHOT_TARGETS": resolveSeqShotTargets,
   "PROJECT.ASSET_LIBRARY": resolveProjectAssetLibrary,
   "SEQ.EXISTING_CASTINGS": resolveSeqExistingCastings,
+  "SEQ.IDENTITY": resolveSeqIdentity,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
 
 // ---------------------------------------------------------------------------
@@ -2074,11 +2404,27 @@ export const VARIABLE_REGISTRY = {
 // ---------------------------------------------------------------------------
 
 export type PostResponseFormInput = {
-  items: Array<Record<string, string | number>>;
+  // Widened `Record<string, string | number>` -> `Record<string, string |
+  // number | boolean>` (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1) — see
+  // `runner.ts`'s own widening note on `RunOperationResult`. The items a form
+  // *receives* are never actually boolean-valued yet (`ListItemField` gains
+  // no `"boolean"` variant), but the type is kept in lockstep with what a
+  // form may *return*, on the same one-object-contract discipline this type
+  // already follows for `parameters`.
+  items: Array<Record<string, string | number | boolean>>;
   variables: Record<string, unknown>;
   // Widened `number | string` -> `number | string | boolean | string[]`
   // (LLMW.DESCRIPTOR.ASSETS.1, B7f) — see `types.ts`'s own widening note.
   parameters: Record<string, number | string | boolean | string[] | undefined>;
+  // LLMW.DESCRIPTOR.CASTING.1 (B7h-b2), §2 of the ticket: the operation's own
+  // already-validated anchor identifiers. Necessary and not bypassable —
+  // `castingFromSequence.filterAndEnrich`'s sequence-level filter compares a
+  // "sequence" item's `targetId` to the *current* sequence, an id no
+  // resolved variable carries into a `postResponse` form (only `SEQ.IDENTITY`
+  // carries it into a *render* block, per §3bis — a distinct, earlier stage
+  // of the pipeline). No form before this one needed it, so every existing
+  // form simply ignores the new field.
+  anchorIds: AnchorIds;
 };
 
 /**
@@ -2096,7 +2442,7 @@ export type PostResponseFormInput = {
  */
 export function renderSequencesFromOutlinePinTitlesToSections(
   input: PostResponseFormInput
-): Array<Record<string, string | number>> {
+): Array<Record<string, string | number | boolean>> {
   const outlineSections = input.variables["PROJECT.OUTLINE_SECTIONS"] as OutlineSection[];
   const targetCount = input.parameters.targetCount;
   if (targetCount != null || outlineSections.length === 0 || input.items.length !== outlineSections.length) {
@@ -2104,7 +2450,7 @@ export function renderSequencesFromOutlinePinTitlesToSections(
   }
   return input.items.map((item, i) => {
     const section = outlineSections[i];
-    const updated: Record<string, string | number> = { ...item, title: section.title };
+    const updated: Record<string, string | number | boolean> = { ...item, title: section.title };
     if (section.body) {
       updated.summary = section.body;
     }
@@ -2114,4 +2460,5 @@ export function renderSequencesFromOutlinePinTitlesToSections(
 
 export const POST_RESPONSE_FORMS = {
   "sequencesFromOutline.pinTitlesToSections": renderSequencesFromOutlinePinTitlesToSections,
-} as const satisfies Record<string, (input: PostResponseFormInput) => Array<Record<string, string | number>>>;
+  "castingFromSequence.filterAndEnrich": renderCastingFromSequenceFilterAndEnrich,
+} as const satisfies Record<string, (input: PostResponseFormInput) => Array<Record<string, string | number | boolean>>>;

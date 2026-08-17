@@ -49,7 +49,10 @@ export async function runBenchOperation(input: {
   searchParams: BenchSearchParams;
 }): Promise<
   | { ok: true; kind: "object"; values: Record<string, string> }
-  | { ok: true; kind: "list"; items: Array<Record<string, string | number>> }
+  // `Record<string, string | number>` -> `Record<string, string | number |
+  // boolean>` (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1), mirroring
+  // `RunOperationResult`'s own widening (`runner.ts`) one-for-one.
+  | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
   | { ok: false; error: string }
 > {
   const result = await loadBenchDescriptor(input.templateId);

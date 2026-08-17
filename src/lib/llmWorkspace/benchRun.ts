@@ -120,11 +120,21 @@ export type ListOutputItemFields = Extract<OperationDescriptor["output"], { kind
 // (`src/actions/llm/sequenceShots.ts`) can reuse the same runner-item ->
 // model-key mapping in object form (it serializes its own array itself, per
 // its return type, rather than taking a pre-serialized JSON string).
+//
+// `Record<string, string | number>` -> `Record<string, string | number |
+// boolean>` (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1) — following
+// `RunOperationResult`'s own widening (`runner.ts`). No declared
+// `output.item.fields` entry is ever boolean-typed (`ListItemField` gains no
+// `"boolean"` variant), so a boolean value never actually reaches this
+// function's `fields` loop today — `alreadyAssigned`, the one boolean field
+// any current list item carries, is added by a `postResponse` form and is
+// never declared in `fields`, so `field.field in item` never matches it. The
+// type is widened anyway, to stay in lockstep with what `item` may now carry.
 export function mapListItemToModelKeys(
   fields: ListOutputItemFields,
-  item: Record<string, string | number>
-): Record<string, string | number> {
-  const entry: Record<string, string | number> = {};
+  item: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> {
+  const entry: Record<string, string | number | boolean> = {};
   for (const field of fields) {
     // A field absent from the item (an "omit"-fallback numeric field the
     // model left out, per `readNumberField` in `runner.ts`) is omitted
@@ -139,7 +149,7 @@ export function mapListItemToModelKeys(
 
 export function buildListSelectionPayload(
   fields: ListOutputItemFields,
-  items: Array<Record<string, string | number>>,
+  items: Array<Record<string, string | number | boolean>>,
   selected: number[]
 ): string {
   // Iterate `selected` in ascending index order, ignoring any out-of-bounds

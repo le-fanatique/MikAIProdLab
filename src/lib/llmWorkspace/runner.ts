@@ -94,9 +94,17 @@ export type PromptResolutionResult =
 // comment signalled without being able to model: a plain `string` record
 // cannot honestly carry `duration_seconds` or `order_index`. The `"object"`
 // variant is untouched.
+//
+// LLMW.DESCRIPTOR.CASTING.1 (B7h-b2), §1: widened again to `string | number |
+// boolean` — never parsed from the model (`ListItemField` itself does not
+// gain a `"boolean"` variant; see `types.ts`), but a `postResponse` form may
+// now compute and attach a boolean field after parsing (`alreadyAssigned`,
+// the first case). `parseListOutput`'s own items are still only ever `string
+// | number` at the moment they leave `output` parsing — this widening is
+// entirely about what a `postResponse` form is allowed to hand back.
 export type RunOperationResult =
   | { ok: true; kind: "object"; values: Record<string, string> }
-  | { ok: true; kind: "list"; items: Array<Record<string, string | number>> }
+  | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
@@ -793,11 +801,12 @@ function applyPostResponseForm(
   postResponse: NonNullable<OperationDescriptor["postResponse"]>,
   parsed: Extract<RunOperationResult, { ok: true; kind: "list" }>,
   resolved: Partial<Record<VariableId, unknown>>,
-  normalizedParameters: NormalizedIntentParameters | undefined
+  normalizedParameters: NormalizedIntentParameters | undefined,
+  ids: AnchorIds
 ): RunOperationResult {
   const table = POST_RESPONSE_FORMS as unknown as Record<
     string,
-    (input: PostResponseFormInput) => Array<Record<string, string | number>>
+    (input: PostResponseFormInput) => Array<Record<string, string | number | boolean>>
   >;
   const fn = table[postResponse.form];
   if (!fn) throw new Error(`runner: no post-response form ${postResponse.form}`);
@@ -808,7 +817,14 @@ function applyPostResponseForm(
   const parameters: Record<string, number | string | boolean | string[] | undefined> = {};
   for (const id of postResponse.parameters ?? []) parameters[id] = normalizedParameters?.[id];
 
-  return { ok: true, kind: "list", items: fn({ items: parsed.items, variables, parameters }) };
+  // LLMW.DESCRIPTOR.CASTING.1 (B7h-b2), §2: the operation's own already-
+  // validated anchor identifiers, carried through — necessary for
+  // `castingFromSequence.filterAndEnrich`'s sequence-level filter, which
+  // compares a `targetType: "sequence"` item's `targetId` to the *current*
+  // sequence (`castingSuggestions.ts`'s own read-side gate,
+  // `raw.targetId !== sequenceId`). No `postResponse` form before this one
+  // needed the anchor at all.
+  return { ok: true, kind: "list", items: fn({ items: parsed.items, variables, parameters, anchorIds: ids }) };
 }
 
 // ---------------------------------------------------------------------------
@@ -964,7 +980,7 @@ export async function runOperation(
 
   // Step 9 — postResponse, only on a successful list result.
   if (parsed.ok && parsed.kind === "list" && descriptor.postResponse) {
-    return applyPostResponseForm(descriptor.postResponse, parsed, resolved.resolved, resolved.normalizedParameters);
+    return applyPostResponseForm(descriptor.postResponse, parsed, resolved.resolved, resolved.normalizedParameters, ids);
   }
   return parsed;
 }
