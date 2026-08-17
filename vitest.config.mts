@@ -10,6 +10,17 @@ export default defineConfig({
     // Points DB_PATH at a throwaway file before any test module loads, so a
     // mis-ordered import can never reach the development database.
     setupFiles: ["./tests/setup/dbGuard.ts"],
+    // REPO.VITEST.DETERMINISM.1 — the heaviest DB-backed suites (asset
+    // byte-equality proofs, tests/actions/bindings.test.ts) each spin up their
+    // own temporary SQLite file. They pass in isolation and pass four at a
+    // time, but fail unpredictably when all 89 files run in parallel on this
+    // machine (observed both as thrown errors and as raw pass/fail count
+    // drift across identical runs on a clean tree). This is a scheduling
+    // problem, not a test content problem: capping worker concurrency removes
+    // the contention that causes it. `poolOptions.threads.maxThreads` is not
+    // part of Vitest 4's `InlineConfig` (TS2769); `maxWorkers` is the current
+    // equivalent top-level option for the same "threads" pool.
+    maxWorkers: 4,
   },
   resolve: {
     alias: {
