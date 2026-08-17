@@ -135,7 +135,21 @@ export type VariableId =
   // "descriptive". The overlap with `SEQ.CONTEXT.title` is accepted: each
   // serves a different phrase of the prompt. See `variables/registry.ts` for
   // the resolver.
-  | "SEQ.IDENTITY";
+  | "SEQ.IDENTITY"
+  // LLMW.VAR.CONTINUITY.1 (B11-c) — UC1's insertion descriptor (B11-bd) needs
+  // to state "the continuity with the preceding Shots, the continuity with
+  // the following Shots" (§4 of the vision doc), and no existing variable
+  // carries `continuityIn`/`continuityOut` ordered by `orderIndex` around an
+  // insertion point. `SEQ.SHOTS` (`:93` above) deliberately stops at story
+  // and action for UC2's own reason (see its own comment) — widening it would
+  // change `shot.retakeDirected`'s rendered prompt, so this is a new variable
+  // rather than an extra field. `SEQ.SHOT_TARGETS` already carries both
+  // continuity fields, but keyed by `id` for casting's addressing need, not
+  // by `orderIndex` for UC1's positional need — kept distinct rather than
+  // reused for the same reason `SEQ.SHOT_TARGETS` itself gives for existing
+  // separately from `SEQ.SHOTS`. See `variables/registry.ts` for the
+  // resolver.
+  | "SEQ.SHOT_CONTINUITY";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque
