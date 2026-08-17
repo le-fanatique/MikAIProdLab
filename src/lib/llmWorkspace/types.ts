@@ -108,7 +108,20 @@ export type VariableId =
   // either).
   | "PROJECT.SEQUENCES"
   | "PROJECT.SHOTS"
-  | "PROJECT.ASSETS";
+  | "PROJECT.ASSETS"
+  // LLMW.VAR.CASTING.1 (B7h-b1) — addressable entities and what is already
+  // attributed, needed by `casting.fromSequence` (B7h-b2, not yet declared).
+  // `SEQ.SHOT_TARGETS` / `PROJECT.ASSET_LIBRARY` carry the `id` `SEQ.SHOTS` /
+  // `PROJECT.ASSETS` never project, so a plan or an asset can be designated
+  // by the model. `SEQ.EXISTING_CASTINGS` is the plan-level and
+  // sequence-level castings already posted for this sequence, kept distinct
+  // — one variable answering one question, over two tables. See
+  // `variables/registry.ts` for the three resolvers and their projections
+  // (read verbatim off `CastingFromSequenceInput`,
+  // `src/lib/prompts/casting-from-sequence.ts`).
+  | "SEQ.SHOT_TARGETS"
+  | "PROJECT.ASSET_LIBRARY"
+  | "SEQ.EXISTING_CASTINGS";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque

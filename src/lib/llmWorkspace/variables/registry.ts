@@ -528,6 +528,133 @@ export async function resolveProjectAssets(projectId: number): Promise<ProjectAs
 }
 
 // ---------------------------------------------------------------------------
+// SEQ.SHOT_TARGETS — anchors: sequence. LLMW.VAR.CASTING.1 (B7h-b1). The
+// sequence's shots, **addressable** — carrying their own `id`, unlike
+// `SEQ.SHOTS` (`:358-364` above), which never projects it. Fields copied
+// verbatim from `generateCastingSuggestionsDraft`'s `shots` mapping
+// (`src/actions/llm/castingSuggestions.ts:195-203`), which is exactly what
+// `CastingFromSequenceInput.shots` (`src/lib/prompts/casting-from-sequence.ts`)
+// consumes: `id`, `shotCode`, `title`, `description`, `actionPitch`,
+// `continuityIn`, `continuityOut` — no more, no fewer. Ordering copied
+// verbatim too: the action's own `shotList` query
+// (`castingSuggestions.ts:141-145`) carries `orderBy(asc(shots.orderIndex))`,
+// unlike `PROJECT.ASSETS`'s unordered source below — nothing to correct here.
+// No bound: the action's own query carries none either.
+// ---------------------------------------------------------------------------
+
+export type SeqShotTargetEntry = {
+  id: number;
+  shotCode: string | null;
+  title: string;
+  description: string | null;
+  actionPitch: string | null;
+  continuityIn: string | null;
+  continuityOut: string | null;
+};
+
+export async function resolveSeqShotTargets(sequenceId: number): Promise<SeqShotTargetEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({
+      id: shots.id,
+      shotCode: shots.shotCode,
+      title: shots.title,
+      description: shots.description,
+      actionPitch: shots.actionPitch,
+      continuityIn: shots.continuityIn,
+      continuityOut: shots.continuityOut,
+    })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId))
+    .orderBy(asc(shots.orderIndex));
+}
+
+// ---------------------------------------------------------------------------
+// PROJECT.ASSET_LIBRARY — anchors: project. LLMW.VAR.CASTING.1 (B7h-b1). The
+// project's assets, **addressable** — carrying their own `id`, unlike
+// `PROJECT.ASSETS` above, which never projects it and is left strictly
+// unchanged (widening it would break `assetsFromProject`'s byte-for-byte
+// proof, B7f). Fields copied verbatim from `generateCastingSuggestionsDraft`'s
+// `assets` mapping (`castingSuggestions.ts:204-210`), exactly what
+// `CastingFromSequenceInput.assets` consumes: `id`, `name`, `type`,
+// `description`, `notes`. Ordering copied verbatim too: the action's own
+// `assetLibrary` query (`castingSuggestions.ts:147-151`) carries
+// `orderBy(asc(assets.orderIndex))` — unlike `assetExtraction.ts`'s
+// unordered source for `PROJECT.ASSETS`, this source declares a real
+// `ORDER BY`, so there is no scan-order correction to make here. No bound:
+// the action's own query carries none either (it slices to 30 only inside
+// the prompt builder, not the DB read).
+// ---------------------------------------------------------------------------
+
+export type ProjectAssetLibraryEntry = {
+  id: number;
+  name: string;
+  type: string;
+  description: string | null;
+  notes: string | null;
+};
+
+export async function resolveProjectAssetLibrary(projectId: number): Promise<ProjectAssetLibraryEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({
+      id: assets.id,
+      name: assets.name,
+      type: assets.type,
+      description: assets.description,
+      notes: assets.notes,
+    })
+    .from(assets)
+    .where(eq(assets.projectId, projectId))
+    .orderBy(asc(assets.orderIndex));
+}
+
+// ---------------------------------------------------------------------------
+// SEQ.EXISTING_CASTINGS — anchors: sequence. LLMW.VAR.CASTING.1 (B7h-b1).
+// What is **already attributed** here: the plan→asset pairs of this
+// sequence's shots, and the sequence→asset pairs of the sequence itself —
+// **one** variable, because it answers one question, even though it reads
+// two tables (§ of the ticket). Fields copied verbatim from
+// `generateCastingSuggestionsDraft`'s two "existing castings" reads
+// (`castingSuggestings.ts:163-177`), exactly what
+// `CastingFromSequenceInput.existingShotCastings` / `.existingSequenceCastings`
+// consume: `{shotId, assetId}` and `{assetId}`. The two levels are kept
+// distinct in the return shape (`shotCastings` / `sequenceCastings`), never
+// merged into one flat list, per the ticket's explicit instruction. No
+// `ORDER BY` reproduced: the action's own two queries
+// (`castingSuggestions.ts:165-171`, `:174-177`) carry none either — these are
+// anti-duplicate lookup sets, not a rendered list, so there is no order to
+// preserve or correct.
+//
+// Isolation: `shotCastings` is scoped to this sequence through an inner join
+// on `shots` (`shotAssets.shotId -> shots.id`, `shots.sequenceId =
+// sequenceId`) — a `shot_assets` row carries no `sequenceId` of its own, so
+// project/sequence isolation for this half is enforced entirely through the
+// join, exactly as `PROJECT.SHOTS` above enforces project isolation through
+// its own join on `sequences`. `sequenceCastings` is scoped directly by
+// `sequenceAssets.sequenceId`.
+// ---------------------------------------------------------------------------
+
+export type SeqExistingCastingsData = {
+  shotCastings: Array<{ shotId: number; assetId: number }>;
+  sequenceCastings: Array<{ assetId: number }>;
+};
+
+export async function resolveSeqExistingCastings(sequenceId: number): Promise<SeqExistingCastingsData> {
+  const { db } = await import("@/db");
+  const shotCastings = await db
+    .select({ shotId: shotAssets.shotId, assetId: shotAssets.assetId })
+    .from(shotAssets)
+    .innerJoin(shots, eq(shotAssets.shotId, shots.id))
+    .where(eq(shots.sequenceId, sequenceId));
+  const sequenceCastings = await db
+    .select({ assetId: sequenceAssets.assetId })
+    .from(sequenceAssets)
+    .where(eq(sequenceAssets.sequenceId, sequenceId));
+  return { shotCastings, sequenceCastings };
+}
+
+// ---------------------------------------------------------------------------
 // `assetsFromProject` render forms — LLMW.DESCRIPTOR.ASSETS.1 (B7f). Read
 // verbatim off `buildAssetsFromProjectPrompt`
 // (`src/lib/prompts/assets-from-project.ts`) — the oracle, left untouched.
@@ -1929,6 +2056,9 @@ export const VARIABLE_REGISTRY = {
   "PROJECT.SEQUENCES": resolveProjectSequences,
   "PROJECT.SHOTS": resolveProjectShots,
   "PROJECT.ASSETS": resolveProjectAssets,
+  "SEQ.SHOT_TARGETS": resolveSeqShotTargets,
+  "PROJECT.ASSET_LIBRARY": resolveProjectAssetLibrary,
+  "SEQ.EXISTING_CASTINGS": resolveSeqExistingCastings,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
 
 // ---------------------------------------------------------------------------
