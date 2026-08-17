@@ -1046,6 +1046,91 @@ export function renderAssetCoreClosingBible(data: AssetCoreData): string {
 }
 
 // ---------------------------------------------------------------------------
+// `asset.retakeDirected` render forms — LLMW.UC3.ASSET_RETAKE.1 (B10). Same
+// "no oracle" situation as `shot.retakeDirected` (B9b): every block below is
+// authored for this ticket, not transcribed from a builder — see
+// `.agents/executor_report.md` for the resolved prompt.
+// ---------------------------------------------------------------------------
+
+/**
+ * ASSET.BIBLE, `asset.retakeDirected`'s own render form — not
+ * `assetBible.existingBibleLines` (§2 of the ticket): that form's header,
+ * "Existing Asset Bible (improve/complete, do not contradict without
+ * reason)", frames the Bible as something this operation is about to write.
+ * It never is here — the Asset Bible is read-only input (§0 of the ticket:
+ * `visualIdentity`/`usageRules`/`forbiddenVariations` are context, never
+ * committed) — so a neutral, non-editorial header is used instead. Empty
+ * when the Asset carries no Bible yet, matching the reused form's own
+ * "nothing to say" behaviour.
+ */
+export function renderAssetRetakeBibleLines(data: AssetBibleData): string {
+  const hasBible = data.visualIdentity?.trim() || data.usageRules?.trim() || data.forbiddenVariations?.trim();
+  if (!hasBible) return "";
+  const lines: string[] = [`\nAsset Bible (reference — describes the intended design, not the file to edit):`];
+  if (data.visualIdentity?.trim()) lines.push(`Visual Identity: ${data.visualIdentity.trim()}`);
+  if (data.usageRules?.trim()) lines.push(`Usage Rules: ${data.usageRules.trim()}`);
+  if (data.forbiddenVariations?.trim()) lines.push(`Forbidden Variations: ${data.forbiddenVariations.trim()}`);
+  return lines.join("\n");
+}
+
+/**
+ * ASSET.SHOT_APPEARANCES, `asset.retakeDirected`'s own render form — not
+ * `assetContext.shotAppearancesLines` (§2 of the ticket): that form projects
+ * five fields including `cameraPitch`, while §4 UC3 asks for exactly
+ * Description and Action Pitch from each Shot, plus an identifier so the
+ * Shot is nameable. This is the point §4 UC3 exists to prove — the variable
+ * library can project a chosen subset of fields across a relation, not just
+ * repeat a fixed shape — so this form is deliberately narrower than the one
+ * it sits beside in the registry, not a copy of it. Empty when the Asset
+ * appears in no Shot, matching every other "nothing to say" render form in
+ * this file (never a bare, empty header).
+ */
+export function renderAssetRetakeShotAppearancesLines(entries: AssetShotAppearanceEntry[]): string {
+  if (entries.length === 0) return "";
+  const lines: string[] = [`\nShots this Asset appears in:`];
+  for (const s of entries) {
+    const label = s.shotCode ? `${s.shotCode} — ${s.title}` : s.title;
+    const parts: string[] = [`- ${label}`];
+    if (s.description?.trim()) parts.push(s.description.trim());
+    if (s.actionPitch?.trim()) parts.push(`action: ${s.actionPitch.trim()}`);
+    lines.push(parts.join(" | "));
+  }
+  return lines.join("\n");
+}
+
+const ASSET_RETAKE_FREE_TEXT_MAX_LENGTH = 500;
+
+/**
+ * The director's free-text direction — same "absent/empty/blank -> empty
+ * string" contract as every other `intent.freeText` render form in this file
+ * (B9a's own), reused verbatim rather than re-derived.
+ */
+export function renderAssetRetakeFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's direction: ${trimmed.slice(0, ASSET_RETAKE_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+/**
+ * `asset.retakeDirected`'s system rule instructing the model to read the
+ * director's direction — B10's own corrective manche, defect 1: the rule
+ * used to be an unconditional block, so a note-less prompt still told the
+ * model to "respond to the director's direction below" when no direction
+ * was in the prompt at all (the same fault UC2's `shot.retakeDirected` was
+ * sent back for, at the `template`'s closing line rather than the
+ * `system`). Same "absent/empty/blank -> empty string" contract as
+ * `renderAssetRetakeFreeTextDirective` above, so `assembleBlocks` drops this
+ * block before the system message is joined whenever there is no note —
+ * leaving the `system` **with** a note byte-for-byte unchanged from before
+ * this correction.
+ */
+export function renderAssetRetakeDirectorRuleLine(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return "- Respond to the director's direction below: it names what is wrong with the current design and what to change.";
+}
+
+// ---------------------------------------------------------------------------
 // `sequencePrompt.assist` / `shotPrompt.assist` render forms —
 // LLMW.DESCRIPTOR.RENDER.1 (B1c), widened 2026-08-13.
 //
@@ -1691,12 +1776,14 @@ export const VARIABLE_RENDER_FORMS = {
   },
   "ASSET.BIBLE": {
     "assetBible.existingBibleLines": renderAssetBibleExistingLines,
+    "assetRetake.bibleLines": renderAssetRetakeBibleLines,
   },
   "ASSET.SEQ_APPEARANCES": {
     "assetContext.seqAppearancesLines": renderAssetSeqAppearancesLines,
   },
   "ASSET.SHOT_APPEARANCES": {
     "assetContext.shotAppearancesLines": renderAssetShotAppearancesLines,
+    "assetRetake.shotAppearancesLines": renderAssetRetakeShotAppearancesLines,
   },
   "ASSET.REFERENCES": {
     "assetContext.referencesLine": renderAssetReferencesLine,
@@ -1819,6 +1906,8 @@ export const MODE_RENDER_FORMS = {
 export const FREE_TEXT_RENDER_FORMS = {
   "shotPrompt.freeTextDirective": renderShotPromptFreeTextDirective,
   "shotRetake.freeTextDirective": renderShotRetakeFreeTextDirective,
+  "assetRetake.freeTextDirective": renderAssetRetakeFreeTextDirective,
+  "assetRetake.directorRuleLine": renderAssetRetakeDirectorRuleLine,
 } as const;
 
 export const VARIABLE_REGISTRY = {
