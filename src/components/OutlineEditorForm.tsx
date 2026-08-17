@@ -57,17 +57,7 @@ export default function OutlineEditorForm({ projectId, initialOutline }: Props) 
         className="w-full rounded border border-[#2c3035] bg-[#141618] text-sm text-[#e7e9ec] placeholder-[#3a4046] px-3 py-2.5 leading-relaxed resize-y focus:outline-none focus:border-[#3a4046] font-mono"
       />
 
-      <TextFieldTranslationButton
-        getSourceText={() => text}
-        onReplace={(t) => {
-          setText(t);
-          if (saveState === "saved" || saveState === "error") setSaveState("idle");
-        }}
-        onAppend={(t) => {
-          setText(text.trim() ? `${text}\n\n${t}` : t);
-          if (saveState === "saved" || saveState === "error") setSaveState("idle");
-        }}
-      />
+      <TextFieldTranslationButton getSourceText={() => text} />
 
       <div className="flex items-center gap-3">
         <button

@@ -4,10 +4,6 @@ import { useEffect, useState } from "react";
 import { updateAssetDetailsInline } from "@/actions/assets";
 import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
 
-function appendText(current: string, addition: string): string {
-  return current.trim() ? `${current}\n\n${addition}` : addition;
-}
-
 type Props = {
   projectId: number;
   assetId: number;
@@ -105,8 +101,6 @@ export default function AssetInlineDetailsForm({
         />
         <TextFieldTranslationButton
           getSourceText={() => description}
-          onReplace={(t) => setDescription(t)}
-          onAppend={(t) => setDescription(appendText(description, t))}
           disabled={isSaving}
         />
       </div>
@@ -125,8 +119,6 @@ export default function AssetInlineDetailsForm({
         />
         <TextFieldTranslationButton
           getSourceText={() => notes}
-          onReplace={(t) => setNotes(t)}
-          onAppend={(t) => setNotes(appendText(notes, t))}
           disabled={isSaving}
         />
       </div>

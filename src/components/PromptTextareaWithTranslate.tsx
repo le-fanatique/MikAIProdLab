@@ -41,11 +41,7 @@ export default function PromptTextareaWithTranslate({
           "w-full rounded border border-[#2c3035] bg-[#141618] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#4b5158] resize-y focus:outline-none focus:border-[#3a4046] leading-relaxed"
         }
       />
-      <TextFieldTranslationButton
-        getSourceText={() => value}
-        onReplace={(t) => setValue(t)}
-        onAppend={(t) => setValue(value.trim() ? `${value}\n\n${t}` : t)}
-      />
+      <TextFieldTranslationButton getSourceText={() => value} />
     </div>
   );
 }

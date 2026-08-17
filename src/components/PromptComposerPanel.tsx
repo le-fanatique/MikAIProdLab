@@ -81,11 +81,7 @@ export default function PromptComposerPanel({
               className="w-full rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] leading-relaxed resize-y focus:outline-none focus:border-[#3a4046] placeholder:text-[#4b5158]"
               placeholder="No draft generated."
             />
-            <TextFieldTranslationButton
-              getSourceText={() => text}
-              onReplace={(t) => setText(t)}
-              onAppend={(t) => setText(text.trim() ? `${text}\n\n${t}` : t)}
-            />
+            <TextFieldTranslationButton getSourceText={() => text} />
           </div>
 
           {segmentCount > 0 && (

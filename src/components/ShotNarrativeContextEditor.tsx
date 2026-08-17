@@ -5,10 +5,6 @@ import { useRouter } from "next/navigation";
 import { updateShotNarrativeContext } from "@/actions/shots";
 import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
 
-function appendText(current: string, addition: string): string {
-  return current.trim() ? `${current}\n\n${addition}` : addition;
-}
-
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -111,8 +107,6 @@ export default function ShotNarrativeContextEditor({
         />
         <TextFieldTranslationButton
           getSourceText={() => description}
-          onReplace={(t) => setDescription(t)}
-          onAppend={(t) => setDescription(appendText(description, t))}
           disabled={saving}
         />
       </div>
@@ -130,8 +124,6 @@ export default function ShotNarrativeContextEditor({
         />
         <TextFieldTranslationButton
           getSourceText={() => actionPitch}
-          onReplace={(t) => setActionPitch(t)}
-          onAppend={(t) => setActionPitch(appendText(actionPitch, t))}
           disabled={saving}
         />
       </div>
@@ -149,8 +141,6 @@ export default function ShotNarrativeContextEditor({
         />
         <TextFieldTranslationButton
           getSourceText={() => cameraPitch}
-          onReplace={(t) => setCameraPitch(t)}
-          onAppend={(t) => setCameraPitch(appendText(cameraPitch, t))}
           disabled={saving}
         />
       </div>

@@ -2,8 +2,6 @@
 
 type Props = {
   translation: string;
-  onReplace: () => void;
-  onAppend: () => void;
   onCopy: () => void;
   onCancel: () => void;
   copied?: boolean;
@@ -11,8 +9,6 @@ type Props = {
 
 export default function TextTranslationPreviewPanel({
   translation,
-  onReplace,
-  onAppend,
   onCopy,
   onCancel,
   copied,
@@ -29,12 +25,6 @@ export default function TextTranslationPreviewPanel({
         {translation}
       </p>
       <div className="flex items-center gap-2 pt-1">
-        <button type="button" onClick={onReplace} className={actionButtonClass}>
-          Replace
-        </button>
-        <button type="button" onClick={onAppend} className={actionButtonClass}>
-          Append
-        </button>
         <button type="button" onClick={onCopy} className={actionButtonClass}>
           {copied ? "Copied" : "Copy"}
         </button>

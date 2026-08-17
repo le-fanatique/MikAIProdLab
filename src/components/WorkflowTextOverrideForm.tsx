@@ -122,18 +122,6 @@ export default function WorkflowTextOverrideForm({
                 />
                 <TextFieldTranslationButton
                   getSourceText={() => values[input.nodeId] ?? ""}
-                  onReplace={(t) =>
-                    setValues((prev) => ({ ...prev, [input.nodeId]: t }))
-                  }
-                  onAppend={(t) =>
-                    setValues((prev) => {
-                      const current = prev[input.nodeId] ?? "";
-                      return {
-                        ...prev,
-                        [input.nodeId]: current.trim() ? `${current}\n\n${t}` : t,
-                      };
-                    })
-                  }
                 />
                 {showFill && (
                   <div className="relative" data-fill-dropdown>

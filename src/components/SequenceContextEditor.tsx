@@ -5,15 +5,6 @@ import { useRouter } from "next/navigation";
 import { updateSequenceContext } from "@/actions/sequences";
 import TextFieldTranslationButton from "@/components/TextFieldTranslationButton";
 
-function appendText(current: string, addition: string): string {
-  return current.trim() ? `${current}\n\n${addition}` : addition;
-}
-
-// Single-line inputs cannot hold newlines — join with a comma instead
-function appendInline(current: string, addition: string): string {
-  return current.trim() ? `${current.trim()}, ${addition}` : addition;
-}
-
 type Props = {
   sequenceId: number;
   projectId: number;
@@ -125,8 +116,6 @@ export default function SequenceContextEditor({
             />
             <TextFieldTranslationButton
               getSourceText={() => summary}
-              onReplace={(t) => setSummary(t)}
-              onAppend={(t) => setSummary(appendText(summary, t))}
               disabled={saving}
             />
           </div>
@@ -143,8 +132,6 @@ export default function SequenceContextEditor({
             />
             <TextFieldTranslationButton
               getSourceText={() => description}
-              onReplace={(t) => setDescription(t)}
-              onAppend={(t) => setDescription(appendText(description, t))}
               disabled={saving}
             />
           </div>
@@ -161,8 +148,6 @@ export default function SequenceContextEditor({
             />
             <TextFieldTranslationButton
               getSourceText={() => narrativePurpose}
-              onReplace={(t) => setNarrativePurpose(t)}
-              onAppend={(t) => setNarrativePurpose(appendInline(narrativePurpose, t))}
               disabled={saving}
             />
           </div>
@@ -179,8 +164,6 @@ export default function SequenceContextEditor({
             />
             <TextFieldTranslationButton
               getSourceText={() => mood}
-              onReplace={(t) => setMood(t)}
-              onAppend={(t) => setMood(appendInline(mood, t))}
               disabled={saving}
             />
           </div>
@@ -197,8 +180,6 @@ export default function SequenceContextEditor({
             />
             <TextFieldTranslationButton
               getSourceText={() => locationHint}
-              onReplace={(t) => setLocationHint(t)}
-              onAppend={(t) => setLocationHint(appendInline(locationHint, t))}
               disabled={saving}
             />
           </div>

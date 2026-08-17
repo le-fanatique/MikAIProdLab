@@ -6,8 +6,6 @@ import TextTranslationPreviewPanel from "@/components/TextTranslationPreviewPane
 
 type Props = {
   getSourceText: () => string;
-  onReplace: (translation: string) => void;
-  onAppend: (translation: string) => void;
   disabled?: boolean;
   sourceLanguage?: string;
 };
@@ -19,8 +17,6 @@ const TARGET_LANGUAGES = [
 
 export default function TextFieldTranslationButton({
   getSourceText,
-  onReplace,
-  onAppend,
   disabled,
   sourceLanguage,
 }: Props) {
@@ -121,8 +117,6 @@ export default function TextFieldTranslationButton({
         <TextTranslationPreviewPanel
           translation={translation}
           copied={copied}
-          onReplace={() => { onReplace(translation); reset(); }}
-          onAppend={() => { onAppend(translation); reset(); }}
           onCopy={handleCopy}
           onCancel={reset}
         />
