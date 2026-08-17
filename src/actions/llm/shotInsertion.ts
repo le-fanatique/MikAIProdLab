@@ -88,7 +88,10 @@ function normalizeProposedShot(raw: unknown): ProposedShot | null {
     description: str(r.description, 500),
     durationSeconds: dur,
     actionPitch: str(r.actionPitch, 300),
-    cameraPitch: str(r.cameraPitch, 200),
+    // LLMW.UC1.TUNE.2 (S7b), défaut 2 — raised from 200 to 500, in step with
+    // `descriptors/shotInsertDirected.ts`'s own `truncateTo: 500`: the two
+    // bounds must stay equal, or one side truncates what the other accepts.
+    cameraPitch: str(r.cameraPitch, 500),
     continuityNotes: str(r.continuityNotes, 500),
     framing: str(r.framing, 50),
     cameraMovement: str(r.cameraMovement, 50),

@@ -2006,7 +2006,11 @@ export function renderShotInsertShotListLines(input: VariableParameterRenderInpu
     )
   );
   const lines = shotTargets.map((s, index) => {
-    const label = s.shotCode ? `${s.shotCode} — ${s.title}` : s.title;
+    // LLMW.UC1.TUNE.2 (S7b), défaut 1 — a quoted title, no em dash: the
+    // model imitated our own `Code — Title` rendering when it wrote a
+    // fabricated code into `title`. See `renderShotInsertPositionLine` just
+    // below for the second, identical spot.
+    const label = s.shotCode ? `${s.shotCode} "${s.title}"` : s.title;
     if (!neighborIndices.has(index)) {
       return `[ID: ${s.id}] ${label}`;
     }
@@ -2029,7 +2033,9 @@ export function renderShotInsertPositionLine(input: VariableParameterRenderInput
   if (!target) {
     return "\nInsert the new shot at the very start of the sequence.";
   }
-  const label = target.shotCode ? `${target.shotCode} — ${target.title}` : target.title;
+  // LLMW.UC1.TUNE.2 (S7b), défaut 1 — same quoted-title, no-em-dash fix as
+  // `renderShotInsertShotListLines` above.
+  const label = target.shotCode ? `${target.shotCode} "${target.title}"` : target.title;
   return `\nInsert the new shot after ${label}.`;
 }
 

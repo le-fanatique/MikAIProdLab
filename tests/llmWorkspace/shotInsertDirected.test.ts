@@ -95,9 +95,11 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
     // SEQ.CONTEXT
     expect(result.prompt.user).toContain("Sequence: Rooftop chase");
     expect(result.prompt.user).toContain("Mood: Tense");
-    // SEQ.SHOT_TARGETS
-    expect(result.prompt.user).toContain("SH020 — Vex gives chase");
-    expect(result.prompt.user).toContain("SH030 — Hero looks back");
+    // SEQ.SHOT_TARGETS — LLMW.UC1.TUNE.2 (S7b), défaut 1: quoted title, no
+    // em dash, so the model has nothing composed-looking to imitate into
+    // its own `title` field.
+    expect(result.prompt.user).toContain('SH020 "Vex gives chase"');
+    expect(result.prompt.user).toContain('SH030 "Hero looks back"');
   });
 
   it("the position is named in clear when afterShotId names a real shot of this sequence", async () => {
@@ -108,7 +110,7 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
-    expect(result.prompt.user).toContain("Insert the new shot after SH020 — Vex gives chase.");
+    expect(result.prompt.user).toContain('Insert the new shot after SH020 "Vex gives chase".');
   });
 
   it("the position is named in clear for a second shot of the same sequence too — not just the first", async () => {
@@ -119,7 +121,7 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
-    expect(result.prompt.user).toContain("Insert the new shot after SH030 — Hero looks back.");
+    expect(result.prompt.user).toContain('Insert the new shot after SH030 "Hero looks back".');
   });
 
   it("an afterShotId that does not belong to this sequence falls back to the start, the same safe text as an absent one", async () => {
@@ -231,6 +233,82 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
       "continuity_out describes the state of the world at the end of this shot, and only this shot — never what the following shot goes on to accomplish."
     );
   });
+
+  // LLMW.UC1.TUNE.2 (S7b), défaut 1 — the explicit "no code in title" rule,
+  // plus the quoted rendering, on both a shot that has a code and one that
+  // does not (the ticket's own two required cases).
+  it("the system message states that title never carries a shot code (défaut 1, LLMW.UC1.TUNE.2)", async () => {
+    const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.system).toContain(
+      "title is the name of the shot alone. It never contains a shot code — numbering is assigned by production, not by you — and no field you write should carry one either."
+    );
+  });
+
+  it("the shot list and position line quote the title and drop the em dash, for a shot with a code", async () => {
+    const result = await resolveOperationPrompt(
+      shotInsertDirectedDescriptor,
+      { projectId, sequenceId },
+      { parameters: { afterShotId: firstShotId } }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.user).toContain('SH020 "Vex gives chase"');
+    expect(result.prompt.user).toContain('Insert the new shot after SH020 "Vex gives chase".');
+    expect(result.prompt.user).not.toMatch(/SH020 — /);
+  });
+
+  it("the shot list and position line render correctly for a shot with no code — title only, still no em dash", async () => {
+    const codelessSequenceId = await insertSequence(ctx, projectId, { title: "Codeless sequence" });
+    const codelessShotId = await insertShot(ctx, codelessSequenceId, { title: "Uncoded establishing shot" });
+    const result = await resolveOperationPrompt(
+      shotInsertDirectedDescriptor,
+      { projectId, sequenceId: codelessSequenceId },
+      { parameters: { afterShotId: codelessShotId } }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.user).toContain("[ID: " + codelessShotId + "] Uncoded establishing shot");
+    expect(result.prompt.user).toContain("Insert the new shot after Uncoded establishing shot.");
+    expect(result.prompt.user).not.toContain('"Uncoded establishing shot"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LLMW.UC1.TUNE.2 (S7b), défaut 2 — `cameraPitch`'s bound, raised from 200 to
+// 500 in the descriptor (`truncateTo: 500`), proven at the runner level: a
+// value under the bound survives whole, one over it is cut at exactly 500 —
+// the descriptor-side half of the "both sides stay equal" guarantee. The
+// write-action half (`normalizeProposedShot`) is proven the same way in
+// `tests/actions/registry.test.ts`.
+// ---------------------------------------------------------------------------
+describe("shot.insertDirected — cameraPitch bound (LLMW.UC1.TUNE.2, défaut 2)", () => {
+  it("the descriptor declares cameraPitch's truncateTo as 500, not 200", () => {
+    if (shotInsertDirectedDescriptor.output.kind !== "object") throw new Error("unreachable");
+    const field = shotInsertDirectedDescriptor.output.fields.find((f) => f.field === "cameraPitch");
+    if (field?.type !== "string") throw new Error("cameraPitch is expected to be a string field");
+    expect(field.truncateTo).toBe(500);
+  });
+
+  it("a 400-character camera_pitch survives the runner whole, no truncation", async () => {
+    const value = "x".repeat(400);
+    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", camera_pitch: value }));
+    const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "object") throw new Error("unreachable");
+    expect(result.values.cameraPitch).toBe(value);
+  });
+
+  it("a camera_pitch longer than 500 characters is cut at exactly 500", async () => {
+    const value = "y".repeat(600);
+    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", camera_pitch: value }));
+    const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "object") throw new Error("unreachable");
+    expect(result.values.cameraPitch).toBe(value.slice(0, 500));
+    expect((result.values.cameraPitch as string).length).toBe(500);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -284,7 +362,7 @@ describe("shot.insertDirected — shot list rendering (LLMW.UC1.TUNE.1, défaut 
     expect(result.prompt.user).not.toContain("…");
   });
 
-  it("a shot outside the neighbor window renders only as [ID] Code — Title, none of its other fields", async () => {
+  it('a shot outside the neighbor window renders only as [ID] Code "Title", none of its other fields', async () => {
     const result = await resolveOperationPrompt(
       shotInsertDirectedDescriptor,
       { projectId, sequenceId: longSequenceId },
@@ -293,8 +371,8 @@ describe("shot.insertDirected — shot list rendering (LLMW.UC1.TUNE.1, défaut 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     // index 0 and 5 are outside {1,2,3,4}
-    expect(shotLine(result.prompt.user, longShotIds[0])).toBe(`[ID: ${longShotIds[0]}] SH000 — Shot 0`);
-    expect(shotLine(result.prompt.user, longShotIds[5])).toBe(`[ID: ${longShotIds[5]}] SH500 — Shot 5`);
+    expect(shotLine(result.prompt.user, longShotIds[0])).toBe(`[ID: ${longShotIds[0]}] SH000 "Shot 0"`);
+    expect(shotLine(result.prompt.user, longShotIds[5])).toBe(`[ID: ${longShotIds[5]}] SH500 "Shot 5"`);
   });
 
   it("afterShotId absent renders the first two shots of the sequence as the neighbors", async () => {
@@ -310,7 +388,7 @@ describe("shot.insertDirected — shot list rendering (LLMW.UC1.TUNE.1, défaut 
     // every other shot is title-only
     for (const index of [2, 3, 4, 5]) {
       const line = shotLine(result.prompt.user, longShotIds[index]);
-      expect(line).toBe(`[ID: ${longShotIds[index]}] SH${index}00 — Shot ${index}`);
+      expect(line).toBe(`[ID: ${longShotIds[index]}] SH${index}00 "Shot ${index}"`);
     }
   });
 });

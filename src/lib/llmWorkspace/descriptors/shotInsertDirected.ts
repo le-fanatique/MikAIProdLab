@@ -47,10 +47,11 @@
 //      field-by-field from `normalizeProposedShot` (`shotInsertion.ts:75-98`)
 //      — verified against that file directly, not assumed from the ticket's
 //      own table: `title` 200, `description` 500, `actionPitch` 300,
-//      `cameraPitch` 200, `continuityNotes` 500, `framing` 50,
-//      `cameraMovement` 50, `continuityIn` 500, `continuityOut` 500. A
-//      mismatch here would truncate the same field twice, at two different
-//      lengths — the ticket's own named risk.
+//      `cameraPitch` 500 (raised from 200 by LLMW.UC1.TUNE.2, S7b, défaut 2
+//      — see below), `continuityNotes` 500, `framing` 50, `cameraMovement`
+//      50, `continuityIn` 500, `continuityOut` 500. A mismatch here would
+//      truncate the same field twice, at two different lengths — the
+//      ticket's own named risk.
 //   5. `commit: ["createShotAtPosition"]`.
 //
 // Not wired to the bench's Approve step here — that is the next ticket
@@ -82,6 +83,26 @@
 //      it here would break that descriptor's own proof for no reason of
 //      its own. Only the rendering that is unique to `shot.insertDirected`
 //      changed.
+//
+// LLMW.UC1.TUNE.2 (S7b) — two more corrections from the user's second real
+// Run:
+//
+//   1. Défaut 1 — the model wrote a fabricated shot code into `title`
+//      (`"Sh_250 — Passage Through the Bulkhead Door"`), imitating our own
+//      `Code — Title` rendering in `shotInsert.shotListLines` and
+//      `shotInsert.positionLine` (`variables/registry.ts`). Fixed in two
+//      places at once: an explicit rule above ("title is the name of the
+//      shot alone... no field you write should carry [a shot code]") and
+//      both render forms now show `Code "Title"` (quoted, no em dash)
+//      instead — the rule alone would have left the inducing format in
+//      place, the rendering fix alone would have left the model free to
+//      invent a code elsewhere.
+//   2. Défaut 2 — `camera_pitch` was cut mid-word at 200 characters. Raised
+//      to 500 here AND in `normalizeProposedShot`
+//      (`src/actions/llm/shotInsertion.ts`) in the same diff, aligning it
+//      with `description`/`continuityNotes`/`continuityIn`/`continuityOut`,
+//      which already carry 500 on both sides. The two bounds must stay
+//      equal — see decision 4 above and `.agents/executor_report.md`.
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
@@ -110,7 +131,8 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
           text: `Rules:
 - Write one shot, and only one. It will be inserted at the position the director names, between the shots shown below.
 - Read the shot before and the shot after the insertion point first. Your shot must leave the first and arrive at the second: continuity_in describes what carries over from the preceding shot, continuity_out what the following shot inherits.
-- continuity_out describes the state of the world at the end of this shot, and only this shot — never what the following shot goes on to accomplish. Stop at the point your own shot reaches; leave the next shot's own progress to its own continuity_out.`,
+- continuity_out describes the state of the world at the end of this shot, and only this shot — never what the following shot goes on to accomplish. Stop at the point your own shot reaches; leave the next shot's own progress to its own continuity_out.
+- title is the name of the shot alone. It never contains a shot code — numbering is assigned by production, not by you — and no field you write should carry one either.`,
         },
         // Conditional, dropped entirely with no consigne — see the module
         // header and `renderShotInsertDirectiveRuleLine`'s own comment
@@ -176,7 +198,7 @@ No markdown. No explanation. Only the JSON object.`,
       { type: "string", field: "description", jsonKey: "description", truncateTo: 500 },
       { type: "number", field: "durationSeconds", jsonKey: "duration_seconds", exclusiveMin: 0, max: 120, fallback: "omit" },
       { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 300 },
-      { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 200 },
+      { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 500 },
       { type: "string", field: "continuityNotes", jsonKey: "continuity_notes", truncateTo: 500 },
       { type: "string", field: "framing", jsonKey: "framing", truncateTo: 50 },
       { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
