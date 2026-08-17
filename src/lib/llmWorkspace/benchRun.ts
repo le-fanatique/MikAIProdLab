@@ -90,11 +90,68 @@ export function planBenchCommit(descriptor: OperationDescriptor): BenchCommitPla
 
 export type ObjectOutputFields = Extract<OperationDescriptor["output"], { kind: "object" }>["fields"];
 
+// `Record<string, string>` -> `Record<string, string | number>` (LLMW.UC1.BENCH.1,
+// B11-b3), mirroring `runBenchOperation`'s own widened return type
+// (`bench.ts`), now that `assertStringValues` no longer collapses every
+// value to a string before this function ever sees it. A value's default —
+// a field the model left out entirely — stays `""`, unchanged: `""` is a
+// legitimate draft value for a `"number"` field too, the same "nothing
+// filled in" state `buildShotJsonPayload` (below) already treats as absent.
 export function buildBenchDraftFields(
   fields: ObjectOutputFields,
-  values: Record<string, string>
-): Array<{ field: string; value: string }> {
+  values: Record<string, string | number>
+): Array<{ field: string; value: string | number }> {
   return fields.map((f) => ({ field: f.field, value: values[f.field] ?? "" }));
+}
+
+// ---------------------------------------------------------------------------
+// `buildShotJsonPayload` — LLMW.UC1.BENCH.1 (B11-b3). Serializes the bench's
+// object-mode draft into the JSON string `createShotAtPosition`'s own
+// `normalizeProposedShot` (`src/actions/llm/shotInsertion.ts`) reads back:
+// entity field names (`title`, `durationSeconds`, ...), verbatim, with a real
+// JSON number for the one field `output.fields` declares `type: "number"` —
+// never that number's decimal-written textarea string.
+//
+// A bench object draft field starts life as `string | number` (the model's
+// own parsed value, LLMW.OUTPUT.OBJECT_NUMBER.1 B11-b1), but every field
+// edits in a `<textarea>` (`BenchRunPanel.tsx`), whose `onChange` always
+// writes back a plain string — so by the time Approve runs, a numeric field
+// may still be its original number (untouched draft) or the same value
+// re-typed as text (edited draft). This function does not special-case
+// which: it reads `output.fields` — never a hard-coded field name — to know
+// which fields the descriptor declares `type: "number"`, and re-parses
+// whatever the draft currently holds for each one (`Number(value)`) into a
+// real JSON number. A field left empty, or one whose value fails
+// `Number.isFinite` once parsed (non-numeric text), is omitted from the
+// emitted object entirely — never written as `0` or `""` — matching
+// `fallback: "omit"`, the only fallback `ObjectOutputField`'s `"number"`
+// variant admits (`types.ts`), and exactly what `normalizeProposedShot`
+// already treats as "no duration" (`typeof durationSeconds === "number"`
+// fails for both an absent key and `null`).
+//
+// Every other declared field is `type: "string"` today (`ObjectOutputField`'s
+// only two variants) and passes through unchanged, under its own `field`
+// name — precisely the shape `normalizeProposedShot` already reads. A blank
+// string field is still emitted (not omitted): `normalizeProposedShot`'s own
+// `str()` helper already collapses an empty string to `null`, so there is no
+// second place that needs to re-decide "blank".
+// ---------------------------------------------------------------------------
+
+export function buildShotJsonPayload(fields: ObjectOutputFields, draft: Record<string, string | number>): string {
+  const payload: Record<string, string | number> = {};
+  for (const f of fields) {
+    const raw = draft[f.field];
+    if (f.type === "number") {
+      if (raw === undefined || raw === "") continue;
+      const parsed = typeof raw === "number" ? raw : Number(raw);
+      if (Number.isFinite(parsed)) payload[f.field] = parsed;
+      continue;
+    }
+    if (typeof raw === "string") {
+      payload[f.field] = raw;
+    }
+  }
+  return JSON.stringify(payload);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,20 +265,16 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     to `casting.fromSequence`'s own `commit` and reachable from
 //     `BenchRunPanel.tsx` since LLMW.MIGRATE.LIST.4 (B7h-m) —
 //     `resolveBenchConfirmation` below now renders real wording for it too.
+//   - `createShotAtPosition` (`src/actions/llm/shotInsertion.ts:107,111`),
+//     declared by LLMW.ACTION.INSERT_AT.1 (B11-a): `shotInserted`,
+//     `shotInsertError`. Left unwired in `resolveBenchConfirmation` below
+//     until LLMW.UC1.BENCH.1 (B11-b3) gave it a bench Approve branch
+//     (`BenchRunPanel.tsx`) and, with it, real wording — the same
+//     `applySelectedCastingSuggestions`/B7h-a-then-B7h-m sequence repeated
+//     one more time.
 //
-// `RedirectOnlyActionId` had exactly these six members before
-// LLMW.ACTION.INSERT_AT.1 (B11-a) added a seventh, `createShotAtPosition`
-// (`src/actions/llm/shotInsertion.ts`): `shotInserted`, `shotInsertError`.
-// Unlike the six above, it is deliberately NOT wired into
-// `resolveBenchConfirmation` below — no descriptor commits through it yet
-// (its own descriptor, UC1's insertion descriptor, is B11-bd), so the bench
-// can never actually reach it. B7h-a declared `applySelectedCastingSuggestions`
-// the same way, ahead of being reachable, until B7h-m gave it its own
-// wording once `casting.fromSequence` existed to reach it through — the
-// same guard-clause discipline `planBenchCommit`/`resolveBenchConfirmation`
-// already apply. The six actions actually wired below are now all reachable
-// and `resolveBenchConfirmation` below renders real wording for every one
-// of them.
+// `RedirectOnlyActionId` has seven members. All seven are wired below —
+// `resolveBenchConfirmation` renders real wording for every one of them.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
 // ticket buys: a future `redirectOnly` action does not compile into this
@@ -320,16 +373,17 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // one action alone renders `No castings applied.` on a `0` count, not
 // nothing.
 //
-// LLMW.ACTION.INSERT_AT.1 (B11-a) declares a seventh `RedirectOnlyActionId`,
-// `createShotAtPosition`, but the guard clause below deliberately does NOT
-// name it. No descriptor commits through it yet (B11-bd), so
-// `planBenchCommit` can never hand this function a `plan.actionId ===
-// "createShotAtPosition"` in the first place — the clause-guard excludes it
-// on purpose, the same way B7h-a's own guard excluded
-// `applySelectedCastingSuggestions` until B7h-m gave it real wording once
-// `casting.fromSequence` existed to reach it through. Inventing a message
-// for an action nothing can reach is not this function's job; B11-bd adds
-// the branch when the descriptor exists to reach it.
+// LLMW.UC1.BENCH.1 (B11-b3) adds a seventh and last, `createShotAtPosition`,
+// now that `shot.insertDirected` is wired to a bench Approve branch
+// (`BenchRunPanel.tsx`) — same rule as `updateShotPrompt`/`updateSequencePrompt`
+// below: success only on exactly `"1"`, no plural to render (the action
+// writes one row on every successful call, never a count) and no `0` case
+// (unlike `applySelectedCastingSuggestions` above, nothing here can
+// legitimately succeed at zero). `createShotAtPosition` (LLMW.ACTION.INSERT_AT.1,
+// B11-a) declared this action's `RedirectOnlyActionId` membership two tickets
+// ago, ahead of being reachable — the guard clause below no longer excludes
+// it; see `REDIRECT_CONFIRMATION_KEYS`'s own header for the previous
+// deliberate exclusion this replaces.
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {
@@ -347,11 +401,9 @@ export function resolveBenchConfirmation(
     plan.actionId !== "createGeneratedShots" &&
     plan.actionId !== "createGeneratedSequences" &&
     plan.actionId !== "createSelectedAssets" &&
-    plan.actionId !== "applySelectedCastingSuggestions"
+    plan.actionId !== "applySelectedCastingSuggestions" &&
+    plan.actionId !== "createShotAtPosition"
   ) {
-    // `createShotAtPosition` (LLMW.ACTION.INSERT_AT.1, B11-a) falls through
-    // to this `return null` deliberately — see this function's own header
-    // comment.
     return null;
   }
 
@@ -397,7 +449,10 @@ export function resolveBenchConfirmation(
 
   if (successValue !== "1") return null;
 
-  return plan.actionId === "updateShotPrompt"
-    ? { kind: "success", message: "Shot Prompt saved." }
-    : { kind: "success", message: "Sequence Prompt saved." };
+  if (plan.actionId === "updateShotPrompt") return { kind: "success", message: "Shot Prompt saved." };
+  if (plan.actionId === "updateSequencePrompt") return { kind: "success", message: "Sequence Prompt saved." };
+  // Only `createShotAtPosition` remains: it writes exactly one row per
+  // successful call and redirects with `shotInserted=1` on that one path
+  // (`src/actions/llm/shotInsertion.ts:225`) — no plural, no `0` case.
+  return { kind: "success", message: "Shot inserted." };
 }

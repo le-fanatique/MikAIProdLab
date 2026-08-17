@@ -24,6 +24,7 @@ import { runBenchOperation, commitBenchProposal } from "@/actions/llmWorkspace/b
 import {
   buildBenchDraftFields,
   buildListSelectionPayload,
+  buildShotJsonPayload,
   type BenchCommitPlan,
   type ListOutputItemFields,
   type ObjectOutputFields,
@@ -33,6 +34,7 @@ import {
   buildCreateGeneratedSequencesHiddenFields,
   buildCreateGeneratedShotsHiddenFields,
   buildCreateSelectedAssetsHiddenFields,
+  buildCreateShotAtPositionHiddenFields,
   buildUpdateSequencePromptHiddenFields,
   buildUpdateShotPromptHiddenFields,
 } from "@/lib/llmWorkspace/actions/proposalCommit";
@@ -41,7 +43,23 @@ import type { AnchorIds } from "@/lib/llmWorkspace/runner";
 import type { BenchSearchParams } from "@/lib/llmWorkspace/bench";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
 
-type ObjectDraft = Record<string, string>;
+// `Record<string, string>` -> `Record<string, string | number>` (LLMW.UC1.BENCH.1,
+// B11-b3), mirroring `runBenchOperation`'s own widened return type
+// (`bench.ts`) and `buildBenchDraftFields`'s own widened return type
+// (`benchRun.ts`). Every value still edits as text in a `<textarea>` below —
+// this only widens what the *initial* Run draft may carry, not what an edit
+// produces.
+type ObjectDraft = Record<string, string | number>;
+
+// Local copy of `bench.ts`'s own `firstBenchParam` (identical one-liner):
+// this component cannot import a runtime binding from `bench.ts` without
+// pulling its whole module graph (`runner.ts` → `llm/index.ts` →
+// `comfy/comfyServerClient.ts` → Node's `fs/promises`) into the client
+// bundle — the same bundling failure `benchRun.ts`'s own `firstSearchValue`
+// avoids the same way, for the same reason (see that function's comment).
+function firstSearchParamValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 // The list draft's identity contract, frozen by the ticket: an item has no
 // identity but its own index into `items` (nothing is persisted, there is no
@@ -250,11 +268,19 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
           action: ACTION_BINDINGS.updateShotPrompt,
           hiddenFields: (currentDraft) => {
             const current = currentDraft as ObjectDraft;
+            // `shotPrompt.assist` declares only `type: "string"` fields
+            // (`ObjectOutputField`, `types.ts`), so `current.shotPrompt` is
+            // never actually a number at runtime — `String(...)` here is the
+            // same "type mechanically widened, value never actually numeric"
+            // treatment `ObjectDraft`'s own widening requires
+            // (LLMW.UC1.BENCH.1, B11-b3), not a silent stringify of a real
+            // number the way `commitBenchProposal`'s `requireStringValue`
+            // (`bench.ts`) refuses instead.
             return buildUpdateShotPromptHiddenFields({
               projectId: ids.projectId as number,
               sequenceId: ids.sequenceId as number,
               shotId: ids.shotId as number,
-              shotPrompt: current.shotPrompt ?? "",
+              shotPrompt: String(current.shotPrompt ?? ""),
               returnTo,
             });
           },
@@ -271,11 +297,57 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
           action: ACTION_BINDINGS.updateSequencePrompt,
           hiddenFields: (currentDraft) => {
             const current = currentDraft as ObjectDraft;
+            // `sequencePrompt.assist` declares only `type: "string"` fields
+            // (`ObjectOutputField`, `types.ts`) — see the sibling comment on
+            // `updateShotPrompt`'s own branch above for why `String(...)` is
+            // the right, and not a silent, coercion here.
             return buildUpdateSequencePromptHiddenFields({
               projectId: ids.projectId as number,
               sequenceId: ids.sequenceId as number,
-              sequencePrompt: current.sequencePrompt ?? "",
+              sequencePrompt: String(current.sequencePrompt ?? ""),
               returnTo,
+            });
+          },
+        },
+      ];
+    }
+
+    if (plan.kind === "redirectOnly" && plan.actionId === "createShotAtPosition") {
+      // `afterShotId` is an `intent.parameters` entry (`shot.insertDirected`'s
+      // own descriptor, `descriptors/shotInsertDirected.ts`), not an anchor
+      // id — it arrives on the query string exactly like the bench's other
+      // intent controls, read here the same way `parseIntentInputFromSearchParams`
+      // reads it server-side (`bench.ts`), via the local
+      // `firstSearchParamValue` copy above.
+      //
+      // No `output.formDataKey`-shaped guard exists for this branch, unlike
+      // the four list branches above: that guard refuses to write a list
+      // payload under an invented key if a descriptor's own declared
+      // `selection.formDataKey` ever diverges from what the commit action
+      // reads. An object `redirectOnly` branch has no equivalent declared
+      // key to diverge from — `updateShotPrompt`/`updateSequencePrompt`
+      // above render unconditionally once `plan.actionId` matches, and this
+      // branch follows the same, already-established model.
+      const afterShotIdRaw = firstSearchParamValue(searchParams.afterShotId);
+      const afterShotId =
+        afterShotIdRaw != null && afterShotIdRaw !== "" && Number.isInteger(Number(afterShotIdRaw))
+          ? Number(afterShotIdRaw)
+          : undefined;
+
+      return [
+        {
+          kind: "redirectOnly",
+          id: "approve",
+          label: "Approve",
+          action: ACTION_BINDINGS.createShotAtPosition,
+          hiddenFields: (currentDraft) => {
+            const current = currentDraft as ObjectDraft;
+            return buildCreateShotAtPositionHiddenFields({
+              projectId: ids.projectId as number,
+              sequenceId: ids.sequenceId as number,
+              afterShotId,
+              returnTo,
+              shotJson: buildShotJsonPayload(output.fields, current),
             });
           },
         },

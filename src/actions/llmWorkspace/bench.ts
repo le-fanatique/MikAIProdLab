@@ -37,37 +37,25 @@ function invalidTemplateError(reason: string): string {
   return `This template's stored JSON is not a valid operation descriptor and cannot be run: ${reason}`;
 }
 
-// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1): `RunOperationResult`'s `"object"`
-// branch now carries `Record<string, string | number>` (`runner.ts`), but
-// this action's own return type keeps `values: Record<string, string>` —
-// widening it here, without deciding what the bench would *do* with a
-// number, is exactly the "repair by widening" the ticket forbids
-// (`.agents/supervised_task.md`). None of the ten built-in descriptors
-// declares an `ObjectOutputField` of `type: "number"` yet (the first is
-// UC1's insertion descriptor, B11-bd, not shipped by this ticket), so this
-// branch is unreachable today for every descriptor `loadBenchDescriptor`
-// resolves from the closed registry. It throws rather than silently
-// stringifying, on the same discipline `generateAssetCandidatesDraft`
-// applies to an unexpected boolean (`src/actions/llm/assetExtraction.ts`).
+// LLMW.UC1.BENCH.1 (B11-b3) removes `assertStringValues`, the guard
+// LLMW.OUTPUT.OBJECT_NUMBER.1 (B11-b1) posted here to keep the compiler
+// honest while no built-in descriptor declared an `ObjectOutputField` of
+// `type: "number"`. `shot.insertDirected` (B11-b2) declares one now
+// (`durationSeconds`) — the guard's own precondition is false, and it threw
+// on every Run of that descriptor the moment the model filled the duration.
+// `runBenchOperation`'s return type below carries `Record<string, string |
+// number>` end to end instead, one-for-one with `RunOperationResult`'s own
+// `"object"` branch (`runner.ts`) — no second, narrower copy of that type
+// kept here.
 //
 // Known limitation, reported rather than fixed here (out of this ticket's
 // file scope): a *custom, imported* template can already declare
-// `type: "number"` and reach this function, because
+// `type: "number"` on a field this file's callers do not expect, because
 // `validateObjectOutput` (`src/lib/llmWorkspace/templateStorage.ts`) does
 // not inspect individual `output.fields[]` entries at all — unlike its own
 // `validateListItemField` sibling for the list branch. That gap pre-dates
 // this ticket (it never validated `maxLength`/`truncateTo` either) and is
 // not touched here; see `.agents/executor_report.md`.
-function assertStringValues(values: Record<string, string | number>): Record<string, string> {
-  for (const [field, value] of Object.entries(values)) {
-    if (typeof value === "number") {
-      throw new Error(
-        `runBenchOperation: unexpected numeric value for field "${field}" — no built-in descriptor declares an ObjectOutputField of type "number" yet.`
-      );
-    }
-  }
-  return values as Record<string, string>;
-}
 
 // ---------------------------------------------------------------------------
 // `runBenchOperation` — never writes. The intention is re-parsed server-side
@@ -80,7 +68,10 @@ export async function runBenchOperation(input: {
   ids: AnchorIds;
   searchParams: BenchSearchParams;
 }): Promise<
-  | { ok: true; kind: "object"; values: Record<string, string> }
+  // `Record<string, string>` -> `Record<string, string | number>` (LLMW.UC1.BENCH.1,
+  // B11-b3), mirroring `RunOperationResult`'s own `"object"` branch
+  // (`runner.ts`) one-for-one, now that `assertStringValues` above is gone.
+  | { ok: true; kind: "object"; values: Record<string, string | number> }
   // `Record<string, string | number>` -> `Record<string, string | number |
   // boolean>` (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1), mirroring
   // `RunOperationResult`'s own widening (`runner.ts`) one-for-one.
@@ -103,11 +94,38 @@ export async function runBenchOperation(input: {
     // unaffected, since a list-output descriptor's single commit action is
     // always `redirectOnly` and never reaches its `returnValue` switch.
     return result.kind === "object"
-      ? { ok: true, kind: "object", values: assertStringValues(result.values) }
+      ? { ok: true, kind: "object", values: result.values }
       : { ok: true, kind: "list", items: result.items };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// LLMW.UC1.BENCH.1 (B11-b3): `commitBenchProposal`'s own `values` widens the
+// same way `runBenchOperation`'s return type just did, above — but every
+// branch of the switch below still hands a plain `string` to a `string`-typed
+// action argument (`applyGeneratedStory`, `applyGeneratedOutline`,
+// `updateAssetDescriptionFieldInline`, `updateAssetDetailsInline`,
+// `updateShotNarrativeContext`). Unlike `runBenchOperation`, this function
+// does not convert in silence: a numeric value reaching one of those five
+// text reads throws, naming the field, on the same discipline
+// `generateAssetCandidatesDraft` applies to an unexpected boolean
+// (`src/actions/llm/assetExtraction.ts`). None of these five branches is
+// reachable with a numeric value today — `shot.insertDirected`, the one
+// built-in descriptor declaring a `type: "number"` field, commits through
+// `createShotAtPosition`, which is `redirectOnly` and never reaches this
+// function's switch at all (routed out at Step 2, below) — but a future
+// descriptor pairing a numeric `output.fields` entry with one of these five
+// `returnValue` actions would hit this throw instead of writing a stringified
+// number silently.
+function requireStringValue(values: Record<string, string | number>, field: string): string {
+  const value = values[field];
+  if (typeof value === "number") {
+    throw new Error(
+      `commitBenchProposal: unexpected numeric value for field "${field}" — this commit action expects text.`
+    );
+  }
+  return value ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +136,7 @@ export async function runBenchOperation(input: {
 export async function commitBenchProposal(input: {
   templateId: string;
   ids: AnchorIds;
-  values: Record<string, string>;
+  values: Record<string, string | number>;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   // Step 1 — re-resolve the descriptor.
   const result = await loadBenchDescriptor(input.templateId);
@@ -154,12 +172,12 @@ export async function commitBenchProposal(input: {
   // adapters. Exhaustive over `ActionId`: a future eighth id fails `tsc`.
   switch (plan.actionId) {
     case "applyGeneratedStory": {
-      const args = buildApplyGeneratedStoryArgs(projectId, input.values.story ?? "");
+      const args = buildApplyGeneratedStoryArgs(projectId, requireStringValue(input.values, "story"));
       return ACTION_BINDINGS.applyGeneratedStory(...args);
     }
 
     case "applyGeneratedOutline": {
-      const args = buildApplyGeneratedOutlineArgs(projectId, input.values.outline ?? "");
+      const args = buildApplyGeneratedOutlineArgs(projectId, requireStringValue(input.values, "outline"));
       return ACTION_BINDINGS.applyGeneratedOutline(...args);
     }
 
@@ -178,7 +196,7 @@ export async function commitBenchProposal(input: {
         projectId,
         field,
         mode: "replace",
-        content: input.values[field] ?? "",
+        content: requireStringValue(input.values, field),
       });
       return ACTION_BINDINGS.updateAssetDescriptionFieldInline(...args);
     }
@@ -207,7 +225,7 @@ export async function commitBenchProposal(input: {
       // approved draft; a field this descriptor never generates is carried
       // through from the existing row, untouched (registry behaviour 3).
       const pick = (field: "description" | "notes" | "visualIdentity" | "usageRules" | "forbiddenVariations") =>
-        preserved.includes(field) ? (existing[field] ?? "") : (input.values[field] ?? "");
+        preserved.includes(field) ? (existing[field] ?? "") : requireStringValue(input.values, field);
 
       const args = buildAssetBibleCommitArgs({
         assetId,
@@ -256,9 +274,9 @@ export async function commitBenchProposal(input: {
           cameraPitch: existing.cameraPitch,
         },
         applied: {
-          description: input.values.description ?? "",
-          actionPitch: input.values.actionPitch ?? "",
-          cameraPitch: input.values.cameraPitch ?? "",
+          description: requireStringValue(input.values, "description"),
+          actionPitch: requireStringValue(input.values, "actionPitch"),
+          cameraPitch: requireStringValue(input.values, "cameraPitch"),
         },
       });
       return ACTION_BINDINGS.updateShotNarrativeContext(...args);

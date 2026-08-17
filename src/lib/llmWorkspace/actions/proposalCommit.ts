@@ -276,3 +276,34 @@ export function buildUpdateSequencePromptHiddenFields(input: {
     returnTo: input.returnTo,
   };
 }
+
+// ── shot.insertDirected → createShotAtPosition (redirectOnly) ─────────────
+//
+// LLMW.UC1.BENCH.1 (B11-b3). Same model as the six `build*HiddenFields`
+// above: `createShotAtPosition` stays `(formData: FormData) => Promise<void>`
+// with `redirect()` on every path (registry behaviour 6) — the five hidden
+// field names are read verbatim off `src/actions/llm/shotInsertion.ts:101-107`.
+// `shotJson` is not built here — that serialization belongs to
+// `buildShotJsonPayload` (`benchRun.ts`), which the caller runs first.
+//
+// `afterShotId` is optional on the write action itself: absent or blank
+// means "insert at the very start of the sequence", `createShotAtPosition`'s
+// own contract for a blank field (`shotInsertion.ts:126-130`). This builder
+// does not fabricate a `"0"` for a missing value — `afterShotId ==
+// undefined` is carried through as `""`, the same value `FormData.get`
+// returns for a field the form never appended at all.
+export function buildCreateShotAtPositionHiddenFields(input: {
+  projectId: number;
+  sequenceId: number;
+  afterShotId: number | undefined;
+  returnTo: string;
+  shotJson: string;
+}): Record<string, string> {
+  return {
+    projectId: String(input.projectId),
+    sequenceId: String(input.sequenceId),
+    afterShotId: input.afterShotId != null ? String(input.afterShotId) : "",
+    returnTo: input.returnTo,
+    shotJson: input.shotJson,
+  };
+}

@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBenchDraftFields,
+  buildShotJsonPayload,
   isBenchReturnToQueryKey,
   planBenchCommit,
   preservedAssetDetailColumns,
   resolveBenchConfirmation,
   type BenchCommitPlan,
 } from "@/lib/llmWorkspace/benchRun";
-import { DESCRIPTORS, assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors";
+import {
+  DESCRIPTORS,
+  assetBibleGenerateDescriptor,
+  shotInsertDirectedDescriptor,
+} from "@/lib/llmWorkspace/descriptors";
 import type { OperationDescriptor } from "@/lib/llmWorkspace/types";
 
 // ---------------------------------------------------------------------------
@@ -87,6 +92,74 @@ describe("buildBenchDraftFields", () => {
       { field: "usageRules", value: "kept" },
       { field: "forbiddenVariations", value: "" },
     ]);
+  });
+});
+
+describe("buildBenchDraftFields — LLMW.UC1.BENCH.1 (B11-b3)", () => {
+  it("carries a numeric value through as a number, not a stringified draft value", () => {
+    const output = shotInsertDirectedDescriptor.output;
+    if (output.kind !== "object") throw new Error("unreachable");
+    const result = buildBenchDraftFields(output.fields, { title: "A shot", durationSeconds: 4 });
+
+    const durationEntry = result.find((f) => f.field === "durationSeconds");
+    expect(durationEntry).toEqual({ field: "durationSeconds", value: 4 });
+  });
+});
+
+describe("buildShotJsonPayload — LLMW.UC1.BENCH.1 (B11-b3)", () => {
+  const output = shotInsertDirectedDescriptor.output;
+  if (output.kind !== "object") throw new Error("unreachable");
+  const fields = output.fields;
+
+  const fullDraft: Record<string, string | number> = {
+    title: "Hero enters frame",
+    description: "A low shot of the hero stepping into view.",
+    durationSeconds: 4,
+    actionPitch: "Hero walks in, pauses, walks out.",
+    cameraPitch: "Low angle, static.",
+    continuityNotes: "Picks up from the previous shot's exit direction.",
+    framing: "WS",
+    cameraMovement: "static",
+    continuityIn: "Hero was off-frame, entering left.",
+    continuityOut: "Hero exits right, into the next shot.",
+  };
+
+  it("emits durationSeconds as a JSON number, not a string — the defect this ticket repairs", () => {
+    const parsed = JSON.parse(buildShotJsonPayload(fields, fullDraft));
+    expect(parsed.durationSeconds).toBe(4);
+    expect(typeof parsed.durationSeconds).toBe("number");
+  });
+
+  it("emits the nine text fields unchanged, under their entity names", () => {
+    const parsed = JSON.parse(buildShotJsonPayload(fields, fullDraft));
+    expect(parsed.title).toBe(fullDraft.title);
+    expect(parsed.description).toBe(fullDraft.description);
+    expect(parsed.actionPitch).toBe(fullDraft.actionPitch);
+    expect(parsed.cameraPitch).toBe(fullDraft.cameraPitch);
+    expect(parsed.continuityNotes).toBe(fullDraft.continuityNotes);
+    expect(parsed.framing).toBe(fullDraft.framing);
+    expect(parsed.cameraMovement).toBe(fullDraft.cameraMovement);
+    expect(parsed.continuityIn).toBe(fullDraft.continuityIn);
+    expect(parsed.continuityOut).toBe(fullDraft.continuityOut);
+  });
+
+  it("omits durationSeconds entirely when the draft value is empty — never 0", () => {
+    const draft = { ...fullDraft, durationSeconds: "" };
+    const parsed = JSON.parse(buildShotJsonPayload(fields, draft));
+    expect("durationSeconds" in parsed).toBe(false);
+  });
+
+  it("omits durationSeconds entirely when the draft value is non-numeric text — never 0", () => {
+    const draft = { ...fullDraft, durationSeconds: "not a number" };
+    const parsed = JSON.parse(buildShotJsonPayload(fields, draft));
+    expect("durationSeconds" in parsed).toBe(false);
+  });
+
+  it("re-parses a numeric field re-typed as decimal text back into a real number (the textarea round trip)", () => {
+    const draft = { ...fullDraft, durationSeconds: "4" };
+    const parsed = JSON.parse(buildShotJsonPayload(fields, draft));
+    expect(parsed.durationSeconds).toBe(4);
+    expect(typeof parsed.durationSeconds).toBe("number");
   });
 });
 
@@ -188,6 +261,30 @@ describe("resolveBenchConfirmation — LLMW.BENCH.CONFIRM.1 (B7d-f)", () => {
     expect(
       resolveBenchConfirmation(shotsCreatedPlan, { shotsCreated: "2", shotsCreateError: "Partial failure." })
     ).toEqual({ kind: "error", message: "Partial failure." });
+  });
+
+  it("renders \"Shot inserted.\" for createShotAtPosition, only when the value is exactly \"1\" (LLMW.UC1.BENCH.1, B11-b3)", () => {
+    const plan = { kind: "redirectOnly", actionId: "createShotAtPosition" } as const;
+    expect(resolveBenchConfirmation(plan, { shotInserted: "1" })).toEqual({
+      kind: "success",
+      message: "Shot inserted.",
+    });
+    // The action redirects with `shotInserted=1` on its one success path and
+    // nowhere else, so any other value is a crafted URL, not a real outcome.
+    expect(resolveBenchConfirmation(plan, { shotInserted: "2" })).toBeNull();
+    expect(resolveBenchConfirmation(plan, { shotInserted: "0" })).toBeNull();
+    expect(resolveBenchConfirmation(plan, {})).toBeNull();
+  });
+
+  it("renders the error for createShotAtPosition verbatim, and in preference to a success value", () => {
+    const plan = { kind: "redirectOnly", actionId: "createShotAtPosition" } as const;
+    expect(resolveBenchConfirmation(plan, { shotInsertError: "Shot not found." })).toEqual({
+      kind: "error",
+      message: "Shot not found.",
+    });
+    expect(
+      resolveBenchConfirmation(plan, { shotInserted: "1", shotInsertError: "Sequence not found." })
+    ).toEqual({ kind: "error", message: "Sequence not found." });
   });
 
   it("renders nothing for a returnValue or an unsupported plan", () => {

@@ -25,6 +25,8 @@ import {
   readShot,
 } from "./helpers/fixtures";
 import { ACTION_REGISTRY } from "@/lib/llmWorkspace/actions/registry";
+import { buildShotJsonPayload } from "@/lib/llmWorkspace/benchRun";
+import { shotInsertDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/shotInsertDirected";
 
 /**
  * Correspondence proof for `src/lib/llmWorkspace/actions/registry.ts`
@@ -1050,5 +1052,90 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
     if (body === undefined) throw new Error("createShotAtPosition not found");
 
     expect(body).toContain("db.transaction");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LLMW.UC1.BENCH.1 (B11-b3) — the round trip the supervisor asked for by name:
+// the bench's own serializer feeding the write action's own reader. Each half
+// is already proven alone — `buildShotJsonPayload` in `benchRun.test.ts`,
+// `createShotAtPosition` above — and neither proof can catch the one defect
+// that matters here, a duration emitted as `"4"` instead of `4`. The write
+// action would drop it silently (`normalizeProposedShot` requires
+// `typeof === "number"`), no error, no test failing. So the two halves are
+// joined here, once, against a real row.
+// ---------------------------------------------------------------------------
+
+describe("UC1 end to end — buildShotJsonPayload feeds createShotAtPosition (LLMW.UC1.BENCH.1, B11-b3)", () => {
+  const output = shotInsertDirectedDescriptor.output;
+
+  it("a bench draft becomes a real shot, duration included, at the named position", async () => {
+    if (output.kind !== "object") throw new Error("unreachable");
+    const sequenceId = await insertSequence(ctx, projectId);
+    const first = await insertShot(ctx, sequenceId, { title: "First", orderIndex: 0 });
+    await insertShot(ctx, sequenceId, { title: "Second", orderIndex: 1 });
+
+    const shotJson = buildShotJsonPayload(output.fields, {
+      title: "Hero enters frame",
+      description: "A low shot of the hero stepping into view.",
+      // The textarea round trip: a number the user re-typed as text.
+      durationSeconds: "4",
+      actionPitch: "Hero walks in, pauses, walks out.",
+      cameraPitch: "Low angle, static.",
+      continuityNotes: "Picks up the previous shot's exit direction.",
+      framing: "WS",
+      cameraMovement: "static",
+      continuityIn: "Hero off-frame, entering left.",
+      continuityOut: "Hero exits right.",
+    });
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          afterShotId: String(first),
+          shotJson,
+        })
+      )
+    );
+    expect(target).toContain("shotInserted=1");
+
+    const rows = await ctx.db
+      .select()
+      .from(ctx.schema.shots)
+      .where(eq(ctx.schema.shots.sequenceId, sequenceId));
+    const inserted = rows.find((r) => r.title === "Hero enters frame");
+    if (!inserted) throw new Error("the shot was not created");
+
+    // The assertion this whole test exists for: the duration survived the
+    // serializer. A `"4"` here would have been dropped to null in silence.
+    expect(inserted.durationSeconds).toBe(4);
+    expect(inserted.orderIndex).toBe(1);
+    expect(inserted.framing).toBe("WS");
+    expect(inserted.continuityOut).toBe("Hero exits right.");
+  });
+
+  it("a draft whose duration was left blank creates the shot with a null duration, not zero", async () => {
+    if (output.kind !== "object") throw new Error("unreachable");
+    const sequenceId = await insertSequence(ctx, projectId);
+
+    const shotJson = buildShotJsonPayload(output.fields, {
+      title: "No duration given",
+      durationSeconds: "",
+    });
+
+    await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({ projectId: String(projectId), sequenceId: String(sequenceId), shotJson })
+      )
+    );
+
+    const [row] = await ctx.db
+      .select()
+      .from(ctx.schema.shots)
+      .where(eq(ctx.schema.shots.sequenceId, sequenceId));
+    expect(row.title).toBe("No duration given");
+    expect(row.durationSeconds).toBeNull();
   });
 });
