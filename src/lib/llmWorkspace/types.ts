@@ -187,7 +187,24 @@ export type ActionId =
   // to say so. Not yet reachable from a descriptor's `commit` (its own
   // descriptor, `casting.fromSequence`, is B7h-b) — declared for the same
   // reason B7c-w's three insert entries were declared ahead of being wired.
-  | "applySelectedCastingSuggestions";
+  | "applySelectedCastingSuggestions"
+  // LLMW.ACTION.INSERT_AT.1 (B11-a) — the write side of UC1's "insert a
+  // plan between two existing plans". `INSERT`s one row like the four
+  // above, but at an arbitrary position (`afterShotId`) rather than always
+  // at `max(orderIndex) + 1` — `actions/registry.ts`'s `ownership.transactional`
+  // is `true` for this one entry alone; every entry above keeps `false`.
+  // Not the ticket's own file list (`src/actions/shots.ts`,
+  // `actions/registry.ts`, `actions/bindings.ts`, `benchRun.ts`,
+  // `tests/actions/registry.test.ts`) — widening this union is a mechanical
+  // consequence of `actions/registry.ts`'s own `satisfies Record<ActionId,
+  // ActionRegistryEntry>` (a new key not in `ActionId` does not compile),
+  // the same reason every earlier `ActionId` addition (B7c-w, B7h-a) also
+  // touched this file despite never being named in those tickets' own scope
+  // lists either. Reported in `.agents/executor_report.md` rather than
+  // silently assumed. Not yet reachable from a descriptor's `commit` (its
+  // own descriptor is B11-bd) — declared ahead of being wired, the same
+  // discipline every earlier insert `ActionId` followed.
+  | "createShotAtPosition";
 
 /**
  * Names a field on the operation's anchor entity, for a `messages.chainNotFound`

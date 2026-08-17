@@ -37,6 +37,12 @@ import { createGeneratedSequences } from "@/actions/llm/sequenceGeneration";
 // a real callable — the same mechanical consequence B7c-w's three entries
 // had here, not a new decision of this ticket's own.
 import { applySelectedCastingSuggestions } from "@/actions/llm/castingSuggestions";
+// LLMW.ACTION.INSERT_AT.1 (B11-a) — same shape as the four insert entries
+// above: (formData: FormData) => Promise<void>, response observable only
+// through redirect(). Added because ActionId grew (types.ts) and this
+// module's own `satisfies Record<ActionId, …>` (below) forces every member
+// to resolve to a real callable.
+import { createShotAtPosition } from "@/actions/llm/shotInsertion";
 import type { ActionId } from "../types";
 
 export const ACTION_BINDINGS = {
@@ -52,4 +58,5 @@ export const ACTION_BINDINGS = {
   createSelectedAssets,
   createGeneratedSequences,
   applySelectedCastingSuggestions,
+  createShotAtPosition,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

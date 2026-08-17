@@ -104,18 +104,28 @@ export type ActionRegistryEntry = {
         /** A chain (asset→project, shot→sequence→project, or
          * sequence→project) is verified before the mutation runs. */
         checked: true;
-        /** `false` on every entry that has one, per behaviour 4: the check
-         * is a separate `SELECT`, the mutation a separate `UPDATE` by
-         * primary key alone — not `db.transaction`. A concurrent
-         * reassignment landing between the two statements would not be
-         * caught. This is a structural fact about the source (cited in
-         * each entry's `notes`), not something a single-process,
+        /** `false` on every entry that had one before LLMW.ACTION.INSERT_AT.1
+         * (B11-a), per behaviour 4: the check is a separate `SELECT`, the
+         * mutation a separate `UPDATE`/`INSERT` — not `db.transaction`. A
+         * concurrent reassignment landing between the two statements would
+         * not be caught. This is a structural fact about the source (cited
+         * in each entry's `notes`), not something a single-process,
          * single-connection `better-sqlite3` unit test can force to
          * interleave — B0 recorded the same limitation ("low impact under
          * single-process SQLite but not a conformance"). Proven here by
          * source citation, not by a race test; see `registry.test.ts`'s
-         * structural assertion. */
-        transactional: false;
+         * structural assertion.
+         *
+         * `true` for exactly one entry, `createShotAtPosition`
+         * (LLMW.ACTION.INSERT_AT.1, B11-a): its own `orderIndex` shift and
+         * insert run inside one real `db.transaction`, not a separate
+         * `SELECT` and `UPDATE`/`INSERT` — widened from the literal `false`
+         * to `boolean` for this one fact, the same way `columns.writesUpdatedAt`
+         * is widened below for `applySelectedCastingSuggestions`. Every
+         * other entry keeps `false` unchanged. See that entry's own `notes`
+         * for why this action cannot share B7c-w2's untransacted-loop
+         * reasoning. */
+        transactional: boolean;
       }
     | {
         /** `applyGeneratedStory` / `applyGeneratedOutline` only —
@@ -461,6 +471,51 @@ export const ACTION_REGISTRY = {
       "`writesUpdatedAt: false` — unlike every entry above, because neither `shot_assets` nor `sequence_assets` (`src/db/schema/assets.ts:32-66`) has an `updated_at` column at all; both only have `created_at` (schema-assigned, never rewritten by this action).",
       "Redirects on every path (`Promise<void>`), never a return value: `castingsError` on refusal (src/actions/llm/castingSuggestions.ts:293) or `castingsApplied=<inserted count>` on success (src/actions/llm/castingSuggestions.ts:356) — the same shape as `createGeneratedShots`/`createSelectedAssets`/`createGeneratedSequences` above.",
       "Unlike the three `createGenerated*`/`createSelectedAssets` insert entries above, this action calls no `revalidatePath` on any path (verified absent from src/actions/llm/castingSuggestions.ts) — reported, not fixed.",
+    ],
+  },
+
+  // LLMW.ACTION.INSERT_AT.1 (B11-a) — the write side of UC1's "insert a
+  // plan between two existing plans". Unlike every `"insert"` entry above,
+  // this one does NOT always write at `max(orderIndex) + 1`: `afterShotId`
+  // names an arbitrary position, and every later shot's `orderIndex` must
+  // shift by one to make room. Not yet reachable from a descriptor's
+  // `commit` (its own descriptor, UC1's insertion descriptor, is B11-bd) —
+  // declared ahead of being wired, the same discipline B7c-w's and B7h-a's
+  // own entries followed.
+  createShotAtPosition: {
+    id: "createShotAtPosition",
+    operation: "insert",
+    source: { module: "@/actions/llm/shotInsertion", export: "createShotAtPosition" },
+    target: { entity: "shot" },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: true },
+    columns: {
+      written: [
+        "sequenceId",
+        "shotCode",
+        "title",
+        "description",
+        "durationSeconds",
+        "actionPitch",
+        "cameraPitch",
+        "continuityNotes",
+        "framing",
+        "cameraMovement",
+        "continuityIn",
+        "continuityOut",
+        "shotPrompt",
+        "orderIndex",
+      ],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "insertPerItem",
+    notes: [
+      "`transactional: true` — the one exception to `ownership.transactional: false`/no-`db.transaction` every other insert entry above declares. B7c-w2 (2026-08-16) arbitrated an untransacted per-item loop acceptable for the three `create*` insert actions because a mid-loop failure there only ever leaves FEWER rows committed than requested — an incomplete but still coherent order. That reasoning does not carry over here: this action shifts every existing shot's `orderIndex >= targetIndex` by +1 and then inserts the new row at `targetIndex` (src/actions/llm/shotInsertion.ts), and a failure landing between the shift and the insert would leave the sequence with a gap OR two shots sharing the same `orderIndex` — a corrupted order, not an incomplete one. Both steps run inside one synchronous `db.transaction` (same primitive as `src/actions/assetAlignment.ts:174`, `src/actions/cameraLabSnapshot.ts:237`) so they commit together or not at all. Proven by tests/actions/registry.test.ts: each of the four declared refusals writes no row and shifts no `orderIndex`, and three insertion positions (start, middle, after-the-last) are proven to leave `0,1,2,3` with no gap and no duplicate.",
+      "`shotCode` (src/actions/llm/shotInsertion.ts) is never read from `shotJson` — the accepted shape does not even declare a `shotCode` key — and is generated from the project's nomenclature template (`getNomenclatureSettings`, `generateNextCode`), the same dispositif `createGeneratedShots` and `createShot` (src/actions/shots.ts:41-49) use. Proven by registry.test.ts against a pre-seeded shot code.",
+      "`shotJson` is read under the entity's own field names (`title`, `durationSeconds`, `actionPitch`, ...), not through a `snake_case` model-key translation like `normalizeShot` — this ticket declares only the write action, no descriptor exists yet to fix a model-facing JSON shape (B11-bd).",
+      "Ownership check: `sequences` is selected by `sequenceId` and `sequence.projectId !== projectId` is verified before any read/write; when `afterShotId` is present, the named shot must also exist and belong to this `sequenceId` — refusing with \"Shot not found.\" otherwise, the guard that stops an id from another project's sequence being used to insert into this one. Both checks happen before the transaction opens; refusal writes no row and shifts no `orderIndex`. Proven by registry.test.ts against a sequence belonging to another project and an `afterShotId` from a foreign sequence.",
+      "A titled but otherwise-empty `shotJson`, or an unparsable one, refuses with \"Invalid shot data.\" and writes nothing — a visible refusal, deliberately NOT `createShot`'s silent `if (!title?.trim()) return;` (src/actions/shots.ts:31, the documented defect at docs/PROJECT_STATE.md section B9b). This ticket's own contract requires the visible refusal for this action; `createShot` itself is unchanged.",
+      "`revalidatePath(\"/\", \"layout\")` is called before the success redirect — present, like every `create*`/`applySelectedCastingSuggestions` insert entry above.",
     ],
   },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;

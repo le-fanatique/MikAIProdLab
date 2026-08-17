@@ -62,6 +62,7 @@ let sequenceShotsActions: typeof import("@/actions/llm/sequenceShots");
 let assetExtractionActions: typeof import("@/actions/llm/assetExtraction");
 let sequenceGenerationActions: typeof import("@/actions/llm/sequenceGeneration");
 let castingSuggestionsActions: typeof import("@/actions/llm/castingSuggestions");
+let shotInsertionActions: typeof import("@/actions/llm/shotInsertion");
 let projectId: number;
 
 beforeAll(async () => {
@@ -75,6 +76,7 @@ beforeAll(async () => {
   assetExtractionActions = await import("@/actions/llm/assetExtraction");
   sequenceGenerationActions = await import("@/actions/llm/sequenceGeneration");
   castingSuggestionsActions = await import("@/actions/llm/castingSuggestions");
+  shotInsertionActions = await import("@/actions/llm/shotInsertion");
   projectId = await insertProject(ctx, "Registry project");
 });
 
@@ -797,5 +799,256 @@ describe("action registry — applySelectedCastingSuggestions (LLMW.ACTION.CASTI
     expect(body).not.toContain("db.transaction");
     expect(body).toMatch(/db\s*\.\s*select/);
     expect(body).toMatch(/db\s*\.\s*insert/);
+  });
+});
+
+describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11-a)", () => {
+  async function orderedShots(sequenceId: number) {
+    const rows = await ctx.db
+      .select()
+      .from(ctx.schema.shots)
+      .where(eq(ctx.schema.shots.sequenceId, sequenceId));
+    return rows.sort((a, b) => a.orderIndex - b.orderIndex);
+  }
+
+  it("insertion at the start (afterShotId absent): new plan at index 0, the three existing shift to 1,2,3", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotA = await insertShot(ctx, sequenceId, { title: "A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, sequenceId, { title: "B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, sequenceId, { title: "C", orderIndex: 2 });
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          shotJson: JSON.stringify({ title: "New at start" }),
+        })
+      )
+    );
+    expect(target).toContain("shotInserted=1");
+
+    const rows = await orderedShots(sequenceId);
+    expect(rows.map((r) => r.orderIndex)).toEqual([0, 1, 2, 3]);
+    expect(rows[0].title).toBe("New at start");
+    const byId = new Map(rows.map((r) => [r.id, r.orderIndex]));
+    expect(byId.get(shotA)).toBe(1);
+    expect(byId.get(shotB)).toBe(2);
+    expect(byId.get(shotC)).toBe(3);
+  });
+
+  it("insertion in the middle (after the first of three): 0,1,2,3 with no duplicate and no gap", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotA = await insertShot(ctx, sequenceId, { title: "A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, sequenceId, { title: "B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, sequenceId, { title: "C", orderIndex: 2 });
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          afterShotId: String(shotA),
+          shotJson: JSON.stringify({ title: "New in middle" }),
+        })
+      )
+    );
+    expect(target).toContain("shotInserted=1");
+
+    const rows = await orderedShots(sequenceId);
+    expect(rows.map((r) => r.orderIndex)).toEqual([0, 1, 2, 3]);
+    // No duplicate orderIndex, no gap.
+    const seen = new Set(rows.map((r) => r.orderIndex));
+    expect(seen.size).toBe(4);
+
+    const byId = new Map(rows.map((r) => [r.id, r.orderIndex]));
+    expect(byId.get(shotA)).toBe(0);
+    expect(rows.find((r) => r.title === "New in middle")?.orderIndex).toBe(1);
+    expect(byId.get(shotB)).toBe(2);
+    expect(byId.get(shotC)).toBe(3);
+  });
+
+  it("insertion after the last shot is equivalent to an append", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    await insertShot(ctx, sequenceId, { title: "A", orderIndex: 0 });
+    await insertShot(ctx, sequenceId, { title: "B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, sequenceId, { title: "C", orderIndex: 2 });
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          afterShotId: String(shotC),
+          shotJson: JSON.stringify({ title: "New at end" }),
+        })
+      )
+    );
+    expect(target).toContain("shotInserted=1");
+
+    const rows = await orderedShots(sequenceId);
+    expect(rows.map((r) => r.orderIndex)).toEqual([0, 1, 2, 3]);
+    expect(rows[3].title).toBe("New at end");
+  });
+
+  it("shotCode is generated from the nomenclature template, never the JSON's own value; shotPrompt is derived; approvedVideoPath/trimInSeconds/trimOutSeconds stay null", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          shotJson: JSON.stringify({
+            title: "New shot",
+            shotCode: "MODEL_PROPOSED_CODE",
+            description: "d",
+            actionPitch: "ap",
+            cameraPitch: "cp",
+          }),
+        })
+      )
+    );
+    expect(target).toContain("shotInserted=1");
+
+    const rows = await orderedShots(sequenceId);
+    expect(rows).toHaveLength(1);
+    const created = rows[0];
+    expect(created.shotCode).not.toBe("MODEL_PROPOSED_CODE");
+    expect(created.shotCode).toMatch(/^Sh_/);
+    expect(created.shotPrompt).toBeTruthy();
+    expect(created.approvedVideoPath).toBeNull();
+    expect(created.trimInSeconds).toBeNull();
+    expect(created.trimOutSeconds).toBeNull();
+
+    // Declared columns match ACTION_REGISTRY.createShotAtPosition.columns.written.
+    expect([...ACTION_REGISTRY.createShotAtPosition.columns.written].sort()).toEqual(
+      [
+        "sequenceId",
+        "shotCode",
+        "title",
+        "description",
+        "durationSeconds",
+        "actionPitch",
+        "cameraPitch",
+        "continuityNotes",
+        "framing",
+        "cameraMovement",
+        "continuityIn",
+        "continuityOut",
+        "shotPrompt",
+        "orderIndex",
+      ].sort()
+    );
+  });
+
+  it("refuses a non-integer projectId/sequenceId and writes nothing, shifts nothing", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotA = await insertShot(ctx, sequenceId, { title: "A", orderIndex: 0 });
+    const before = await orderedShots(sequenceId);
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: "not-a-number",
+          sequenceId: String(sequenceId),
+          shotJson: JSON.stringify({ title: "Injected" }),
+        })
+      )
+    );
+    expect(target).toContain(`shotInsertError=${encodeURIComponent("Invalid request.")}`);
+
+    const after = await orderedShots(sequenceId);
+    expect(after).toEqual(before);
+    expect(after.find((r) => r.id === shotA)?.orderIndex).toBe(0);
+  });
+
+  it("refuses a sequence belonging to another project and writes nothing, shifts nothing", async () => {
+    const otherProjectId = await insertProject(ctx, "Foreign project (shot insertion)");
+    const otherSequenceId = await insertSequence(ctx, otherProjectId);
+    const shotA = await insertShot(ctx, otherSequenceId, { title: "A", orderIndex: 0 });
+    const before = await orderedShots(otherSequenceId);
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(otherSequenceId),
+          shotJson: JSON.stringify({ title: "Injected" }),
+        })
+      )
+    );
+    expect(target).toContain(`shotInsertError=${encodeURIComponent("Sequence not found.")}`);
+
+    const after = await orderedShots(otherSequenceId);
+    expect(after).toEqual(before);
+    expect(after.find((r) => r.id === shotA)?.orderIndex).toBe(0);
+  });
+
+  it("refuses an afterShotId that does not belong to this sequence and writes nothing, shifts nothing", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotA = await insertShot(ctx, sequenceId, { title: "A", orderIndex: 0 });
+    const otherSequenceId = await insertSequence(ctx, projectId);
+    const foreignShot = await insertShot(ctx, otherSequenceId, { title: "Foreign", orderIndex: 0 });
+    const before = await orderedShots(sequenceId);
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          afterShotId: String(foreignShot),
+          shotJson: JSON.stringify({ title: "Injected" }),
+        })
+      )
+    );
+    expect(target).toContain(`shotInsertError=${encodeURIComponent("Shot not found.")}`);
+
+    const after = await orderedShots(sequenceId);
+    expect(after).toEqual(before);
+    expect(after.find((r) => r.id === shotA)?.orderIndex).toBe(0);
+  });
+
+  it("refuses invalid/blank-title shot data and writes nothing, shifts nothing", async () => {
+    const sequenceId = await insertSequence(ctx, projectId);
+    const shotA = await insertShot(ctx, sequenceId, { title: "A", orderIndex: 0 });
+    const before = await orderedShots(sequenceId);
+
+    const target = await captureRedirect(() =>
+      shotInsertionActions.createShotAtPosition(
+        form({
+          projectId: String(projectId),
+          sequenceId: String(sequenceId),
+          shotJson: JSON.stringify({ title: "   " }),
+        })
+      )
+    );
+    expect(target).toContain(`shotInsertError=${encodeURIComponent("Invalid shot data.")}`);
+
+    const after = await orderedShots(sequenceId);
+    expect(after).toEqual(before);
+    expect(after.find((r) => r.id === shotA)?.orderIndex).toBe(0);
+  });
+
+  it("no plain SELECT+UPDATE/INSERT pair — the shift and the insert run inside one db.transaction (ownership.transactional: true)", async () => {
+    const entry = ACTION_REGISTRY.createShotAtPosition;
+    expect(entry.ownership.transactional).toBe(true);
+
+    const filePath = path.join(process.cwd(), "src/actions/llm/shotInsertion.ts");
+    const src = readFileSync(filePath, "utf8");
+    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true);
+    let body: string | undefined;
+    sourceFile.forEachChild((node) => {
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name?.text === "createShotAtPosition" &&
+        node.body
+      ) {
+        body = node.body.getFullText(sourceFile);
+      }
+    });
+    if (body === undefined) throw new Error("createShotAtPosition not found");
+
+    expect(body).toContain("db.transaction");
   });
 });

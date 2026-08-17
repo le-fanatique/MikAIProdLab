@@ -209,10 +209,19 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     `BenchRunPanel.tsx` since LLMW.MIGRATE.LIST.4 (B7h-m) —
 //     `resolveBenchConfirmation` below now renders real wording for it too.
 //
-// `RedirectOnlyActionId` has exactly these six members, and all six are now
-// wired to a descriptor's `commit` and reach a bench Approve branch
-// (`BenchRunPanel.tsx`) — `resolveBenchConfirmation` below renders real
-// wording for every one of them.
+// `RedirectOnlyActionId` had exactly these six members before
+// LLMW.ACTION.INSERT_AT.1 (B11-a) added a seventh, `createShotAtPosition`
+// (`src/actions/llm/shotInsertion.ts`): `shotInserted`, `shotInsertError`.
+// Unlike the six above, it is deliberately NOT wired into
+// `resolveBenchConfirmation` below — no descriptor commits through it yet
+// (its own descriptor, UC1's insertion descriptor, is B11-bd), so the bench
+// can never actually reach it. B7h-a declared `applySelectedCastingSuggestions`
+// the same way, ahead of being reachable, until B7h-m gave it its own
+// wording once `casting.fromSequence` existed to reach it through — the
+// same guard-clause discipline `planBenchCommit`/`resolveBenchConfirmation`
+// already apply. The six actions actually wired below are now all reachable
+// and `resolveBenchConfirmation` below renders real wording for every one
+// of them.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
 // ticket buys: a future `redirectOnly` action does not compile into this
@@ -229,6 +238,10 @@ export const REDIRECT_CONFIRMATION_KEYS = {
   createSelectedAssets: { successKey: "assetsCreated", errorKey: "assetsCreateError" },
   createGeneratedSequences: { successKey: "sequencesCreated", errorKey: "sequencesCreateError" },
   applySelectedCastingSuggestions: { successKey: "castingsApplied", errorKey: "castingsError" },
+  // LLMW.ACTION.INSERT_AT.1 (B11-a) — declared per the type-level guardrail
+  // above; deliberately given no wording in `resolveBenchConfirmation`
+  // below (see this table's own header comment) — nothing reaches it yet.
+  createShotAtPosition: { successKey: "shotInserted", errorKey: "shotInsertError" },
 } as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
 
 // ---------------------------------------------------------------------------
@@ -306,6 +319,17 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // nowhere" gap B7d-f (`f892850`) paid to close for the object case — so this
 // one action alone renders `No castings applied.` on a `0` count, not
 // nothing.
+//
+// LLMW.ACTION.INSERT_AT.1 (B11-a) declares a seventh `RedirectOnlyActionId`,
+// `createShotAtPosition`, but the guard clause below deliberately does NOT
+// name it. No descriptor commits through it yet (B11-bd), so
+// `planBenchCommit` can never hand this function a `plan.actionId ===
+// "createShotAtPosition"` in the first place — the clause-guard excludes it
+// on purpose, the same way B7h-a's own guard excluded
+// `applySelectedCastingSuggestions` until B7h-m gave it real wording once
+// `casting.fromSequence` existed to reach it through. Inventing a message
+// for an action nothing can reach is not this function's job; B11-bd adds
+// the branch when the descriptor exists to reach it.
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {
@@ -325,6 +349,9 @@ export function resolveBenchConfirmation(
     plan.actionId !== "createSelectedAssets" &&
     plan.actionId !== "applySelectedCastingSuggestions"
   ) {
+    // `createShotAtPosition` (LLMW.ACTION.INSERT_AT.1, B11-a) falls through
+    // to this `return null` deliberately — see this function's own header
+    // comment.
     return null;
   }
 
