@@ -479,7 +479,15 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     const beforeCount = (await ctx.db.select().from(ctx.schema.assets)).length;
 
     const selectedPayload = [
-      { name: "Asset A", assetType: "character", description: "d1", notes: "n1" },
+      {
+        name: "Asset A",
+        assetType: "character",
+        description: "d1",
+        notes: "n1",
+        sourceLevel: "shot",
+        sourceExcerpt: "excerpt A",
+        duplicateWarning: "warning A",
+      },
       { name: "Asset B", assetType: "prop" },
     ];
 
@@ -508,10 +516,45 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].type).toBe("character");
     expect(created[1].type).toBe("prop");
 
+    // SCHEMA.ASSET_SOURCING.1 (S1a) — sourcing metadata submitted with the
+    // candidate is written verbatim.
+    expect(created[0].sourceLevel).toBe("shot");
+    expect(created[0].sourceExcerpt).toBe("excerpt A");
+    expect(created[0].duplicateWarning).toBe("warning A");
+
+    // A candidate missing `sourceExcerpt`/`duplicateWarning` in the
+    // submitted JSON lands NULL, never an empty string. `sourceLevel` always
+    // has a value — `normalizeCandidate` defaults it to `"outline"`.
+    expect(created[1].sourceLevel).toBe("outline");
+    expect(created[1].sourceExcerpt).toBeNull();
+    expect(created[1].duplicateWarning).toBeNull();
+
     // Undeclared columns stay at their schema default.
     expect(created[0].visualIdentity).toBeNull();
     expect(created[0].usageRules).toBeNull();
     expect(created[0].forbiddenVariations).toBeNull();
+  });
+
+  it("createSelectedAssets — preserves an asset created before these columns existed, its three new columns null", async () => {
+    // Simulates a pre-SCHEMA.ASSET_SOURCING.1 row: inserted with no opinion
+    // on the new columns, exactly as a row written before this migration
+    // would read back today.
+    const preExistingId = await insertAsset(ctx, projectId, { name: "Legacy Asset" });
+
+    const target = await captureRedirect(() =>
+      assetExtractionActions.createSelectedAssets(
+        form({
+          projectId: String(projectId),
+          selectedJson: JSON.stringify([{ name: "Asset C", assetType: "prop" }]),
+        })
+      )
+    );
+    expect(target).toContain("assetsCreated=1");
+
+    const legacy = await readAsset(ctx, preExistingId);
+    expect(legacy!.sourceLevel).toBeNull();
+    expect(legacy!.sourceExcerpt).toBeNull();
+    expect(legacy!.duplicateWarning).toBeNull();
   });
 
   it("createSelectedAssets — refuses a nonexistent projectId cleanly and writes no row", async () => {

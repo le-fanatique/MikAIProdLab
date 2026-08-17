@@ -234,6 +234,9 @@ export async function createSelectedAssets(formData: FormData): Promise<void> {
       type: c.assetType,
       description: c.description ?? null,
       notes: c.notes ?? null,
+      sourceLevel: c.sourceLevel,
+      sourceExcerpt: c.sourceExcerpt ?? null,
+      duplicateWarning: c.duplicateWarning ?? null,
       orderIndex: startIndex + i,
     });
   }

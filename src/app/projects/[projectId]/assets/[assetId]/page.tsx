@@ -30,6 +30,16 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+// SCHEMA.ASSET_SOURCING.1 (S1a) — same source-level chip colors as
+// `AssetsLLMExtractPanel`'s `SOURCE_CHIP_CLASS` (the Approve step this
+// sourcing metadata comes from), reused here rather than invented.
+const SOURCE_LEVEL_CHIP_CLASS: Record<"outline" | "sequence" | "shot" | "story", string> = {
+  outline: "text-[#5b93d6] border-[#5b93d6]/40",
+  sequence: "text-[#5fa37a] border-[#5fa37a]/40",
+  shot: "text-[#cda24f] border-[#cda24f]/40",
+  story: "text-[#6e767d] border-[#2c3035]",
+};
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -298,6 +308,39 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           <p className="mt-3 border-t border-[#1e2124] pt-3 text-xs text-[#4b5158]">
             Description and notes are used as the text prompt for asset image generation.
           </p>
+          {/* SCHEMA.ASSET_SOURCING.1 (S1a) — informative only, never an
+              editable field or an action. Renders nothing at all when the
+              asset carries none of the three values, which is the case for
+              every hand-created asset and every asset created before this
+              metadata existed: no empty section, no "—", no orphaned label. */}
+          {(asset.sourceLevel || asset.sourceExcerpt || asset.duplicateWarning) && (
+            <div className="mt-3 flex flex-col gap-1.5 border-t border-[#1e2124] pt-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
+                  Suggested by AI
+                </span>
+                {asset.sourceLevel && (
+                  <span
+                    className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${SOURCE_LEVEL_CHIP_CLASS[asset.sourceLevel]}`}
+                  >
+                    {asset.sourceLevel}
+                  </span>
+                )}
+              </div>
+              {asset.sourceExcerpt && (
+                <p className="text-xs text-[#6e767d] italic leading-relaxed">
+                  &ldquo;{asset.sourceExcerpt}&rdquo;
+                </p>
+              )}
+              {asset.duplicateWarning && (
+                <div className="rounded border border-amber-800/40 bg-amber-950/20 px-2 py-1">
+                  <p className="text-xs text-amber-500">
+                    Possible duplicate of existing asset: &ldquo;{asset.duplicateWarning}&rdquo;
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </section>
 

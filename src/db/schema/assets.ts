@@ -20,6 +20,16 @@ export const assets = sqliteTable("assets", {
   visualIdentity: text("visual_identity"),
   usageRules: text("usage_rules"),
   forbiddenVariations: text("forbidden_variations"),
+  // SCHEMA.ASSET_SOURCING.1 (S1a) — sourcing metadata `normalizeCandidate`
+  // (src/actions/llm/assetExtraction.ts) already produces for each LLM
+  // extraction candidate, now persisted instead of discarded by
+  // `createSelectedAssets`. Nullable and additive: every hand-created asset,
+  // and every asset created before this column existed, has all three null.
+  sourceLevel: text("source_level", {
+    enum: ["outline", "sequence", "shot", "story"],
+  }),
+  sourceExcerpt: text("source_excerpt"),
+  duplicateWarning: text("duplicate_warning"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
