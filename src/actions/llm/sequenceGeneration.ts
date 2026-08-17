@@ -5,22 +5,16 @@ import { projects, sequences } from "@/db/schema";
 import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { callLLMJson } from "@/lib/llm";
-import { buildSequencesFromOutlinePrompt } from "@/lib/prompts/sequences-from-outline";
-import { parseOutlineSections } from "@/lib/prompts/outlineSections";
-import { getLLMConfig, getNomenclatureSettings } from "@/lib/settings";
+import { getNomenclatureSettings } from "@/lib/settings";
 import type { GeneratedSequence } from "@/types/llm";
 import { generateSequentialCodes } from "@/lib/nomenclature";
+import { runOperation } from "@/lib/llmWorkspace/runner";
+import { sequencesFromOutlineDescriptor } from "@/lib/llmWorkspace/descriptors/sequencesFromOutline";
+import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function extractJson(raw: string): string {
-  const trimmed = raw.trim();
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
-  return fence ? fence[1].trim() : trimmed;
-}
 
 function str(value: unknown, maxLen = 1000): string | null {
   if (typeof value !== "string") return null;
@@ -50,91 +44,78 @@ function normalizeSequence(raw: unknown, fallbackIndex: number): GeneratedSequen
   };
 }
 
-function parseSequencesResult(raw: string): GeneratedSequence[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractJson(raw));
-  } catch {
-    throw new Error("The model returned an unexpected format. Try again or use a different model.");
-  }
-  const arr = (parsed as Record<string, unknown>)?.sequences;
-  if (!Array.isArray(arr)) {
-    throw new Error("The model did not return a sequences array. Try again.");
-  }
-  const normalized = arr
-    .map((item, i) => normalizeSequence(item, i))
-    .filter((s): s is GeneratedSequence => s !== null);
-  if (normalized.length === 0) {
-    throw new Error("The model returned no valid sequences. Try again.");
-  }
-  return normalized.sort((a, b) => a.order_index - b.order_index);
-}
-
 // ---------------------------------------------------------------------------
 // Server Actions
 // ---------------------------------------------------------------------------
 
+/**
+ * Thin adapter over `runOperation(sequencesFromOutlineDescriptor, ...)`
+ * (LLMW.MIGRATE.LIST.2, B7g-m), on the model of
+ * `generateShotsFromSequenceDraft` (`src/actions/llm/sequenceShots.ts`,
+ * post-B7e): keeps the exact `{ok:true, sequences}` return shape
+ * `SequencesGenerationPanel` depends on.
+ *
+ * The deterministic title/summary override that used to live here
+ * (`sequenceGeneration.ts:148-158` pre-migration) is now the descriptor's own
+ * `postResponse` (`sequencesFromOutlineDescriptor.postResponse`,
+ * LLMW.POSTRESPONSE.1, B7g) — `runOperation` applies it itself once the
+ * result is a successful list. No local copy of that rule is kept here: it
+ * is idempotent, so keeping it would not have broken anything observably,
+ * which is exactly why it had to be found and removed by reading rather than
+ * by a failing test (see `.agents/executor_report.md`, mutation control).
+ *
+ * `result.items` are keyed by entity field name (`orderIndex`); the same
+ * `mapListItemToModelKeys` bridge `generateShotsFromSequenceDraft` uses
+ * translates each item back to the model's own JSON keys (`order_index`),
+ * matching `GeneratedSequence`'s own field names. Only the six string fields
+ * need the `"" -> null` fill-back `readStringField` (`runner.ts`) does not
+ * do itself — `order_index` does not: the descriptor declares
+ * `fallback: "index"` for it (not `fallback: "omit"`, unlike
+ * `duration_seconds` on the shots side), and `readNumberField` makes that
+ * fallback branch `present: true` unconditionally, so the field is always
+ * in `result.items` and never needs a null fill. `title` is never `null` —
+ * `item.validity` already filtered out any item missing it.
+ */
 export async function generateSequencesFromOutlineDraft(
   formData: FormData
 ): Promise<{ ok: true; sequences: GeneratedSequence[] } | { ok: false; error: string }> {
   try {
     const projectId = parseInt(formData.get("projectId") as string, 10);
-    if (!Number.isInteger(projectId) || projectId <= 0) {
-      return { ok: false, error: "Invalid request." };
-    }
-
     const rawCount = parseInt(formData.get("targetCount") as string, 10);
-    const targetCount =
-      Number.isInteger(rawCount) && rawCount >= 1 && rawCount <= 20 ? rawCount : null;
 
-    const config = await getLLMConfig();
-    if (!config) {
-      return {
-        ok: false,
-        error: "LLM provider not configured. Go to Settings to configure Ollama.",
-      };
+    const result = await runOperation(
+      sequencesFromOutlineDescriptor,
+      { projectId },
+      { parameters: Number.isInteger(rawCount) ? { targetCount: rawCount } : {} }
+    );
+    if (!result.ok) return { ok: false, error: result.error };
+    // `sequencesFromOutlineDescriptor.output.kind` is always `"list"` — the
+    // guard exists because `RunOperationResult` is `kind`-discriminated
+    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
+    if (result.kind !== "list") {
+      throw new Error("generateSequencesFromOutlineDraft: expected a list-kind result.");
+    }
+    if (sequencesFromOutlineDescriptor.output.kind !== "list") {
+      throw new Error("generateSequencesFromOutlineDraft: descriptor output is not list-kind.");
     }
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    if (!project) {
-      return { ok: false, error: "Project not found." };
-    }
-
-    if (!project.outline?.trim() && !project.pitch?.trim()) {
-      return { ok: false, error: "Add a project pitch or outline first." };
-    }
-
-    const outlineSections = project.outline?.trim()
-      ? parseOutlineSections(project.outline)
-      : [];
-    const sectionCount = outlineSections.length || null;
-
-    const prompt = buildSequencesFromOutlinePrompt({
-      name: project.name,
-      pitch: project.pitch,
-      story: project.story,
-      outline: project.outline,
-      targetCount,
-      sectionCount,
-      outlineSections: outlineSections.length > 0 ? outlineSections : undefined,
+    const fields = sequencesFromOutlineDescriptor.output.item.fields;
+    const generatedSequences: GeneratedSequence[] = result.items.map((item) => {
+      const mapped = mapListItemToModelKeys(fields, item);
+      const seq: Record<string, string | number | null> = {};
+      for (const field of fields) {
+        const key = field.jsonKey;
+        if (!(key in mapped)) {
+          seq[key] = null;
+          continue;
+        }
+        const value = mapped[key];
+        seq[key] = value === "" ? null : value;
+      }
+      return seq as unknown as GeneratedSequence;
     });
 
-    const raw = await callLLMJson(prompt, config);
-    const seqs = parseSequencesResult(raw);
-
-    // Deterministic override: when targetCount is unset and LLM returned exactly
-    // the same number of sequences as outline sections, pin title and summary to
-    // the parsed section values so no LLM paraphrase can slip through.
-    if (targetCount === null && outlineSections.length > 0 && seqs.length === outlineSections.length) {
-      for (let i = 0; i < seqs.length; i++) {
-        seqs[i].title = outlineSections[i].title;
-        if (outlineSections[i].body) {
-          seqs[i].summary = outlineSections[i].body;
-        }
-      }
-    }
-
-    return { ok: true, sequences: seqs };
+    return { ok: true, sequences: generatedSequences };
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";

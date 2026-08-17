@@ -184,22 +184,22 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     `sequencePromptError`, `sequencePromptSaved`
 //   - `createGeneratedShots` (`src/actions/llm/sequenceShots.ts:141,213`),
 //     wired by LLMW.PROPOSAL.LIST.1 (B7d): `shotsCreateError`, `shotsCreated`
+//   - `createGeneratedSequences` (`src/actions/llm/sequenceGeneration.ts:135,199`),
+//     wired by LLMW.MIGRATE.LIST.2 (B7g-m), now that
+//     `sequencesFromOutlineDescriptor.commit` names it: `sequencesCreateError`,
+//     `sequencesCreated`
 //
-// `RedirectOnlyActionId` is wider than these three: `ACTION_REGISTRY` also
+// `RedirectOnlyActionId` is wider than these four: `ACTION_REGISTRY` also
 // declares `createSelectedAssets` (`src/actions/llm/assetExtraction.ts:207,258`
-// — `assetsCreateError`, `assetsCreated`) and `createGeneratedSequences`
-// (`src/actions/llm/sequenceGeneration.ts:177,241` — `sequencesCreateError`,
-// `sequencesCreated`) as `response: "redirectOnly"`, though neither is wired
-// to any descriptor's `commit` yet (registry.ts's own comment on
-// `createGeneratedShots`: "future tickets"). `planBenchCommit` can therefore
-// never actually produce a `redirectOnly` plan for either today — but the
-// `satisfies` below is a type-level check, not a reachability one, so both
-// still need a real entry to compile. Keys verified against the actions'
-// own `redirect()` calls, not invented; `resolveBenchConfirmation` below
-// deliberately renders nothing for either — the ticket froze wording for
-// only the first three, and this ticket does not invent copy for the other
-// two. Flagged in `.agents/executor_report.md` as a gap the ticket's frozen
-// table did not anticipate.
+// — `assetsCreateError`, `assetsCreated`) as `response: "redirectOnly"`,
+// though it is not wired to any descriptor's `commit` yet (registry.ts's own
+// comment on `createGeneratedShots`: "future tickets") — out of this
+// ticket's scope (§ "Hors scope"). `planBenchCommit` can therefore never
+// actually produce a `redirectOnly` plan for it today — but the `satisfies`
+// below is a type-level check, not a reachability one, so it still needs a
+// real entry to compile. Keys verified against the action's own `redirect()`
+// calls, not invented; `resolveBenchConfirmation` below deliberately renders
+// nothing for it — no ticket has frozen wording for it yet.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
 // ticket buys: a future `redirectOnly` action does not compile into this
@@ -267,12 +267,16 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // value from `bench.ts`. Only `BenchSearchParams` is imported from there,
 // as `import type`, which TypeScript erases entirely.
 //
-// Only the three actions the ticket's frozen table names
-// (`updateShotPrompt`, `updateSequencePrompt`, `createGeneratedShots`) get a
-// rendered message here — `createSelectedAssets` and
-// `createGeneratedSequences` are unreachable from any descriptor today (see
+// The ticket's frozen table (B7d-f) named only three actions
+// (`updateShotPrompt`, `updateSequencePrompt`, `createGeneratedShots`).
+// LLMW.MIGRATE.LIST.2 (B7g-m) adds a fourth, `createGeneratedSequences`, now
+// that `sequencesFromOutlineDescriptor` commits through it — same rules as
+// `createGeneratedShots`: `N sequences created.`, singular
+// `1 sequence created.`, a non-integer or `<= 0` count renders nothing, and
+// an error takes precedence over a success value (checked first, above).
+// `createSelectedAssets` remains unreachable from any descriptor (see
 // `REDIRECT_CONFIRMATION_KEYS` above) and the ticket froze no wording for
-// them; this function returns `null` for both rather than invent copy.
+// it; this function returns `null` for it rather than invent copy.
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {
@@ -284,7 +288,12 @@ export function resolveBenchConfirmation(
   search: BenchSearchParams
 ): { kind: "success"; message: string } | { kind: "error"; message: string } | null {
   if (plan.kind !== "redirectOnly") return null;
-  if (plan.actionId !== "updateShotPrompt" && plan.actionId !== "updateSequencePrompt" && plan.actionId !== "createGeneratedShots") {
+  if (
+    plan.actionId !== "updateShotPrompt" &&
+    plan.actionId !== "updateSequencePrompt" &&
+    plan.actionId !== "createGeneratedShots" &&
+    plan.actionId !== "createGeneratedSequences"
+  ) {
     return null;
   }
 
@@ -304,6 +313,12 @@ export function resolveBenchConfirmation(
     const count = Number(successValue);
     if (!Number.isInteger(count) || count <= 0) return null;
     return { kind: "success", message: `${count} shot${count === 1 ? "" : "s"} created.` };
+  }
+
+  if (plan.actionId === "createGeneratedSequences") {
+    const count = Number(successValue);
+    if (!Number.isInteger(count) || count <= 0) return null;
+    return { kind: "success", message: `${count} sequence${count === 1 ? "" : "s"} created.` };
   }
 
   if (successValue !== "1") return null;

@@ -28,6 +28,7 @@ import {
   type ObjectOutputFields,
 } from "@/lib/llmWorkspace/benchRun";
 import {
+  buildCreateGeneratedSequencesHiddenFields,
   buildCreateGeneratedShotsHiddenFields,
   buildUpdateSequencePromptHiddenFields,
   buildUpdateShotPromptHiddenFields,
@@ -120,9 +121,36 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
         ];
       }
 
+      if (plan.kind === "redirectOnly" && plan.actionId === "createGeneratedSequences") {
+        // `output.formDataKey` names the descriptor's own declared selection
+        // destination (`descriptor.output.selection.formDataKey`); refuse
+        // rather than write the payload under an invented key if it ever
+        // diverges from what `createGeneratedSequences` actually reads.
+        if (output.formDataKey !== "sequencesJson") {
+          return [];
+        }
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            disabled: listDraft.selected.length === 0,
+            action: ACTION_BINDINGS.createGeneratedSequences,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as ListDraft;
+              return buildCreateGeneratedSequencesHiddenFields({
+                projectId: ids.projectId as number,
+                returnTo,
+                sequencesJson: buildListSelectionPayload(output.itemFields, current.items, current.selected),
+              });
+            },
+          },
+        ];
+      }
+
       // Every other `actionId` a list descriptor could declare
-      // (`createSelectedAssets`, `createGeneratedSequences`) has no descriptor
-      // wired to it yet (out of scope for this ticket — B7e-g), and any
+      // (`createSelectedAssets`) has no descriptor wired to it yet (out of
+      // scope — no descriptor commits through it), and any
       // `returnValue`/`unsupported` plan is not a list-commit shape at all.
       // No Approve button; the reason is rendered under the fields below.
       return [];
@@ -252,7 +280,8 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
 
               {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
               {plan.kind !== "unsupported" &&
-                !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedShots") && (
+                !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedShots") &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "createGeneratedSequences") && (
                   <p className="text-xs text-[#cf7b6b]">
                     This template&apos;s commit action has no bench Approve path yet.
                   </p>
