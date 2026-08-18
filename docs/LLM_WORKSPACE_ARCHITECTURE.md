@@ -1167,6 +1167,35 @@ special case into library growth.
 | ~~S6~~ | ~~UC1 on the Sequence page~~ | **Delivered 2026-08-18, commit `05f381a`**, and validated in the running product by the user the same day. The affordance is per shot, on the connector between two of them, and `afterShotId` is **implicit in the click** — the bench asked for an id in a field because a bench may; making an artist hunt for a numeric identifier is the technical friction §1 of the vision rules out. Everything else is reuse: `ProposalPanel` with B9a's pre-trigger input, `shotPrompt.assist`'s own `redirectOnly` envelope, `createShotAtPosition`, and `buildShotJsonPayload` deliberately not rewritten. | **surfaces UC1** |
 | E1 | The template editor | `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. Must make `intent.freeText` editable — see that file's 2026-08-15 correction. | makes all three authorable |
 
+### What remains — the whole of it, 2026-08-18
+
+**Written as a checklist because it was under-reported once.** On 2026-08-18 the
+supervisor summarised the remaining work as "C0 and the deletions" three times
+running, silently dropping **E1** — the ticket that makes the user an author,
+and §7's own third success criterion — and collapsing six cleanup tickets into
+one word. A reader of this file must be able to count what is left without
+reconstructing it from struck-through rows.
+
+**Order settled by the user 2026-08-18: B8, then E1, then Chantier 2.**
+
+Chantier 1, two tickets left:
+
+1. **B8** — text mode + `promptCompiler`. Rescoped: `translation` is
+   permanently out, so this is one heavy operation and it unblocks nothing else.
+   Its two hard parts are already written down under "B8 rescoped" below.
+2. **E1** — the template editor. **The last ticket of the chantier and the point
+   of it**: it turns the workspace from a thing that runs the eight built-ins
+   into a thing the user authors in. Scoped in
+   `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`, and it **must** make
+   `intent.freeText` editable — that file's own 2026-08-15 correction.
+
+Chantier 2, seven tickets plus three independents, all listed below: C0 (the
+prerequisite), C1, C2, C3, C4, C5, C6, then `ThemeModeToggle.tsx`,
+`src/actions/sequenceVideoSplit.ts` and the large storyboard/editorial pages.
+Then, and only then, the token-efficiency audit and the roadmap reconciliation.
+
+Everything else in the Chantier 1 table above is delivered and struck through.
+
 ### Chantier 2 — the cleanup, which only B7-B8 make possible
 
 A panel that still serves an unmigrated operation cannot be deleted. Phase C

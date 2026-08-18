@@ -919,6 +919,28 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### What is left, and the reporting error that hid part of it (2026-08-18)
+
+The user asked whether only B8 and C0 remained. They did not, and the gap was
+the supervisor's reporting rather than the queue's content.
+
+**E1 had been dropped from three successive summaries.** It is the last ticket
+of Chantier 1 and the point of the whole thing — the template editor is what
+turns the workspace from a runner of eight built-ins into something the user
+authors in, which is §7's third success criterion in his own words. And "the
+deletions" was said as if it were one item where the queue lists **seven**
+(C0 through C6) plus three independents plus two follow-ups.
+
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3 now opens with an explicit
+"What remains" checklist for exactly this reason: a struck-through table is
+easy to summarise wrong, and the summary is what a session reset inherits.
+
+**Order settled by the user, 2026-08-18: B8, then E1, then Chantier 2.** The
+supervisor had recommended E1 first, on the argument that autonomy is worth more
+than tenability and that B8 unblocks nothing since translation left the
+workspace. The user chose otherwise; the recommendation is recorded, not
+re-argued.
+
 ### UC3 reaches the product, and a blocked report stops a supervisor (2026-08-18)
 
 `4210df8`. With UC1 on the Sequence page, **all three founding use cases are
