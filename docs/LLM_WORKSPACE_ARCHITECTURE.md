@@ -550,6 +550,79 @@ type Block =
 
 Everything else in the sketch survives contact with the eight unchanged.
 
+#### The image input — `LLMW.DESCRIPTOR.IMAGE.1` (B16a), delivered `c30b6a7`
+
+The first thing the workspace can read that is not text. Designed against
+**B20's** requirements rather than B16b's single-image lighting case, because
+§11.3 said in advance that a declaration shaped around one image would be
+widened immediately afterwards.
+
+Shape, on `OperationDescriptor`, optional and sibling to `context`:
+
+```ts
+images?: {
+  source: ImageSourceId;   // closed registry — a family, never a path
+  minCount: number;        // all three bounds mandatory: no silent fallback
+  maxCount: number;
+  maxTotalBytes: number;
+  keyPrefix: string;       // "R" produces R1..Rn
+  messages: { noneSelected: string; tooMany: string; unavailable: string };
+};
+```
+
+plus an eighth `Block` variant, `{ images: true; render: string }`, whose render
+form receives **keys and metadata only** — never a path, never a byte. Pixels
+travel exclusively as image parts of the outbound `ChatMessage`.
+
+**Three decisions, each forced by something already in the repository.**
+
+1. **A descriptor names a source, never a path.** Every image family owns its
+   own storage root and its own confinement predicate —
+   `isConfinedReferenceImagePath` for Project Style,
+   `isConfinedUploadedReferenceImagePath` for the Asset/Shot root (exported by
+   this ticket from where it was written inline),
+   `isConfinedShotReferenceVideoPathForShot` for a third. Path policy stays
+   with the family; the format and the runner never learn what a valid path
+   looks like. `src/lib/llmWorkspace/images/registry.ts` holds the closed
+   registry; `resolve` follows `resolveLookReferences`'s proven pattern —
+   caller order preserved and never re-sorted, duplicate refused, foreign
+   anchor refused, missing id refused, unconfined path refused before any read.
+2. **The selection is run input, beside `intent`.** Not a variable, and this is
+   exactly the gap "B8 dissolved" recorded below in its own words: *"No
+   variable can express 'the ordered subset the user just ticked'."* A variable
+   resolves from the anchor and the database with no user choice in it, so no
+   variable could ever have carried this. `runOperation` gains a fourth
+   argument, `{ selectedIds: number[] }`.
+3. **Keys come from the selection ordinal**, `R1..Rn`, so what the prompt
+   labels and what the model cites are the same identifier — and the database
+   id never reaches the prompt at all.
+
+`src/lib/llmWorkspace/images/prepare.ts` re-reads and re-validates the real
+bytes **at call time**: confinement, readability, per-file bound, cumulative
+bound, magic-byte sniff, decode gate, real dimensions, then sha256 and base64.
+It refuses **the whole batch on the first failure** — a prompt labelling its
+images `R1..Rn` and an answer citing those keys both go incoherent the moment
+one silently drops out. GIF is refused although `saveReferenceImage` accepts one
+at upload: neither the sniff nor the decode gate establishes a still frame for
+it.
+
+**One consequence B20 inherits, recorded here and beside the code.** The only
+route that carries images is `callLLMChat`, and it forces JSON on **neither**
+provider family, unlike `callLLMJson` (`response_format` / `format: "json"`).
+So an image-bearing operation with `output.kind` `"object"` or `"list"` must ask
+for its JSON schema in the prompt and rely on `parseOutput`'s fence-stripping —
+precisely what `referenceAnalysis/prompt.ts` already does at `temperature: 0`.
+`kind: "text"` is unaffected, which is why B16b is not constrained by this and
+B20 is.
+
+**A knowing duplication, with a scheduled removal.**
+`src/lib/projectStyle/referenceAnalysis/imageInputs.ts` performs the same
+re-validation and was left **untouched**, by the user's decision on 2026-08-18:
+it has no test anywhere under `tests/`, and
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9 requires that gate to survive the
+B20 migration intact. **B20 collapses the two.** Do not add a third copy — a new
+image family declares a registry entry and reuses `prepare.ts`.
+
 ### 4.2 Storage
 
 Follows the `comfy_workflows` precedent: one table, template stored as JSON,
@@ -1325,7 +1398,7 @@ ordering — read the list, not the numbers.
 | 1 | **B12** — text output mode + the narrative jar. **Split 2026-08-18 into B12a (done, `c4d7af1`) and B12b.** | All that survives of B8. `output.kind: "text"` in the runner (`RunOperationResult` gains a third variant, breaking the ~14 declared consumers on purpose, B11-b1's pattern), plus the Shot column the generated narrative prompt lands in — §5.3's jar, distinct from `shots.shot_prompt` so a human's text and a model's are never merged again. Bench-only, like UC1 and UC3 were. Needs a schema authorization and a migration the user runs. |
 | 2 | **E1** — the template editor, the saved recipes. **Split 2026-08-18 into E1a (`6f44c72`) and E1b (`638832f`) — both delivered.** E1a is the pure module plus the save action, which accepts a *patch* of the editable surface and never a descriptor — the barrier that keeps E1 from becoming E2. E1b is the screen. | Unchanged in intent, and now named in the user's own vocabulary ("listes de course sauvegardées", §5.2). After B12 because a recipe that can neither cook text nor fill a jar is a thin thing to author against. Must make `intent.freeText` editable — the 2026-08-15 correction in `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. |
 | 3 | **B15** — lighting, the field. **Split 2026-08-18 into B15a (`f163da6`) and B15b (`bc4c498`) — both delivered.** B15a is the three columns, the three write actions and the reads, including `SEQ.LIGHTING`'s precedence rule (own field wins when filled, else the environment assets of the Sequence's cast) and its `source` reporting. B15b is the three form surfaces plus the "Fill from environment" button. No relation column was needed: `sequence_assets` already links them. | §5.9. Three levels: Shot, Sequence, and Environment Asset — the last being the point, since a Sequence can then read its environment's lighting instead of inventing one. Manual fill, plus the reuse path. No model involved. |
-| 4 | **B16** — lighting, assisted | §5.9's other two fills. **Cheaper than first estimated:** the multimodal capability is already built and hardened in `src/lib/projectStyle/referenceAnalysis/` — byte re-validation at call time, one `ChatMessage` the router already translates for both provider families, a leak-proof error wrapper, a validated JSON answer, and a prompt that already asks about lighting by name. What is missing is that **the descriptor format cannot declare an image input**, so that capability sits outside the workspace, anchored on the Reference Board. B16 makes it reachable from another anchor and another question. Plus the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. **Design constraint from B20:** the image-input declaration must be designed against Reference Board analysis's needs — N ordered images with per-image keys, bytes re-validated at call time — not only against lighting's single-image case, or it will be widened immediately afterwards. |
+| 4 | **B16** — lighting, assisted. **Split 2026-08-18 into B16a (`c30b6a7`, delivered), B16b and B16c.** B16a is the format brick: `ImageSourceId` and the closed image-source registry, `descriptor.images`, the eighth `Block` variant, call-time byte re-validation, and the runner's multimodal route. Supervisor-implemented under protocol §3 — no check can prove a format right. B16b is lighting from an image; B16c is the director's-note adjust, which needs no new primitive. | §5.9's other two fills. **Cheaper than first estimated:** the multimodal capability is already built and hardened in `src/lib/projectStyle/referenceAnalysis/` — byte re-validation at call time, one `ChatMessage` the router already translates for both provider families, a leak-proof error wrapper, a validated JSON answer, and a prompt that already asks about lighting by name. What is missing is that **the descriptor format cannot declare an image input**, so that capability sits outside the workspace, anchored on the Reference Board. B16 makes it reachable from another anchor and another question. Plus the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. **Design constraint from B20:** the image-input declaration must be designed against Reference Board analysis's needs — N ordered images with per-image keys, bytes re-validated at call time — not only against lighting's single-image case, or it will be widened immediately afterwards. |
 | 5 | **B13** — the conformation stage | §5.4/§5.5: the engine formatting the app owns. Renders stored reference roles into the guide's named image modes, applies the word budget, the one-primary-camera rule and the tag caps. Placed after B15/B16 so it has lighting to render. Must be replaceable per engine, nothing named after Seedance — and per §5.6 it **must not hard-code today's camera shape**, since that shape is scheduled to change after Chantier 2. |
 | 6 | **B14** — the storyboard prompt under the workspace | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
 | 7 | **B20** — Reference Board analysis joins the registry | Ruled a **brick to build** by the author 2026-08-18, not an exception like chat/image generation/translation. `src/actions/projectStyleReferenceAnalysis.ts` is 1 259 hand-written lines doing exactly what the workspace exists to express. Its migration needs three format gaps closed, not one — an image input with per-image keys, a **composite output** (one scalar plus two lists, where `output.kind` picks one shape today), and cross-item referential validity. Three things must survive untouched: the file confinement/decode gate, the prompt's provenance hash, and the pre-call/in-transaction snapshot drift detection. See `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9. Big enough that it may split; scoped when reached. |
