@@ -919,6 +919,33 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### UC3 reaches the product, and a blocked report stops a supervisor (2026-08-18)
+
+`4210df8`. With UC1 on the Sequence page, **all three founding use cases are
+reachable where the work happens.**
+
+**The ticket's central premise was false, and the executor refused it.** It
+asserted — insistently, as the section the whole ticket was built around — that
+`asset.retakeDirected` writes through `updateAssetDetailsInline`, the
+five-column rewriter, and that approving a retake without carrying the other
+four columns would erase the asset's notes and Bible. Four sources in the
+repository said otherwise: the descriptor's own `commit:
+["updateAssetDescriptionFieldInline"]`, `commitBenchProposal`'s routing, this
+document's own B10 entry, and a passing test asserting the single-column write.
+
+The executor read all four, stopped without writing a line, and reported the
+contradiction. **Had it complied, UC3 would have been rewired to the wider write
+to guard against a danger that the rewiring would itself have created** — and
+the supervisor had already relayed that danger to the user as a risk of losing
+real data.
+
+This is the second blocked report in the chantier to prevent a design error, and
+it is the strongest argument for the loop: **a ticket's authority must never
+outweigh what the code demonstrates.** The rule generalizes past this incident —
+when a ticket and four independent sources disagree, the ticket is the thing
+most likely to be wrong, because it was written by whoever had least recently
+read the code.
+
 ### UC1 reaches the product, tuned four times by its own answers (2026-08-18)
 
 `shot.insertDirected` is on the Sequence page (`05f381a`) and the user validated
