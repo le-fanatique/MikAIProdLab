@@ -208,7 +208,14 @@ No markdown. No explanation. Only the JSON object.`,
       { type: "string", field: "title", jsonKey: "title", truncateTo: 200 },
       { type: "string", field: "description", jsonKey: "description", truncateTo: 500 },
       { type: "number", field: "durationSeconds", jsonKey: "duration_seconds", exclusiveMin: 0, max: 120, fallback: "omit" },
-      { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 300 },
+      // 300 -> 500 (S7d). S7c's own rule is what made this bound bite: asking
+      // for "who does what, in what order" instead of one sentence of intent
+      // produces a beat-by-beat action, and the first run under the new rule
+      // came back cut mid-word at 300 ("takes a deliberate half-step forward,
+      // p"). Same repair S7b made for `cameraPitch`, and the same discipline:
+      // this number and `normalizeProposedShot`'s own must stay equal, or one
+      // side truncates what the other accepts.
+      { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 500 },
       { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 500 },
       { type: "string", field: "continuityNotes", jsonKey: "continuity_notes", truncateTo: 500 },
       { type: "string", field: "framing", jsonKey: "framing", truncateTo: 50 },

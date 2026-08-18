@@ -336,6 +336,44 @@ describe("shot.insertDirected — cameraPitch bound (LLMW.UC1.TUNE.2, défaut 2)
 });
 
 // ---------------------------------------------------------------------------
+// LLMW.UC1.TUNE.4 (S7d) — `actionPitch`'s bound, raised from 300 to 500 for
+// the reason S7c created: a rule asking for "who does what, in what order"
+// produces a beat-by-beat action where one sentence of intent used to sit,
+// and the first real run under that rule came back cut mid-word at 300. Same
+// shape as the `cameraPitch` block above, including the equality against
+// `normalizeProposedShot`'s own bound — the two truncate the same field on
+// two sides of one Approve, and a gap between them means one silently cuts
+// what the other would have kept.
+// ---------------------------------------------------------------------------
+
+describe("shot.insertDirected — actionPitch bound (LLMW.UC1.TUNE.4, S7d)", () => {
+  it("the descriptor declares actionPitch's truncateTo as 500, not 300", () => {
+    if (shotInsertDirectedDescriptor.output.kind !== "object") throw new Error("unreachable");
+    const field = shotInsertDirectedDescriptor.output.fields.find((f) => f.field === "actionPitch");
+    if (field?.type !== "string") throw new Error("actionPitch is expected to be a string field");
+    expect(field.truncateTo).toBe(500);
+  });
+
+  it("a 400-character action_pitch survives the runner whole, no truncation", async () => {
+    const value = "x".repeat(400);
+    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", action_pitch: value }));
+    const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "object") throw new Error("unreachable");
+    expect(result.values.actionPitch).toBe(value);
+  });
+
+  it("an action_pitch longer than 500 characters is cut at exactly 500", async () => {
+    const value = "y".repeat(600);
+    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", action_pitch: value }));
+    const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "object") throw new Error("unreachable");
+    expect((result.values.actionPitch as string).length).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // LLMW.UC1.TUNE.1 (S7), défaut 3 — `shotInsert.shotListLines` neighbor
 // selection. A six-shot sequence, every field long enough that the previous
 // 200/150/100-char slicing would have cut it mid-word, to prove the new form
