@@ -49,6 +49,14 @@ export type RenderParameter = (parameterId: string, render: string) => string;
 export type RenderMode = (render: string) => string;
 export type RenderFreeText = (render: string) => string;
 export type RenderVariablesParameters = (variableIds: VariableId[], parameterIds: string[], render: string) => string;
+/**
+ * LLMW.DESCRIPTOR.IMAGE.1 (B16a). Takes only the render-form name, exactly as
+ * `RenderMode` and `RenderFreeText` do: the caller's dispatcher closes over
+ * the already-prepared images, the same way every other dispatcher here closes
+ * over its own resolved data. What it closes over is a list of per-run keys
+ * and the words the user typed about each image — never a path, never bytes.
+ */
+export type RenderImages = (render: string) => string;
 
 function assembleBlocks(
   blocks: Block[],
@@ -58,7 +66,8 @@ function assembleBlocks(
   renderParameter: RenderParameter,
   renderMode: RenderMode,
   renderFreeText: RenderFreeText,
-  renderVariablesParameters: RenderVariablesParameters
+  renderVariablesParameters: RenderVariablesParameters,
+  renderImages: RenderImages
 ): string {
   const parts = blocks.map((block) => {
     if ("text" in block) return block.text;
@@ -67,6 +76,7 @@ function assembleBlocks(
     if ("variable" in block) return renderVariable(block.variable, block.render);
     if ("mode" in block) return renderMode(block.render);
     if ("freeText" in block) return renderFreeText(block.render);
+    if ("images" in block) return renderImages(block.render);
     return renderParameter(block.parameter, block.render);
   });
   return parts.filter((part) => part.length > 0).join(separator);
@@ -90,7 +100,13 @@ export function assembleDescriptorMessages(
   renderFreeText: RenderFreeText = () => "",
   renderVariablesParameters: RenderVariablesParameters = () => {
     throw new Error("assembleDescriptorMessages: no renderVariablesParameters dispatcher supplied.");
-  }
+  },
+  // Like `renderFreeText` above, and unlike the four that throw: an operation
+  // that declares no `descriptor.images` has no attached images by contract,
+  // so an absent dispatcher is an absent input, not an unknown one. A
+  // descriptor that DOES carry an `{images}` block is always run through
+  // `runner.ts`, which always supplies this dispatcher.
+  renderImages: RenderImages = () => ""
 ): { system: string; user: string } {
   return {
     system: assembleBlocks(
@@ -101,7 +117,8 @@ export function assembleDescriptorMessages(
       renderParameter,
       renderMode,
       renderFreeText,
-      renderVariablesParameters
+      renderVariablesParameters,
+      renderImages
     ),
     user: assembleBlocks(
       descriptor.template.blocks,
@@ -111,7 +128,8 @@ export function assembleDescriptorMessages(
       renderParameter,
       renderMode,
       renderFreeText,
-      renderVariablesParameters
+      renderVariablesParameters,
+      renderImages
     ),
   };
 }

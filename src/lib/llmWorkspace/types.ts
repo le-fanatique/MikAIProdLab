@@ -188,6 +188,18 @@ export type VariableId =
  * descriptor tickets, and none of the eight flat-JSON operations references
  * one.
  */
+/**
+ * The closed set of image families an operation may read — LLMW.DESCRIPTOR.IMAGE.1
+ * (B16a). Declared here rather than beside the registry itself, for the same
+ * reason `VariableId` is: `images/registry.ts` is `server-only`, and a
+ * descriptor's type must stay importable from a client component.
+ *
+ * One entry today. B20 adds Project Style's Reference Board when it migrates
+ * `projectStyleReferenceAnalysis` into the workspace
+ * (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3).
+ */
+export type ImageSourceId = "ASSET.REFERENCE_IMAGES";
+
 export type KnowledgeId = string;
 
 /**
@@ -405,6 +417,43 @@ export type OperationDescriptor = {
       id: VariableId; // closed registry, section 3.1
       userAdjustable: boolean; // per variable — correction 1
     }>;
+  };
+
+  /**
+   * LLMW.DESCRIPTOR.IMAGE.1 (B16a). The operation reads N stored images, in a
+   * user-chosen order, each carrying an opaque per-run key (`R1..Rn`) the
+   * prompt labels it with and the model's answer may cite.
+   *
+   * Designed against B20's needs and not only against B16b's single-image
+   * lighting case — `docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3 states that
+   * constraint explicitly, on the grounds that a declaration shaped around one
+   * image would be widened immediately afterwards.
+   *
+   * Three things this shape deliberately does NOT carry:
+   *
+   *   - **no path, ever.** It names a `source` from the closed registry
+   *     (`images/registry.ts`); confinement, storage root and per-file bound
+   *     belong to the family that owns the files, not to a descriptor;
+   *   - **no selection.** Which images, and in what order, is user input and
+   *     arrives beside `intent` on the run input. This is precisely the
+   *     primitive §11.3's "B8 dissolved" note found missing: "No variable can
+   *     express 'the ordered subset the user just ticked'";
+   *   - **no implicit bound.** `minCount`, `maxCount` and `maxTotalBytes` are
+   *     all mandatory, on the same no-silent-fallback principle this format
+   *     has applied since B7a made `output.kind` itself mandatory.
+   */
+  images?: {
+    source: ImageSourceId;
+    minCount: number; // below it, the operation refuses with `messages.noneSelected`
+    maxCount: number; // above it, `messages.tooMany`
+    maxTotalBytes: number; // cumulative raw bytes across the whole selection
+    keyPrefix: string; // `"R"` produces `R1..Rn` — declared, never hard-coded in the runner
+    messages: {
+      noneSelected: string; // fewer than `minCount` selected — including none at all
+      tooMany: string; // more than `maxCount` selected
+      /** Prefix for a refusal the image family itself reported (a foreign id, a missing file, an undecodable one). The family's own reason follows it. */
+      unavailable: string;
+    };
   };
 
   expertise: {
@@ -715,4 +764,17 @@ export type Block =
   | { variables: VariableId[]; parameters: string[]; render: string } // a render form that reads variables AND intent.parameters together
   | { parameter: string; render: string } // an intent parameter, e.g. targetSections
   | { mode: true; render: string } // the operation's selected intent.mode
-  | { freeText: true; render: string }; // the operation's free-text director's note (intent.freeText)
+  | { freeText: true; render: string } // the operation's free-text director's note (intent.freeText)
+  // LLMW.DESCRIPTOR.IMAGE.1 (B16a) — an eighth variant, on the same model as
+  // `freeText` before it: the attached images have no owning variable, no
+  // parameter id and are not the selected mode, so they need their own block
+  // shape rather than borrowing one of the others. The render form receives
+  // `Array<{key, metadata}>` and emits the per-image text blocks the prompt
+  // needs to label what is attached (B20's per-reference context blocks are
+  // exactly this).
+  //
+  // **The bytes never reach this block.** A render form sees a key and the
+  // words the user typed about the image — never a path, never base64. Pixels
+  // travel only as image parts of the outbound `ChatMessage`, the rule
+  // `projectStyle/referenceAnalysis/prompt.ts` already imposes on itself.
+  | { images: true; render: string };

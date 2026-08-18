@@ -351,3 +351,78 @@ describe("validateLlmTemplateJson — freeText blocks (LLMW.INTENT.FREETEXT.1, B
     if (!result.ok) expect(result.reason).toMatch(/"freeText" must be true/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// LLMW.DESCRIPTOR.IMAGE.1 (B16a) — the eighth `Block` shape (`images`) and the
+// optional `images` declaration. Added in the same diff as the format widening
+// itself, on B12b-2's lesson: a stored descriptor declaring a shape this
+// validator does not know is refused at import, so a widening that skips this
+// file ships a template that cannot be re-read.
+// ---------------------------------------------------------------------------
+
+describe("validateLlmTemplateJson — the image input (LLMW.DESCRIPTOR.IMAGE.1, B16a)", () => {
+  function withImages(): OperationDescriptor {
+    const descriptor = clone();
+    descriptor.images = {
+      source: "ASSET.REFERENCE_IMAGES",
+      minCount: 1,
+      maxCount: 4,
+      maxTotalBytes: 20 * 1024 * 1024,
+      keyPrefix: "R",
+      messages: { noneSelected: "Select one.", tooMany: "Too many.", unavailable: "Unavailable." },
+    };
+    return descriptor;
+  }
+
+  it("accepts a descriptor declaring an image input and an images block", () => {
+    const descriptor = withImages();
+    descriptor.template.blocks = [{ images: true, render: "images.attachedContextLines" }];
+    expect(validateLlmTemplateJson(JSON.stringify(descriptor)).ok).toBe(true);
+  });
+
+  it("still accepts every descriptor that declares no image input at all", () => {
+    expect(validateLlmTemplateJson(JSON.stringify(storyGenerateDescriptor)).ok).toBe(true);
+  });
+
+  it("refuses an unknown image source", () => {
+    const descriptor = withImages();
+    (descriptor.images as unknown as { source: string }).source = "SOMEWHERE.ELSE";
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/unknown image source/);
+  });
+
+  it("refuses a missing bound — none of the three is optional", () => {
+    for (const key of ["minCount", "maxCount", "maxTotalBytes"] as const) {
+      const descriptor = withImages();
+      delete (descriptor.images as unknown as Record<string, unknown>)[key];
+      const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toMatch(new RegExp(`images.${key}`));
+    }
+  });
+
+  it("refuses a missing declared refusal message", () => {
+    const descriptor = withImages();
+    delete (descriptor.images!.messages as unknown as Record<string, unknown>).tooMany;
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/images\.messages\.tooMany/);
+  });
+
+  it("refuses an images block naming a render form that does not exist", () => {
+    const descriptor = withImages();
+    descriptor.template.blocks = [{ images: true, render: "totally.made.up" }];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/unknown images render form/);
+  });
+
+  it('refuses an images block whose "images" field is not literally true', () => {
+    const descriptor = withImages();
+    descriptor.template.blocks = [{ images: "yes", render: "images.attachedContextLines" } as never];
+    const result = validateLlmTemplateJson(JSON.stringify(descriptor));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/"images" must be true/);
+  });
+});

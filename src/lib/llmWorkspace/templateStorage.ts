@@ -15,9 +15,13 @@
 //      is a known `VariableId`, every `commit` entry a declared `ActionId`,
 //      every `anchor.entity` / `output.target.entity` an `EntityKind`, and
 //      every render form referenced by a block in `expertise.system.blocks`
-//      or `template.blocks` actually exists in one of the five render-form
-//      tables of `./variables/registry.ts` (widened from four by
-//      LLMW.BLOCK.VARPARAM.1, B7c-n4's `VARIABLE_PARAMETER_RENDER_FORMS`).
+//      or `template.blocks` actually exists in one of the six render-form
+//      tables (widened from four by LLMW.BLOCK.VARPARAM.1, B7c-n4's
+//      `VARIABLE_PARAMETER_RENDER_FORMS`, and from five by
+//      LLMW.DESCRIPTOR.IMAGE.1, B16a's `IMAGE_RENDER_FORMS` — the first table
+//      that does not live in `./variables/registry.ts`, since an attached
+//      image is not a variable), plus `images.source` in the closed
+//      `IMAGE_SOURCE_REGISTRY`.
 //
 // `runner.ts:307-341` throws on an unknown render form (§3 of the ticket) —
 // this is the one place that refusal happens before Run, provable without a
@@ -36,7 +40,7 @@
 // `"object"` silently.
 // ---------------------------------------------------------------------------
 
-import type { ActionId, EntityKind, OperationDescriptor, VariableId } from "./types";
+import type { ActionId, EntityKind, ImageSourceId, OperationDescriptor, VariableId } from "./types";
 import {
   FREE_TEXT_RENDER_FORMS,
   MODE_RENDER_FORMS,
@@ -46,6 +50,7 @@ import {
   VARIABLE_REGISTRY,
   VARIABLE_RENDER_FORMS,
 } from "./variables/registry";
+import { IMAGE_RENDER_FORMS, IMAGE_SOURCE_REGISTRY } from "./images/registry";
 import { ACTION_REGISTRY } from "./actions/registry";
 
 // `EntityKind` (`./types.ts`) is a string-literal union with no runtime
@@ -62,6 +67,10 @@ function isEntityKind(value: unknown): value is EntityKind {
 
 function isVariableId(value: unknown): value is VariableId {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(VARIABLE_REGISTRY, value);
+}
+
+function isImageSourceId(value: unknown): value is ImageSourceId {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(IMAGE_SOURCE_REGISTRY, value);
 }
 
 function isActionId(value: unknown): value is ActionId {
@@ -160,7 +169,20 @@ function validateBlock(block: unknown, path: string): string | null {
     return null;
   }
 
-  return `${path}: block matches none of the known shapes (text/variable/variables/variables+parameters/parameter/mode/freeText).`;
+  // LLMW.DESCRIPTOR.IMAGE.1 (B16a) — the eighth `Block` variant. Added here in
+  // the same diff as the variant itself, on B12b-2's lesson: a stored
+  // descriptor declaring a shape this validator does not know is refused at
+  // import, so a format widening that skips this file ships a template that
+  // cannot be re-read.
+  if ("images" in block) {
+    if (block.images !== true) return `${path}: "images" must be true.`;
+    if (typeof block.render !== "string") return `${path}: "render" must be a string.`;
+    const table = IMAGE_RENDER_FORMS as unknown as Record<string, unknown>;
+    if (!table[block.render]) return `${path}: unknown images render form "${block.render}".`;
+    return null;
+  }
+
+  return `${path}: block matches none of the known shapes (text/variable/variables/variables+parameters/parameter/mode/freeText/images).`;
 }
 
 function validateBlockList(value: unknown, path: string): string | null {
@@ -395,6 +417,30 @@ export function validateLlmTemplateJson(raw: string): TemplateValidationResult {
     if (!isPlainObject(entry)) return fail('"context.variables" entries must be objects.');
     if (!isVariableId(entry.id)) return fail(`"context.variables" references an unknown variable id "${String(entry.id)}".`);
     if (typeof entry.userAdjustable !== "boolean") return fail('"context.variables" entries require a boolean "userAdjustable".');
+  }
+
+  // LLMW.DESCRIPTOR.IMAGE.1 (B16a). Optional, like `preconditions` and
+  // `postResponse` — but unlike those two it is validated, because it names a
+  // CLOSED registry (`ImageSourceId`), which is precisely what this module's
+  // own header says it exists to check. An unrecognised source would reach the
+  // runner as an undefined registry entry and crash on a property access,
+  // instead of being refused here with a sentence the user can act on.
+  if (d.images !== undefined) {
+    if (!isPlainObject(d.images)) return fail('"images" must be an object when present.');
+    const images = d.images;
+    if (!isImageSourceId(images.source)) {
+      return fail(`"images.source" references an unknown image source "${String(images.source)}".`);
+    }
+    for (const key of ["minCount", "maxCount", "maxTotalBytes"] as const) {
+      if (typeof images[key] !== "number") return fail(`"images.${key}" is required and must be a number.`);
+    }
+    if (typeof images.keyPrefix !== "string" || !images.keyPrefix) {
+      return fail('"images.keyPrefix" is required and must be a non-empty string.');
+    }
+    if (!isPlainObject(images.messages)) return fail('"images.messages" is required and must be an object.');
+    for (const key of ["noneSelected", "tooMany", "unavailable"] as const) {
+      if (typeof images.messages[key] !== "string") return fail(`"images.messages.${key}" is required and must be a string.`);
+    }
   }
 
   if (!isPlainObject(d.expertise)) return fail('"expertise" is required and must be an object.');

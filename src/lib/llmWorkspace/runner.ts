@@ -35,6 +35,7 @@ import {
   type RenderMode,
   type RenderParameter,
   type RenderVariable,
+  type RenderImages,
   type RenderVariables,
   type RenderVariablesParameters,
 } from "./assembleDescriptorMessages";
@@ -50,7 +51,9 @@ import {
   type PostResponseFormInput,
   type VariableParameterRenderInput,
 } from "./variables/registry";
-import type { LLMConfig, LLMPrompt } from "@/types/llm";
+import { IMAGE_RENDER_FORMS, IMAGE_SOURCE_REGISTRY } from "./images/registry";
+import { prepareWorkspaceImages, type PreparedWorkspaceImage } from "./images/prepare";
+import type { ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
 
 // ---------------------------------------------------------------------------
 // Public input/output shapes
@@ -76,6 +79,21 @@ export type OperationIntentInput = {
   // (LLMW.DESCRIPTOR.ASSETS.1, B7f) for `"boolean"` / `"multiEnum"`
   // `intent.parameters` entries — see `types.ts`'s own widening note.
   parameters?: Record<string, number | string | boolean | string[]>;
+};
+
+/**
+ * LLMW.DESCRIPTOR.IMAGE.1 (B16a). Which stored images this run attaches, and
+ * in which order — user input, sitting beside `intent` rather than inside
+ * `context.variables`, because a variable resolves from the anchor and the
+ * database with no user choice in it. `docs/LLM_WORKSPACE_ARCHITECTURE.md`
+ * §11.3 named this exact gap when B8 dissolved: "No variable can express 'the
+ * ordered subset the user just ticked'."
+ *
+ * The order given here is the order the images are attached and keyed
+ * (`R1..Rn`), and it is never re-sorted anywhere downstream.
+ */
+export type OperationImagesInput = {
+  selectedIds: number[];
 };
 
 export type PromptResolutionResult =
@@ -563,6 +581,86 @@ function buildFreeTextDispatcher(freeText: string | undefined): { renderFreeText
 }
 
 /**
+ * `{images: true, render}` dispatcher — LLMW.DESCRIPTOR.IMAGE.1 (B16a). Closes
+ * over the already-prepared images exactly as the dispatchers above close over
+ * their own resolved data, and hands the render form keys and metadata only:
+ * `base64`, `imageSha256` and the row id are deliberately stripped here, so no
+ * render form can put a byte or a path into the prompt text even by accident.
+ */
+function buildImagesDispatcher(images: PreparedWorkspaceImage[]): { renderImages: RenderImages } {
+  const forRender = images.map((image) => ({ key: image.key, metadata: image.metadata }));
+  const renderImages: RenderImages = (render) => {
+    const table = IMAGE_RENDER_FORMS as unknown as Record<string, (input: typeof forRender) => string>;
+    const fn = table[render];
+    if (!fn) throw new Error(`runner: no images render form ${render}`);
+    return fn(forRender);
+  };
+  return { renderImages };
+}
+
+// ---------------------------------------------------------------------------
+// Step 4b — the declared image input (LLMW.DESCRIPTOR.IMAGE.1, B16a).
+//
+// Runs after the preconditions and before block assembly, because an
+// `{images}` block renders from the prepared result. Three refusals, each
+// with the descriptor's own declared message, on the same principle as every
+// other pre-call refusal in this file: the runner never writes user-facing
+// text of its own.
+//
+// A descriptor that declares no `images` skips this entirely and behaves
+// exactly as it did before this ticket — including when a caller passes an
+// images input anyway, which is then ignored rather than silently attached to
+// an operation that never asked for one.
+// ---------------------------------------------------------------------------
+async function resolveDeclaredImages(
+  descriptor: OperationDescriptor,
+  ids: AnchorIds,
+  images: OperationImagesInput | undefined
+): Promise<{ ok: true; images: PreparedWorkspaceImage[] } | { ok: false; error: string }> {
+  const declared = descriptor.images;
+  if (!declared) return { ok: true, images: [] };
+
+  const selectedIds = images?.selectedIds ?? [];
+  if (selectedIds.length < declared.minCount) {
+    return { ok: false, error: declared.messages.noneSelected };
+  }
+  if (selectedIds.length > declared.maxCount) {
+    return { ok: false, error: declared.messages.tooMany };
+  }
+
+  const source = IMAGE_SOURCE_REGISTRY[declared.source];
+  // A source anchored on an entity the operation is not anchored on has no
+  // id to resolve against. This is a descriptor-authoring error, not a user
+  // error, so it throws rather than borrowing a user-facing message — the
+  // same treatment an unknown render form gets above.
+  if (source.anchor !== descriptor.anchor.entity) {
+    throw new Error(
+      `runner: image source ${declared.source} anchors on ${source.anchor}, but the operation anchors on ${descriptor.anchor.entity}`
+    );
+  }
+  // The entity's OWN id is the last of the chain `requiredAnchorIdKeys`
+  // returns (`["projectId", "assetId"]` for an asset), never the first.
+  const anchorKeys = requiredAnchorIdKeys(source.anchor);
+  const anchorId = ids[anchorKeys[anchorKeys.length - 1]];
+  if (typeof anchorId !== "number") {
+    return { ok: false, error: declared.messages.unavailable };
+  }
+
+  const resolved = await source.resolve(anchorId, selectedIds);
+  if (!resolved.ok) return { ok: false, error: `${declared.messages.unavailable} ${resolved.error}` };
+
+  const prepared = await prepareWorkspaceImages(resolved.images, {
+    isConfined: source.isConfined,
+    maxFileBytes: source.maxFileBytes,
+    maxTotalBytes: declared.maxTotalBytes,
+    keyPrefix: declared.keyPrefix,
+  });
+  if (!prepared.ok) return { ok: false, error: `${declared.messages.unavailable} ${prepared.error}` };
+
+  return { ok: true, images: prepared.images };
+}
+
+/**
  * `{variables, parameters, render}` dispatcher — LLMW.BLOCK.VARPARAM.1
  * (B7c-n4). Unlike `buildVariableDispatchers` / `buildIntentDispatchers`
  * above, `VARIABLE_PARAMETER_RENDER_FORMS` takes one object argument
@@ -918,6 +1016,50 @@ function applyPostResponseForm(
 }
 
 // ---------------------------------------------------------------------------
+// Step 6, image path — the outbound multimodal message
+// (LLMW.DESCRIPTOR.IMAGE.1, B16a).
+//
+// ONE `ChatMessage` in the shape the existing router already translates for
+// both provider families: OpenAI-compatible/OpenRouter read the `content`
+// array's `image_url` data-URL parts, Ollama reads the same message's
+// top-level `images` (raw base64, no prefix) and only the text parts. Never a
+// second per-provider payload builder — the same discipline
+// `projectStyle/referenceAnalysis/provider.ts` states for its own copy.
+//
+// **The JSON forcing is lost on this path, and that is a real consequence, not
+// an oversight.** `callLLMJson` sets `response_format: {type:"json_object"}`
+// (OpenAI-compatible) / `format: "json"` (Ollama); `callLLMChat`, the only
+// route that carries images at all, sets neither. So:
+//
+//   - `output.kind: "text"` is unaffected — it never wanted JSON. This is
+//     B16b's case (a lighting description is prose);
+//   - an image-bearing `"object"` or `"list"` operation must ask for its JSON
+//     schema in the prompt itself and rely on `parseOutput`'s fence-stripping,
+//     exactly as `referenceAnalysis/prompt.ts` already does at
+//     `temperature: 0`. B20 will be the first such operation.
+//
+// `temperature: 0` is passed for the same reason that module passes it: a
+// description of what is visible in an image is an observation, not a
+// creative act.
+// ---------------------------------------------------------------------------
+function buildImageChatMessages(prompt: LLMPrompt, images: PreparedWorkspaceImage[]): ChatMessage[] {
+  return [
+    { role: "system", content: prompt.system },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt.user },
+        ...images.map((image) => ({
+          type: "image_url" as const,
+          image_url: { url: `data:${image.mimeType};base64,${image.base64}` },
+        })),
+      ],
+      images: images.map((image) => image.base64),
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -935,7 +1077,8 @@ async function resolvePromptInternal(
   descriptor: OperationDescriptor,
   ids: AnchorIds,
   intent: OperationIntentInput,
-  options: ResolvePromptInternalOptions = {}
+  options: ResolvePromptInternalOptions = {},
+  images?: OperationImagesInput
 ): Promise<
   | {
       ok: true;
@@ -947,6 +1090,12 @@ async function resolvePromptInternal(
       // post-response step reads it as-is instead of recomputing it — "the
       // parameters passed are those already normalized" (ticket §3).
       normalizedParameters: NormalizedIntentParameters | undefined;
+      // LLMW.DESCRIPTOR.IMAGE.1 (B16a): the prepared images, carried through
+      // so `runOperation` builds its outbound message from the same bytes
+      // this resolution already read and re-validated — never a second read
+      // that could straddle a file change. Empty for every descriptor that
+      // declares no `images`, which is all of them today.
+      images: PreparedWorkspaceImage[];
     }
   | { ok: false; error: string }
 > {
@@ -1002,11 +1151,17 @@ async function resolvePromptInternal(
   );
   if (!precondition.ok) return precondition;
 
+  // Step 4b — the declared image input, before assembly: an `{images}` block
+  // renders from the prepared result.
+  const preparedImages = await resolveDeclaredImages(descriptor, ids, images);
+  if (!preparedImages.ok) return preparedImages;
+
   // Step 5 — assemble {system, user} from blocks.
   const { renderVariable, renderVariables } = buildVariableDispatchers(resolved, selectedMode);
   const { renderParameter, renderMode } = buildIntentDispatchers(normalizedParameters, selectedMode);
   const { renderFreeText } = buildFreeTextDispatcher(intent.freeText);
   const { renderVariablesParameters } = buildVariableParameterDispatcher(resolved, normalizedParameters, selectedMode);
+  const { renderImages } = buildImagesDispatcher(preparedImages.images);
   const prompt = assembleDescriptorMessages(
     descriptor,
     renderVariable,
@@ -1014,10 +1169,11 @@ async function resolvePromptInternal(
     renderMode,
     renderVariables,
     renderFreeText,
-    renderVariablesParameters
+    renderVariablesParameters,
+    renderImages
   );
 
-  return { ok: true, prompt, config: config ?? null, resolved, normalizedParameters };
+  return { ok: true, prompt, config: config ?? null, resolved, normalizedParameters, images: preparedImages.images };
 }
 
 /**
@@ -1043,9 +1199,10 @@ export async function resolveOperationPrompt(
 export async function runOperation(
   descriptor: OperationDescriptor,
   ids: AnchorIds,
-  intent: OperationIntentInput = {}
+  intent: OperationIntentInput = {},
+  images?: OperationImagesInput
 ): Promise<RunOperationResult> {
-  const resolved = await resolvePromptInternal(descriptor, ids, intent);
+  const resolved = await resolvePromptInternal(descriptor, ids, intent, {}, images);
   if (!resolved.ok) return resolved;
 
   // `config` is typed `LLMConfig | null` on `resolvePromptInternal`'s shared
@@ -1075,8 +1232,9 @@ export async function runOperation(
   // trigger that check — the exact regression `.agents/executor_report.md`
   // reports finding and fixing this way.
   const llm = await import("@/lib/llm");
-  const raw =
-    descriptor.output.kind === "text"
+  const raw = descriptor.images
+    ? (await llm.callLLMChat(buildImageChatMessages(resolved.prompt, resolved.images), resolved.config, { temperature: 0 })).text
+    : descriptor.output.kind === "text"
       ? await llm.callLLMText(resolved.prompt, resolved.config)
       : await llm.callLLMJson(resolved.prompt, resolved.config);
 
