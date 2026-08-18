@@ -3,34 +3,26 @@ import {
   addBlock,
   addContextVariable,
   applyEditablePatch,
-  availableVariableIds,
-  freeTextRenderForms,
-  modeRenderForms,
+  describeBlock,
   moveBlockDown,
   moveBlockUp,
-  multiVariableRenderForms,
-  parameterRenderForms,
   parseEditableTemplatePatch,
   removeBlockAt,
   removeContextVariable,
-  renderFormsForVariable,
   toggleContextVariableAdjustable,
-  variableParameterRenderForms,
 } from "@/lib/llmWorkspace/templateEditor";
-import {
-  MODE_RENDER_FORMS,
-  MULTI_VARIABLE_RENDER_FORMS,
-  PARAMETER_RENDER_FORMS,
-  VARIABLE_PARAMETER_RENDER_FORMS,
-  VARIABLE_REGISTRY,
-  VARIABLE_RENDER_FORMS,
-} from "@/lib/llmWorkspace/variables/registry";
 import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
 import type { Block, OperationDescriptor } from "@/lib/llmWorkspace/types";
 
 // ---------------------------------------------------------------------------
 // LLMW.EDITOR.CORE.1 (E1a) — the pure decision layer. No database: every
 // assertion here is about data transformation, per `.agents/supervised_task.md`.
+//
+// LLMW.EDITOR.SCREEN.1 (E1b) retake: the closed-vocabulary catalogue tests
+// (render forms, `availableVariableIds`) moved to
+// `templateEditorCatalogues.test.ts`, following the functions they exercise
+// out of `templateEditor.ts` into `templateEditorCatalogues.ts` — see that
+// module's header comment for why. No assertion here changed.
 // ---------------------------------------------------------------------------
 
 describe("block list manipulation", () => {
@@ -73,69 +65,50 @@ describe("block list manipulation", () => {
   });
 });
 
-describe("the render-form catalogue is derived from the registry tables, not recopied", () => {
-  it("every variable's render forms are exactly the keys of its own VARIABLE_RENDER_FORMS entry", () => {
-    const table = VARIABLE_RENDER_FORMS as Record<string, Record<string, unknown>>;
-    expect(renderFormsForVariable("PROJECT.IDENTITY").sort()).toEqual(
-      Object.keys(table["PROJECT.IDENTITY"] ?? {}).sort()
+// R1 retake (LLMW.EDITOR.SCREEN.1): `describeBlock` used to be duplicated,
+// byte for byte, between `TemplateContentEditorForm.tsx` and the workbench
+// page — unproven in either place, which is exactly how the duplication went
+// unnoticed. One assertion per `Block` variant, the seven `types.ts`
+// declares, including the mixed `{variables, parameters, render}` variant
+// whose test-order dependency ("parameters" before "variables") is the whole
+// reason this function is worth testing on its own.
+describe("describeBlock", () => {
+  it("describes a text block", () => {
+    expect(describeBlock({ text: "hello" })).toBe('text: "hello"');
+  });
+
+  it("describes a variable block", () => {
+    expect(describeBlock({ variable: "PROJECT.IDENTITY", render: "raw" })).toBe(
+      "variable: PROJECT.IDENTITY :: raw"
     );
   });
 
-  it("a variable with no single-variable render form answers an empty catalogue, not an error", () => {
-    // PROJECT.OUTLINE_SECTIONS has no entry in VARIABLE_RENDER_FORMS.
-    expect(renderFormsForVariable("PROJECT.OUTLINE_SECTIONS")).toEqual([]);
+  it("describes a mixed variables+parameters block, reading both keys", () => {
+    expect(
+      describeBlock({
+        variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT"],
+        parameters: ["tone"],
+        render: "raw",
+      })
+    ).toBe("variables: [PROJECT.IDENTITY, SEQ.CONTEXT], parameters: [tone] :: raw");
   });
 
-  it("THE assertion: the catalogue refuses a form belonging to another block type", () => {
-    // A MODE_RENDER_FORMS key must never appear as a legal render form for a
-    // {variable, render} block of any variable — proving the catalogue reads
-    // its own table and does not fall back to a merged/hand-copied list.
-    const aModeForm = Object.keys(MODE_RENDER_FORMS)[0];
-    for (const id of availableVariableIds()) {
-      expect(renderFormsForVariable(id)).not.toContain(aModeForm);
-    }
-    expect(multiVariableRenderForms()).not.toContain(aModeForm);
-    expect(parameterRenderForms()).not.toContain(aModeForm);
-    expect(freeTextRenderForms()).not.toContain(aModeForm);
-    expect(variableParameterRenderForms()).not.toContain(aModeForm);
-
-    // Symmetrically: a PARAMETER_RENDER_FORMS key must never appear in the
-    // mode catalogue.
-    const aParameterForm = Object.keys(PARAMETER_RENDER_FORMS)[0];
-    expect(modeRenderForms()).not.toContain(aParameterForm);
-
-    // And a MULTI_VARIABLE_RENDER_FORMS key must never appear as a
-    // single-variable form for any variable.
-    const aMultiForm = Object.keys(MULTI_VARIABLE_RENDER_FORMS)[0];
-    for (const id of availableVariableIds()) {
-      expect(renderFormsForVariable(id)).not.toContain(aMultiForm);
-    }
-
-    // R1.1 (retake): the sixth table, `VARIABLE_PARAMETER_RENDER_FORMS`, must
-    // hold to the same rule — its own key never leaks into any other block
-    // type's catalogue, and no other table's key leaks into it.
-    const aVariableParameterForm = Object.keys(VARIABLE_PARAMETER_RENDER_FORMS)[0];
-    for (const id of availableVariableIds()) {
-      expect(renderFormsForVariable(id)).not.toContain(aVariableParameterForm);
-    }
-    expect(multiVariableRenderForms()).not.toContain(aVariableParameterForm);
-    expect(parameterRenderForms()).not.toContain(aVariableParameterForm);
-    expect(modeRenderForms()).not.toContain(aVariableParameterForm);
-    expect(freeTextRenderForms()).not.toContain(aVariableParameterForm);
-    expect(variableParameterRenderForms()).not.toContain(aModeForm);
-    expect(variableParameterRenderForms()).not.toContain(aParameterForm);
-    expect(variableParameterRenderForms()).not.toContain(aMultiForm);
+  it("describes a multi-variable block (no parameters)", () => {
+    expect(describeBlock({ variables: ["PROJECT.IDENTITY", "SEQ.CONTEXT"], render: "raw" })).toBe(
+      "variables: [PROJECT.IDENTITY, SEQ.CONTEXT] :: raw"
+    );
   });
 
-  it("multiVariableRenderForms / parameterRenderForms / modeRenderForms / freeTextRenderForms / variableParameterRenderForms mirror their tables exactly", () => {
-    expect(multiVariableRenderForms().sort()).toEqual(Object.keys(MULTI_VARIABLE_RENDER_FORMS).sort());
-    expect(parameterRenderForms().sort()).toEqual(Object.keys(PARAMETER_RENDER_FORMS).sort());
-    expect(modeRenderForms().sort()).toEqual(Object.keys(MODE_RENDER_FORMS).sort());
-    expect(variableParameterRenderForms().sort()).toEqual(Object.keys(VARIABLE_PARAMETER_RENDER_FORMS).sort());
+  it("describes a parameter block", () => {
+    expect(describeBlock({ parameter: "tone", render: "raw" })).toBe("parameter: tone :: raw");
   });
 
-  it("availableVariableIds is exactly VARIABLE_REGISTRY's own keys", () => {
-    expect(availableVariableIds().sort()).toEqual(Object.keys(VARIABLE_REGISTRY).sort());
+  it("describes a mode block", () => {
+    expect(describeBlock({ mode: true, render: "raw" })).toBe("mode :: raw");
+  });
+
+  it("describes a freeText block", () => {
+    expect(describeBlock({ freeText: true, render: "raw" })).toBe("freeText :: raw");
   });
 });
 

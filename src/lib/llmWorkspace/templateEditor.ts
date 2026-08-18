@@ -5,18 +5,36 @@
 // here). No React, no database access, no `server-only`: functions on data,
 // same discipline as `variableLibrary.ts` and `templateStorage.ts`.
 //
-// `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md` §3 is the general rule this
-// module exists to serve: the editor composes only existing vocabulary. Every
-// catalogue below is *derived* from the registries `variables/registry.ts`
-// already declares — `VARIABLE_RENDER_FORMS`, `MULTI_VARIABLE_RENDER_FORMS`,
-// `PARAMETER_RENDER_FORMS`, `VARIABLE_PARAMETER_RENDER_FORMS`,
-// `MODE_RENDER_FORMS`, `FREE_TEXT_RENDER_FORMS` for render forms (the six
-// tables backing `Block`'s six `render`-carrying variants — `{ text }` is the
-// seventh and carries no render form of its own), `VARIABLE_REGISTRY` for
-// available variables — never a second,
-// hand-written list. A hand-written list would drift the first time a ticket
-// adds a form or a variable to the registry without anyone remembering to
-// update a copy here; deriving it makes that drift structurally impossible.
+// LLMW.EDITOR.SCREEN.1 (E1b) retake: the closed-vocabulary catalogue
+// functions this module used to export (`renderFormsForVariable`,
+// `multiVariableRenderForms`, `parameterRenderForms`,
+// `variableParameterRenderForms`, `modeRenderForms`, `freeTextRenderForms`,
+// `availableVariableIds`) moved out to `templateEditorCatalogues.ts`. They
+// were the only reason this file imported `variables/registry.ts` — and that
+// module is `import "server-only"` (it reads `VARIABLE_REGISTRY` and the
+// render-form tables, and dynamically imports `@/db` for two of its
+// resolvers). A module-level `import "server-only"` is a build-time sentinel,
+// not merely a runtime guard: any file that statically imports it — even
+// transitively, even when the importer itself calls none of the affected
+// exports — makes the *whole* importing module unbuildable for a client
+// bundle (confirmed by `npm run build`, not assumed: E1b's screen imports
+// this module's block/variable manipulation functions from a Client
+// Component, and the build failed with `Module not found: Can't resolve
+// 'fs'` inside `better-sqlite3`, pulled in through
+// `variables/registry.ts`'s own dynamic `@/db` import). The functions this
+// file still exports below (block-list and `context.variables` manipulation,
+// the patch parser and merge) need no registry data and have no such
+// constraint — moving the six registry-derived catalogue functions out is
+// the smaller of the two fixes available (the other being to duplicate their
+// trivial callers' logic inside the Client Component, which would leave two
+// implementations of the same rule to keep in sync). Every existing consumer
+// of the moved functions (this file's own former exports, and
+// `tests/llmWorkspace/templateEditor.test.ts`) is repointed at
+// `templateEditorCatalogues.ts`; no behaviour of any moved function changes.
+//
+// `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md` §3 is the general rule
+// `templateEditorCatalogues.ts` exists to serve: the editor composes only
+// existing vocabulary. See that file for the catalogue functions themselves.
 //
 // The central decision, per `.agents/supervised_task.md` §1: the save action
 // does not accept a whole descriptor, only a patch of the editable surface
@@ -44,15 +62,6 @@
 // ---------------------------------------------------------------------------
 
 import type { Block, OperationDescriptor, VariableId } from "./types";
-import {
-  FREE_TEXT_RENDER_FORMS,
-  MODE_RENDER_FORMS,
-  MULTI_VARIABLE_RENDER_FORMS,
-  PARAMETER_RENDER_FORMS,
-  VARIABLE_PARAMETER_RENDER_FORMS,
-  VARIABLE_REGISTRY,
-  VARIABLE_RENDER_FORMS,
-} from "./variables/registry";
 
 // ---------------------------------------------------------------------------
 // Block list manipulation. Order is signifying — it is the prompt — so
@@ -96,64 +105,36 @@ function swapBlocks(blocks: Block[], i: number, j: number): Block[] {
   return next;
 }
 
-// ---------------------------------------------------------------------------
-// The render-form catalogue — derived, never recopied. Each function reads
-// the keys of the matching table in `variables/registry.ts` at call time, so
-// a form added to a table tomorrow is visible here tomorrow, with no second
-// edit. `validateBlock` (`templateStorage.ts`) is the proof these are the
-// *same* tables the storage portal itself checks against — this module and
-// that validator can never disagree about what is legal, because both read
-// the one set of tables.
-// ---------------------------------------------------------------------------
-
-/** Named render forms legal for a `{variable: id, render}` block — the forms
- * declared for that specific variable, and no other variable's. An id with
- * no entry in `VARIABLE_RENDER_FORMS` (a real `VariableId` that simply has
- * no single-variable render form yet) answers `[]`, not an error. */
-export function renderFormsForVariable(id: VariableId): string[] {
-  const table = VARIABLE_RENDER_FORMS as Partial<Record<VariableId, Record<string, unknown>>>;
-  return Object.keys(table[id] ?? {});
-}
-
-/** Named render forms legal for a `{variables: [...], render}` block — a
- * form that reads more than one variable and therefore has no single owning
- * `VariableId`, kept in its own table. */
-export function multiVariableRenderForms(): string[] {
-  return Object.keys(MULTI_VARIABLE_RENDER_FORMS);
-}
-
-/** Named render forms legal for a `{parameter: id, render}` block — an
- * `intent.parameters` entry's render form. */
-export function parameterRenderForms(): string[] {
-  return Object.keys(PARAMETER_RENDER_FORMS);
-}
-
-/** Named render forms legal for a `{variables, parameters, render}` block —
- * the sixth `Block` variant that carries a `render` form, missed by the
- * ticket's own §3.1 (retake R1.1: it named five tables, `Block` has six).
- * Reads both a set of variables and a set of `intent.parameters` entries
- * together, backed by `VARIABLE_PARAMETER_RENDER_FORMS`. */
-export function variableParameterRenderForms(): string[] {
-  return Object.keys(VARIABLE_PARAMETER_RENDER_FORMS);
-}
-
-/** Named render forms legal for a `{mode: true, render}` block — the
- * operation's selected `intent.mode`. */
-export function modeRenderForms(): string[] {
-  return Object.keys(MODE_RENDER_FORMS);
-}
-
-/** Named render forms legal for a `{freeText: true, render}` block — the
- * operation's `intent.freeText` director's note. */
-export function freeTextRenderForms(): string[] {
-  return Object.keys(FREE_TEXT_RENDER_FORMS);
-}
-
-/** Every declared `VariableId`, derived from `VARIABLE_REGISTRY`'s own keys —
- * the "which variables exist" half of §3's closed vocabulary, never a second
- * hand-written list beside the resolver table. */
-export function availableVariableIds(): VariableId[] {
-  return Object.keys(VARIABLE_REGISTRY) as VariableId[];
+/**
+ * A one-line, human-readable description of a `Block` — the seven variants
+ * `types.ts` declares, in the order this `switch`-shaped chain of `if`s
+ * checks them.
+ *
+ * R1 retake (LLMW.EDITOR.SCREEN.1): this function used to be duplicated,
+ * byte for byte, between `TemplateContentEditorForm.tsx` (Client Component,
+ * needs it for the block-list editor) and the workbench page
+ * `src/app/settings/llm-workflows/[templateId]/page.tsx` (Server Component,
+ * needs it for the read-only Template pane). It lives here rather than in
+ * `templateEditorCatalogues.ts` because it reads only the *shape* of a
+ * `Block` value it is handed — no registry, no `variables/registry.ts`, none
+ * of what makes that other module `server-only` — so it must stay reachable
+ * from a Client Component, exactly as the rest of this file already is.
+ *
+ * "parameters" must be tested before "variables": the mixed
+ * `{variables, parameters, render}` variant carries both keys, and testing
+ * "variables" first would match it and hide the `parameters` half it also
+ * reads.
+ */
+export function describeBlock(block: Block): string {
+  if ("text" in block) return `text: "${block.text}"`;
+  if ("variable" in block) return `variable: ${block.variable} :: ${block.render}`;
+  if ("parameters" in block) {
+    return `variables: [${block.variables.join(", ")}], parameters: [${block.parameters.join(", ")}] :: ${block.render}`;
+  }
+  if ("variables" in block) return `variables: [${block.variables.join(", ")}] :: ${block.render}`;
+  if ("parameter" in block) return `parameter: ${block.parameter} :: ${block.render}`;
+  if ("mode" in block) return `mode :: ${block.render}`;
+  return `freeText :: ${block.render}`;
 }
 
 // ---------------------------------------------------------------------------

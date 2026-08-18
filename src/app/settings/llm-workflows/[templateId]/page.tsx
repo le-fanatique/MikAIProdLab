@@ -23,7 +23,7 @@ import {
   type BenchSearchParams,
 } from "@/lib/llmWorkspace/bench";
 import BenchRunPanel from "@/components/llmWorkspace/BenchRunPanel";
-import type { Block } from "@/lib/llmWorkspace/types";
+import { describeBlock } from "@/lib/llmWorkspace/templateEditor";
 import { readAssetBibleFreshness } from "@/lib/assetBible/freshness";
 
 // LLMW.BENCH.READ.1 (B6b) — the three-pane bench in read-only form
@@ -41,20 +41,6 @@ type Props = {
   params: Promise<{ templateId: string }>;
   searchParams: Promise<BenchSearchParams>;
 };
-
-function describeBlock(block: Block): string {
-  if ("text" in block) return `text: "${block.text}"`;
-  if ("variable" in block) return `variable: ${block.variable} :: ${block.render}`;
-  // "parameters" must be tested before "variables": the mixed variant carries both
-  // keys, and testing "variables" first would hide the parameters it also reads.
-  if ("parameters" in block) {
-    return `variables: [${block.variables.join(", ")}], parameters: [${block.parameters.join(", ")}] :: ${block.render}`;
-  }
-  if ("variables" in block) return `variables: [${block.variables.join(", ")}] :: ${block.render}`;
-  if ("parameter" in block) return `parameter: ${block.parameter} :: ${block.render}`;
-  if ("mode" in block) return `mode :: ${block.render}`;
-  return `freeText :: ${block.render}`;
-}
 
 export default async function LlmWorkflowBenchPage({ params, searchParams }: Props) {
   const { templateId } = await params;
@@ -249,6 +235,19 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
           >
             {sourceLabel}
           </span>
+        }
+        actions={
+          // Only a stored template (a numeric id) has an `llm_templates` row
+          // for `updateLlmTemplateContent` to patch — a built-in descriptor
+          // (a string id) has nothing to edit here.
+          resolved.source === "stored" ? (
+            <Link
+              href={`/settings/llm-workflows/${templateId}/edit`}
+              className="inline-flex items-center gap-1.5 rounded border border-[#5b93d6]/40 bg-[#1a2535] px-3 py-1.5 text-sm text-[#5b93d6] hover:border-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Edit template
+            </Link>
+          ) : undefined
         }
       />
 
