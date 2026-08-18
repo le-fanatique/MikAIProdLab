@@ -1178,11 +1178,11 @@ reconstructing it from struck-through rows.
 
 **Order settled by the user 2026-08-18: B8, then E1, then Chantier 2** — and
 revised later the same day, after §5 and the author's rulings, to
-B12 → E1 → B15 → B16 → B13 → B14 → Chantier 2 → B17/B18/B19.
+B12 → E1 → B15 → B16 → B13 → B14 → B20 → Chantier 2 → B17/B18/B19.
 
 **Revised 2026-08-18 after the vision's §5 was written** — B8 is dissolved and
 the queue re-derived; see "B8 dissolved" below for the full table and the
-reasoning. Chantier 1 now has six tickets left:
+reasoning. Chantier 1 now has seven tickets left:
 
 1. **B12** — text output mode + the narrative jar. All that survives of B8.
 2. **E1** — the template editor, the user's own "saved shopping lists". **The
@@ -1194,6 +1194,7 @@ reasoning. Chantier 1 now has six tickets left:
 4. **B16** — lighting, assisted: the vision fill and the director's-note adjust.
 5. **B13** — the conformation stage: the engine formatting the app owns.
 6. **B14** — the storyboard prompt brought under the workspace.
+7. **B20** — Reference Board analysis joins the registry, ruled a brick to build.
 
 Three more are scheduled **after** Chantier 2 rather than inside it — the media
 reference families (B17), negative constraints (B18) and the camera redesign
@@ -1324,9 +1325,10 @@ ordering — read the list, not the numbers.
 | 1 | **B12** — text output mode + the narrative jar | All that survives of B8. `output.kind: "text"` in the runner (`RunOperationResult` gains a third variant, breaking the ~14 declared consumers on purpose, B11-b1's pattern), plus the Shot column the generated narrative prompt lands in — §5.3's jar, distinct from `shots.shot_prompt` so a human's text and a model's are never merged again. Bench-only, like UC1 and UC3 were. Needs a schema authorization and a migration the user runs. |
 | 2 | **E1** — the template editor, the saved recipes | Unchanged in intent, and now named in the user's own vocabulary ("listes de course sauvegardées", §5.2). After B12 because a recipe that can neither cook text nor fill a jar is a thin thing to author against. Must make `intent.freeText` editable — the 2026-08-15 correction in `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. |
 | 3 | **B15** — lighting, the field | §5.9. Three levels: Shot, Sequence, and Environment Asset — the last being the point, since a Sequence can then read its environment's lighting instead of inventing one. Manual fill, plus the reuse path. No model involved. |
-| 4 | **B16** — lighting, assisted | §5.9's other two fills. **Cheaper than first estimated:** the multimodal capability is already built and hardened in `src/lib/projectStyle/referenceAnalysis/` — byte re-validation at call time, one `ChatMessage` the router already translates for both provider families, a leak-proof error wrapper, a validated JSON answer, and a prompt that already asks about lighting by name. What is missing is that **the descriptor format cannot declare an image input**, so that capability sits outside the workspace, anchored on the Reference Board. B16 makes it reachable from another anchor and another question. Plus the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. |
+| 4 | **B16** — lighting, assisted | §5.9's other two fills. **Cheaper than first estimated:** the multimodal capability is already built and hardened in `src/lib/projectStyle/referenceAnalysis/` — byte re-validation at call time, one `ChatMessage` the router already translates for both provider families, a leak-proof error wrapper, a validated JSON answer, and a prompt that already asks about lighting by name. What is missing is that **the descriptor format cannot declare an image input**, so that capability sits outside the workspace, anchored on the Reference Board. B16 makes it reachable from another anchor and another question. Plus the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. **Design constraint from B20:** the image-input declaration must be designed against Reference Board analysis's needs — N ordered images with per-image keys, bytes re-validated at call time — not only against lighting's single-image case, or it will be widened immediately afterwards. |
 | 5 | **B13** — the conformation stage | §5.4/§5.5: the engine formatting the app owns. Renders stored reference roles into the guide's named image modes, applies the word budget, the one-primary-camera rule and the tag caps. Placed after B15/B16 so it has lighting to render. Must be replaceable per engine, nothing named after Seedance — and per §5.6 it **must not hard-code today's camera shape**, since that shape is scheduled to change after Chantier 2. |
 | 6 | **B14** — the storyboard prompt under the workspace | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
+| 7 | **B20** — Reference Board analysis joins the registry | Ruled a **brick to build** by the author 2026-08-18, not an exception like chat/image generation/translation. `src/actions/projectStyleReferenceAnalysis.ts` is 1 259 hand-written lines doing exactly what the workspace exists to express. Its migration needs three format gaps closed, not one — an image input with per-image keys, a **composite output** (one scalar plus two lists, where `output.kind` picks one shape today), and cross-item referential validity. Three things must survive untouched: the file confinement/decode gate, the prompt's provenance hash, and the pre-call/in-transaction snapshot drift detection. See `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9. Big enough that it may split; scoped when reached. |
 
 **Then Chantier 2** — C0 → C6 and the three independents, unchanged.
 

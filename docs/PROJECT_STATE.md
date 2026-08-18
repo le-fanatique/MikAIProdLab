@@ -1027,6 +1027,18 @@ the audio family — his own call to wait), **B18** (negative constraints, not
 MVP), **B19** (the camera redesign, waiting because C4–C6 are about to move the
 Shot forms it would touch, so doing it first means doing it twice). B13 carries
 a constraint from that last one: it must not hard-code today's camera shape.
+Then **B20**: asked whether Reference Board
+analysis — 1 259 hand-written lines doing exactly what the workspace exists to
+express — was a brick to build or a deliberate exception like chat, image
+generation and translation, the author ruled **a brick to build**. Reading its
+code before scheduling it found three format gaps rather than the one assumed:
+an image input with per-image keys, a **composite output** (one scalar plus two
+lists, where `output.kind` picks a single shape today), and cross-item
+referential validity. Three non-format properties must survive it untouched —
+the file confinement and decode gate, the prompt's provenance hash, and the
+drift detection between the pre-call snapshot and a fresh read inside the
+committing transaction. B16's image-input declaration is therefore constrained
+to be designed against B20's needs, not only lighting's single-image case.
 Full table in `docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3, "B8 dissolved".
 
 ### What is left, and the reporting error that hid part of it (2026-08-18)

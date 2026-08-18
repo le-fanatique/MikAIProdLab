@@ -534,13 +534,34 @@ product shape, not an implementation.
 another entity's field rather than the user's keyboard. Both are worth more than
 the lighting text itself.
 
-**One question this raises, left open for the author.**
+**And it settles the status of Reference Board analysis.**
 `src/actions/projectStyleReferenceAnalysis.ts` is 1 259 lines of hand-written
 action performing exactly the kind of operation the workspace exists to
-express — anchored, context-driven, producing reviewable proposals. It is
-currently outside the registry entirely. Under §11.3's governing rule that is a
-brick to build; under §6's "what this is not" it may be a deliberate exception
-like chat, image generation and field translation. Not decided here.
+express — anchored, context-driven, producing reviewable proposals — and it sat
+outside the registry entirely. Asked whether it was a brick to build or a
+deliberate exception like chat, image generation and field translation, the
+author answered on 2026-08-18: **a brick to build.** It joins the migration
+targets rather than the exceptions.
+
+What that migration will actually require, read off its own code rather than
+assumed — three format gaps, not one:
+
+1. **An image input.** N images, in a declared order, each carrying a key the
+   answer must cite (`R1..Rn`), with their bytes re-validated at call time
+   rather than trusted from the row.
+2. **A composite output.** Its answer is one object holding a scalar
+   (`summary`) **and two lists** (`observations`, `candidateRules`), where
+   today `output.kind` picks exactly one shape and list items are flat records
+   of scalars. `candidateRules[].referenceKeys` is itself an array.
+3. **Cross-item referential validity.** Every observation cites exactly one
+   attached reference; every candidate rule cites every reference supporting
+   it. No rule in `item.validity` can state that today.
+
+Three further things are not format at all and must survive the migration
+untouched: the file confinement and decode gate, the deterministic prompt's
+provenance hash, and the drift detection that compares the snapshot taken
+before the provider call against a fresh read inside the committing
+transaction.
 
 ---
 
