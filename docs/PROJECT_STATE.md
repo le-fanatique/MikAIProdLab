@@ -919,6 +919,51 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B15b — lighting reaches the screen, and a label that lied (2026-08-18)
+
+Commit `bc4c498`. B15 is complete: the field is editable at the three levels and
+a Sequence can inherit its environment's in one click — the second half of the
+user's both-ways decision.
+
+**The S4 trap, in reverse, and worth generalising.** Until now the danger was an
+action writing *too many* columns. Here `updateShot`, `updateSequence` and
+`updateAsset` are multi-column actions that **erase what is not passed back to
+them**, so adding `lighting` to each meant the field had to appear in each form
+or every ordinary page save would silently wipe it. Proven on all three with a
+column diff. **Rule: adding a column to an existing multi-column form action is
+only half the change — the form must carry it too, and the proof is a save that
+does not touch the field.**
+
+**Why the button does not call `resolveSeqLighting`.** It would have been the
+obvious reuse and it would have been wrong: that resolver short-circuits to
+`{ source: "own" }` as soon as the Sequence's own field is filled, and never
+reaches the environment query — which is precisely the case the button exists to
+overwrite. The shared traversal `resolveSequenceEnvironmentAssets` was extracted
+instead. The near-miss is recorded because the correct-looking reuse would have
+made the button silently unavailable exactly when it is wanted.
+
+The decision of what to copy lives in a pure `buildSequenceLightingFillText` a
+test can call with a plain array; the page and the button's action both go
+through the same wrapper, so they cannot disagree about whether anything is
+copyable. The button is rendered only when something is, never fires by itself,
+and lists every environment by name — no election rule, consistent with B15a.
+
+**The defect no automated check in this repository could have caught.** The
+button's caption said it copied the value "into the Lighting field below". It
+does not: it writes to the database immediately and reloads. With two submit
+buttons of different scopes on one page, a user could click it, see the field
+filled, change their mind, press Cancel, and believe nothing was saved — having
+already overwritten their hand-written lighting for good. `tsc`, 749 tests and a
+clean build were all green on that sentence. Behaviour was right; only its
+description was not.
+
+**Not validated in a real browser**, by the executor or the supervisor — the
+same reservation as E1b, and the same reason: `AGENTS.md`'s UI checklist went to
+the user with the commit rather than blocking the chantier he asked to review as
+a whole.
+
+**UC impact: none.**
+
 ### B15a — lighting, and a relation that already existed (2026-08-18)
 
 Commit `f163da6`, migration `0054_modern_wasp` (three additive nullable columns,
