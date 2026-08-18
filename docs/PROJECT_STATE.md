@@ -919,6 +919,49 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### S7, S5, S3, S1 — five tickets driven by first contact (2026-08-18)
+
+All delivered the day after UC1 landed, and four of the five exist because
+something was **used** rather than reasoned about.
+
+**UC1's prompt was tuned twice by the user's own runs** (`133816e`, `85b276e`).
+The first real answer returned `framing: "MS to WS"` — an interval, because the
+rule offered examples and forbade nothing — and a `continuity_out` that
+delivered the hero to the *next* shot's destination. The second returned
+`title: "Sh_250 — Passage Through the Bulkhead Door"`, a fabricated shot code in
+the title, **caused by our own rendering**: two lines glued code to title with
+an em dash and the model copied the format it was shown. Fixing only the rule
+would have left the inducing format in place. The shot list also cost 2477 of
+2588 tokens on a fourteen-shot sequence and truncated mid-word; the four shots
+framing the insertion point now render in full and the rest as one title line,
+halving the block. `SEQ.SHOT_TARGETS` was deliberately **not** bounded —
+`casting.fromSequence` reads it under a frozen proof.
+
+**The test suite was answering at random** (`716fc55`). The same tree gave 655
+passing, then 89 files failing to load, then 3 failures, then 12 — and 12 again
+on a clean tree. Always the heavy DB-backed files. `maxWorkers: 4` holds it:
+eight consecutive green runs, identical counts, for +65-85% wall time. **The
+unstable runs were also skipping 15 to 26 tests outright** — the contention was
+not only breaking tests, it was silently not running them. A second symptom
+remains open and rarer: all files failing to load at once on
+`Cannot read properties of undefined (reading 'config')`, cured by a re-run.
+
+**The cost of a non-deterministic gate, paid in full.** Before the fix, the
+supervisor accused an executor of mislabelling a flake as "pre-existing", then
+verified on a clean tree and found the executor had been right. The lesson is
+not about that executor: a gate that answers differently each run makes the
+sentence "this failure is pre-existing" unverifiable, and every review after it
+rests on the luck of the draw.
+
+**S1's freshness took a corrective round on a subtle distinction.**
+`updateAssetDetailsInline` is the only path that writes an Asset Bible — the
+executor traced every caller and was right — but it is not a path that *only*
+writes Bibles. It rewrites all five columns on every call, so a plain
+description edit reports the Bible back unchanged. Capturing the fingerprint
+unconditionally declared the Bible `current` at the exact moment it went stale,
+silencing the advisory precisely where it earns its keep. The question to ask
+was not "is this the only path that writes X" but "does this path write only X".
+
 ### B11 — UC1 delivered, and two predictions that were wrong (2026-08-17)
 
 `LLMW.ACTION.INSERT_AT.1`, `LLMW.OUTPUT.OBJECT_NUMBER.1`, `LLMW.UC1.INSERT.1`,
