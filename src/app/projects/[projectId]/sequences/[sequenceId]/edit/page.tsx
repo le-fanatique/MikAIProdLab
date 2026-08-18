@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import FormField from "@/components/FormField";
-import { updateSequence } from "@/actions/sequences";
+import { updateSequence, fillSequenceLightingFromEnvironment } from "@/actions/sequences";
+import { computeSequenceLightingFill } from "@/lib/llmWorkspace/sequenceLightingFill";
 
 type Props = { params: Promise<{ projectId: string; sequenceId: string }> };
 
@@ -20,6 +21,12 @@ export default async function EditSequencePage({ params }: Props) {
   if (!sequence || sequence.projectId !== pid) notFound();
 
   const updateAction = updateSequence.bind(null, sid, pid);
+  // LLMW.LIGHTING.SURFACE.1 (B15b) — the button is offered only when there is
+  // something to copy (§5.9: a bare button that would write empty is worse
+  // than no button). Computed once at render time so the page and the
+  // button's own action can never disagree.
+  const environmentLightingFill = await computeSequenceLightingFill(sid);
+  const hasOwnLighting = Boolean(sequence.lighting && sequence.lighting.trim() !== "");
 
   return (
     <div>
@@ -32,6 +39,31 @@ export default async function EditSequencePage({ params }: Props) {
         ]}
       />
       <h1 className="text-2xl font-semibold tracking-tight mb-8">Edit Sequence</h1>
+
+      {environmentLightingFill !== null && (
+        <form
+          action={fillSequenceLightingFromEnvironment}
+          className="max-w-xl mb-5 rounded border border-neutral-700 px-4 py-3 flex items-center justify-between gap-4"
+        >
+          <input type="hidden" name="projectId" value={pid} />
+          <input type="hidden" name="sequenceId" value={sid} />
+          <input type="hidden" name="returnTo" value={`/projects/${pid}/sequences/${sid}/edit`} />
+          <p className="text-xs text-neutral-400">
+            Replaces the Lighting field below with the Lighting of this sequence&apos;s
+            environment Asset(s), and saves it immediately.
+            {hasOwnLighting && (
+              <span className="text-[#cf7b6b]"> This replaces what is already written there
+                — right away, not just in this form.</span>
+            )}
+          </p>
+          <button
+            type="submit"
+            className="shrink-0 rounded border border-neutral-700 text-neutral-200 px-4 py-2 text-sm hover:border-neutral-500 transition-colors"
+          >
+            Fill from environment
+          </button>
+        </form>
+      )}
 
       <form action={updateAction} className="max-w-xl flex flex-col gap-5">
         <FormField label="Title" name="title" required defaultValue={sequence.title} />
@@ -70,6 +102,14 @@ export default async function EditSequencePage({ params }: Props) {
           name="location_hint"
           defaultValue={sequence.locationHint}
           placeholder='e.g. "Exterior rooftop / night"'
+        />
+        <FormField
+          label="Lighting"
+          name="lighting"
+          type="textarea"
+          rows={2}
+          defaultValue={sequence.lighting}
+          placeholder='e.g. "At the start the character is in shadow, at the end lit by the screens"'
         />
 
         <div className="flex gap-3 pt-2">

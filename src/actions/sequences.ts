@@ -69,6 +69,13 @@ export async function updateSequence(
   const narrativePurpose = (formData.get("narrative_purpose") as string) || null;
   const mood = (formData.get("mood") as string) || null;
   const locationHint = (formData.get("location_hint") as string) || null;
+  // LLMW.LIGHTING.SURFACE.1 (B15b) — joins this existing multi-column action
+  // rather than the mono-column `updateSequenceLighting` (B15a), per this
+  // ticket's contract. `lighting` MUST also be present in the Edit Sequence
+  // form (`src/app/projects/[projectId]/sequences/[sequenceId]/edit/page.tsx`)
+  // or every save of that page would silently clear it (the S4 trap in
+  // reverse). Proven by tests/actions/updateSequence.test.ts.
+  const lighting = (formData.get("lighting") as string) || null;
 
   if (!title?.trim()) return;
 
@@ -81,6 +88,7 @@ export async function updateSequence(
       narrativePurpose,
       mood,
       locationHint,
+      lighting,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(sequences.id, id));
@@ -352,4 +360,65 @@ export async function updateSequenceLighting(formData: FormData): Promise<void> 
 
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}sequenceLightingSaved=1`);
+}
+
+/**
+ * LLMW.LIGHTING.SURFACE.1 (B15b) — the write side of the "Fill from
+ * environment" button on the Edit Sequence form (§5.9 of
+ * docs/LLM_WORKSPACE_PRODUCT_VISION.md). Never called automatically — a form
+ * submit, the same "the user clicks" discipline as every other action here
+ * (§6.1: nothing is written before approval).
+ *
+ * `updateSequenceLighting` above is this button's actual write path, not a
+ * parallel one: this action only ever computes the text to copy
+ * (`computeSequenceLightingFill`, `src/lib/llmWorkspace/sequenceLightingFill.ts`
+ * — which itself reuses `resolveSequenceEnvironmentAssets`, the same query
+ * `SEQ.LIGHTING` reads, never a second one) and hands it to
+ * `updateSequenceLighting` as a plain FormData `lighting` value, exactly as
+ * a human typing it in would. Ownership, redirect shape and the
+ * blank-becomes-null rule are therefore inherited, not reimplemented.
+ *
+ * Refuses (no write) when there is nothing to copy — no environment Asset
+ * cast on this sequence, or none of them has a `lighting` value — the same
+ * "no election rule, but no button that writes empty either" contract the
+ * page itself uses to decide whether to render the button at all. Both call
+ * sites share the one function so they cannot disagree.
+ */
+export async function fillSequenceLightingFromEnvironment(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() ||
+    `/projects/${projectId}/sequences/${sequenceId}`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}sequenceLightingError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) {
+    errRedirect("Sequence not found or does not belong to this project.");
+  }
+
+  const { computeSequenceLightingFill } = await import("@/lib/llmWorkspace/sequenceLightingFill");
+  const fillText = await computeSequenceLightingFill(sequenceId);
+  if (fillText === null) {
+    errRedirect("This sequence has no environment Asset with a Lighting value to copy.");
+  }
+
+  const writeFormData = new FormData();
+  writeFormData.set("projectId", String(projectId));
+  writeFormData.set("sequenceId", String(sequenceId));
+  writeFormData.set("lighting", fillText);
+  writeFormData.set("returnTo", returnTo);
+
+  await updateSequenceLighting(writeFormData);
 }

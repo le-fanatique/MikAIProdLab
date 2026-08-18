@@ -88,6 +88,16 @@ export async function updateShot(
   const cameraMovement = (formData.get("camera_movement") as string) || null;
   const continuityIn = (formData.get("continuity_in") as string) || null;
   const continuityOut = (formData.get("continuity_out") as string) || null;
+  // LLMW.LIGHTING.SURFACE.1 (B15b) — joins this existing multi-column
+  // action's own form/action pair rather than the mono-column
+  // `updateShotLighting` (B15a), per this ticket's contract. The S4 trap in
+  // reverse: this action rewrites every field below on every call, so
+  // `lighting` MUST also be present in the Edit Shot form
+  // (`src/app/projects/[projectId]/sequences/[sequenceId]/shots/[shotId]/edit/page.tsx`)
+  // or every save of that page would silently clear it. Proven by
+  // tests/actions/updateShot.test.ts ("preserves lighting on a save that
+  // does not touch its field").
+  const lighting = (formData.get("lighting") as string) || null;
 
   if (!title?.trim()) return;
 
@@ -113,6 +123,7 @@ export async function updateShot(
       cameraMovement,
       continuityIn,
       continuityOut,
+      lighting,
       shotPrompt: resolvedShotPrompt,
       updatedAt: new Date().toISOString(),
     })

@@ -77,6 +77,20 @@ export default async function EditAssetPage({ params }: Props) {
           rows={3}
           defaultValue={asset.notes}
         />
+        <FormField
+          label="Lighting"
+          name="lighting"
+          type="textarea"
+          rows={2}
+          defaultValue={asset.lighting}
+          placeholder='e.g. "Overcast daylight, soft shadows, cool colour temperature"'
+        />
+        {asset.type === "environment" && (
+          <p className="text-xs text-[#6e767d] -mt-3">
+            This is the field a Sequence set in this environment can inherit — use the
+            &quot;Fill from environment&quot; button on that Sequence&apos;s Edit form.
+          </p>
+        )}
 
         <div className="flex items-center gap-3 pt-2">
           <button

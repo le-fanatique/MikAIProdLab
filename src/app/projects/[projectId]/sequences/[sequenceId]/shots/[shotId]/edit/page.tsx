@@ -110,6 +110,14 @@ export default async function EditShotPage({ params }: Props) {
           defaultValue={shot.continuityOut}
           placeholder="Outgoing edit cut / match"
         />
+        <FormField
+          label="Lighting"
+          name="lighting"
+          type="textarea"
+          rows={2}
+          defaultValue={shot.lighting}
+          placeholder='e.g. "At the start the character is in shadow, at the end lit by the screens"'
+        />
 
         <div className="flex gap-3 pt-2">
           <button

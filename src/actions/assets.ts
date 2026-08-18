@@ -57,10 +57,17 @@ export async function updateAsset(
 
   const description = formData.get("description")?.toString().trim() || null;
   const notes = formData.get("notes")?.toString().trim() || null;
+  // LLMW.LIGHTING.SURFACE.1 (B15b) — joins this existing multi-column action
+  // rather than the mono-column `updateAssetLightingInline` (B15a), per this
+  // ticket's contract. `lighting` MUST also be present in the Edit Asset
+  // form (`src/app/projects/[projectId]/assets/[assetId]/edit/page.tsx`) or
+  // every save of that page would silently clear it (the S4 trap in
+  // reverse). Proven by tests/actions/updateAsset.test.ts.
+  const lighting = formData.get("lighting")?.toString().trim() || null;
 
   await db
     .update(assets)
-    .set({ name, type, description, notes, updatedAt: new Date().toISOString() })
+    .set({ name, type, description, notes, lighting, updatedAt: new Date().toISOString() })
     .where(eq(assets.id, assetId));
 
   redirect(`/projects/${projectId}/assets/${assetId}`);

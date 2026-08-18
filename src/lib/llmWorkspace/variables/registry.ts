@@ -272,6 +272,31 @@ export type SeqLightingData =
   | { source: "environment"; environments: SeqLightingEnvironmentEntry[] }
   | { source: "none" };
 
+/**
+ * The environment-Assets-of-a-sequence query, extracted so it has exactly one
+ * source. `resolveSeqLighting` below calls it only after its own precedence
+ * check fails (the Sequence's own field is blank) — but B15b's "Fill from
+ * environment" button (`src/lib/llmWorkspace/sequenceLightingFill.ts`) needs
+ * this same list unconditionally, precedence check or not, because offering
+ * to overwrite an already-filled field is the whole point of that button.
+ * Calling `resolveSeqLighting` itself from there would short-circuit to
+ * `{ source: "own" }` whenever the Sequence's own field already has a value
+ * — exactly the case the button exists for — and never reach this query at
+ * all. Same order as `SHOT.CAST`'s own cast read: `assets.name` ascending,
+ * deterministic, no election rule.
+ */
+export async function resolveSequenceEnvironmentAssets(
+  sequenceId: number
+): Promise<SeqLightingEnvironmentEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({ name: assets.name, lighting: assets.lighting })
+    .from(sequenceAssets)
+    .innerJoin(assets, eq(sequenceAssets.assetId, assets.id))
+    .where(and(eq(sequenceAssets.sequenceId, sequenceId), eq(assets.type, "environment")))
+    .orderBy(asc(assets.name));
+}
+
 export async function resolveSeqLighting(sequenceId: number): Promise<SeqLightingData> {
   const { db } = await import("@/db");
   const [sequence] = await db
@@ -286,12 +311,7 @@ export async function resolveSeqLighting(sequenceId: number): Promise<SeqLightin
     return { source: "own", lighting: sequence.lighting };
   }
 
-  const environments = await db
-    .select({ name: assets.name, lighting: assets.lighting })
-    .from(sequenceAssets)
-    .innerJoin(assets, eq(sequenceAssets.assetId, assets.id))
-    .where(and(eq(sequenceAssets.sequenceId, sequenceId), eq(assets.type, "environment")))
-    .orderBy(asc(assets.name));
+  const environments = await resolveSequenceEnvironmentAssets(sequenceId);
 
   if (environments.length === 0) {
     return { source: "none" };
