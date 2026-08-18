@@ -252,6 +252,11 @@ export type GeneratedShotRetakeDraft = {
   cameraPitch: string;
 };
 
+/** Draft output for "Retake Asset Description (Directed)" (LLMW.UC3.SURFACE.1) — `output.require: "all"`, so unlike `GeneratedShotRetakeDraft` the single field is never blank. */
+export type GeneratedAssetRetakeDraft = {
+  description: string;
+};
+
 // ---------------------------------------------------------------------------
 // Preview state (used by Client Components in V0.4)
 // ---------------------------------------------------------------------------

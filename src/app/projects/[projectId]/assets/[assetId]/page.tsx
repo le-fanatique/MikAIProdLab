@@ -20,6 +20,8 @@ import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/AssetDescriptionEnhancePanel";
 import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
 import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
+import AssetRetakeDirectedPanel from "@/components/AssetRetakeDirectedPanel";
+import { assetRetakeDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/assetRetakeDirected";
 import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 import AssetAlignmentPanel from "@/components/AssetAlignmentPanel";
@@ -383,6 +385,20 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             isConfigured={!!llmSettings.model.trim()}
             hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
             commitAdvisory={bibleFreshness === "stale" ? assetDescriptionGenerateDescriptor.commitAdvisory : undefined}
+          />
+        </Card>
+      </Collapsible>
+
+      {/* LLMW.UC3.SURFACE.1 (S4) — `asset.retakeDirected` leaves the bench for
+          this page, next to "Enhance Description" since both write the same
+          `description` column through `updateAssetDescriptionFieldInline`. */}
+      <Collapsible label="Retake Description (Directed)">
+        <Card title="Retake Description (Directed)">
+          <AssetRetakeDirectedPanel
+            projectId={pid}
+            assetId={aid}
+            description={asset.description}
+            commitAdvisory={bibleFreshness === "stale" ? assetRetakeDirectedDescriptor.commitAdvisory : undefined}
           />
         </Card>
       </Collapsible>
