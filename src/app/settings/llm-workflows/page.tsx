@@ -77,7 +77,17 @@ export default async function LlmWorkflowsListPage({ searchParams }: Props) {
           { label: "LLM Workflows" },
         ]}
       />
-      <PageHeader title="LLM Workflows" />
+      <PageHeader
+        title="LLM Workflows"
+        actions={
+          <Link
+            href="/settings/llm-workflows/variables"
+            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+          >
+            Variable Library
+          </Link>
+        }
+      />
 
       {error && ERROR_MESSAGES[error] && (
         <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#1a0e0e] px-4 py-3">
