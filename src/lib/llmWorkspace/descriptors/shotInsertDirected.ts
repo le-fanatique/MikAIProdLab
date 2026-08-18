@@ -103,6 +103,15 @@
 //      with `description`/`continuityNotes`/`continuityIn`/`continuityOut`,
 //      which already carry 500 on both sides. The two bounds must stay
 //      equal — see decision 4 above and `.agents/executor_report.md`.
+//
+// LLMW.UC1.TUNE.3 (S7c) — `action_pitch` and `continuity_notes` had no rule
+// of their own, unlike `framing`, `camera_movement` and `duration_seconds`.
+// On the user's third real Run the model filled that gap with the
+// directive's own intention ("A deliberate, quiet pause that externalizes
+// Azelle's tactical hesitation...") instead of a playable action, and with
+// editorial commentary on the cut instead of material continuity. Two rules
+// added to the same bullet list, same format as the others: what the field
+// is for, then the door closed on the observed drift.
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
@@ -142,6 +151,8 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
         {
           text: `- framing is exactly one value from this set: ECU, CU, MCU, MS, MLS, WS, EWS, OTS, POV. camera_movement is exactly one value from this set: static, pan, tilt, dolly in, dolly out, track, crane, handheld, zoom. Never an interval ("MS to WS") and never a combination ("pan + tilt") — one value, chosen once, in each field. If the shot changes frame or camera behavior partway through, describe that change in camera_pitch, not in framing or camera_movement. camera_pitch is prose describing the camera intent behind them.
 - duration_seconds is a plain number of seconds, sized to the action you describe, never a range and never text.
+- action_pitch describes what happens on screen, in terms an animation team can act — who does what, in what order. Never the intention behind the shot and never the effect you want it to have on the audience: that belongs to camera_pitch for the camera, and to nowhere else for anything not about the camera. If the director's note gives you an intention, your job is to translate it into a visible action, not to copy it in.
+- continuity_notes lists the material elements the next shot must find again — props, lighting, costume, VFX, the position of objects. Never the tone, never this shot's role in the sequence, never a summary of what it connects: continuity_in and continuity_out already describe the connection.
 - Stay inside the story that already exists. Do not invent characters, locations or plot facts that the sequence and its shots do not already establish.
 - Leave a field empty only when the sequence genuinely gives you nothing to write in it. An empty string means "nothing to say", never "skipped".
 - Write in English.`,

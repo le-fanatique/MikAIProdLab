@@ -234,6 +234,30 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
     );
   });
 
+  // LLMW.UC1.TUNE.3 (S7c) — `action_pitch` and `continuity_notes` gained
+  // their own rule, filling the gap `framing`/`camera_movement`/
+  // `duration_seconds` already had. Existing rules stay put — checked by
+  // every assertion above still passing unchanged.
+  it("the system message rules action_pitch as visible action, not the directive's own intention (LLMW.UC1.TUNE.3)", async () => {
+    const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    const matches = result.prompt.system.match(
+      /action_pitch describes what happens on screen, in terms an animation team can act — who does what, in what order\. Never the intention behind the shot and never the effect you want it to have on the audience: that belongs to camera_pitch for the camera, and to nowhere else for anything not about the camera\. If the director's note gives you an intention, your job is to translate it into a visible action, not to copy it in\./g
+    );
+    expect(matches?.length).toBe(1);
+  });
+
+  it("the system message rules continuity_notes as material carry-over, not tone or a summary of the cut (LLMW.UC1.TUNE.3)", async () => {
+    const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    const matches = result.prompt.system.match(
+      /continuity_notes lists the material elements the next shot must find again — props, lighting, costume, VFX, the position of objects\. Never the tone, never this shot's role in the sequence, never a summary of what it connects: continuity_in and continuity_out already describe the connection\./g
+    );
+    expect(matches?.length).toBe(1);
+  });
+
   // LLMW.UC1.TUNE.2 (S7b), défaut 1 — the explicit "no code in title" rule,
   // plus the quoted rendering, on both a shot that has a code and one that
   // does not (the ticket's own two required cases).
