@@ -15,12 +15,13 @@ let ctx: TempDb;
 let createLlmTemplateFromDescriptor: typeof import("@/actions/llmTemplates").createLlmTemplateFromDescriptor;
 let importLlmTemplate: typeof import("@/actions/llmTemplates").importLlmTemplate;
 let updateLlmTemplateMetadata: typeof import("@/actions/llmTemplates").updateLlmTemplateMetadata;
+let updateLlmTemplateContent: typeof import("@/actions/llmTemplates").updateLlmTemplateContent;
 let deleteLlmTemplate: typeof import("@/actions/llmTemplates").deleteLlmTemplate;
 let storyGenerateDescriptor: typeof import("@/lib/llmWorkspace/descriptors/story").storyGenerateDescriptor;
 
 beforeAll(async () => {
   ctx = await setupTempDb();
-  ({ createLlmTemplateFromDescriptor, importLlmTemplate, updateLlmTemplateMetadata, deleteLlmTemplate } =
+  ({ createLlmTemplateFromDescriptor, importLlmTemplate, updateLlmTemplateMetadata, updateLlmTemplateContent, deleteLlmTemplate } =
     await import("@/actions/llmTemplates"));
   ({ storyGenerateDescriptor } = await import("@/lib/llmWorkspace/descriptors/story"));
 });
@@ -235,6 +236,280 @@ describe("updateLlmTemplateMetadata", () => {
 
     const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
     expect(after.projectId).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LLMW.EDITOR.CORE.1 (E1a) — the one path that touches `templateJson` after
+// creation. §"Validation attendue" of the ticket names two required proofs
+// on a disposable database, both here:
+//   - a patch that tries to change `commit` / `output` / `anchor` does not
+//     change them — a read-after-write shows the coupled triangle identical;
+//   - an invalid patch (unknown variable id, unknown render form) is refused
+//     by `validateLlmTemplateJson` and nothing is written.
+// ---------------------------------------------------------------------------
+
+async function insertEditableTemplate() {
+  const [row] = await ctx.db
+    .insert(ctx.schema.llmTemplates)
+    .values({
+      name: "Editable story",
+      description: null,
+      anchorKind: "project",
+      projectId: null,
+      templateJson: JSON.stringify(storyGenerateDescriptor),
+      sourceFilename: null,
+    })
+    .returning();
+  return row;
+}
+
+function patchFormData(patch: unknown): FormData {
+  const formData = new FormData();
+  formData.set("patch", JSON.stringify(patch));
+  return formData;
+}
+
+describe("updateLlmTemplateContent", () => {
+  it("refuses an id that does not exist", async () => {
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(999999, patchFormData({ name: "Whatever" }))
+    );
+    expect(target).toBe("/settings/llm-workflows?error=not_found");
+  });
+
+  it("applies an editable-field patch (name, template.blocks) and touches updatedAt", async () => {
+    const row = await insertEditableTemplate();
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          name: "My custom story prompt",
+          templateBlocks: [{ text: "Write a story synopsis, my own way." }],
+        })
+      )
+    );
+    expect(target).toBe(`/settings/llm-workflows/${row.id}`);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    const descriptor = JSON.parse(after.templateJson);
+    expect(descriptor.name).toBe("My custom story prompt");
+    expect(descriptor.template.blocks).toEqual([{ text: "Write a story synopsis, my own way." }]);
+    expect(after.updatedAt >= row.updatedAt).toBe(true);
+  });
+
+  // THE assertion the whole ticket rests on.
+  it("a patch that tries to change commit, output or anchor does not change them", async () => {
+    const row = await insertEditableTemplate();
+    const before = JSON.parse(row.templateJson);
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          name: "Renamed, but the triangle should not move",
+          commit: ["applyGeneratedOutline"],
+          output: {
+            kind: "text",
+            target: { entity: "shot" },
+            field: "hacked",
+            errors: { empty: "x" },
+          },
+          anchor: { kind: "entity", entity: "asset" },
+          messages: { notConfigured: "hacked", chainNotFound: {} },
+          preconditions: [{ refs: [], require: "all", message: "hacked" }],
+        })
+      )
+    );
+    expect(target).toBe(`/settings/llm-workflows/${row.id}`);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    const descriptor = JSON.parse(after.templateJson);
+
+    // The read-after-write proof: the coupled triangle is byte-for-byte what
+    // it was before the patch, whatever the patch itself tried to say.
+    expect(descriptor.commit).toEqual(before.commit);
+    expect(descriptor.output).toEqual(before.output);
+    expect(descriptor.anchor).toEqual(before.anchor);
+    expect(descriptor.messages).toEqual(before.messages);
+    expect(descriptor.preconditions).toEqual(before.preconditions);
+    // The one field the patch legitimately named did apply.
+    expect(descriptor.name).toBe("Renamed, but the triangle should not move");
+  });
+
+  it("refuses a patch naming an unknown variable id and writes nothing", async () => {
+    const row = await insertEditableTemplate();
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          contextVariables: [{ id: "NOT.A.REAL.VARIABLE", userAdjustable: false }],
+        })
+      )
+    );
+    const url = new URL(target, "http://localhost");
+    expect(url.searchParams.get("error")).toBe("invalid_json");
+    expect(url.searchParams.get("detail")).toMatch(/unknown variable id/i);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(after.templateJson).toBe(row.templateJson);
+  });
+
+  it("refuses a patch referencing an unknown render form and writes nothing", async () => {
+    const row = await insertEditableTemplate();
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          templateBlocks: [{ variable: "PROJECT.IDENTITY", render: "totally.made.up" }],
+        })
+      )
+    );
+    const url = new URL(target, "http://localhost");
+    expect(url.searchParams.get("error")).toBe("invalid_json");
+    expect(url.searchParams.get("detail")).toMatch(/unknown render form/i);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(after.templateJson).toBe(row.templateJson);
+  });
+
+  it("refuses a missing patch field and writes nothing", async () => {
+    const row = await insertEditableTemplate();
+    const target = await captureRedirect(() => updateLlmTemplateContent(row.id, new FormData()));
+    expect(target).toBe(`/settings/llm-workflows/${row.id}?error=missing_patch`);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(after.templateJson).toBe(row.templateJson);
+  });
+
+  it("refuses a patch field that is not valid JSON and writes nothing", async () => {
+    const row = await insertEditableTemplate();
+    const formData = new FormData();
+    formData.set("patch", "{ not json");
+    const target = await captureRedirect(() => updateLlmTemplateContent(row.id, formData));
+    expect(target).toBe(`/settings/llm-workflows/${row.id}?error=invalid_patch_json`);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(after.templateJson).toBe(row.templateJson);
+  });
+
+  it("can add and remove a context variable via the patch", async () => {
+    const row = await insertEditableTemplate();
+
+    const added = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          contextVariables: [
+            { id: "PROJECT.IDENTITY", userAdjustable: false },
+            { id: "PROJECT.STYLE", userAdjustable: true },
+          ],
+        })
+      )
+    );
+    expect(added).toBe(`/settings/llm-workflows/${row.id}`);
+    let [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(JSON.parse(after.templateJson).context.variables).toEqual([
+      { id: "PROJECT.IDENTITY", userAdjustable: false },
+      { id: "PROJECT.STYLE", userAdjustable: true },
+    ]);
+
+    const removed = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          contextVariables: [{ id: "PROJECT.IDENTITY", userAdjustable: false }],
+        })
+      )
+    );
+    expect(removed).toBe(`/settings/llm-workflows/${row.id}`);
+    [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(JSON.parse(after.templateJson).context.variables).toEqual([{ id: "PROJECT.IDENTITY", userAdjustable: false }]);
+  });
+
+  it("can declare intent.freeText through the patch", async () => {
+    const row = await insertEditableTemplate();
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          intentFreeText: { label: "Director's note" },
+        })
+      )
+    );
+    expect(target).toBe(`/settings/llm-workflows/${row.id}`);
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(JSON.parse(after.templateJson).intent.freeText).toEqual({ label: "Director's note" });
+  });
+
+  // R1.2 (retake): `updateLlmTemplateContent` used to write only
+  // `templateJson`, so the `name` column desynced from `descriptor.name`
+  // whenever a patch renamed the template. The list at
+  // `/settings/llm-workflows` reads the column.
+  it("R1.2: writes the name column from the validated descriptor when a patch renames the template", async () => {
+    const row = await insertEditableTemplate();
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(row.id, patchFormData({ name: "Renamed via patch" }))
+    );
+    expect(target).toBe(`/settings/llm-workflows/${row.id}`);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    // The column and the stored descriptor's own `name` agree.
+    expect(after.name).toBe("Renamed via patch");
+    expect(JSON.parse(after.templateJson).name).toBe("Renamed via patch");
+  });
+
+  it("R1.2: a patch that does not touch name leaves the column at the descriptor's current name", async () => {
+    const row = await insertEditableTemplate();
+
+    const target = await captureRedirect(() =>
+      updateLlmTemplateContent(row.id, patchFormData({ templateBlocks: [{ text: "unrelated change" }] }))
+    );
+    expect(target).toBe(`/settings/llm-workflows/${row.id}`);
+
+    const [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(after.name).toBe(storyGenerateDescriptor.name);
+    expect(JSON.parse(after.templateJson).name).toBe(storyGenerateDescriptor.name);
+  });
+
+  // R1.3 (retake): `null` on an intent.* field removes it from the merged
+  // descriptor — proved end to end through the action, not just the pure
+  // module, and specifically that the removal does not reopen the coupled
+  // triangle.
+  it("R1.3: null removes intent.freeText after it was added, and the triangle stays untouched", async () => {
+    const row = await insertEditableTemplate();
+    const before = JSON.parse(row.templateJson);
+
+    const added = await captureRedirect(() =>
+      updateLlmTemplateContent(row.id, patchFormData({ intentFreeText: { label: "Director's note" } }))
+    );
+    expect(added).toBe(`/settings/llm-workflows/${row.id}`);
+    let [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    expect(JSON.parse(after.templateJson).intent.freeText).toEqual({ label: "Director's note" });
+
+    const removed = await captureRedirect(() =>
+      updateLlmTemplateContent(
+        row.id,
+        patchFormData({
+          intentFreeText: null,
+          // A backdoor attempt riding along the same removal patch: null
+          // must never touch anything outside the three intent fields.
+          commit: ["applyGeneratedOutline"],
+          anchor: { kind: "entity", entity: "asset" },
+        })
+      )
+    );
+    expect(removed).toBe(`/settings/llm-workflows/${row.id}`);
+    [after] = await ctx.db.select().from(ctx.schema.llmTemplates).where(eq(ctx.schema.llmTemplates.id, row.id));
+    const descriptor = JSON.parse(after.templateJson);
+    expect(descriptor.intent.freeText).toBeUndefined();
+    expect(descriptor.commit).toEqual(before.commit);
+    expect(descriptor.anchor).toEqual(before.anchor);
   });
 });
 
