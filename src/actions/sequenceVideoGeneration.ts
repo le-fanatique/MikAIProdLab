@@ -371,7 +371,22 @@ export async function buildSequenceVideoGenerationContext(
     { projectId, sequenceId, sequenceTitle: sequence.title, sequenceCode: sequence.sequenceCode },
     shotInputs
   );
-  const packageText = formatSequenceGenerationPackageText(pkg);
+  // LLMW.STORYBOARD.WARNINGS.1 — `includeWarnings: false`, matching the
+  // Storyboard and Sequence Detail paths, which both already pass it.
+  //
+  // This text is not a display string here: it becomes
+  // `buildSequenceVideoPrompt`'s `packageText`, then `promptResult.text`,
+  // then the `suggestedText` `buildGenerationPayload` queues. With the
+  // default (`true`), diagnostic lines meant for the author — `Shot Prompt is
+  // empty.` and its siblings from `compileShotPrompt` — were being sent to
+  // the model as if they were part of the prompt.
+  //
+  // Reported in `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.7 and deliberately
+  // left unrepaired there; fixed on its own rather than inside B14, so a
+  // change in generated output after B14 cannot be confused with this one.
+  // The package's structured `warnings` are still computed and returned
+  // unchanged — only their rendering into this one text form is skipped.
+  const packageText = formatSequenceGenerationPackageText(pkg, { includeWarnings: false });
 
   return {
     ok: true,

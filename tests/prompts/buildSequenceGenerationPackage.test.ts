@@ -98,4 +98,32 @@ describe("formatSequenceGenerationPackageText", () => {
     const pkg = buildSequenceGenerationPackage(meta, [shotOne, shotTwo]);
     expect(formatSequenceGenerationPackageText(pkg, { includeWarnings: false })).toMatchSnapshot();
   });
+
+  // LLMW.STORYBOARD.WARNINGS.1 — pinned by name rather than by snapshot,
+  // because this is the exact contract `sequenceVideoGeneration.ts` now
+  // depends on: its `packageText` becomes the `suggestedText` queued to the
+  // generation backend, so a diagnostic line reaching this text reaches the
+  // model. A snapshot would record the same fact, but silently — and a
+  // regression here would be accepted by re-running with `-u`.
+  it("keeps author-facing diagnostics out of the text when includeWarnings is false", () => {
+    const emptyPromptShot: SequenceGenerationPackageShotInput = {
+      ...shotOne,
+      shotId: 99,
+      shotCode: "SH099",
+      promptContext: {
+        ...shotOne.promptContext,
+        shot: { ...shotOne.promptContext.shot, shotPrompt: "" },
+      },
+    };
+    const pkg = buildSequenceGenerationPackage(meta, [emptyPromptShot]);
+
+    expect(formatSequenceGenerationPackageText(pkg)).toContain("Shot Prompt is empty.");
+    expect(formatSequenceGenerationPackageText(pkg, { includeWarnings: false })).not.toContain(
+      "Shot Prompt is empty."
+    );
+
+    // The structured warnings are still computed and returned — only their
+    // rendering into this one text form is skipped, never their detection.
+    expect(pkg.shots[0].warnings).toContain("Shot Prompt is empty.");
+  });
 });
