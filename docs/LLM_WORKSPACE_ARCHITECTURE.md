@@ -657,6 +657,50 @@ it has no test anywhere under `tests/`, and
 B20 migration intact. **B20 collapses the two.** Do not add a third copy — a new
 image family declares a registry entry and reuses `prepare.ts`.
 
+#### The conformation stage — `LLMW.CONFORMATION.1` (B13a), delivered `739ad6f`
+
+`src/lib/llmWorkspace/conformation/`. **Assembly, not cooking** (§5.3): no
+model, no database, no write, deterministic — therefore, by §5.3's own rule,
+**never stored**. It does not go through `runOperation` and has no jar, no
+column and no staleness machinery. No `server-only`: nothing in it reads the
+database or the disk, so a client-side preview can call it.
+
+It answers §5.6's largest single item, in that section's own words: the
+reference roles and their order *"are already in the database… Nothing renders
+it into the engine's syntax. This is not a gap in the stock; it is the missing
+formatting stage of §5.4."*
+
+**Three decisions, each load-bearing for something scheduled later.**
+
+1. **The camera is opaque, on purpose.** `ConformationRequest` carries
+   `cameraPhrases: string[]` — strings the profile **counts** (the guide asks
+   for one primary camera instruction) and **never reads**. §5.6 requires it:
+   *"The conformation stage must therefore not hard-code today's camera
+   shape"*, because B19 is scheduled to redesign `cameraPitch` / `framing` /
+   `cameraMovement` after Chantier 2. When that happens the caller changes and
+   this module does not. Same discipline B16a applied to image paths.
+2. **Engine knowledge lives in the profile and nowhere else.**
+   `src/lib/referenceImageRoles.ts` is the *app's* twenty-role vocabulary and
+   is untouched. That `first_frame` renders as `as first frame` is the
+   *guide's* way of using that role, so the table lives in
+   `profiles/guideDefault.ts`. A second engine declares a second profile with
+   its own table and the catalogue never learns it exists — which is what makes
+   §5.5's "replaceable per engine, nothing named after Seedance" true rather
+   than merely written down. A test asserts the registry contains no such name.
+3. **A role the guide does not name keeps its tag and gets `mode: null`.** The
+   guide names five modes; the catalogue has twenty roles. Dropping the
+   reference loses an image the user deliberately filed; inventing a mode lies
+   to the engine. `keyframe` is **not** folded into `as first frame` either —
+   the catalogue offers both and the user chose between them, the same reason
+   B15a refused to invent an election rule among several environments. An
+   unrecognized or absent role is treated as a role with no mode, so a stale
+   row stays renderable.
+
+**No consumer, deliberately — B14 is the consumer.** B12a and B12b-1 both
+shipped an engine ahead of its consumer on the ground that a deterministic
+module is proven directly rather than through a pipeline; the same reasoning
+applies here, and eleven direct tests are that proof.
+
 ### 4.2 Storage
 
 Follows the `comfy_workflows` precedent: one table, template stored as JSON,
@@ -1433,7 +1477,7 @@ ordering — read the list, not the numbers.
 | 2 | **E1** — the template editor, the saved recipes. **Split 2026-08-18 into E1a (`6f44c72`) and E1b (`638832f`) — both delivered.** E1a is the pure module plus the save action, which accepts a *patch* of the editable surface and never a descriptor — the barrier that keeps E1 from becoming E2. E1b is the screen. | Unchanged in intent, and now named in the user's own vocabulary ("listes de course sauvegardées", §5.2). After B12 because a recipe that can neither cook text nor fill a jar is a thin thing to author against. Must make `intent.freeText` editable — the 2026-08-15 correction in `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. |
 | 3 | **B15** — lighting, the field. **Split 2026-08-18 into B15a (`f163da6`) and B15b (`bc4c498`) — both delivered.** B15a is the three columns, the three write actions and the reads, including `SEQ.LIGHTING`'s precedence rule (own field wins when filled, else the environment assets of the Sequence's cast) and its `source` reporting. B15b is the three form surfaces plus the "Fill from environment" button. No relation column was needed: `sequence_assets` already links them. | §5.9. Three levels: Shot, Sequence, and Environment Asset — the last being the point, since a Sequence can then read its environment's lighting instead of inventing one. Manual fill, plus the reuse path. No model involved. |
 | 4 | **B16** — lighting, assisted. **Split 2026-08-18 into B16a (`c30b6a7`, delivered), B16b and B16c.** B16a is the format brick: `ImageSourceId` and the closed image-source registry, `descriptor.images`, the eighth `Block` variant, call-time byte re-validation, and the runner's multimodal route. Supervisor-implemented under protocol §3 — no check can prove a format right. **B16b (`ef470fb`, delivered)** is `lighting.fromImage`: the first operation to declare an image input, anchored on the Asset, bench-only, writing `assets.lighting` through B15a's mono-column action. **B16c (`0231327`, delivered)** is the director's-note adjust — `shot.lightingDirected` and `sequence.lightingDirected`, `intent.freeText` over the current value, no new primitive. **B16 is complete.** | §5.9's other two fills. **Cheaper than first estimated:** the multimodal capability is already built and hardened in `src/lib/projectStyle/referenceAnalysis/` — byte re-validation at call time, one `ChatMessage` the router already translates for both provider families, a leak-proof error wrapper, a validated JSON answer, and a prompt that already asks about lighting by name. What is missing is that **the descriptor format cannot declare an image input**, so that capability sits outside the workspace, anchored on the Reference Board. B16 makes it reachable from another anchor and another question. Plus the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. **Design constraint from B20:** the image-input declaration must be designed against Reference Board analysis's needs — N ordered images with per-image keys, bytes re-validated at call time — not only against lighting's single-image case, or it will be widened immediately afterwards. |
-| 5 | **B13** — the conformation stage | §5.4/§5.5: the engine formatting the app owns. Renders stored reference roles into the guide's named image modes, applies the word budget, the one-primary-camera rule and the tag caps. Placed after B15/B16 so it has lighting to render. Must be replaceable per engine, nothing named after Seedance — and per §5.6 it **must not hard-code today's camera shape**, since that shape is scheduled to change after Chantier 2. |
+| 5 | **B13** — the conformation stage. **Split 2026-08-18 into B13a (`739ad6f`, delivered) and B13b.** B13a is the profile contract plus the reference rendering — supervisor-implemented, contract-defining; B13b is the output discipline (word budget, one primary camera, tag caps, lighting presence) as findings. | §5.4/§5.5: the engine formatting the app owns. Renders stored reference roles into the guide's named image modes, applies the word budget, the one-primary-camera rule and the tag caps. Placed after B15/B16 so it has lighting to render. Must be replaceable per engine, nothing named after Seedance — and per §5.6 it **must not hard-code today's camera shape**, since that shape is scheduled to change after Chantier 2. |
 | 6 | **B14** — the storyboard prompt under the workspace | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
 | 7 | **B20** — Reference Board analysis joins the registry | Ruled a **brick to build** by the author 2026-08-18, not an exception like chat/image generation/translation. `src/actions/projectStyleReferenceAnalysis.ts` is 1 259 hand-written lines doing exactly what the workspace exists to express. Its migration needs three format gaps closed, not one — an image input with per-image keys, a **composite output** (one scalar plus two lists, where `output.kind` picks one shape today), and cross-item referential validity. Three things must survive untouched: the file confinement/decode gate, the prompt's provenance hash, and the pre-call/in-transaction snapshot drift detection. See `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9. Big enough that it may split; scoped when reached. |
 
