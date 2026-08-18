@@ -34,6 +34,30 @@ export async function callLLMJson(
 }
 
 /**
+ * Calls the configured LLM provider for freeform text output — LLMW.TEXT.1
+ * (B12b-1). `callLLMJson` forces JSON on both provider families
+ * (`response_format: {type:"json_object"}` in `openaiCompatible.ts`,
+ * `format: "json"` in `ollama.ts`), which would ask the model for a
+ * narrative prompt encoded as JSON — exactly wrong for a text-output
+ * operation (`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.3). `callLLMChat`
+ * already routes both provider families with nothing forced, so this
+ * function is only the `LLMPrompt` -> `ChatMessage[]` adapter — the same two
+ * messages `callOllama` already builds in-line for its own JSON request —
+ * not a second provider router.
+ */
+export async function callLLMText(
+  prompt: LLMPrompt,
+  config: LLMConfig
+): Promise<string> {
+  const messages: ChatMessage[] = [
+    { role: "system", content: prompt.system },
+    { role: "user", content: prompt.user },
+  ];
+  const response = await callLLMChat(messages, config);
+  return response.text;
+}
+
+/**
  * Calls the configured LLM provider for freeform chat.
  * Returns the full response including any image content parts from the provider.
  */

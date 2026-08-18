@@ -76,6 +76,11 @@ export async function runBenchOperation(input: {
   // boolean>` (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1), mirroring
   // `RunOperationResult`'s own widening (`runner.ts`) one-for-one.
   | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
+  // LLMW.TEXT.1 (B12b-1): a third variant, relaying `RunOperationResult`'s
+  // own `kind: "text"` one-for-one — no built-in descriptor declares
+  // `kind: "text"` yet, so this is only reachable from a future imported
+  // custom template.
+  | { ok: true; kind: "text"; text: string }
   | { ok: false; error: string }
 > {
   const result = await loadBenchDescriptor(input.templateId);
@@ -93,9 +98,14 @@ export async function runBenchOperation(input: {
     // kinds (LLMW.PROPOSAL.LIST.1, B7d); `commitBenchProposal` below is
     // unaffected, since a list-output descriptor's single commit action is
     // always `redirectOnly` and never reaches its `returnValue` switch.
-    return result.kind === "object"
-      ? { ok: true, kind: "object", values: result.values }
-      : { ok: true, kind: "list", items: result.items };
+    //
+    // LLMW.TEXT.1 (B12b-1) widens the relay to three branches, matching
+    // `RunOperationResult`'s own third `kind` one-for-one. Not reachable from
+    // a built-in descriptor today — `commitBenchProposal` has no
+    // `kind: "text"` commit path either, same reason.
+    if (result.kind === "object") return { ok: true, kind: "object", values: result.values };
+    if (result.kind === "list") return { ok: true, kind: "list", items: result.items };
+    return { ok: true, kind: "text", text: result.text };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

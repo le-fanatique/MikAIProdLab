@@ -109,9 +109,19 @@ export type PromptResolutionResult =
 // variant (`types.ts`), so a parsed object value can honestly be a number,
 // not just a string. Still no `boolean` here: unlike the list branch, no
 // `postResponse` form runs over an `"object"` result.
+//
+// LLMW.TEXT.1 (B12b-1): a third, deliberately breaking variant —
+// `{ok:true, kind:"text", text:string}` — forcing `tsc` to make every
+// declared consumer of this union recognise the new `kind`, exactly the
+// discipline B11-b1 already applied to its own widening. See
+// `.agents/executor_report.md` for the two consumers this broke
+// (`src/actions/llmWorkspace/bench.ts`'s serializable copy,
+// `src/app/settings/llm-workflows/[templateId]/page.tsx`'s bench render) and
+// how each was resolved.
 export type RunOperationResult =
   | { ok: true; kind: "object"; values: Record<string, string | number> }
   | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
+  | { ok: true; kind: "text"; text: string }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
@@ -840,8 +850,29 @@ function parseListOutput(
   return { ok: true, kind: "list", items: truncated };
 }
 
+// ---------------------------------------------------------------------------
+// The text branch (LLMW.TEXT.1, B12b-1). Deliberately not `extractCodeFence`:
+// a strip that makes sense against corrupted JSON would corrupt legitimate
+// prose that happens to contain backticks or braces of its own. `.trim()`,
+// refuse empty-or-blank with `output.errors.empty`, and nothing else — no
+// `require` (one value), no `unparsable` (nothing is parsed).
+// ---------------------------------------------------------------------------
+
+function parseTextOutput(
+  raw: string,
+  output: Extract<OperationDescriptor["output"], { kind: "text" }>
+): RunOperationResult {
+  const text = raw.trim();
+  if (text.length === 0) {
+    return { ok: false, error: output.errors.empty };
+  }
+  return { ok: true, kind: "text", text };
+}
+
 function parseOutput(raw: string, output: OperationDescriptor["output"]): RunOperationResult {
-  return output.kind === "list" ? parseListOutput(raw, output) : parseObjectOutput(raw, output);
+  if (output.kind === "list") return parseListOutput(raw, output);
+  if (output.kind === "text") return parseTextOutput(raw, output);
+  return parseObjectOutput(raw, output);
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,10 +1060,25 @@ export async function runOperation(
     return { ok: false, error: descriptor.messages.notConfigured };
   }
 
-  // Step 6 — callLLMJson. Dynamic import: `@/lib/llm` transitively imports
-  // `@/db` via `@/lib/vramManager.ts`.
-  const { callLLMJson } = await import("@/lib/llm");
-  const raw = await callLLMJson(resolved.prompt, resolved.config);
+  // Step 6 — callLLMJson, or callLLMText for a `kind: "text"` output
+  // (LLMW.TEXT.1, B12b-1): `callLLMJson` forces JSON on both provider
+  // families, which a free-text operation must not ask for. Dynamic import:
+  // `@/lib/llm` transitively imports `@/db` via `@/lib/vramManager.ts`.
+  //
+  // Accessed off the module namespace rather than destructured: every
+  // pre-existing runner test mocks `@/lib/llm` with a factory that returns
+  // `callLLMJson` alone (`vi.mock("@/lib/llm", () => ({ callLLMJson:
+  // vi.fn() }))`), and Vitest's mock proxy throws the moment an undeclared
+  // export is *destructured*, even for an `"object"`/`"list"` descriptor
+  // that never calls `callLLMText` at all. Property access on the namespace
+  // object, read only inside the branch that actually needs it, does not
+  // trigger that check — the exact regression `.agents/executor_report.md`
+  // reports finding and fixing this way.
+  const llm = await import("@/lib/llm");
+  const raw =
+    descriptor.output.kind === "text"
+      ? await llm.callLLMText(resolved.prompt, resolved.config)
+      : await llm.callLLMJson(resolved.prompt, resolved.config);
 
   // Steps 7-8 — strip the fence, parse, map the error.
   const parsed = parseOutput(raw, descriptor.output);

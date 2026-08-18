@@ -76,6 +76,14 @@
 // `ObjectOutputField[]`; all ten existing descriptors gain `type: "string"`
 // mechanically on every field (fifteen fields total), no other value
 // changing.
+//
+// LLMW.TEXT.1 (B12b-1) adds a third `kind`, `"text"` — the runner's
+// non-JSON call (`callLLMText`, `src/lib/llm/index.ts`), needed by §5.3's
+// "cooking" stage: a generated narrative prompt is prose, not a JSON object
+// to decode. See the field itself for the shape and the three decisions
+// deliberately left out of it. No descriptor declares `kind: "text"` yet —
+// this ticket ships the engine, not the narrative-prompt-composer descriptor
+// (B12b-2) or any bench render surface for it.
 // ---------------------------------------------------------------------------
 
 /**
@@ -588,6 +596,31 @@ export type OperationDescriptor = {
           // same message.
           notArray: string;
           empty: string; // every item was filtered out by `item.validity`
+        };
+      }
+    | {
+        // LLMW.TEXT.1 (B12b-1). Free text, not decoded: `callLLMText`
+        // (`src/lib/llm/index.ts`) is called instead of `callLLMJson`, and
+        // the response is returned `.trim()`ed, nothing else. Three
+        // decisions, already taken, not oversights:
+        //   - no `unparsable`: nothing is parsed, so there is nothing that
+        //     can fail to parse — this asymmetry with `"object"`/`"list"` is
+        //     the whole point of a text-mode output, not a gap in it;
+        //   - no `require`: there is exactly one value, and `errors.empty`
+        //     already covers the one refusal a single value can need;
+        //   - no `maxLength` / `truncateTo`: a word-count budget belongs to
+        //     the conformation stage (§5.5 of the product vision, ticket
+        //     B13), not to the runner. Not added "just in case" — a field
+        //     with no consumer is debt, not readiness.
+        kind: "text";
+        target: { entity: EntityKind };
+        // The single column the text lands in, from the same vocabulary as
+        // `ObjectOutputField.field` — e.g. `"narrativePrompt"` for
+        // `shots.narrative_prompt` (B12a's jar). No `jsonKey`: there is no
+        // JSON to read a key from.
+        field: string;
+        errors: {
+          empty: string; // the response was empty or entirely blank
         };
       };
 
