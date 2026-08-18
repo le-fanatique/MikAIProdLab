@@ -1397,6 +1397,54 @@ therefore starts after the migrations, not before.
   then the roadmap reconciliation — both are worth far more once ~6 000 lines of
   superseded code have actually left the repository.
 
+### Chantier 2 scoped, 2026-08-19 — measured, not estimated
+
+Read off the repository the day Chantier 1 closed.
+
+**C0 is the prerequisite, and it is bigger than its one line suggests.**
+**25 test files** under `tests/llmWorkspace/` import from `src/lib/prompts/`,
+and they do not merely reference it — they assert **equality against the old
+builder's live output**:
+
+```ts
+expect(assembled.system).toBe(expected.system); // expected = buildAssetNotesOnlyPrompt(...)
+```
+
+So the builders are not dead weight, they are the oracle. Deleting them deletes
+the proof that every descriptor still renders what the product used to send.
+
+**The one rule that makes C0 correct**, and the way it can silently go wrong:
+the frozen literal must be captured **from the builder**, never from the
+descriptor. Capture it from the descriptor and the proof becomes circular — it
+would pass even if the descriptor had already drifted, which is precisely what
+it exists to detect. The re-anchored tests must also pass against the
+**unchanged** code before a single builder is deleted.
+
+**C1/C2 are smaller than they sound.** B3 already turned the LLM actions into
+thin adapters over `runOperation` (`src/actions/llm/assetBible.ts`: *"Thin
+adapter over `runOperation(assetBibleGenerateDescriptor, ...)"*). Removing them
+is removing adapters and their callers, not migrating logic. 19 descriptors now
+cover the 19 files in `src/actions/llm/`, minus the deliberate exceptions
+(`chat`, `chatImageReferences`, `imageGeneration`, `translation`).
+
+**One sequencing finding that is not in the original plan.**
+`promptCompiler` is **still live in six UI files** — `PromptCompilerPanel`,
+`PromptCompilerHandoffGate`, `ShotGenerationPanel`, `WorkflowProfilePanel`, and
+two pages. §5.8 declared its design superseded, and B14 delivered the
+replacement — but that replacement is **opt-in and unvalidated**: the author has
+not yet run his from-scratch beta, and the legacy composition is still the
+default by his own decision (2026-08-18).
+
+Removing the Prompt Compiler before that beta would take away a surface he
+still uses, in favour of one nobody has judged yet. **C1/C2 should therefore
+strip the migrated assist panels first and leave the Prompt Compiler standing
+until the beta rules on the new composition.** Not a blocker, an ordering.
+
+**Proposed order:** C0 → C1/C2 without the Prompt Compiler → the beta → the
+Prompt Compiler's removal → C3 → C4/C5/C6. The independents
+(`ThemeModeToggle.tsx`, `sequenceVideoSplit.ts`, the large storyboard and
+editorial files) remain schedulable at any time and touch none of this.
+
 ### The ordering the user settled, and what B7a changed
 
 **Order settled by the user on 2026-08-15**, revised as above:
