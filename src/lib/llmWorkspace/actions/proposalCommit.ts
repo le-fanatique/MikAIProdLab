@@ -119,6 +119,30 @@ export function buildUpdateShotPromptHiddenFields(input: {
   };
 }
 
+// ── narrativePrompt.compose → updateShotNarrativePrompt (redirectOnly) ────
+//
+// LLMW.NARRATIVE.1 (B12b-2). Same model as `buildUpdateShotPromptHiddenFields`
+// above, over `narrativePrompt` instead of `shotPrompt` — `updateShotNarrativePrompt`
+// stays `(formData: FormData) => Promise<void>` with `redirect()` on every
+// path (registry behaviour 6), and this action never reads or rewrites
+// `shotPrompt` (`src/actions/shots.ts`) — the two jars coexist by
+// construction, not by omission (§5.3 of docs/LLM_WORKSPACE_PRODUCT_VISION.md).
+export function buildUpdateShotNarrativePromptHiddenFields(input: {
+  projectId: number;
+  sequenceId: number;
+  shotId: number;
+  narrativePrompt: string;
+  returnTo: string;
+}): Record<string, string> {
+  return {
+    projectId: String(input.projectId),
+    sequenceId: String(input.sequenceId),
+    shotId: String(input.shotId),
+    narrativePrompt: input.narrativePrompt,
+    returnTo: input.returnTo,
+  };
+}
+
 // ── shots.fromSequence → createGeneratedShots (redirectOnly) ──────────────
 //
 // LLMW.PROPOSAL.LIST.1 (B7d). Same model as

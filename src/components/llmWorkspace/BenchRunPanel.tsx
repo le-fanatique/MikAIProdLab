@@ -2,7 +2,12 @@
 
 // ---------------------------------------------------------------------------
 // BenchRunPanel.tsx — LLMW.BENCH.RUN.1 (B6c1), §4.5; widened to serve a
-// `kind: "list"` descriptor's output by LLMW.PROPOSAL.LIST.1 (B7d), §4.
+// `kind: "list"` descriptor's output by LLMW.PROPOSAL.LIST.1 (B7d), §4;
+// widened again to serve a `kind: "text"` descriptor's output by
+// LLMW.NARRATIVE.1 (B12b-2) — `narrativePrompt.compose`'s own single
+// generated value, mirroring the `"object"` branch's one-field case (one
+// `<textarea>`, no selection), never the `"list"` branch's checkbox-per-item
+// model.
 //
 // A thin wrapper around `ProposalPanel`: no business logic here — it calls
 // the two Server Actions (`runBenchOperation`, `commitBenchProposal`) and
@@ -36,6 +41,7 @@ import {
   buildCreateSelectedAssetsHiddenFields,
   buildCreateShotAtPositionHiddenFields,
   buildUpdateSequencePromptHiddenFields,
+  buildUpdateShotNarrativePromptHiddenFields,
   buildUpdateShotPromptHiddenFields,
 } from "@/lib/llmWorkspace/actions/proposalCommit";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
@@ -71,11 +77,22 @@ function firstSearchParamValue(value: string | string[] | undefined): string | u
 // `runBenchOperation`'s own widened return type.
 type ListDraft = { items: Array<Record<string, string | number | boolean>>; selected: number[] };
 
-type Draft = ObjectDraft | ListDraft;
+// LLMW.NARRATIVE.1 (B12b-2): the first bench render surface for a
+// `kind: "text"` output — one value, no selection, no field list. `text`
+// edits in a single `<textarea>`, same interaction as an `"object"` draft's
+// one-field case, minus the per-field label loop `output.fields` would
+// otherwise drive.
+type TextDraft = { text: string };
+
+type Draft = ObjectDraft | ListDraft | TextDraft;
 
 type Output =
   | { kind: "object"; fields: ObjectOutputFields }
-  | { kind: "list"; itemFields: ListOutputItemFields; formDataKey: string };
+  | { kind: "list"; itemFields: ListOutputItemFields; formDataKey: string }
+  // `field` names the descriptor's own declared `output.field`
+  // (`narrativePrompt.compose`'s `"narrativePrompt"`) — the same value the
+  // Approve hidden field is posted under.
+  | { kind: "text"; field: string };
 
 type Props = {
   templateId: string;
@@ -116,6 +133,14 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
         return { ok: true, draft };
       }
 
+      if (output.kind === "text") {
+        if (result.kind !== "text") {
+          return { ok: false, error: "This template's Run result does not match its declared text output." };
+        }
+        const draft: TextDraft = { text: result.text };
+        return { ok: true, draft };
+      }
+
       if (result.kind !== "object") {
         return { ok: false, error: "This template's Run result does not match its declared object output." };
       }
@@ -127,6 +152,35 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
   };
 
   function approveActions(draft: Draft): ProposalApproveAction<Draft>[] {
+    if (output.kind === "text") {
+      if (plan.kind === "redirectOnly" && plan.actionId === "updateShotNarrativePrompt") {
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            action: ACTION_BINDINGS.updateShotNarrativePrompt,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as TextDraft;
+              return buildUpdateShotNarrativePromptHiddenFields({
+                projectId: ids.projectId as number,
+                sequenceId: ids.sequenceId as number,
+                shotId: ids.shotId as number,
+                narrativePrompt: current.text,
+                returnTo,
+              });
+            },
+          },
+        ];
+      }
+
+      // Any other `actionId` a text descriptor could declare has no
+      // approve branch wired here yet — no Approve button; the reason is
+      // rendered under the field below, on the same model the list and
+      // object branches already follow.
+      return [];
+    }
+
     if (output.kind === "list") {
       const listDraft = draft as ListDraft;
 
@@ -382,6 +436,40 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
       regenerateLabel="Redo"
       approveActions={approveActions}
       renderDraft={(draft, setDraft) => {
+        if (output.kind === "text") {
+          const textDraft = draft as TextDraft;
+          return (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor={`bench-${output.field}`}
+                  className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]"
+                >
+                  {output.field}
+                </label>
+                <textarea
+                  id={`bench-${output.field}`}
+                  value={textDraft.text}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setDraft((prev) => ({ ...(prev as TextDraft), text: value }));
+                  }}
+                  rows={8}
+                  className={textareaClass}
+                />
+              </div>
+
+              {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
+              {plan.kind !== "unsupported" &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "updateShotNarrativePrompt") && (
+                  <p className="text-xs text-[#cf7b6b]">
+                    This template&apos;s commit action has no bench Approve path yet.
+                  </p>
+                )}
+            </div>
+          );
+        }
+
         if (output.kind === "list") {
           const listDraft = draft as ListDraft;
           return (

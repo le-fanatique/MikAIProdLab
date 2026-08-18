@@ -332,10 +332,35 @@ function validateListOutput(output: Record<string, unknown>): string | null {
   return null;
 }
 
+// LLMW.NARRATIVE.1 (B12b-2) — the `kind: "text"` branch (LLMW.TEXT.1, B12b-1)
+// had no validator branch of its own until `narrativePrompt.compose` became
+// the first descriptor to declare it: this module's own round-trip test
+// (`templateStorage.test.ts`, "round-trips all eight built-in descriptors")
+// widened to import/export every `DESCRIPTORS` entry, including this one,
+// and an unrecognised `"text"` `kind` fell into the same catch-all refusal
+// `"list"` used to fall into before B7a gave it its own branch — exactly the
+// gap this module's own header exists to close. Mirrors `validateObjectOutput`
+// above, minus `fields`/`require`/`exactKeysOnly`/`errors.unparsable` — a text
+// output has no fields to decode and nothing that can fail to parse
+// (`types.ts`'s own `kind: "text"` comment).
+function validateTextOutput(output: Record<string, unknown>): string | null {
+  if (!isPlainObject(output.target)) return '"output.target" is required and must be an object.';
+  if (!isEntityKind(output.target.entity)) {
+    return `"output.target.entity" references an unknown entity kind "${String(output.target.entity)}".`;
+  }
+  if (typeof output.field !== "string" || !output.field) {
+    return '"output.field" is required and must be a non-empty string.';
+  }
+  if (!isPlainObject(output.errors)) return '"output.errors" is required and must be an object.';
+  if (typeof output.errors.empty !== "string") return '"output.errors.empty" is required and must be a string.';
+  return null;
+}
+
 function validateOutput(output: Record<string, unknown>): string | null {
   if (output.kind === "object") return validateObjectOutput(output);
   if (output.kind === "list") return validateListOutput(output);
-  return `"output.kind" must be "object" or "list" (was ${output.kind === undefined ? "absent" : `"${String(output.kind)}"`}).`;
+  if (output.kind === "text") return validateTextOutput(output);
+  return `"output.kind" must be "object", "list" or "text" (was ${output.kind === undefined ? "absent" : `"${String(output.kind)}"`}).`;
 }
 
 export function validateLlmTemplateJson(raw: string): TemplateValidationResult {

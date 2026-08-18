@@ -100,12 +100,11 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   // from `descriptor.output` and no longer needs this narrowing.
   const objectOutput = descriptor.output.kind === "object" ? descriptor.output : null;
 
-  // LLMW.TEXT.1 (B12b-1): `BenchRunPanel`'s own `Output` prop still only
-  // declares `"object"` / `"list"` — this ticket ships the runner's text
-  // engine, not a bench render surface for it (that is B12b-2, once a
-  // descriptor actually declares `kind: "text"`). `null` here is an explicit,
-  // named refusal below (`benchOutput` unavailable), never a silent render of
-  // untested code.
+  // LLMW.TEXT.1 (B12b-1) shipped the runner's text engine with no bench
+  // render surface for it (`benchOutput` used to fall back to `null` here).
+  // LLMW.NARRATIVE.1 (B12b-2) gives `kind: "text"` its own branch, now that
+  // `narrativePrompt.compose` is the first descriptor to declare it —
+  // `benchOutput` is never `null` any more.
   const benchOutput =
     descriptor.output.kind === "object"
       ? { kind: "object" as const, fields: descriptor.output.fields }
@@ -115,7 +114,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
             itemFields: descriptor.output.item.fields,
             formDataKey: descriptor.output.selection.formDataKey,
           }
-        : null;
+        : { kind: "text" as const, field: descriptor.output.field };
 
   const anchorEntity = descriptor.anchor.entity;
   const requiredKeys = requiredAnchorIdKeys(anchorEntity);
@@ -615,7 +614,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
             </p>
           )}
 
-          {complete && preview && preview.ok && benchOutput && (
+          {complete && preview && preview.ok && (
             <BenchRunPanel
               templateId={templateId}
               ids={selection}
@@ -625,13 +624,6 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
               returnTo={returnTo}
               commitAdvisory={bibleFreshness === "stale" ? descriptor.commitAdvisory : undefined}
             />
-          )}
-
-          {complete && preview && preview.ok && !benchOutput && (
-            <p className="text-sm text-[#cf7b6b]">
-              This template declares a &quot;text&quot; output — the bench has no render
-              surface for it yet.
-            </p>
           )}
         </Card>
       </div>

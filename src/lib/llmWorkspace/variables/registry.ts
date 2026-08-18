@@ -2315,6 +2315,79 @@ Break this project into production sequences.`;
 }
 
 // ---------------------------------------------------------------------------
+// `narrativePrompt.compose` render forms — LLMW.NARRATIVE.1 (B12b-2). The
+// "grosse marmite" of §5.3 of `docs/LLM_WORKSPACE_PRODUCT_VISION.md`: no
+// oracle to reproduce (this is a new operation, not a flat-JSON migration),
+// authored on the same register as `shot.retakeDirected` /
+// `shot.insertDirected` / `asset.retakeDirected`. The context lines reuse
+// `shotPrompt.assist`'s own `generate`-mode wording almost verbatim
+// (`renderShotPromptGenerateContextLines` above) over the same six
+// ingredients, in the same declared order (PROJECT.IDENTITY, SEQ.CONTEXT,
+// SHOT.CORE, SHOT.CURRENT_PROMPT, SHOT.CAST, SHOT.REFERENCES) — but
+// unconditional (no mode to branch on) and phrased as the current draft
+// rather than "existing prompt draft" wording tied to the transform modes
+// `shotPrompt.assist` alone has.
+// ---------------------------------------------------------------------------
+
+/** System: fixed role/rules text — §5.4 of the product vision, "the app owns the format": prose only, one proposal, faithful to the ingredients, no invented facts. */
+export const NARRATIVE_PROMPT_SYSTEM_INTRO =
+  "You are a narrative prompt writer for a film or animation production, turning a Shot's structured production data into a single, vivid narrative prompt suitable as an AI image or video generation prompt.";
+
+/** System: the rules block — every constraint §5.4 and the ticket's point 5 ask for, in one place. */
+export const NARRATIVE_PROMPT_SYSTEM_RULES = `Rules:
+- Use only the provided context. Do not invent characters, locations, or actions that are not present in the input.
+- Propose exactly one narrative prompt — a single paragraph, never a list of options or variants.
+- Write in plain English prose. No JSON, no markdown, no code fences, no headers, no bullet points.
+- Do not include a preamble, a label, or any comment about the response itself. Output only the prose paragraph.
+- Stay faithful to the shot's action, camera intent, cast and references, while giving the result a more narratively vivid, evocative voice than the raw fields alone.`;
+
+/**
+ * Template: the six ingredients, in their declared order — the operation's
+ * whole context, with no mode branch (unlike `shotPrompt.assist`'s own
+ * `generateContextLines`, this always renders). `currentPrompt.shotPrompt`
+ * is surfaced as "Current shot prompt" — background the model may draw on,
+ * never the thing being asked for (that is `SHOT.NARRATIVE_PROMPT`, the
+ * jar this operation fills, deliberately not read back as an ingredient —
+ * see the descriptor's own `context` comment).
+ */
+export function renderNarrativePromptContextLines(
+  project: ProjectIdentityData,
+  sequence: SeqContextData,
+  shot: ShotCoreData,
+  currentPrompt: ShotCurrentPromptData,
+  cast: ShotCastEntry[],
+  references: ShotReferenceEntry[]
+): string {
+  const lines: string[] = [`Project: ${project.name}`];
+  if (project.pitch?.trim()) lines.push(`Pitch: ${project.pitch}`);
+  if (project.story?.trim()) lines.push(`Story: ${project.story.slice(0, 400)}`);
+  lines.push(`Sequence: ${sequence.title}`);
+  if (sequence.summary?.trim()) lines.push(`Sequence summary: ${sequence.summary}`);
+  if (sequence.description?.trim()) lines.push(`Sequence description: ${sequence.description}`);
+  if (sequence.mood?.trim()) lines.push(`Mood: ${sequence.mood}`);
+  if (sequence.locationHint?.trim()) lines.push(`Location: ${sequence.locationHint}`);
+  const shotLabel = shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title;
+  lines.push(`Shot: ${shotLabel}`);
+  if (shot.durationSeconds != null) lines.push(`Duration: ${shot.durationSeconds}s`);
+  if (shot.description?.trim()) lines.push(`Description: ${shot.description}`);
+  if (shot.actionPitch?.trim()) lines.push(`Action: ${shot.actionPitch}`);
+  if (shot.cameraPitch?.trim()) lines.push(`Camera intent: ${shot.cameraPitch}`);
+  if (shot.framing?.trim()) lines.push(`Framing: ${shot.framing}`);
+  if (shot.cameraMovement?.trim()) lines.push(`Camera movement: ${shot.cameraMovement}`);
+  if (currentPrompt.shotPrompt?.trim()) lines.push(`Current shot prompt: ${currentPrompt.shotPrompt}`);
+  const castSummary = cast.map((r) => {
+    const extras = [r.description?.trim(), r.notes?.trim()].filter(Boolean).join("; ");
+    return extras ? `${r.name} (${r.type}: ${extras})` : `${r.name} (${r.type})`;
+  });
+  if (castSummary.length > 0) lines.push(`Cast: ${castSummary.join(", ")}`);
+  const referenceSummary = references
+    .map((r) => r.label ?? r.sourceFilename ?? r.imageRole ?? null)
+    .filter((v): v is string => v !== null);
+  if (referenceSummary.length > 0) lines.push(`References: ${referenceSummary.join(", ")}`);
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // The registry — one entry per `VariableId`. Resolver signatures differ
 // across variables (project-anchored vs. sequence-anchored vs. shot/asset
 // -anchored), matching the precedent's shape rather than forcing a uniform
@@ -2419,6 +2492,7 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "sequencesFromOutline.templatePathB": renderSequencesFromOutlineTemplatePathB,
   "castingFromSequence.sequenceContextLines": renderCastingFromSequenceSequenceContextLines,
   "castingFromSequence.existingCastingsBlock": renderCastingFromSequenceExistingCastingsBlock,
+  "narrativePrompt.contextLines": renderNarrativePromptContextLines,
 } as const;
 
 /**

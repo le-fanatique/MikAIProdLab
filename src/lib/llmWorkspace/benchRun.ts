@@ -289,8 +289,13 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
 //     (`BenchRunPanel.tsx`) and, with it, real wording — the same
 //     `applySelectedCastingSuggestions`/B7h-a-then-B7h-m sequence repeated
 //     one more time.
+//   - `updateShotNarrativePrompt` (`src/actions/shots.ts:687`), declared by
+//     LLMW.JAR.1 (B12a): `narrativePromptSaved`, `narrativePromptError`.
+//     Left unwired in `resolveBenchConfirmation` below until LLMW.NARRATIVE.1
+//     (B12b-2) gave it a bench Approve branch (`BenchRunPanel.tsx`) and, with
+//     it, real wording — the same sequence repeated once more.
 //
-// `RedirectOnlyActionId` has seven members. All seven are wired below —
+// `RedirectOnlyActionId` has eight members. All eight are wired below —
 // `resolveBenchConfirmation` renders real wording for every one of them.
 //
 // The `satisfies Record<RedirectOnlyActionId, …>` is the guardrail this
@@ -314,9 +319,10 @@ export const REDIRECT_CONFIRMATION_KEYS = {
   createShotAtPosition: { successKey: "shotInserted", errorKey: "shotInsertError" },
   // LLMW.JAR.1 (B12a) — `updateShotNarrativePrompt` mirrors `updateShotPrompt`
   // exactly (src/actions/shots.ts), redirect-only on both paths. Declared
-  // per the same type-level guardrail; deliberately given no wording in
-  // `resolveBenchConfirmation` below — no descriptor's `commit` reaches it
-  // yet (B12b, the next ticket, wires the jar's filling operation).
+  // per the same type-level guardrail. LLMW.NARRATIVE.1 (B12b-2) wires it to
+  // `narrativePrompt.compose`'s own `commit` and gives it real wording below
+  // — see this table's own header for the previous "no wording yet" state
+  // this replaces.
   updateShotNarrativePrompt: { successKey: "narrativePromptSaved", errorKey: "narrativePromptError" },
 } as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
 
@@ -407,6 +413,13 @@ export function isBenchReturnToQueryKey(key: string): boolean {
 // ago, ahead of being reachable — the guard clause below no longer excludes
 // it; see `REDIRECT_CONFIRMATION_KEYS`'s own header for the previous
 // deliberate exclusion this replaces.
+//
+// LLMW.NARRATIVE.1 (B12b-2) adds an eighth and last, `updateShotNarrativePrompt`,
+// now that `narrativePrompt.compose` is wired to a bench Approve branch
+// (`BenchRunPanel.tsx`) — same rule as `updateShotPrompt`/`updateSequencePrompt`
+// below: success only on exactly `"1"`, one fixed message, no plural, no `0`
+// case (this action always writes exactly one row on success, like the two
+// prompt-update actions it mirrors).
 // ---------------------------------------------------------------------------
 
 function firstSearchValue(value: string | string[] | undefined): string | undefined {
@@ -425,7 +438,8 @@ export function resolveBenchConfirmation(
     plan.actionId !== "createGeneratedSequences" &&
     plan.actionId !== "createSelectedAssets" &&
     plan.actionId !== "applySelectedCastingSuggestions" &&
-    plan.actionId !== "createShotAtPosition"
+    plan.actionId !== "createShotAtPosition" &&
+    plan.actionId !== "updateShotNarrativePrompt"
   ) {
     return null;
   }
@@ -474,8 +488,9 @@ export function resolveBenchConfirmation(
 
   if (plan.actionId === "updateShotPrompt") return { kind: "success", message: "Shot Prompt saved." };
   if (plan.actionId === "updateSequencePrompt") return { kind: "success", message: "Sequence Prompt saved." };
-  // Only `createShotAtPosition` remains: it writes exactly one row per
-  // successful call and redirects with `shotInserted=1` on that one path
-  // (`src/actions/llm/shotInsertion.ts:225`) — no plural, no `0` case.
-  return { kind: "success", message: "Shot inserted." };
+  if (plan.actionId === "createShotAtPosition") return { kind: "success", message: "Shot inserted." };
+  // Only `updateShotNarrativePrompt` remains: it writes exactly one row per
+  // successful call and redirects with `narrativePromptSaved=1` on that one
+  // path (`src/actions/shots.ts`) — no plural, no `0` case.
+  return { kind: "success", message: "Narrative Prompt saved." };
 }

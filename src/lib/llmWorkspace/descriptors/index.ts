@@ -23,6 +23,7 @@ import { shotsFromSequenceDescriptor } from "./shotsFromSequence";
 import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 import { assetsFromProjectDescriptor } from "./assetsFromProject";
 import { castingFromSequenceDescriptor } from "./castingFromSequence";
+import { narrativePromptComposeDescriptor } from "./narrativePrompt";
 
 export const DESCRIPTORS = {
   "story.generate": storyGenerateDescriptor,
@@ -40,6 +41,7 @@ export const DESCRIPTORS = {
   "sequences.fromOutline": sequencesFromOutlineDescriptor,
   "assets.fromProject": assetsFromProjectDescriptor,
   "casting.fromSequence": castingFromSequenceDescriptor,
+  "narrativePrompt.compose": narrativePromptComposeDescriptor,
 } as const satisfies Record<string, OperationDescriptor>;
 
 export {
@@ -58,4 +60,5 @@ export {
   sequencesFromOutlineDescriptor,
   assetsFromProjectDescriptor,
   castingFromSequenceDescriptor,
+  narrativePromptComposeDescriptor,
 };
