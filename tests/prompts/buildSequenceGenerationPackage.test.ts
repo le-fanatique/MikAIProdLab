@@ -155,7 +155,7 @@ describe("formatSequenceGenerationPackageText", () => {
         includeWarnings: false,
         storyboardComposition: {
           projectStyle: "Grainy anamorphic, muted palette.",
-          lighting: { environment: [], sequence: null, shotById: {} },
+          lighting: { byShotId: {} },
         },
       });
 
@@ -181,7 +181,7 @@ describe("formatSequenceGenerationPackageText", () => {
         includeWarnings: false as const,
         storyboardComposition: {
           projectStyle: null,
-          lighting: { environment: [], sequence: null, shotById: {} }, // no lighting resolved for shotOne — a `lightingMissing` finding
+          lighting: { byShotId: {} }, // no lighting resolved for shotOne — a `lightingMissing` finding
         },
       };
 
@@ -197,7 +197,7 @@ describe("formatSequenceGenerationPackageText", () => {
         context: pkg.shots[0].context,
         continuity: { framing: pkg.shots[0].continuity.framing, cameraMovement: pkg.shots[0].continuity.cameraMovement },
         projectStyle: options.storyboardComposition.projectStyle,
-        lighting: { environment: [], sequence: null, shot: null },
+        lighting: null,
       });
       expect(composed.findings.map((f) => f.code)).toContain("lightingMissing");
       expect(composed.text.length).toBeGreaterThan(0);

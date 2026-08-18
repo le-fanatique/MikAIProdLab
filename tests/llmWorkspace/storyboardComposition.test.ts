@@ -61,7 +61,7 @@ function inputWith(
     context: contextWith(),
     continuity: { framing: "WS", cameraMovement: "static" },
     projectStyle: "Grainy anamorphic, muted palette.",
-    lighting: { environment: [], sequence: null, shot: "Cold blue screen glow." },
+    lighting: "Cold blue screen glow.",
     ...overrides,
   };
 }
@@ -138,7 +138,7 @@ describe("composeStoryboardShot", () => {
 
   it("surfaces the conformation findings rather than acting on them", () => {
     const result = composeStoryboardShot(
-      inputWith({ lighting: { environment: [], sequence: null, shot: null } })
+      inputWith({ lighting: null })
     );
 
     // Three camera phrases, a short body, and no lighting — all reported.
@@ -161,45 +161,24 @@ describe("composeStoryboardShot", () => {
     expect(result.parts.some((p) => p.id === "style")).toBe(false);
   });
 
-  // LLMW.STORYBOARD.LIGHTING.1 — the author's craft model, 2026-08-19: the rig
-  // is built upstream and refined down, so the three levels accumulate. A
-  // fallback that kept only the Shot's line would throw away the ambiance the
-  // whole scene is lit by.
-  it("accumulates the three lighting levels, upstream first, each named", () => {
+  // LLMW.STORYBOARD.LIGHTING.1 — the author's model, 2026-08-19: a level is
+  // refined by copying the one above and editing its text, exactly as
+  // `sequence_style_overrides` copies a Project Style snapshot and replaces it
+  // whole. So the composition renders ONE value, already resolved by
+  // precedence — concatenating levels would print the same ambiance twice.
+  it("renders the one resolved lighting value it is given", () => {
     const result = composeStoryboardShot(
-      inputWith({
-        lighting: {
-          environment: [{ name: "Server room", lighting: "Cold blue monitor glow." }],
-          sequence: "Warmer as the scene turns.",
-          shot: "Rim-light the lead from behind.",
-        },
-      })
+      inputWith({ lighting: "Cold blue monitor glow, warmed toward the window." })
     );
 
     const lighting = result.parts.find((p) => p.id === "lighting")!.text;
-    expect(lighting).toContain("Environment (Server room): Cold blue monitor glow.");
-    expect(lighting).toContain("Sequence: Warmer as the scene turns.");
-    expect(lighting).toContain("Shot: Rim-light the lead from behind.");
-    // Upstream to downstream, the order the rig is actually built in.
-    expect(lighting.indexOf("Environment")).toBeLessThan(lighting.indexOf("Sequence:"));
-    expect(lighting.indexOf("Sequence:")).toBeLessThan(lighting.indexOf("Shot:"));
+    expect(lighting).toBe("Cold blue monitor glow, warmed toward the window.");
   });
 
-  it("renders whichever levels exist, and nothing at all when none do", () => {
-    const environmentOnly = composeStoryboardShot(
-      inputWith({
-        lighting: { environment: [{ name: "Alley", lighting: "Sodium vapour." }], sequence: null, shot: null },
-      })
-    );
-    expect(environmentOnly.parts.find((p) => p.id === "lighting")!.text).toBe(
-      "- Environment (Alley): Sodium vapour."
-    );
+  it("renders no lighting at all when none resolved, and still produces a prompt", () => {
+    // His arbitration: an undefined rig must never block generation.
+    const none = composeStoryboardShot(inputWith({ lighting: null }));
 
-    // The author's arbitration: an undefined rig must never block generation,
-    // and nothing goes up into the prompt.
-    const none = composeStoryboardShot(
-      inputWith({ lighting: { environment: [], sequence: null, shot: null } })
-    );
     expect(none.parts.some((p) => p.id === "lighting")).toBe(false);
     expect(none.text).not.toContain("Lighting:");
     expect(none.text.length).toBeGreaterThan(0);
@@ -220,7 +199,7 @@ describe("composeStoryboardShot", () => {
       }),
       continuity: { framing: null, cameraMovement: null },
       projectStyle: null,
-      lighting: { environment: [], sequence: null, shot: null },
+      lighting: null,
     });
 
     expect(result.parts.map((p) => p.id)).toEqual(["action"]);

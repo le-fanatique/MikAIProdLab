@@ -4,8 +4,8 @@
 // Resolves the lighting rig a storyboard composition renders, at the three
 // levels it is actually built at.
 //
-// **Why the rig accumulates instead of falling back.** The author's craft
-// model, given 2026-08-19 as a former lighting supervisor in animation:
+// **Why precedence and not accumulation.** The author's craft model, given
+// 2026-08-19 as a former lighting supervisor in animation:
 //
 //   > le plus malin c'est de travailler ton rig d'éclairage en upstream et
 //   > d'affiner jusqu'au shot […] tu crées un environment, qui a une ambiance
@@ -15,9 +15,24 @@
 //   > shots, tu fine tune ton rig de light pour mettre en valeur les
 //   > personnages ou le sens narratif du shot.
 //
-// So the Shot's line refines the Sequence's, which refines the environment's.
-// Keeping only the most specific one would throw away the ambiance the whole
-// scene is lit by.
+// The refinement is real — but it happens **in the text**, by copying a level
+// down and editing it (B15b's "Fill from environment" button is that gesture),
+// not by concatenating levels at prompt time. He put it plainly:
+//
+//   > recuperer le prompt de l'env dans la sequence, et juste decider de
+//   > l'overrider en reprennant le text et en ajoutant ou supprimant certain
+//   > mots, ca me parait pas trop cher, et plus agile qu un systeme additif.
+//   > C'est un peu la meme logique que l'override de project style à la
+//   > sequence par rapport au projet.
+//
+// The analogy is exact, and the codebase already implements it:
+// `sequence_style_overrides` copies the Project Style snapshot byte-for-byte,
+// then replaces it whole on update, "never merged field-by-field", and
+// resolution is override-else-inherit. Lighting follows the same shape.
+//
+// An accumulating render would also have printed the same content twice — the
+// environment's ambiance raw, and again inside the sequence's edited copy of
+// it.
 //
 // **Nothing here ever blocks.** Also his arbitration, same day: he wants to
 // generate with no lighting direction at all — as a proof of concept of action
@@ -36,46 +51,56 @@
 import "server-only";
 import { resolveSeqLighting } from "../variables/registry";
 
-export type StoryboardLightingRig = {
-  /** The environment Assets' ambiance, in `resolveSeqLighting`'s own deterministic order. */
-  environment: Array<{ name: string; lighting: string }>;
-  /** The Sequence's own field — the global adjustment on that rig. */
-  sequence: string | null;
-  /** Each Shot's own field — the fine tune. Keyed by shot id; a missing key means none. */
-  shotById: Record<number, string | null>;
+export type StoryboardLighting = {
+  /** The effective lighting for each Shot, keyed by shot id. `null` means none resolved anywhere. */
+  byShotId: Record<number, string | null>;
 };
 
 /**
- * `shots` carries each Shot's own `lighting` column, in any order — the map it
- * produces is keyed, so order does not matter here.
+ * `shots` carries each Shot's own `lighting` column, in any order.
  *
- * The environment ambiance and the Sequence's own field are read through
- * `resolveSeqLighting`, which owns the relation between a Sequence and its
- * environment Assets (B15a). **Its precedence rule is not re-implemented and
- * not bypassed**: when it reports `source: "own"` the Sequence has its own
- * value and no environment line is emitted for it, which is the one place the
- * accumulating model and B15a's "own wins" rule meet. See the note in
- * `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9.
+ * **Precedence, not accumulation** — the Shot's own field when set, otherwise
+ * the Sequence's effective lighting (`resolveSeqLighting`, which already
+ * resolves its own field before its environment Assets, B15a).
+ *
+ * The refinement the author describes happens **in the text**, not at prompt
+ * time: he fills a level from the one above and edits it — B15b's "Fill from
+ * environment" button is exactly that gesture — so the more specific value
+ * already contains the inherited one as he rewrote it. Concatenating the levels
+ * would print the ambiance twice, once raw and once edited.
+ *
+ * This mirrors `sequence_style_overrides` (`src/lib/projectStyle/resolveSequenceStyle.ts`)
+ * exactly, and the author named the analogy himself: content copied from the
+ * level above at creation, then *"only ever replaced whole by an explicit
+ * update, never merged field-by-field"*, with resolution a plain
+ * override-else-inherit.
+ *
+ * **Nothing here blocks.** His arbitration, 2026-08-19: he wants to generate
+ * with no lighting direction at all, as a proof of concept of action and
+ * framing, while the environment is still unlocked. Nothing resolved means
+ * nothing rendered, never a refusal.
  */
-export async function resolveStoryboardLightingRig(
+export async function resolveStoryboardLighting(
   sequenceId: number,
   shots: Array<{ id: number; lighting: string | null }>
-): Promise<StoryboardLightingRig> {
+): Promise<StoryboardLighting> {
   const seq = await resolveSeqLighting(sequenceId);
 
-  const environment =
-    seq.source === "environment"
-      ? seq.environments
-          .filter((e): e is { name: string; lighting: string } => Boolean(e.lighting?.trim()))
-          .map((e) => ({ name: e.name, lighting: e.lighting.trim() }))
-      : [];
-  const sequence = seq.source === "own" ? seq.lighting.trim() : null;
+  const sequenceLighting =
+    seq.source === "own"
+      ? seq.lighting.trim()
+      : seq.source === "environment"
+        ? seq.environments
+            .filter((e): e is { name: string; lighting: string } => Boolean(e.lighting?.trim()))
+            .map((e) => `${e.name}: ${e.lighting.trim()}`)
+            .join("; ") || null
+        : null;
 
-  const shotById: Record<number, string | null> = {};
+  const byShotId: Record<number, string | null> = {};
   for (const shot of shots) {
     const own = shot.lighting?.trim();
-    shotById[shot.id] = own ? own : null;
+    byShotId[shot.id] = own ? own : sequenceLighting;
   }
 
-  return { environment, sequence, shotById };
+  return { byShotId };
 }

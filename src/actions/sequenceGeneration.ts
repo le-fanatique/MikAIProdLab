@@ -67,8 +67,8 @@ import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStyle
 import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
 import { resolveProjectStyle } from "@/lib/llmWorkspace/variables/registry";
 import {
-  resolveStoryboardLightingRig,
-  type StoryboardLightingRig,
+  resolveStoryboardLighting,
+  type StoryboardLighting,
 } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 
 // ---------------------------------------------------------------------------
@@ -410,12 +410,12 @@ async function buildSequenceStoryboardGenerationContext(
   // composition is actually requested: the legacy default never pays for
   // these two extra queries, and never changes a single byte of its output.
   let storyboardComposition:
-    | { projectStyle: string | null; lighting: StoryboardLightingRig }
+    | { projectStyle: string | null; lighting: StoryboardLighting }
     | undefined;
   if (useGuideComposition) {
     const projectStyle = await resolveProjectStyleTextForComposition(projectId);
 
-    const lighting = await resolveStoryboardLightingRig(
+    const lighting = await resolveStoryboardLighting(
       sequenceId,
       shotList.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
     );

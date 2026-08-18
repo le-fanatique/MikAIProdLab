@@ -59,8 +59,8 @@ import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStyle
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
 import { resolveProjectStyle } from "@/lib/llmWorkspace/variables/registry";
 import {
-  resolveStoryboardLightingRig,
-  type StoryboardLightingRig,
+  resolveStoryboardLighting,
+  type StoryboardLighting,
 } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
 import StoryboardCompositionChoice from "@/components/StoryboardCompositionChoice";
@@ -580,7 +580,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   // behavior before this ticket) never pays for these two extra queries and
   // never changes a single byte of `packageText` below.
   let storyboardComposition:
-    | { projectStyle: string | null; lighting: StoryboardLightingRig }
+    | { projectStyle: string | null; lighting: StoryboardLighting }
     | undefined;
   // The findings §5.6's output discipline reports, per Shot — display-only,
   // never a blocker (§5.4): computed straight from the same inputs handed to
@@ -591,7 +591,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   if (useGuideComposition) {
     const projectStyle = await resolveProjectStyleTextForComposition(pid);
 
-    const lighting = await resolveStoryboardLightingRig(
+    const lighting = await resolveStoryboardLighting(
       sid,
       shotList.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
     );
@@ -603,11 +603,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
         context: s.context,
         continuity: { framing: s.continuity.framing, cameraMovement: s.continuity.cameraMovement },
         projectStyle,
-        lighting: {
-          environment: lighting.environment,
-          sequence: lighting.sequence,
-          shot: lighting.shotById[s.shotId] ?? null,
-        },
+        lighting: lighting.byShotId[s.shotId] ?? null,
       }).findings,
     }));
   }

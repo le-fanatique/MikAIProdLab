@@ -304,18 +304,13 @@ export type FormatSequenceGenerationPackageTextOptions = {
     /** The Project's Style text, or `null` when no Style is active. Same value for every Shot in the package. */
     projectStyle: string | null;
     /**
-     * The lighting rig, shaped the way it is actually built (the author's
-     * craft model, 2026-08-19): the environment carries the ambiance and the
-     * Sequence adjusts it — both the same for every Shot here — while each
-     * Shot fine-tunes on top. Hence a per-Sequence part and a per-Shot map,
-     * rather than one collapsed string per Shot: the three levels accumulate
-     * in the prompt instead of the most specific one winning.
+     * Each Shot's effective lighting, already resolved by precedence
+     * (`resolveStoryboardLighting`): the Shot's own field, else the Sequence's.
+     * The author refines a level by copying the one above and editing it — the
+     * same shape as `sequence_style_overrides` — so the value here already
+     * carries whatever it inherited.
      */
-    lighting: {
-      environment: Array<{ name: string; lighting: string }>;
-      sequence: string | null;
-      shotById: Record<number, string | null>;
-    };
+    lighting: { byShotId: Record<number, string | null> };
   };
 };
 
@@ -345,11 +340,7 @@ export function formatSequenceGenerationPackageText(
           context: s.context,
           continuity: { framing: s.continuity.framing, cameraMovement: s.continuity.cameraMovement },
           projectStyle: storyboardComposition.projectStyle,
-          lighting: {
-            environment: storyboardComposition.lighting.environment,
-            sequence: storyboardComposition.lighting.sequence,
-            shot: storyboardComposition.lighting.shotById[s.shotId] ?? null,
-          },
+          lighting: storyboardComposition.lighting.byShotId[s.shotId] ?? null,
         }).text || "(no compiled prompt)"
       : s.compiledPrompt.text || "(no compiled prompt)";
     const warningsBlock =

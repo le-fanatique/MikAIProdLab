@@ -553,16 +553,37 @@ supervisor in animation — and the answer was a different shape entirely:
 > tu fine tune ton rig de light pour mettre en valeur les personnage ou le sens
 > narratif du shot.
 
-So the levels **accumulate**: the environment carries the ambiance, the
-Sequence adjusts that rig globally against the narration and its master camera
-axes, and the Shot fine-tunes it for its characters or its narrative sense. A
-Shot's "rim-light the lead from behind" is a refinement of its environment's
-cold ambiance, not a replacement for it.
+The refinement is real — but asked how it should be built, he corrected the
+implementation twice in one exchange, and the second correction is the one that
+matters:
 
-The fallback reading was therefore wrong in a way that would have been hard to
-see: it would have silently thrown away the ambiance the whole scene is lit by
-every time a Shot had a line of its own. `composeStoryboardShot` renders all
-three, upstream first, each named for its level.
+> recuperer le prompt de l'env dans la sequence, et juste decider de
+> l'overrider en reprennant le text et en ajoutant ou supprimant certain mots,
+> ca me parait pas trop cher, et plus agile qu un systeme additif. C'est un peu
+> la meme logique que l'override de project style à la sequence par rapport au
+> projet.
+
+**The refinement happens in the text, not at prompt time.** A level is filled
+from the one above and then edited — B15b's "Fill from environment" button is
+exactly that gesture — so the more specific value already contains what it
+inherited, as he rewrote it. Resolution is therefore a plain precedence: the
+Shot's own field, else the Sequence's effective lighting.
+
+**The analogy he names is exact, and the codebase already implements it.**
+`sequence_style_overrides` (`src/lib/projectStyle/resolveSequenceStyle.ts`)
+copies the Project Style snapshot byte-for-byte at creation, then only ever
+replaces it whole — *"never merged field-by-field"* — and resolves
+override-else-inherit. Lighting follows that shape rather than inventing a
+second one.
+
+An accumulating render was built first and reverted: besides contradicting this
+convention, it would have printed the same ambiance twice — once raw from the
+environment, and again inside the Sequence's edited copy of it.
+
+**What is missing to complete the model:** there is a "Fill from environment"
+button on the Sequence (B15b) and **no equivalent on the Shot**. Filling a Shot
+from its Sequence has to be done by hand today. Not urgent, and not invented
+here — recorded so it is chosen rather than stumbled into.
 
 **And nothing about lighting ever blocks generation** — his arbitration in the
 same breath:
