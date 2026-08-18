@@ -919,6 +919,55 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B12b-2 — the jar can be filled, and B12 is complete (2026-08-18)
+
+Commit `d097278`. `narrativePrompt.compose` is the first descriptor to declare a
+text output, and it closes B12: the jar (B12a), the engine (B12b-1), the recipe
+(this one).
+
+**The proof that gives the whole chantier its point.**
+`tests/llmWorkspace/narrativePromptCompose.surface.test.ts` runs the operation,
+takes the draft, approves it against a disposable database, and asserts that
+`shots.narrative_prompt` holds the model's prose while `shots.shot_prompt` still
+holds exactly the human's text. §5.3's separation is demonstrated, not claimed —
+the two halves of a prompt can no longer be merged by an Approve.
+
+**Two decisions defended in the code, not only in the ticket**, because both are
+the kind a later ticket would undo:
+
+- `SHOT.NARRATIVE_PROMPT` is **not** an ingredient of its own recipe. Reading
+  the jar back would make each run drift from whatever the previous run produced
+  instead of restarting from the same six ingredients — which is exactly the
+  property that makes this §5.3's *marmite* ("toujours de la meme maniere");
+- no `intent.freeText`. The director's note is E1's and B16's subject, and
+  declaring it here would pre-empt their design — the same primitive §4's
+  Reachability section records as having been deferred three times by accident.
+
+The ingredient set is `shotPrompt.assist`'s six, unchanged: same anchor entity,
+same raw material, nothing invented. That was a supervisor decision, flagged to
+the user as overturnable.
+
+**A hole B12b-1 left, found only by the first descriptor that could trip it.**
+`templateStorage.ts`'s `validateOutput` had no `"text"` branch, so a stored
+template declaring the kind B12b-1 had just shipped would have been refused on
+import with `"output.kind" must be "object" or "list"`. Nothing could surface it
+until `narrativePrompt.compose` entered `DESCRIPTORS` and the round-trip test
+began exporting and re-importing it. Worth generalising: **a new descriptor-format
+variant is not finished when the runner handles it — the storage validator is a
+second, independent switch over the same union, and only a descriptor actually
+declaring the variant exercises it.**
+
+**Where the supervisor's ticket was wrong.** It asked for the Approve form to
+post under the name given by `output.field`. The executor instead named the key
+as a literal, exactly as the sibling `buildUpdateShotPromptHiddenFields` does,
+and used `output.field` for the bench label. That is the better design and was
+accepted: deriving the posted key from a descriptor string would replace a
+compile-time constant, checked against what the action actually reads, with a
+runtime value a stored template could set to anything.
+
+**UC impact: none.** The bench is the only surface; the Shot page shows nothing
+yet, exactly as UC1 and UC3 shipped.
+
 ### B12b-1 — the runner learns prose, and the JSON it was forcing (2026-08-18)
 
 Commit `00093d8`. Preparing B12b found the obstacle the queue had not named:

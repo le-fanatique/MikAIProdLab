@@ -1348,13 +1348,19 @@ unapplied migration a hard stop: the user runs `db:migrate` himself, always.
   `RunOperationResult` variant broken deliberately on B11-b1's pattern, and the
   runner's text branch — which strips no code fence, because a strip correct
   against corrupted JSON would mutilate prose. No descriptor, no bench render.
-- **B12b-2 — the narrative prompt composer** (next). The first descriptor
-  declaring `kind: "text"`, its bench render surface, and the `commit` that
-  finally reaches `updateShotNarrativePrompt`. Its `REDIRECT_CONFIRMATION_KEYS`
-  entry already exists, deliberately without wording in
-  `resolveBenchConfirmation`, and B12b-2 is what gives it one. It must also
-  consume `output.field`, declared by B12b-1 and unconsumed until then — or
-  remove it.
+- **B12b-2 — the narrative prompt composer** (`LLMW.NARRATIVE.1`, delivered,
+  `d097278`). `narrativePrompt.compose`: the six ingredients of
+  `shotPrompt.assist`, no mode and no `intent.freeText` (§5.3's marmite mixes
+  the same way every time; the director's note is E1's and B16's subject), and
+  deliberately **not** `SHOT.NARRATIVE_PROMPT`, which is its own output. Bench
+  render surface, `commit: ["updateShotNarrativePrompt"]`, and B12b-1's named
+  refusal removed in the same diff. Also closed a hole B12b-1 left: the template
+  storage validator had no `"text"` branch, so a stored template declaring the
+  new kind would have been refused on import.
+
+**B12 is complete.** The generated narrative prompt has a jar of its own, and an
+Approve can no longer merge it into the field the user types by hand — proven end
+to end by `narrativePromptCompose.surface.test.ts`.
 
 **Then Chantier 2** — C0 → C6 and the three independents, unchanged.
 
