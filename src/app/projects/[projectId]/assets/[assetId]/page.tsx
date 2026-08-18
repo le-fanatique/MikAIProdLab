@@ -24,6 +24,7 @@ import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 import AssetAlignmentPanel from "@/components/AssetAlignmentPanel";
 import { getAssetAlignmentStatusAction, type GetAssetAlignmentStatusResult } from "@/actions/assetAlignment";
+import { readAssetBibleFreshness } from "@/lib/assetBible/freshness";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
@@ -142,6 +143,11 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
   const [asset] = await db.select().from(assets).where(eq(assets.id, aid));
   if (!asset || asset.projectId !== pid) notFound();
+
+  // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — the advisory below only has a reason to
+  // show when the Asset Bible is actually `stale`: `"no-bible"` (nothing to
+  // warn about) and `"current"` (already in sync) both suppress it.
+  const bibleFreshness = readAssetBibleFreshness(asset);
 
   // STYLE.1.F.UI — status load must never take Asset Detail down. A thrown
   // exception here is caught and shown as a local panel error instead of
@@ -376,7 +382,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             hasExistingDescription={Boolean(asset.description?.trim())}
             isConfigured={!!llmSettings.model.trim()}
             hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
-            commitAdvisory={assetDescriptionGenerateDescriptor.commitAdvisory}
+            commitAdvisory={bibleFreshness === "stale" ? assetDescriptionGenerateDescriptor.commitAdvisory : undefined}
           />
         </Card>
       </Collapsible>
@@ -392,7 +398,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             hasExistingNotes={Boolean(asset.notes?.trim())}
             isConfigured={!!llmSettings.model.trim()}
             hasUsageContext={sequenceAppearances.length > 0 || shotAppearances.length > 0}
-            commitAdvisory={assetNotesGenerateDescriptor.commitAdvisory}
+            commitAdvisory={bibleFreshness === "stale" ? assetNotesGenerateDescriptor.commitAdvisory : undefined}
           />
         </Card>
       </Collapsible>

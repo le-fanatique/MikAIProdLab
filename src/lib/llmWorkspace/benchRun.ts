@@ -228,7 +228,23 @@ export function buildListSelectionPayload(
 // `updateAssetDetailsInline` replaces all five columns on every call, a
 // blank one becoming null — so the Approve path must read these columns off
 // the existing row and carry them through, or it silently erases them.
+//
+// Scoped to the five caller-supplied detail fields — never
+// `bibleSourceFingerprint` (SCHEMA.BIBLE_FRESHNESS.1, S1b), which the
+// registry now also lists under `columns.written` but which no descriptor
+// ever declares in `output.fields` and no caller ever supplies: it is
+// computed inside `updateAssetDetailsInline` itself from the `description`/
+// `notes` values this same call writes, not a value this Approve path could
+// "carry through" from the existing row.
 // ---------------------------------------------------------------------------
+
+const ASSET_DETAIL_INPUT_COLUMNS = [
+  "description",
+  "notes",
+  "visualIdentity",
+  "usageRules",
+  "forbiddenVariations",
+] as const;
 
 export function preservedAssetDetailColumns(descriptor: OperationDescriptor): string[] {
   // `updateAssetDetailsInline`-committing descriptors are `output.kind ===
@@ -237,7 +253,8 @@ export function preservedAssetDetailColumns(descriptor: OperationDescriptor): st
   // hypothetical list descriptor declares no fields here, so every column is
   // "not declared" and preserved, rather than guessed.
   const declared = new Set(descriptor.output.kind === "object" ? descriptor.output.fields.map((f) => f.field) : []);
-  return ACTION_REGISTRY.updateAssetDetailsInline.columns.written.filter((column) => !declared.has(column));
+  const written = new Set(ACTION_REGISTRY.updateAssetDetailsInline.columns.written);
+  return ASSET_DETAIL_INPUT_COLUMNS.filter((column) => written.has(column) && !declared.has(column));
 }
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,19 @@ export const assets = sqliteTable("assets", {
   }),
   sourceExcerpt: text("source_excerpt"),
   duplicateWarning: text("duplicate_warning"),
+  // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — deterministic fingerprint (sha256 hex,
+  // see src/lib/assetBible/freshness.ts) of `description`/`notes` exactly as
+  // they stood the moment the Asset Bible (visualIdentity/usageRules/
+  // forbiddenVariations) was last written by `updateAssetDetailsInline`
+  // (src/actions/assets.ts). Nullable and informative only: `null` means "no
+  // Bible generated since this column existed", the case for every asset
+  // that predates it — a normal state, not an error. Deliberately a sibling
+  // of `computeAssetContentFingerprint` (src/lib/projectStyle/assetAlignment/
+  // fingerprint.ts), not an extension of it: that function's five-field order
+  // is load-bearing for `asset_style_alignments` rows already stored in the
+  // DB, and widening it would silently reclassify every already-reviewed
+  // asset as "desynced" from the Project Style.
+  bibleSourceFingerprint: text("bible_source_fingerprint"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

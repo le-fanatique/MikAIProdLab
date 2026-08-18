@@ -39,7 +39,11 @@ describe("updateAssetDetailsInline — exact write", () => {
 
     const after = await readAsset(ctx, assetId);
     expect(result).toEqual({ ok: true });
+    // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — `bibleSourceFingerprint` is now
+    // written on every call alongside the five text fields, from `null`
+    // (this fixture's insert never sets it) to the computed fingerprint.
     expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual([
+      "bibleSourceFingerprint",
       "description",
       "forbiddenVariations",
       "notes",

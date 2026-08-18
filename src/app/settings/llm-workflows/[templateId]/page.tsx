@@ -24,6 +24,7 @@ import {
 } from "@/lib/llmWorkspace/bench";
 import BenchRunPanel from "@/components/llmWorkspace/BenchRunPanel";
 import type { Block } from "@/lib/llmWorkspace/types";
+import { readAssetBibleFreshness } from "@/lib/assetBible/freshness";
 
 // LLMW.BENCH.READ.1 (B6b) — the three-pane bench in read-only form
 // (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §5.1, §5.3): left = the template's
@@ -158,6 +159,26 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
     shotIds: shotRows.map((r) => r.id),
     assetIds: assetRows.map((r) => r.id),
   });
+
+  // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — `descriptor.commitAdvisory` only has a
+  // reason to show when the selected Asset's Bible is actually `stale`.
+  // Queried only when this descriptor could show one at all: asset-anchored
+  // with a resolved Asset selection.
+  let bibleFreshness: ReturnType<typeof readAssetBibleFreshness> | null = null;
+  if (descriptor.commitAdvisory && needsAsset && selection.assetId != null) {
+    const [bibleRow] = await db
+      .select({
+        description: assets.description,
+        notes: assets.notes,
+        visualIdentity: assets.visualIdentity,
+        usageRules: assets.usageRules,
+        forbiddenVariations: assets.forbiddenVariations,
+        bibleSourceFingerprint: assets.bibleSourceFingerprint,
+      })
+      .from(assets)
+      .where(eq(assets.id, selection.assetId));
+    if (bibleRow) bibleFreshness = readAssetBibleFreshness(bibleRow);
+  }
 
   const intentInput = complete ? parseIntentInputFromSearchParams(descriptor, search) : {};
   const preview = complete ? await resolveOperationPreview(descriptor, selection, intentInput) : null;
@@ -593,7 +614,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
                     }
               }
               returnTo={returnTo}
-              commitAdvisory={descriptor.commitAdvisory}
+              commitAdvisory={bibleFreshness === "stale" ? descriptor.commitAdvisory : undefined}
             />
           )}
         </Card>

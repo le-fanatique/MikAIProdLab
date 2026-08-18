@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { assets } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { computeBibleSourceFingerprint } from "@/lib/assetBible/freshness";
 
 const VALID_TYPES = [
   "character",
@@ -281,7 +282,12 @@ export async function updateAssetDetailsInline(input: {
   const { assetId, projectId, description, notes, visualIdentity, usageRules, forbiddenVariations } = input;
 
   const [existing] = await db
-    .select({ projectId: assets.projectId })
+    .select({
+      projectId: assets.projectId,
+      visualIdentity: assets.visualIdentity,
+      usageRules: assets.usageRules,
+      forbiddenVariations: assets.forbiddenVariations,
+    })
     .from(assets)
     .where(eq(assets.id, assetId));
 
@@ -289,14 +295,55 @@ export async function updateAssetDetailsInline(input: {
     return { ok: false, error: "Asset not found." };
   }
 
+  const finalDescription = description.trim() || null;
+  const finalNotes = notes.trim() || null;
+  const finalVisualIdentity = visualIdentity.trim() || null;
+  const finalUsageRules = usageRules.trim() || null;
+  const finalForbiddenVariations = forbiddenVariations.trim() || null;
+
+  // SCHEMA.BIBLE_FRESHNESS.1-R1 — this is the one place the Asset Bible
+  // (visualIdentity/usageRules/forbiddenVariations) is written, but it is
+  // NOT the only thing written here: the same call also serves plain
+  // "Save Details" edits, which report the Bible back unchanged while
+  // rewriting description/notes. Capturing the fingerprint on every call
+  // (S1b's original mistake) recalculated it on those non-Bible writes too,
+  // silently marking a Bible that had just gone stale as "current" —
+  // exactly the case the warning exists for.
+  //
+  // So the fingerprint only moves when the Bible itself moves: compare the
+  // three Bible values this call is about to write (after the same
+  // `trim() || null` normalization used everywhere else — comparing raw
+  // strings would make a stray space look like a regeneration) against what
+  // is already stored on the row.
+  const bibleChanged =
+    finalVisualIdentity !== existing.visualIdentity ||
+    finalUsageRules !== existing.usageRules ||
+    finalForbiddenVariations !== existing.forbiddenVariations;
+
   await db
     .update(assets)
     .set({
-      description: description.trim() || null,
-      notes: notes.trim() || null,
-      visualIdentity: visualIdentity.trim() || null,
-      usageRules: usageRules.trim() || null,
-      forbiddenVariations: forbiddenVariations.trim() || null,
+      description: finalDescription,
+      notes: finalNotes,
+      visualIdentity: finalVisualIdentity,
+      usageRules: finalUsageRules,
+      forbiddenVariations: finalForbiddenVariations,
+      // Bible unchanged → leave the fingerprint column untouched (Drizzle
+      // omits a key that is not in `.set()`). Two accepted consequences,
+      // both resolving doubt toward the warning rather than toward silence:
+      // a regeneration that happens to render byte-identical text will not
+      // move the fingerprint and can stay "stale"; clearing the Bible (all
+      // three fields to null) counts as a change and does rewrite the
+      // fingerprint, but `readAssetBibleFreshness` reports "no-bible" for an
+      // all-null Bible regardless, so nothing is displayed.
+      ...(bibleChanged
+        ? {
+            bibleSourceFingerprint: computeBibleSourceFingerprint({
+              description: finalDescription,
+              notes: finalNotes,
+            }),
+          }
+        : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(assets.id, assetId));
