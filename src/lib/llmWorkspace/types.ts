@@ -746,6 +746,43 @@ export type OperationDescriptor = {
           item: {
             fields: CompositeListItemField[];
             validity: { fields: string[]; require: "all" | "any" };
+            /**
+             * LLMW.OUTPUT.REFVALIDITY.1 (B20b) — cross-item referential
+             * validity, the third and last of §5.9's format gaps for B20:
+             * *"Every observation cites exactly one attached reference; every
+             * candidate rule cites every reference supporting it. No rule in
+             * `item.validity` can state that today."*
+             *
+             * The keys are the ones the runner itself attached
+             * (`descriptor.images`'s `R1..Rn`), so nothing here needs to be
+             * declared twice or kept in sync.
+             *
+             * **An item citing an unattached key refuses the whole answer —
+             * it is not filtered.** That is not a preference: it is what
+             * `projectStyleReferenceAnalysis`'s own validator does today
+             * (`validation.ts`'s `parseObservation` returns an error rather
+             * than dropping the observation), and B20e is a migration, not a
+             * redesign. A model inventing `R7` out of a four-image selection
+             * has misunderstood the request, and keeping the half of its
+             * answer that happens to parse is how a wrong answer gets stored.
+             * No `onUnknown: "filter"` option is offered, because no consumer
+             * wants one; if one ever does, that is a widening made then.
+             */
+            references?: {
+              /** The field carrying the key(s). `mode` must match its declared type. */
+              field: string;
+              /** `"single"`: a `"string"` field holding exactly one attached key. `"subset"`: a `"stringList"` field whose every member is an attached key, and which must be non-empty. */
+              mode: "single" | "subset";
+              /**
+               * Per-attached-key bounds across the whole list — how many items
+               * must cite each key. Reproduces
+               * `REFERENCE_ANALYSIS_LIMITS.minObservationsPerReference` /
+               * `maxObservationsPerReference`, which today refuse an answer
+               * that ignores one of the selected images entirely. Absent means
+               * no coverage requirement.
+               */
+              coverage?: { min: number; max: number };
+            };
           };
           maxItems?: number;
         }>;
@@ -755,6 +792,10 @@ export type OperationDescriptor = {
           unparsable: string; // JSON.parse failed, or the shape is wrong
           notArray: string; // a declared list's `arrayKey` is missing or not an array
           empty: string; // the `require` rule over the scalars was not satisfied
+          /** LLMW.OUTPUT.REFVALIDITY.1 (B20b) — an item cited a key that was never attached. Required only when some list declares `item.references`. */
+          unknownReference?: string;
+          /** LLMW.OUTPUT.REFVALIDITY.1 (B20b) — an attached key fell outside its declared `coverage`. Required only when some list declares `coverage`. */
+          coverage?: string;
         };
       }
     | {

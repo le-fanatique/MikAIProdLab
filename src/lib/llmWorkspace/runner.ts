@@ -1003,7 +1003,12 @@ function parseTextOutput(
 // ---------------------------------------------------------------------------
 function parseCompositeOutput(
   raw: string,
-  output: Extract<OperationDescriptor["output"], { kind: "composite" }>
+  output: Extract<OperationDescriptor["output"], { kind: "composite" }>,
+  // LLMW.OUTPUT.REFVALIDITY.1 (B20b). The keys THIS run attached — not a
+  // second declaration to keep in sync, but the very list `resolveDeclaredImages`
+  // produced. Empty for an operation that declares no images, in which case a
+  // list declaring `item.references` can satisfy nothing and says so.
+  attachedKeys: string[] = []
 ): RunOperationResult {
   let parsed: unknown;
   try {
@@ -1095,16 +1100,65 @@ function parseCompositeOutput(
       items.push(itemValues);
     });
 
+    // LLMW.OUTPUT.REFVALIDITY.1 (B20b) — applied to the items that survived
+    // `validity`, and REFUSING rather than filtering. See the field's own note
+    // in `types.ts`: this reproduces what `validation.ts` does today, and a
+    // model citing an image that was never attached has misread the request.
+    const refSpec = list.item.references;
+    if (refSpec) {
+      const attached = new Set(attachedKeys);
+      const citations = new Map<string, number>();
+
+      for (const item of items) {
+        const value = item[refSpec.field];
+        const cited: string[] =
+          refSpec.mode === "subset"
+            ? Array.isArray(value)
+              ? value
+              : []
+            : typeof value === "string" && value.length > 0
+              ? [value]
+              : [];
+
+        // "single" wants exactly one; "subset" wants at least one.
+        if (cited.length === 0) {
+          return { ok: false, error: output.errors.unknownReference ?? output.errors.notArray };
+        }
+        if (refSpec.mode === "single" && cited.length !== 1) {
+          return { ok: false, error: output.errors.unknownReference ?? output.errors.notArray };
+        }
+        for (const key of cited) {
+          if (!attached.has(key)) {
+            return { ok: false, error: output.errors.unknownReference ?? output.errors.notArray };
+          }
+          citations.set(key, (citations.get(key) ?? 0) + 1);
+        }
+      }
+
+      if (refSpec.coverage) {
+        for (const key of attachedKeys) {
+          const count = citations.get(key) ?? 0;
+          if (count < refSpec.coverage.min || count > refSpec.coverage.max) {
+            return { ok: false, error: output.errors.coverage ?? output.errors.notArray };
+          }
+        }
+      }
+    }
+
     lists[list.key] = list.maxItems != null ? items.slice(0, list.maxItems) : items;
   }
 
   return { ok: true, kind: "composite", values, lists };
 }
 
-function parseOutput(raw: string, output: OperationDescriptor["output"]): RunOperationResult {
+function parseOutput(
+  raw: string,
+  output: OperationDescriptor["output"],
+  attachedKeys: string[] = []
+): RunOperationResult {
   if (output.kind === "list") return parseListOutput(raw, output);
   if (output.kind === "text") return parseTextOutput(raw, output);
-  if (output.kind === "composite") return parseCompositeOutput(raw, output);
+  if (output.kind === "composite") return parseCompositeOutput(raw, output, attachedKeys);
   return parseObjectOutput(raw, output);
 }
 
@@ -1374,7 +1428,11 @@ export async function runOperation(
       : await llm.callLLMJson(resolved.prompt, resolved.config);
 
   // Steps 7-8 — strip the fence, parse, map the error.
-  const parsed = parseOutput(raw, descriptor.output);
+  const parsed = parseOutput(
+    raw,
+    descriptor.output,
+    resolved.images.map((image) => image.key)
+  );
 
   // Step 9 — postResponse, only on a successful list result.
   if (parsed.ok && parsed.kind === "list" && descriptor.postResponse) {

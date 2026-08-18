@@ -449,6 +449,36 @@ function validateCompositeOutput(output: Record<string, unknown>): string | null
     if (list.item.validity.require !== "all" && list.item.validity.require !== "any") {
       return `"output.lists[${i}].item.validity.require" must be "all" or "any".`;
     }
+
+    // LLMW.OUTPUT.REFVALIDITY.1 (B20b). Checked here rather than only in the
+    // runner because a stored template declaring a reference field that does
+    // not exist would fail at Run with a message about the model's answer,
+    // blaming the model for the descriptor's own error.
+    const refSpec = list.item.references;
+    if (refSpec !== undefined) {
+      if (!isPlainObject(refSpec)) return `"output.lists[${i}].item.references" must be an object.`;
+      if (typeof refSpec.field !== "string" || !declaredFields.has(refSpec.field)) {
+        return `"output.lists[${i}].item.references.field" references an undeclared field "${String(refSpec.field)}".`;
+      }
+      if (refSpec.mode !== "single" && refSpec.mode !== "subset") {
+        return `"output.lists[${i}].item.references.mode" must be "single" or "subset".`;
+      }
+      if (refSpec.coverage !== undefined) {
+        if (!isPlainObject(refSpec.coverage)) return `"output.lists[${i}].item.references.coverage" must be an object.`;
+        if (typeof refSpec.coverage.min !== "number" || typeof refSpec.coverage.max !== "number") {
+          return `"output.lists[${i}].item.references.coverage" requires numeric "min" and "max".`;
+        }
+        if (refSpec.coverage.min > refSpec.coverage.max) {
+          return `"output.lists[${i}].item.references.coverage.min" cannot exceed "max".`;
+        }
+      }
+      if (typeof (output.errors as Record<string, unknown>)?.unknownReference !== "string") {
+        return `"output.errors.unknownReference" is required when a list declares "item.references".`;
+      }
+      if (refSpec.coverage !== undefined && typeof (output.errors as Record<string, unknown>)?.coverage !== "string") {
+        return `"output.errors.coverage" is required when a list declares "item.references.coverage".`;
+      }
+    }
   }
 
   if (!isPlainObject(output.errors)) return '"output.errors" must be an object.';
