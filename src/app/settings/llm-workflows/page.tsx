@@ -82,8 +82,9 @@ export default async function LlmWorkflowsListPage({ searchParams }: Props) {
         actions={
           <Link
             href="/settings/llm-workflows/variables"
-            className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded border border-[#5b93d6]/40 bg-[#1a2535] px-3 py-1.5 text-sm text-[#5b93d6] hover:border-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
           >
+            <span aria-hidden="true">▤</span>
             Variable Library
           </Link>
         }
