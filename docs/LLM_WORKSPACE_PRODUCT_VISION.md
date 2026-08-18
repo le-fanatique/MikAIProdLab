@@ -497,12 +497,27 @@ product shape, not an implementation.
 1. **By hand.** Always available, always the fallback.
 2. **From an image, by a vision model.** Feed an uploaded image, or a reference
    image of a cast Asset, and ask the model to describe that image's lighting.
-   This is a **new brick for the workspace**: the first operation whose input
-   includes an image rather than only resolved text variables. The transport
-   already exists and is unused by any field operation — `ChatMessage.content`
-   accepts OpenAI-style `image_url` parts, and `ChatMessage.images` carries
-   Ollama vision. What is missing is the descriptor's ability to declare an
-   image input at all.
+
+   **Corrected 2026-08-18, on the author's own recollection: this capability is
+   already built, and it is production-grade.** Project Style's Reference Board
+   analysis (`src/lib/projectStyle/referenceAnalysis/`, ~2 500 lines with its
+   action) already does the whole thing: it re-reads and re-validates the real
+   bytes of a stored image at call time — magic-byte sniff, decode gate,
+   confined path, size bounds — builds **one** multimodal `ChatMessage` that
+   the existing router already translates per provider (OpenAI-compatible reads
+   the `image_url` data-URL parts, Ollama reads the same message's top-level
+   `images`), calls through a wrapper that never leaks a provider body or key
+   even into server logs, and validates a JSON answer of per-image
+   observations. Its own prompt already asks for lighting by name, among
+   composition, colour, texture, framing, material and silhouette.
+
+   So the brick is not "teach the product to look at an image". What is
+   genuinely missing is narrower and more interesting: **the descriptor format
+   cannot declare an image input**, so this capability lives entirely outside
+   the workspace, hand-written, anchored on the Reference Board and producing
+   style-rule candidates rather than a field value. Making it reachable from
+   another anchor, another image source and another question is the work — and
+   it is library growth in the sense of §11.3's governing rule, not invention.
 3. **By director's note, at Shot and Sequence level.** Not a regeneration — an
    *adjustment of what is already there*:
 
@@ -514,11 +529,18 @@ product shape, not an implementation.
    that reads the current lighting value as one of its variables — the same
    shape as UC2's directed retake, applied to one field. No new primitive.
 
-**Why this is not merely another field.** It is the first ingredient in the
-product that can be *derived from an image*, and the first whose natural source
-is another entity's field rather than the user's keyboard. Both are library
-growth in the sense of §11.3's governing rule, and both are worth more than the
-lighting text itself.
+**Why this is not merely another field.** It is the first ingredient the
+*workspace* can derive from an image, and the first whose natural source is
+another entity's field rather than the user's keyboard. Both are worth more than
+the lighting text itself.
+
+**One question this raises, left open for the author.**
+`src/actions/projectStyleReferenceAnalysis.ts` is 1 259 lines of hand-written
+action performing exactly the kind of operation the workspace exists to
+express — anchored, context-driven, producing reviewable proposals. It is
+currently outside the registry entirely. Under §11.3's governing rule that is a
+brick to build; under §6's "what this is not" it may be a deliberate exception
+like chat, image generation and field translation. Not decided here.
 
 ---
 

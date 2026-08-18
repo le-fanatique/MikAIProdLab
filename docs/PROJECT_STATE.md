@@ -996,10 +996,15 @@ is accepted and he designed it on the spot — a field at Shot, Sequence and
 **Environment Asset** level, the last being the point, since a Sequence can then
 read its environment's lighting instead of inventing one; fillable by hand, by a
 **vision model reading an uploaded or referenced image**, or by a director's note
-that *adjusts* the existing value rather than regenerating it. That vision fill
-is the first workspace operation whose input would include an image; the
-transport already exists and is unused by any field operation
-(`ChatMessage.content` image parts, `ChatMessage.images` for Ollama). Negative
+that *adjusts* the existing value rather than regenerating it. The author then recalled that
+the vision fill may already exist, and he was right: Project Style's Reference
+Board analysis (`src/lib/projectStyle/referenceAnalysis/`) already re-validates
+image bytes at call time, builds one multimodal message both provider families
+understand, wraps the call so no provider body can leak, validates a JSON answer
+— and already asks about lighting by name. The missing piece is therefore
+narrower than stated an hour earlier: **the descriptor format cannot declare an
+image input**, so that capability lives outside the workspace, hand-written and
+anchored on the Reference Board. Negative
 constraints he named a real gap in his own work and **explicitly not MVP**. The
 camera he framed as a design job on what already exists, not the adoption of the
 guide's vocabulary. All three, plus the media families, are in
