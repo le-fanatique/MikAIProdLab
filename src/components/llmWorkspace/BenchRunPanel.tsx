@@ -40,7 +40,9 @@ import {
   buildCreateGeneratedShotsHiddenFields,
   buildCreateSelectedAssetsHiddenFields,
   buildCreateShotAtPositionHiddenFields,
+  buildUpdateSequenceLightingHiddenFields,
   buildUpdateSequencePromptHiddenFields,
+  buildUpdateShotLightingHiddenFields,
   buildUpdateShotNarrativePromptHiddenFields,
   buildUpdateShotPromptHiddenFields,
 } from "@/lib/llmWorkspace/actions/proposalCommit";
@@ -216,6 +218,53 @@ export default function BenchRunPanel({
                 sequenceId: ids.sequenceId as number,
                 shotId: ids.shotId as number,
                 narrativePrompt: current.text,
+                returnTo,
+              });
+            },
+          },
+        ];
+      }
+
+      // LLMW.LIGHTING.DIRECTED.1 (B16c) — `shot.lightingDirected`'s own
+      // branch, on the exact model of `updateShotNarrativePrompt`'s branch
+      // above, over `lighting` instead of `narrativePrompt`.
+      if (plan.kind === "redirectOnly" && plan.actionId === "updateShotLighting") {
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            action: ACTION_BINDINGS.updateShotLighting,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as TextDraft;
+              return buildUpdateShotLightingHiddenFields({
+                projectId: ids.projectId as number,
+                sequenceId: ids.sequenceId as number,
+                shotId: ids.shotId as number,
+                lighting: current.text,
+                returnTo,
+              });
+            },
+          },
+        ];
+      }
+
+      // LLMW.LIGHTING.DIRECTED.1 (B16c) — `sequence.lightingDirected`'s own
+      // branch, same model, over `updateSequenceLighting` (no `shotId`: this
+      // operation anchors on `sequence`).
+      if (plan.kind === "redirectOnly" && plan.actionId === "updateSequenceLighting") {
+        return [
+          {
+            kind: "redirectOnly",
+            id: "approve",
+            label: "Approve",
+            action: ACTION_BINDINGS.updateSequenceLighting,
+            hiddenFields: (currentDraft) => {
+              const current = currentDraft as TextDraft;
+              return buildUpdateSequenceLightingHiddenFields({
+                projectId: ids.projectId as number,
+                sequenceId: ids.sequenceId as number,
+                lighting: current.text,
                 returnTo,
               });
             },
@@ -564,7 +613,9 @@ export default function BenchRunPanel({
               {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
               {plan.kind !== "unsupported" &&
                 plan.kind !== "returnValue" &&
-                !(plan.kind === "redirectOnly" && plan.actionId === "updateShotNarrativePrompt") && (
+                !(plan.kind === "redirectOnly" && plan.actionId === "updateShotNarrativePrompt") &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "updateShotLighting") &&
+                !(plan.kind === "redirectOnly" && plan.actionId === "updateSequenceLighting") && (
                   <p className="text-xs text-[#cf7b6b]">
                     This template&apos;s commit action has no bench Approve path yet.
                   </p>

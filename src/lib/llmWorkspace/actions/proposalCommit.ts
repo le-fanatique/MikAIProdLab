@@ -143,6 +143,52 @@ export function buildUpdateShotNarrativePromptHiddenFields(input: {
   };
 }
 
+// ── shot.lightingDirected → updateShotLighting (redirectOnly) ─────────────
+//
+// LLMW.LIGHTING.DIRECTED.1 (B16c). Same model as
+// `buildUpdateShotNarrativePromptHiddenFields` above, over `lighting`
+// instead of `narrativePrompt` — `updateShotLighting` stays
+// `(formData: FormData) => Promise<void>` with `redirect()` on every path
+// (registry behaviour 6), and this action never reads or rewrites
+// `shotPrompt`/`narrativePrompt` (`src/actions/shots.ts`).
+export function buildUpdateShotLightingHiddenFields(input: {
+  projectId: number;
+  sequenceId: number;
+  shotId: number;
+  lighting: string;
+  returnTo: string;
+}): Record<string, string> {
+  return {
+    projectId: String(input.projectId),
+    sequenceId: String(input.sequenceId),
+    shotId: String(input.shotId),
+    lighting: input.lighting,
+    returnTo: input.returnTo,
+  };
+}
+
+// ── sequence.lightingDirected → updateSequenceLighting (redirectOnly) ─────
+//
+// LLMW.LIGHTING.DIRECTED.1 (B16c). Same model as
+// `buildUpdateSequencePromptHiddenFields` below, over `lighting` instead of
+// `sequencePrompt` — `updateSequenceLighting` stays
+// `(formData: FormData) => Promise<void>` with `redirect()` on every path
+// (registry behaviour 6), and this action never reads or rewrites
+// `sequencePrompt` (`src/actions/sequences.ts`).
+export function buildUpdateSequenceLightingHiddenFields(input: {
+  projectId: number;
+  sequenceId: number;
+  lighting: string;
+  returnTo: string;
+}): Record<string, string> {
+  return {
+    projectId: String(input.projectId),
+    sequenceId: String(input.sequenceId),
+    lighting: input.lighting,
+    returnTo: input.returnTo,
+  };
+}
+
 // ── shots.fromSequence → createGeneratedShots (redirectOnly) ──────────────
 //
 // LLMW.PROPOSAL.LIST.1 (B7d). Same model as

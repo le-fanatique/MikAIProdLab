@@ -2183,6 +2183,109 @@ export function renderShotInsertPositionLine(input: VariableParameterRenderInput
 }
 
 // ---------------------------------------------------------------------------
+// `shot.lightingDirected` / `sequence.lightingDirected` render forms —
+// LLMW.LIGHTING.DIRECTED.1 (B16c), closing B16. §5.9's third way of filling
+// the lighting field: "by director's note ... not a regeneration, an
+// adjustment of what is already there." Mechanically the same shape as
+// `shot.retakeDirected` (B9b) — `intent.freeText` over an operation that
+// reads the current value as one of its own variables — applied to one
+// field, `output.kind: "text"` (prose, not a JSON object) like
+// `narrativePrompt.compose` and `lighting.fromImage`. No adapter exists for
+// either operation (both live at the bench only), so neither declares
+// `messages.invalidRequest` — the same "absent is honest, invented is not"
+// rule those two descriptors already follow.
+//
+// `sequence.lightingDirected`'s current-value line is the one render form in
+// this pair with real branching: `SEQ.LIGHTING` (B15a) carries a précédence
+// rule and reports its own `source` (`"own" | "environment" | "none"`) —
+// this render form is the one place that rule surfaces as words the model
+// reads, telling it plainly whether the value it is adjusting is the
+// Sequence's own or inherited from an environment Asset. It does not
+// re-derive the rule; it only renders what `resolveSeqLighting` already
+// decided.
+// ---------------------------------------------------------------------------
+
+const SHOT_LIGHTING_DIRECTED_FREE_TEXT_MAX_LENGTH = 500;
+const SEQUENCE_LIGHTING_DIRECTED_FREE_TEXT_MAX_LENGTH = 500;
+
+/** System: fixed role text. */
+export const SHOT_LIGHTING_DIRECTED_SYSTEM_INTRO =
+  "You are a film lighting supervisor helping a director adjust a Shot's lighting description.";
+
+/** System: fixed role text — the Sequence-level counterpart. */
+export const SEQUENCE_LIGHTING_DIRECTED_SYSTEM_INTRO =
+  "You are a film lighting supervisor helping a director adjust a Sequence's lighting description.";
+
+/**
+ * System: the rules block shared in substance by both descriptors (only the
+ * opening word — "Shot"/"Sequence" — differs), covering §5.9's own framing
+ * ("not a regeneration, an adjustment") and the empty-note decision recorded
+ * in `.agents/executor_report.md`: with no director's note, the model is
+ * told to return the current value unchanged rather than invent one, since
+ * no `PreconditionRef` variant can refuse the run itself on an empty
+ * `intent.freeText` (`types.ts`'s closed set carries no such variant, and
+ * this ticket does not add one).
+ */
+function lightingDirectedSystemRules(entityLabel: "Shot" | "Sequence"): string {
+  return `Rules:
+- Read the current lighting description above as the starting point, and rewrite it according to the director's note below.
+- The result replaces the current lighting description entirely — write a complete, self-contained lighting description, not a diff, not a list of changes, not a comment on the note.
+- Carry forward everything about the current lighting that the note does not ask you to change.
+- If no director's note is given below, return the current lighting description exactly as provided above, unchanged.
+- Stay grounded in what is actually described above — do not invent story facts about this ${entityLabel} that are not present in the input.
+- Write in plain English prose. No JSON, no markdown, no bullet list, no code fences.`;
+}
+
+export const SHOT_LIGHTING_DIRECTED_SYSTEM_RULES = lightingDirectedSystemRules("Shot");
+export const SEQUENCE_LIGHTING_DIRECTED_SYSTEM_RULES = lightingDirectedSystemRules("Sequence");
+
+/** Template: the Shot's own current lighting value — the ingredient this operation adjusts. `SHOT.LIGHTING` carries no fallback (only `SEQ.LIGHTING` does), so an empty value here is a real state, guarded by this descriptor's own `preconditions` entry on `anchorField: "lighting"` in production; still rendered defensively here since this function is also called directly by the render tests. */
+export function renderShotLightingDirectedCurrentLine(data: ShotLightingData): string {
+  const value = data.lighting?.trim();
+  return `Current lighting: ${value ? value : "(none)"}`;
+}
+
+/** Template: the director's free-text note — the same "absent/empty/blank -> empty string" contract as every other `intent.freeText` render form in this file. */
+export function renderShotLightingDirectedFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's note: ${trimmed.slice(0, SHOT_LIGHTING_DIRECTED_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+/**
+ * Template: the Sequence's current lighting value, per `SEQ.LIGHTING`'s own
+ * `source` — `"own"` prints the Sequence's own field; `"environment"` prints
+ * every contributing environment Asset by name, each with its own lighting
+ * (or an explicit "(no lighting recorded)" when that Asset's own field is
+ * blank — `resolveSequenceEnvironmentAssets` never filters by non-emptiness,
+ * so this branch must handle a blank one), and says plainly that the value
+ * is inherited, never silently presenting it as the Sequence's own;
+ * `"none"` states there is nothing recorded at all — the one state this
+ * descriptor's own `preconditions` (see the descriptor's header comment for
+ * why none is declared) does not guard against, so this render form must
+ * degrade honestly rather than assume a non-empty value.
+ */
+export function renderSequenceLightingDirectedCurrentLine(data: SeqLightingData): string {
+  if (data.source === "own") {
+    return `Current lighting (set directly on this Sequence): ${data.lighting}`;
+  }
+  if (data.source === "environment") {
+    const lines = data.environments.map(
+      (e) => `- ${e.name}: ${e.lighting?.trim() ? e.lighting.trim() : "(no lighting recorded)"}`
+    );
+    return `Current lighting (this Sequence has none of its own — inherited from its environment Asset(s)):\n${lines.join("\n")}`;
+  }
+  return "Current lighting: (none recorded — neither this Sequence nor any of its environment Assets has a lighting description)";
+}
+
+/** Template: the director's free-text note — the Sequence-level counterpart of `renderShotLightingDirectedFreeTextDirective`. */
+export function renderSequenceLightingDirectedFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's note: ${trimmed.slice(0, SEQUENCE_LIGHTING_DIRECTED_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+// ---------------------------------------------------------------------------
 // `shots.fromSequence` render forms — LLMW.DESCRIPTOR.LIST.1 (B7c), rewired by
 // LLMW.BLOCK.VARPARAM.1 (B7c-n4). Read verbatim off
 // `buildShotsFromSequencePrompt` (`src/lib/prompts/shots-from-sequence.ts`),
@@ -2596,6 +2699,12 @@ export const VARIABLE_RENDER_FORMS = {
   "SHOT.CAST": {
     "shotRetake.castLines": renderShotCastRetakeLines,
   },
+  "SHOT.LIGHTING": {
+    "shotLightingDirected.currentLine": renderShotLightingDirectedCurrentLine,
+  },
+  "SEQ.LIGHTING": {
+    "sequenceLightingDirected.currentLine": renderSequenceLightingDirectedCurrentLine,
+  },
 } as const;
 
 /**
@@ -2719,6 +2828,8 @@ export const FREE_TEXT_RENDER_FORMS = {
   "assetRetake.directorRuleLine": renderAssetRetakeDirectorRuleLine,
   "shotInsert.freeTextDirective": renderShotInsertFreeTextDirective,
   "shotInsert.directiveRuleLine": renderShotInsertDirectiveRuleLine,
+  "shotLightingDirected.freeTextDirective": renderShotLightingDirectedFreeTextDirective,
+  "sequenceLightingDirected.freeTextDirective": renderSequenceLightingDirectedFreeTextDirective,
 } as const;
 
 export const VARIABLE_REGISTRY = {
