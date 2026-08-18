@@ -57,6 +57,42 @@ import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
+import {
+  resolveProjectStyle,
+  resolveSeqLighting,
+  type SeqLightingData,
+} from "@/lib/llmWorkspace/variables/registry";
+import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
+import StoryboardCompositionChoice from "@/components/StoryboardCompositionChoice";
+
+// ---------------------------------------------------------------------------
+// LLMW.STORYBOARD.COMPOSE.2 (B14b) — same two helpers as
+// `src/actions/sequenceGeneration.ts`'s own copy, duplicated rather than
+// shared: this page already recomputes its whole DB fetch independently of
+// the action ("Data-fetch/package-build logic is intentionally recomputed
+// here", this file's own header comment above) — same convention applied to
+// this one addition.
+// ---------------------------------------------------------------------------
+
+async function resolveProjectStyleTextForComposition(projectId: number): Promise<string | null> {
+  const data = await resolveProjectStyle(projectId);
+  if (data.mode === "none") return null;
+  const joined = [data.worldSegment, data.visualSegment, data.rulesSegment]
+    .filter((segment) => segment.length > 0)
+    .join("\n\n");
+  return joined.length > 0 ? joined : null;
+}
+
+function formatSeqLightingForComposition(data: SeqLightingData): string | null {
+  if (data.source === "own") return data.lighting;
+  if (data.source === "environment") {
+    const named = data.environments
+      .filter((e): e is { name: string; lighting: string } => !!e.lighting?.trim())
+      .map((e) => `${e.name}: ${e.lighting}`);
+    return named.length > 0 ? named.join("; ") : null;
+  }
+  return null;
+}
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -316,6 +352,14 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     };
   });
 
+  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — read server-side from the same
+  // `searchParams` every other control on this page already reads, never a
+  // client-built object (B16b's discipline). Anything but the literal
+  // `"guide"` (including absent) keeps the legacy composition, which is the
+  // ticket's own non-negotiable default.
+  const storyboardCompositionParam = currentSearchParams["storyboardComposition"] ?? "legacy";
+  const useGuideComposition = storyboardCompositionParam === "guide";
+
   const storyboardRefsParam = currentSearchParams["storyboardRefs"] ?? "";
   const storyboardSelectedRefIds = storyboardRefsParam
     .split(",")
@@ -541,11 +585,47 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     { projectId: pid, sequenceId: sid, sequenceTitle: sequence.title, sequenceCode: sequence.sequenceCode },
     shotInputs
   );
+
+  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — resolved only when the guide
+  // composition is actually selected; the legacy default (this page's own
+  // behavior before this ticket) never pays for these two extra queries and
+  // never changes a single byte of `packageText` below.
+  let storyboardComposition: { projectStyle: string | null; lightingByShotId: Record<number, string | null> } | undefined;
+  // The findings §5.6's output discipline reports, per Shot — display-only,
+  // never a blocker (§5.4): computed straight from the same inputs handed to
+  // `formatSequenceGenerationPackageText` below, so preview and queued text
+  // can never diverge (composeStoryboardShot is pure and deterministic).
+  let storyboardFindings: { shotLabel: string; findings: { code: string; severity: "info" | "warn"; message: string }[] }[] = [];
+
+  if (useGuideComposition) {
+    const projectStyle = await resolveProjectStyleTextForComposition(pid);
+    const sequenceLighting = formatSeqLightingForComposition(await resolveSeqLighting(sid));
+    const lightingByShotId: Record<number, string | null> = {};
+    for (const s of shotList) {
+      const own = s.lighting?.trim();
+      lightingByShotId[s.id] = own ? own : sequenceLighting;
+    }
+    storyboardComposition = { projectStyle, lightingByShotId };
+
+    storyboardFindings = pkg.shots.map((s) => ({
+      shotLabel: s.shotCode ?? s.title,
+      findings: composeStoryboardShot({
+        context: s.context,
+        continuity: { framing: s.continuity.framing, cameraMovement: s.continuity.cameraMovement },
+        projectStyle,
+        lighting: lightingByShotId[s.shotId] ?? null,
+      }).findings,
+    }));
+  }
+
   // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — no `Warnings:` block in the
   // text fed into the prompt preview/queue; preview and queue must never
   // diverge, so this preview-only build uses the exact same option as the
   // action (buildSequenceStoryboardGenerationContext).
-  const packageText = formatSequenceGenerationPackageText(pkg, { includeWarnings: false });
+  const packageText = formatSequenceGenerationPackageText(pkg, {
+    includeWarnings: false,
+    ...(storyboardComposition ? { storyboardComposition } : {}),
+  });
 
   const promptResult = buildSequenceStoryboardPrompt({
     projectId: pid,
@@ -623,9 +703,14 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   // "Update Preview" GET form and the Generate redirect's returnTo, not
   // just this page's initial render (same fix already applied to the
   // per-Shot /map page in SEQGEN.STORYBOARD.2 retake 3).
-  const storyboardPreserveParams: Record<string, string> | undefined = storyboardRefsParam
-    ? { storyboardRefs: storyboardRefsParam }
-    : undefined;
+  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — the composition choice must survive
+  // the same round trips `storyboardRefs` already does: the Image Inputs
+  // "Update Preview" GET form and the Generate redirect's returnTo.
+  const storyboardPreserveParamsEntries: [string, string][] = [];
+  if (storyboardRefsParam) storyboardPreserveParamsEntries.push(["storyboardRefs", storyboardRefsParam]);
+  if (useGuideComposition) storyboardPreserveParamsEntries.push(["storyboardComposition", "guide"]);
+  const storyboardPreserveParams: Record<string, string> | undefined =
+    storyboardPreserveParamsEntries.length > 0 ? Object.fromEntries(storyboardPreserveParamsEntries) : undefined;
 
   const selectionParams = new URLSearchParams();
   for (const [nodeId, imageId] of Object.entries(selectedImageByNodeId)) {
@@ -782,6 +867,44 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
           </div>
         )}
 
+        {/* LLMW.STORYBOARD.COMPOSE.2 (B14b) — the choice between the legacy
+            Shot-Prompt-only body and composeStoryboardShot's six-part
+            composition (§5.5). The chosen text is visible below in
+            "Suggested Inputs" (the same text this page already showed
+            before this ticket) — never a separate preview the queued text
+            could diverge from. */}
+        <Card title="Storyboard Prompt Composition">
+          <StoryboardCompositionChoice
+            basePath={basePath}
+            currentSearchParams={currentSearchParams}
+            currentValue={storyboardCompositionParam}
+          />
+          {useGuideComposition && storyboardFindings.some((s) => s.findings.length > 0) && (
+            <div className="mt-3 pt-3 border-t border-[#1e2124] flex flex-col gap-2">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+                Findings — informational, never blocking
+              </span>
+              {storyboardFindings
+                .filter((s) => s.findings.length > 0)
+                .map((s) => (
+                  <div key={s.shotLabel} className="text-xs">
+                    <span className="text-[#a4abb2]">{s.shotLabel}</span>
+                    <ul className="ml-3 list-disc">
+                      {s.findings.map((f, i) => (
+                        <li
+                          key={`${f.code}-${i}`}
+                          className={f.severity === "warn" ? "text-[#cf7b6b]" : "text-[#6e767d]"}
+                        >
+                          {f.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+            </div>
+          )}
+        </Card>
+
         <Card title="Suggested Inputs">
           {parsed === null ? (
             <p className="text-sm text-[#cf7b6b]">This workflow JSON could not be parsed.</p>
@@ -799,7 +922,12 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               // unapplied, in-progress local edit can be reset here, which
               // is the documented, sanctioned tradeoff for never silently
               // Applying a stale prompt.
-              key={orderedReferenceIds.join(",")}
+              //
+              // LLMW.STORYBOARD.COMPOSE.2 (B14b) — `storyboardCompositionParam`
+              // joined into the same key: the composition choice changes
+              // `mapping.suggestedText` exactly like the casting/batch order
+              // does, and must remount this panel for the same reason.
+              key={`${orderedReferenceIds.join(",")}|${storyboardCompositionParam}`}
               mappings={mappings}
               scalarValueByNodeId={scalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
@@ -935,6 +1063,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                   <input type="hidden" name="workflowId" value={String(wid)} />
                   <input type="hidden" name="returnTo" value={returnTo} />
                   <input type="hidden" name="storyboardRefs" value={storyboardRefsParam} />
+                  <input type="hidden" name="storyboardComposition" value={storyboardCompositionParam} />
                   {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
                     <input key={nodeId} type="hidden" name={`imageNode_${nodeId}`} value={String(imageId)} />
                   ))}

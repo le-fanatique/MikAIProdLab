@@ -24,6 +24,7 @@ import {
   type PromptCompilationContext,
 } from "./buildPromptCompilationContext";
 import { compileShotPrompt, type CompiledShotPrompt } from "./compileShotPrompt";
+import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
 
 /**
  * SEQGEN.STORYBOARD.2 — optional, retrocompatible package options. Omitting
@@ -279,6 +280,32 @@ export function buildSequenceGenerationPackage(
  */
 export type FormatSequenceGenerationPackageTextOptions = {
   includeWarnings?: boolean;
+  /**
+   * LLMW.STORYBOARD.COMPOSE.2 (B14b) — when present, every Shot's body is
+   * `composeStoryboardShot`'s six-part composition (§5.5) instead of
+   * `compileShotPrompt`'s Shot-Prompt-only text. Only the per-Shot **body**
+   * changes: the package's own header/envelope (Sequence preamble, shot
+   * count, the `=== Shot N/M — code — "title" ===` label line) is untouched
+   * either way — "the paquet reste un paquet", the ticket's own words.
+   *
+   * Omitting this option (every caller before this ticket, and every caller
+   * that has not opted in) reproduces the exact byte-for-byte legacy text —
+   * this is the ticket's own non-negotiable proof, so this field is never
+   * defaulted to a non-`undefined` value here.
+   *
+   * `projectStyle` and `lightingByShotId` are inputs, not derivations: this
+   * formatter has no database access (SEQGEN.1's own pure-function
+   * constraint), so the caller resolves them — `resolveProjectStyle`
+   * (`PROJECT.STYLE`) and the Shot/Sequence lighting fields — and hands them
+   * down. See `composeStoryboardShot`'s own contract for why a resolved
+   * pantry, never a re-derivation, is the rule here.
+   */
+  storyboardComposition?: {
+    /** The Project's Style text, or `null` when no Style is active. Same value for every Shot in the package. */
+    projectStyle: string | null;
+    /** This Sequence's effective lighting per Shot, keyed by `shotId`. `null` (or a missing key) means no lighting resolved for that Shot. */
+    lightingByShotId: Record<number, string | null>;
+  };
 };
 
 /**
@@ -292,6 +319,7 @@ export function formatSequenceGenerationPackageText(
   options?: FormatSequenceGenerationPackageTextOptions
 ): string {
   const includeWarnings = options?.includeWarnings ?? true;
+  const storyboardComposition = options?.storyboardComposition;
 
   const header = [
     `Sequence Generation Package v${pkg.version}`,
@@ -301,7 +329,14 @@ export function formatSequenceGenerationPackageText(
 
   const shotBlocks = pkg.shots.map((s, i) => {
     const label = `=== Shot ${i + 1}/${pkg.shotCount} — ${s.shotCode ?? s.title}${s.shotCode ? ` — "${s.title}"` : ""}${s.durationSeconds !== null ? ` (${s.durationSeconds.toFixed(1)}s)` : " (no duration)"} ===`;
-    const body = s.compiledPrompt.text || "(no compiled prompt)";
+    const body = storyboardComposition
+      ? composeStoryboardShot({
+          context: s.context,
+          continuity: { framing: s.continuity.framing, cameraMovement: s.continuity.cameraMovement },
+          projectStyle: storyboardComposition.projectStyle,
+          lighting: storyboardComposition.lightingByShotId[s.shotId] ?? null,
+        }).text || "(no compiled prompt)"
+      : s.compiledPrompt.text || "(no compiled prompt)";
     const warningsBlock =
       includeWarnings && s.warnings.length > 0 ? `\nWarnings:\n${s.warnings.map((w) => `- ${w}`).join("\n")}` : "";
     return `${label}\n${body}${warningsBlock}`;

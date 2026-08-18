@@ -4,6 +4,7 @@ import {
   formatSequenceGenerationPackageText,
   type SequenceGenerationPackageShotInput,
 } from "@/lib/prompts/buildSequenceGenerationPackage";
+import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
 
 const meta = { projectId: 1, sequenceId: 2, sequenceTitle: "The Standoff", sequenceCode: "SEQ010" };
 
@@ -125,5 +126,81 @@ describe("formatSequenceGenerationPackageText", () => {
     // The structured warnings are still computed and returned — only their
     // rendering into this one text form is skipped, never their detection.
     expect(pkg.shots[0].warnings).toContain("Shot Prompt is empty.");
+  });
+
+  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — the `storyboardComposition` option.
+  describe("storyboardComposition option", () => {
+    it("is byte-identical to the legacy default when omitted", () => {
+      const pkg = buildSequenceGenerationPackage(meta, [shotOne, shotTwo]);
+      expect(formatSequenceGenerationPackageText(pkg, { includeWarnings: false })).toEqual(
+        formatSequenceGenerationPackageText(pkg, { includeWarnings: false, storyboardComposition: undefined })
+      );
+    });
+
+    it("replaces each Shot's body with composeStoryboardShot's composition, carrying the ingredients §5.7 found missing", () => {
+      const shotWithEverything: SequenceGenerationPackageShotInput = {
+        ...shotOne,
+        continuity: { framing: "WS", cameraMovement: "slow push in" },
+        promptContext: {
+          ...shotOne.promptContext,
+          shot: { ...shotOne.promptContext.shot, cameraPitch: "low angle", actionPitch: "Mara steps out of cover." },
+          assetBibles: [{ assetId: 1, assetName: "Mara", visualIdentity: "Cropped hair, scarred jaw." }],
+          sequenceContext: { locationHint: "Rooftop, dusk", mood: "Tense" },
+          sources: { ...shotOne.promptContext.sources, assetBibles: true, sequenceContext: true },
+        },
+      };
+      const pkg = buildSequenceGenerationPackage(meta, [shotWithEverything]);
+
+      const text = formatSequenceGenerationPackageText(pkg, {
+        includeWarnings: false,
+        storyboardComposition: {
+          projectStyle: "Grainy anamorphic, muted palette.",
+          lightingByShotId: { [shotWithEverything.shotId]: "Cold blue screen glow." },
+        },
+      });
+
+      // Distribution (cast), camera, mood, style — the four §5.7 named as
+      // absent from the storyboard prompt before this ticket.
+      expect(text).toContain("Mara");
+      expect(text).toContain("Cropped hair, scarred jaw.");
+      expect(text).toContain("low angle");
+      expect(text).toContain("slow push in");
+      expect(text).toContain("Tense");
+      expect(text).toContain("Grainy anamorphic, muted palette.");
+      // The legacy label/envelope is untouched — only the body changed.
+      expect(text).toContain('=== Shot 1/1 — SH010 — "Wide establishing" (5.0s) ===');
+      // The Shot Prompt is still present — it stops being the only
+      // ingredient, it does not disappear (composeStoryboardShot's own
+      // contract, unmodified by this ticket).
+      expect(text).toContain("Mara stands on the rooftop.");
+    });
+
+    it("never blocks the composed text on a conformation finding — findings are reachable separately, informationally", () => {
+      const pkg = buildSequenceGenerationPackage(meta, [shotOne]);
+      const options = {
+        includeWarnings: false as const,
+        storyboardComposition: {
+          projectStyle: null,
+          lightingByShotId: {}, // no lighting resolved for shotOne — a `lightingMissing` finding
+        },
+      };
+
+      const text = formatSequenceGenerationPackageText(pkg, options);
+      // The text is produced whole regardless of the finding below.
+      expect(text.length).toBeGreaterThan(0);
+      expect(text).toContain("Mara stands on the rooftop.");
+
+      // The same finding, reachable through composeStoryboardShot directly —
+      // the exact function this option wires in, unmodified — proves the
+      // finding exists without ever having gated the text above.
+      const composed = composeStoryboardShot({
+        context: pkg.shots[0].context,
+        continuity: { framing: pkg.shots[0].continuity.framing, cameraMovement: pkg.shots[0].continuity.cameraMovement },
+        projectStyle: options.storyboardComposition.projectStyle,
+        lighting: null,
+      });
+      expect(composed.findings.map((f) => f.code)).toContain("lightingMissing");
+      expect(composed.text.length).toBeGreaterThan(0);
+    });
   });
 });

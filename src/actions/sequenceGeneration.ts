@@ -65,6 +65,67 @@ import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { findTextInputKey } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
+import {
+  resolveProjectStyle,
+  resolveSeqLighting,
+  type SeqLightingData,
+} from "@/lib/llmWorkspace/variables/registry";
+
+// ---------------------------------------------------------------------------
+// LLMW.STORYBOARD.COMPOSE.2 (B14b) — the two per-Shot compositions. The
+// legacy default (`compileShotPrompt`'s Shot-Prompt-only body,
+// `formatSequenceGenerationPackageText`'s own default) stays untouched;
+// `"guide"` opts into `composeStoryboardShot`'s six-part composition (§5.5).
+// Read from the same `storyboardComposition` searchParam/form field the
+// page reads — never a client-assembled choice, same discipline B16b
+// applied to `imageIds` (`parseSelectedImageIdsFromSearchParams`).
+// ---------------------------------------------------------------------------
+
+function isGuideComposition(value: string | null | undefined): boolean {
+  return value === "guide";
+}
+
+/**
+ * `composeStoryboardShot`'s `projectStyle` input — `resolveProjectStyle`
+ * (`PROJECT.STYLE`, `src/lib/llmWorkspace/variables/registry.ts`) reused
+ * verbatim rather than re-resolving Style here: it already wraps
+ * `resolveAssetStyleContext` (STYLE.1.F.CORE), the same call the Style
+ * preview on this page (`prepareGenerationStyleSource`) goes through
+ * transitively. Segments are joined exactly as `asset-bible-from-context.ts`
+ * already joins the same three segments for its own "Project Style:" block
+ * (`[worldSegment, visualSegment, rulesSegment].filter(Boolean).join("\n\n")`)
+ * — not a new join rule.
+ */
+async function resolveProjectStyleTextForComposition(projectId: number): Promise<string | null> {
+  const data = await resolveProjectStyle(projectId);
+  if (data.mode === "none") return null;
+  const joined = [data.worldSegment, data.visualSegment, data.rulesSegment]
+    .filter((segment) => segment.length > 0)
+    .join("\n\n");
+  return joined.length > 0 ? joined : null;
+}
+
+/**
+ * `composeStoryboardShot`'s `lighting` input, per Shot — a design decision
+ * this ticket makes and documents rather than one the ticket froze: the
+ * Shot's own `lighting` field (finest grain, §5.9) wins when set; otherwise
+ * this Sequence's effective lighting, via `resolveSeqLighting` — the exact
+ * precedence rule §5.9/B15a already encodes (Sequence's own field, else its
+ * `environment`-type Assets) — reused here rather than re-derived. Several
+ * environment Assets with a lighting value are rendered as
+ * `"Name: lighting; Name: lighting"`; an environment Asset with no lighting
+ * set contributes nothing. See `.agents/executor_report.md`.
+ */
+function formatSeqLightingForComposition(data: SeqLightingData): string | null {
+  if (data.source === "own") return data.lighting;
+  if (data.source === "environment") {
+    const named = data.environments
+      .filter((e): e is { name: string; lighting: string } => !!e.lighting?.trim())
+      .map((e) => `${e.name}: ${e.lighting}`);
+    return named.length > 0 ? named.join("; ") : null;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // extractQueuedTextValues — SEQGEN.STORYBOARD.3 (retake 3)
@@ -125,7 +186,8 @@ type SequenceStoryboardGenerationContext =
 async function buildSequenceStoryboardGenerationContext(
   projectId: number,
   sequenceId: number,
-  selectedRefIds: string[]
+  selectedRefIds: string[],
+  useGuideComposition: boolean
 ): Promise<SequenceStoryboardGenerationContext> {
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
   if (!project) return { ok: false, error: "Project not found." };
@@ -365,11 +427,30 @@ async function buildSequenceStoryboardGenerationContext(
     },
     shotInputs
   );
+
+  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — resolved only when the guide
+  // composition is actually requested: the legacy default never pays for
+  // these two extra queries, and never changes a single byte of its output.
+  let storyboardComposition: { projectStyle: string | null; lightingByShotId: Record<number, string | null> } | undefined;
+  if (useGuideComposition) {
+    const projectStyle = await resolveProjectStyleTextForComposition(projectId);
+    const sequenceLighting = formatSeqLightingForComposition(await resolveSeqLighting(sequenceId));
+    const lightingByShotId: Record<number, string | null> = {};
+    for (const s of shotList) {
+      const own = s.lighting?.trim();
+      lightingByShotId[s.id] = own ? own : sequenceLighting;
+    }
+    storyboardComposition = { projectStyle, lightingByShotId };
+  }
+
   // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — the text sent to the Sequence
   // Storyboard workflow never carries a `Warnings:` block. Blocking errors
   // (no casting, invalid workflow, ownership, provider, queue) still stop
   // generation elsewhere in this action; this is presentation-only.
-  const packageText = formatSequenceGenerationPackageText(pkg, { includeWarnings: false });
+  const packageText = formatSequenceGenerationPackageText(pkg, {
+    includeWarnings: false,
+    ...(storyboardComposition ? { storyboardComposition } : {}),
+  });
 
   return {
     ok: true,
@@ -480,6 +561,15 @@ export async function runSequenceGeneration(input: {
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
   /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
   confirmPartnerNodeCost?: boolean;
+  /**
+   * LLMW.STORYBOARD.COMPOSE.2 (B14b) — read straight from the same
+   * `storyboardComposition` form field the generate page's own choice
+   * control writes; `"guide"` opts into `composeStoryboardShot`'s
+   * composition, anything else (including absent) keeps the legacy
+   * Shot-Prompt-only body — the default the ticket requires stay
+   * byte-identical.
+   */
+  storyboardComposition?: string;
 }): Promise<RunSequenceGenerationResult> {
   const { projectId, sequenceId, workflowId } = input;
 
@@ -520,7 +610,8 @@ export async function runSequenceGeneration(input: {
   const context = await buildSequenceStoryboardGenerationContext(
     projectId,
     sequenceId,
-    input.selectedRefIds
+    input.selectedRefIds,
+    isGuideComposition(input.storyboardComposition)
   );
   if (!context.ok) return { ok: false, error: context.error };
 
@@ -870,6 +961,11 @@ export async function runSequenceGenerationFromForm(formData: FormData): Promise
   // preflight already showed the Partner Node cost warning.
   const confirmPartnerNodeCost = (formData.get("confirmPartnerNodeCost") as string | null) === "1";
 
+  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — re-read server-side from the form
+  // field the page's own choice control writes, never trusted from any
+  // other source.
+  const storyboardComposition = (formData.get("storyboardComposition") as string | null) ?? undefined;
+
   const result = await runSequenceGeneration({
     projectId,
     sequenceId,
@@ -881,6 +977,7 @@ export async function runSequenceGenerationFromForm(formData: FormData): Promise
     patchedJsonOverride,
     batchImagesByNodeId,
     confirmPartnerNodeCost,
+    storyboardComposition,
   });
 
   const sep = returnTo.includes("?") ? "&" : "?";
