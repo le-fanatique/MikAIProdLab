@@ -919,6 +919,59 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B12a — the narrative prompt gets a jar, and the column diff that proves it (2026-08-18)
+
+Commit `c4d7af1`. The first ticket of the re-derived Chantier 1 queue, and the
+first application of vision §5.3's storage rule: **a deterministic assembly is
+never stored, a generated content always is.**
+
+Until this commit the Prompt Compiler's output was poured into
+`shots.shot_prompt` through Replace/Append, and after that nobody could tell
+which half a human had written. The generated narrative prompt now has a jar of
+its own — `shots.narrative_prompt` (migration `0053_light_killraven`, additive,
+nullable, no default, applied by the user), the write action
+`updateShotNarrativePrompt`, and the variable `SHOT.NARRATIVE_PROMPT`. §5.2
+requires the variable: a jar is an ingredient like any other, and without a
+resolver the prompt would be a cul-de-sac, written and never read back.
+
+**Nothing fills the jar and no surface shows it.** That is deliberate — a field
+that is always null is noise. B12b brings the text output mode and the
+descriptor. The ticket is provable anyway, and stated why in its own body: a
+write action is proven against a disposable database (precedent `B7c-w`,
+`85ea5ac`) and a variable is proven by its resolver (precedent `B7c-n2`,
+`95d2a3c`). Neither is a pipeline stage, which is what B7c-n3 had ruled
+unprovable without a consumer.
+
+**The S4 trap, closed by construction rather than by care.** The action never
+reads `shotPrompt`, so it cannot overwrite it. The assertion that guards this is
+stronger than "shotPrompt is unchanged": the test computes the column diff with
+`changedColumns` and requires it to equal exactly `["narrativePrompt"]` once
+`updatedAt` is set aside, so a future widening of the write fails loudly instead
+of silently erasing a sibling column.
+
+**Two defects the ticket created and the review caught**, both fixed in one
+corrective round:
+
+- the new `ACTION_REGISTRY` note promised "see registry.test.ts's structural
+  assertion", but that file's `cases` array is hand-curated and did not list the
+  new action. A registry note claiming a proof it does not have is precisely the
+  drift the registry exists to prevent, so the case was added rather than the
+  note softened;
+- `variableLibrary.ts` said "22 variables" twice — correct before the ticket,
+  false after it. The hard count was **removed**, not bumped to 23: it would
+  have drifted again at the next variable.
+
+**Verified rather than implemented:** `SHOT.NARRATIVE_PROMPT` appears in the
+variable library with nothing written for it. `variableLibrary.ts` derives its
+rows from `Object.entries(VARIABLE_REGISTRY)` and derives each anchor from the
+id's own namespace prefix, so any new `SHOT.*` id is anchored on the shot for
+free. Worth knowing before a later ticket writes a registration it does not
+need.
+
+**UC impact: none.** Neither UC1, UC2 nor UC3 is touched or constrained. This is
+node-library growth in the sense of the governing rule of
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3.
+
 ### B8 is dissolved, and the prompt mechanics are written down (2026-08-18)
 
 No code changed. A ticket was prepared, costed, and then not written — which is
