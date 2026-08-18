@@ -919,6 +919,54 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B12b-1 — the runner learns prose, and the JSON it was forcing (2026-08-18)
+
+Commit `00093d8`. Preparing B12b found the obstacle the queue had not named:
+**`runOperation` only ever called `callLLMJson`, and that call forces JSON on
+both provider families** — `response_format: {type:"json_object"}` in
+`openaiCompatible.ts`, `format: "json"` hard-coded in `callOllama`. A text-mode
+operation routed through it would have asked the model for a narrative prompt
+encoded as JSON, the exact opposite of §5.3's cooking stage. B12b was split at
+that line: B12b-1 is the engine, B12b-2 is the descriptor.
+
+**The missing brick was small, which is the useful part of the finding.**
+`callLLMChat` already routes both provider families with nothing forced, and
+both provider chat functions were already written and already used. What was
+missing was only the `LLMPrompt` -> two-`ChatMessage` adapter, so `callLLMText`
+is six lines and **no provider code was written**. Worth remembering the next
+time a capability looks absent from the workspace: check whether it exists one
+layer down, unrouted.
+
+`output` gains a third `kind` and `RunOperationResult` a third variant, widened
+deliberately breaking on B11-b1's pattern so `tsc` names every consumer. Two
+were named: the bench action's serialisable copy relays the new kind, and the
+bench page refuses it **by name** rather than rendering a surface no test
+exercises — B7c-n3's rule, applied to a UI branch this time.
+
+**The text branch strips no code fence.** A strip that is correct against
+corrupted JSON would mutilate prose containing backticks or braces, and the test
+asserts precisely that payload survives.
+
+**A failure class worth naming: invisible to `tsc`, invisible to a targeted
+run.** Widening the model call's destructure to
+`const { callLLMJson, callLLMText } = await import("@/lib/llm")` broke every
+pre-existing runner test, because they mock `@/lib/llm` with a factory declaring
+`callLLMJson` alone and Vitest's mock proxy throws when an **undeclared export
+is destructured** — even for an `"object"` descriptor that never calls the new
+function. Reading the property off the module namespace inside its own branch
+fixes it, and removes the coupling that caused it: the JSON path no longer
+depends on the presence of the text path. It only surfaced under the full suite,
+which is the argument for asking for the broad regression whenever a shared
+union is widened.
+
+The proof, `tests/llmWorkspace/outputText.runner.test.ts`, could not follow its
+two precedents in mocking `@/lib/llm`, because `callLLMText` calls `callLLMChat`
+as a same-module reference such a mock does not intercept. It mocks the two
+**provider** modules instead, so "the text mode does not borrow the JSON call"
+is asserted against the real provider function invoked, in both directions.
+
+**UC impact: none.** Library growth, §11.3's governing rule.
+
 ### B12a — the narrative prompt gets a jar, and the column diff that proves it (2026-08-18)
 
 Commit `c4d7af1`. The first ticket of the re-derived Chantier 1 queue, and the

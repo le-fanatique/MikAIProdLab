@@ -1340,12 +1340,21 @@ unapplied migration a hard stop: the user runs `db:migrate` himself, always.
   descriptor, no text mode, no product surface. Provable without its consumer
   because a write action is proven against a disposable database and a variable
   by its resolver — neither is a pipeline stage.
-- **B12b — the operation that fills it** (next). `output.kind: "text"` in the
-  runner, `RunOperationResult` gaining a third variant and breaking its declared
-  consumers on purpose (B11-b1's pattern), and the descriptor whose `commit`
+- **B12b-1 — the text engine** (`LLMW.TEXT.1`, delivered, `00093d8`). Split out
+  once preparation found that `runOperation` only ever called `callLLMJson`, and
+  that this call **forces JSON on both provider families**. `callLLMText` (the
+  `LLMPrompt` -> `ChatMessage[]` adapter over the existing `callLLMChat`; no
+  provider code written), the third `output.kind`, the third
+  `RunOperationResult` variant broken deliberately on B11-b1's pattern, and the
+  runner's text branch — which strips no code fence, because a strip correct
+  against corrupted JSON would mutilate prose. No descriptor, no bench render.
+- **B12b-2 — the narrative prompt composer** (next). The first descriptor
+  declaring `kind: "text"`, its bench render surface, and the `commit` that
   finally reaches `updateShotNarrativePrompt`. Its `REDIRECT_CONFIRMATION_KEYS`
   entry already exists, deliberately without wording in
-  `resolveBenchConfirmation`, and B12b is what gives it one.
+  `resolveBenchConfirmation`, and B12b-2 is what gives it one. It must also
+  consume `output.field`, declared by B12b-1 and unconsumed until then — or
+  remove it.
 
 **Then Chantier 2** — C0 → C6 and the three independents, unchanged.
 
