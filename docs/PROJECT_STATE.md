@@ -921,7 +921,7 @@ untracked on purpose.
 
 ### E1a — the editor's engine, and the merge that cannot widen (2026-08-18)
 
-Commit `1cc7fd8` (see `git log`). The first half of E1: the pure module and the
+Commit `6f44c72`. The first half of E1: the pure module and the
 save action. No screen — that is E1b.
 
 **The decision the whole ticket rests on: the save action accepts a patch, never
