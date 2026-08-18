@@ -919,6 +919,51 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### E1a — the editor's engine, and the merge that cannot widen (2026-08-18)
+
+Commit `1cc7fd8` (see `git log`). The first half of E1: the pure module and the
+save action. No screen — that is E1b.
+
+**The decision the whole ticket rests on: the save action accepts a patch, never
+a descriptor.** `updateLlmTemplateContent` takes the editable surface only and
+merges it onto the stored JSON. Had it accepted a whole descriptor, posting a
+different `commit` would let a template write into any of the sixty tables, and
+E1 would silently have become E2. Two independent barriers enforce it:
+`parseEditableTemplatePatch` reads only the eight editable property names off
+untrusted input, and `applyEditablePatch` spreads the stored descriptor first
+and never names the coupled triangle on the left-hand side. Proven in the pure
+module and again against a disposable database.
+
+**Nothing is recopied.** The render-form catalogue and the available-variable
+list derive from the closed registries at call time, exactly as
+`variableLibrary.ts` does. The derivation proof runs **in both directions** —
+each table's keys stay out of the other five's catalogues — which is what makes
+it a derivation proof rather than a spot check.
+
+**The scoping document was stale, and correcting it shrank the ticket.** It
+claimed `intent.freeText` had no runtime control anywhere and needed a ticket of
+its own; that was true on 2026-08-15 and false by 2026-08-18, since B9a shipped
+the control and the bench renders it for any descriptor declaring it. E1 only had
+to make it declarable. Recorded because the cost estimate that reached the user
+came from that document.
+
+**Three corrections in review, one of them the supervisor's own error:**
+
+- the ticket named five render-form tables; `Block` has **six** variants carrying
+  a `render`, and the sixth is used by six shipped descriptors. The executor
+  followed the ticket literally and **reported the gap instead of inventing a
+  contract** — the behaviour §7 of the protocol exists to produce;
+- `name` is editable, but the action wrote only `templateJson`, leaving the
+  `llm_templates.name` column stale while the workflows list reads it. Both other
+  writers of `templateJson` maintain that invariant;
+- the merge used `??`, so an `intent` field could be added and never removed. An
+  editor that can only add is broken, and this is the field UC1/UC2/UC3 all need.
+  The convention is now explicit: key absent leaves it, key present as `null`
+  removes it, on the three `intent` fields only.
+
+**UC impact: none directly.** E1 is the condition of §7's third success
+criterion — the user authoring his own templates.
+
 ### B12b-2 — the jar can be filled, and B12 is complete (2026-08-18)
 
 Commit `d097278`. `narrativePrompt.compose` is the first descriptor to declare a
