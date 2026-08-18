@@ -919,6 +919,70 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### E1b — the editor screen, and the boundary only the build can see (2026-08-18)
+
+Commit `638832f`. E1 is complete: authoring a workflow no longer means leaving
+the application to hand-edit JSON.
+
+**The finding worth keeping, because it defeats two of the three checks this
+project relies on.** `templateEditor.ts`, shipped by E1a one commit earlier,
+could not be imported by a Client Component at all: it statically imported
+`variables/registry.ts`, which is `import "server-only"` and pulls
+`better-sqlite3` behind it.
+
+`import "server-only"` is a **build-time sentinel, not merely a runtime guard**.
+Any module that imports it statically — transitively, and even when the importer
+calls none of the affected exports — becomes unbuildable for a client bundle.
+`npx tsc --noEmit` cannot see this. The vitest suite cannot see this. Only
+`npm run build` can, and it failed with `Module not found: Can't resolve 'fs'`.
+
+So: **a client/server boundary is only verifiable at build time.** Any ticket
+adding a Client Component, or making an existing module client-importable, must
+run `npm run build` — the two usual checks are blind to the one thing that
+matters. E1a's review did not catch it and could not have with the checks it ran.
+
+The fix was the smaller of the two available: the six registry-derived catalogue
+functions moved to `templateEditorCatalogues.ts`, computed in the Server
+Component and passed down as props, leaving the block/variable manipulation
+client-importable. The alternative — duplicating the rules inside the component
+— would have left two implementations of the same rule to keep in sync.
+
+**What the screen does.** Closed vocabulary stays closed: variables from the
+registry, and each block type offered only its own render forms, six distinct
+sources never pooled. Only a `{text}` block is free entry, since its content is
+text. Mode ids and parameter names are free entry too, and correctly so — they
+are descriptor-defined strings, not registry entries; only the render form
+attached to them is closed. The coupled triangle is displayed **read-only and
+labelled as inherited**, so the author sees what he is writing onto.
+
+**Two things that look like violations and are not**, recorded so they are not
+"fixed" later:
+
+- the draft is mirrored to `sessionStorage`. §5.8 of the vision forbids
+  reproducing *the `sessionStorage` handoff to the Generation Panel* — a
+  transfer between two screens. This preserves a form across a failed save,
+  which `.claude/rules/frontend.md` requires, and the save action refuses by
+  redirecting, which would otherwise discard every edit;
+- the screen collapses E1a's three patch states to two. It always sends the whole
+  editable surface, so "key absent" never occurs from this caller. The third
+  state stays meaningful for programmatic ones.
+
+`describeBlock` — a switch over all seven `Block` variants, order-sensitive
+because the mixed variant carries both `parameters` and `variables` — had been
+copied byte-for-byte into the new component. Now shared, with one assertion per
+variant. It had survived as a duplicate precisely because it was proven nowhere.
+
+**Not validated in a real browser, by the executor or the supervisor.** The
+checks say it compiles, builds and regresses nothing; they do not say it is
+usable. `AGENTS.md` requires a user-validation checklist on a UI ticket, and §2
+of the Opus protocol excludes UI work needing validation from its scope. The
+commit proceeded under the user's standing instruction to chain and review the
+chantier as a whole; the checklist went to him with it. **This is the one ticket
+of Chantier 1 where the supervisor's checks prove least.**
+
+**UC impact: none directly.** E1 is the condition of §7's third success
+criterion.
+
 ### E1a — the editor's engine, and the merge that cannot widen (2026-08-18)
 
 Commit `6f44c72`. The first half of E1: the pure module and the
