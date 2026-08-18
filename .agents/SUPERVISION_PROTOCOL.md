@@ -161,6 +161,20 @@ Supervisor: independent review + independent re-run of the checks
   This standing go covers the Chantier 1 queue (`docs/LLM_WORKSPACE_ARCHITECTURE.md`
   §11.3). It is not a blanket authorization for anything else, and it lapses
   when that queue ends.
+
+  **Extended 2026-08-18, when the queue was re-derived as B12 → E1 → B15 → B16
+  → B13 → B14 → B20.** The user will **review Chantier 1 as a whole, at its
+  end** — not ticket by ticket. So the supervisor **chains tickets**: on
+  approving one it commits, pushes, writes the durable documentation, prepares
+  the next and starts it, without waiting for a per-ticket user validation.
+  The four interrupt cases above are unchanged and remain the only reasons to
+  stop.
+
+  Two of them will fire by construction and are not failures: **case 3**
+  (schema) on B12a and B15, since the user generates nothing automatically and
+  runs `db:migrate` himself — the supervisor generates the migration, shows him
+  the SQL, and waits. Queue design should therefore put a schema change at a
+  **ticket boundary**, never in the middle of one.
 - **Never `git add .`.** Explicit paths only.
 - **No schema, migration or dependency change** without written authorization
   in the ticket body.
