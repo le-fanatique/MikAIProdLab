@@ -447,10 +447,18 @@ Prompt by hand. This is the exact case §5.3 describes: the recipe consumes one
 jar and has no access to the pantry. It also confirms why the jar matters, and
 why filling it well is worth more than any single generation surface.
 
-One defect noted in passing, not repaired here: `sequenceVideoGeneration.ts`
-formats its package with warnings included, so diagnostic lines such as
-`Shot Prompt is empty.` are sent to the model. The storyboard and image paths
-both pass `includeWarnings: false`.
+One defect noted in passing, **repaired 2026-08-18 (`e3ce8c5`)**:
+`sequenceVideoGeneration.ts` formatted its package with warnings included, so
+diagnostic lines such as `Shot Prompt is empty.` were sent to the model. The
+storyboard and image paths both already passed `includeWarnings: false`.
+
+The claim was verified before the fix rather than taken from this note: that
+`packageText` is not a display string on this path — it becomes
+`buildSequenceVideoPrompt`'s text, then the `suggestedText`
+`buildGenerationPayload` queues. Fixed **on its own**, at the author's
+instruction, so that any change in generated output after B14 cannot be
+confused with it. Warning *detection* is untouched; only the rendering into
+that one text form is skipped.
 
 ### 5.8 What this section makes obsolete
 
