@@ -919,6 +919,49 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### UC1 reaches the product, tuned four times by its own answers (2026-08-18)
+
+`shot.insertDirected` is on the Sequence page (`05f381a`) and the user validated
+it in the running product. **All three founding use cases are now reachable
+where he works.**
+
+**Four tunings, none of which a test could have found.** Every one came from the
+user reading a real answer on a real project: an interval (`"MS to WS"`) where
+the rule gave examples but forbade nothing; a fabricated shot code in the title,
+**taught to the model by our own rendering**, which glued code to title with an
+em dash in two places; two fields — `action_pitch` and `continuity_notes` —
+carrying no rule at all while their neighbours each had one, so the model filled
+the vacuum with the intent from the director's note; and then a bound that
+became too tight *because* the new rule made the field longer, cutting
+`action_pitch` mid-word at 300.
+
+That last one is the pattern worth keeping: **a prompt rule can create the next
+defect.** S7c asked for beat-by-beat action and S7d had to widen the field that
+answer needed. Neither was foreseeable from the other.
+
+**What the final answer showed about the design.** Asked to convey hesitation
+under a helmet, the model used Azelle's tail as an acting instrument and staged
+a breath through the shoulders — neither is in any rule; both come from the
+project pitch describing an anthropomorphic macaque. §3.2's bet, that context
+selected by named variables produces craft rather than decoration, is visible in
+the output.
+
+**The surface's one design decision.** `afterShotId` is implicit in the click,
+on the connector between two shots. The bench asked for an id in a field because
+a bench may; a product may not, and §1 of the vision names that friction
+directly.
+
+**S2 shipped the chantier's first deliberate behaviour change** (`5fc5156`): an
+asset candidate whose type was not requested is now dropped. It also cost a
+lesson about scoping test changes — the ticket authorized one proof to move, and
+two needed to, the second visible only by running the suite.
+
+**The flaky suite had a second cause, found at last.** `maxWorkers` fixed the
+contention failures; the total load failure — all files failing on
+`Cannot read properties of undefined (reading 'config')` — is a **stale Vite
+cache**, cured by `rm -rf node_modules/.vite`. Hours were spent treating it as a
+scheduling problem. Every ticket since carries the remedy in its own text.
+
 ### S7, S5, S3, S1 — five tickets driven by first contact (2026-08-18)
 
 All delivered the day after UC1 landed, and four of the five exist because
