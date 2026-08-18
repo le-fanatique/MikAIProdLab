@@ -140,6 +140,20 @@ export type RunOperationResult =
   | { ok: true; kind: "object"; values: Record<string, string | number> }
   | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
   | { ok: true; kind: "text"; text: string }
+  // LLMW.OUTPUT.COMPOSITE.1 (B20a) — a fourth variant, broken deliberately on
+  // the same discipline B11-b1 and B12b-1 applied to their own widenings:
+  // every declared consumer must recognise the new `kind` or fail `tsc`.
+  //
+  // `values` is the scalar part (same shape as the `"object"` variant's own),
+  // `lists` is keyed by each declared list's `key`. List items admit
+  // `string[]` here and nowhere else — see `CompositeListItemField` in
+  // `types.ts` for why that widening is not pushed onto the `"list"` variant.
+  | {
+      ok: true;
+      kind: "composite";
+      values: Record<string, string | number>;
+      lists: Record<string, Array<Record<string, string | number | string[]>>>;
+    }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
@@ -967,9 +981,130 @@ function parseTextOutput(
   return { ok: true, kind: "text", text };
 }
 
+// ---------------------------------------------------------------------------
+// The composite branch — LLMW.OUTPUT.COMPOSITE.1 (B20a).
+//
+// One scalar record and several named lists, parsed from a single JSON object.
+// Every field reader is the one the `"object"` and `"list"` branches already
+// use (`readRawField`, `readStringField`, `readNumberField`, `readEnumField`)
+// — a composite answer is not a different kind of value, only a different
+// arrangement of them, so a second set of readers would be pure divergence
+// risk.
+//
+// Three rules, each matching what its single-shape sibling already does:
+//   - a declared list whose `arrayKey` is missing or not an array refuses the
+//     whole answer with `errors.notArray`, as `parseListOutput` does. It does
+//     NOT degrade to an empty list: a composite answer missing half of itself
+//     is a malformed answer, not a thin one;
+//   - an invalid ITEM inside a present array is filtered, never refused —
+//     `parseListOutput`'s own rule, unchanged;
+//   - `errors.empty` gates on the SCALARS only. An analysis that observed
+//     nothing is a legitimate answer; one with no summary is not.
+// ---------------------------------------------------------------------------
+function parseCompositeOutput(
+  raw: string,
+  output: Extract<OperationDescriptor["output"], { kind: "composite" }>
+): RunOperationResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractCodeFence(raw));
+  } catch {
+    return { ok: false, error: output.errors.unparsable };
+  }
+  const root = parsed as Record<string, unknown> | null | undefined;
+  if (!root || typeof root !== "object" || Array.isArray(root)) {
+    return { ok: false, error: output.errors.unparsable };
+  }
+
+  const values: Record<string, string | number> = {};
+  for (const field of output.scalars) {
+    const rawValue = root[field.jsonKey];
+    if (field.type === "string") {
+      const text = readStringField(rawValue, field.truncateTo);
+      if (field.maxLength != null && text.length > field.maxLength) {
+        return { ok: false, error: output.errors.empty };
+      }
+      values[field.field] = text;
+    } else {
+      const result = readNumberField(rawValue, field, 0);
+      if (result.present) values[field.field] = result.value;
+    }
+  }
+
+  const isScalarSatisfied = (field: ObjectOutputField) => {
+    const v = values[field.field];
+    return typeof v === "number" ? true : typeof v === "string" && v.length > 0;
+  };
+  const scalarsSatisfied =
+    output.require === "all" ? output.scalars.every(isScalarSatisfied) : output.scalars.some(isScalarSatisfied);
+  if (!scalarsSatisfied) {
+    return { ok: false, error: output.errors.empty };
+  }
+
+  const lists: Record<string, Array<Record<string, string | number | string[]>>> = {};
+  for (const list of output.lists) {
+    const arr = root[list.arrayKey];
+    if (!Array.isArray(arr)) {
+      return { ok: false, error: output.errors.notArray };
+    }
+
+    const { fields: validityFields, require } = list.item.validity;
+    const items: Array<Record<string, string | number | string[]>> = [];
+
+    arr.forEach((rawItem, fallbackIndex) => {
+      if (!rawItem || typeof rawItem !== "object") return;
+      const obj = rawItem as Record<string, unknown>;
+
+      const itemValues: Record<string, string | number | string[]> = {};
+      for (const field of list.item.fields) {
+        if (field.type === "stringList") {
+          const rawValue = obj[field.jsonKey];
+          const members = Array.isArray(rawValue)
+            ? rawValue
+                .filter((m): m is string => typeof m === "string")
+                .map((m) => m.trim())
+                .filter((m) => m.length > 0)
+            : [];
+          itemValues[field.field] = field.maxItems != null ? members.slice(0, field.maxItems) : members;
+          continue;
+        }
+        const rawValue = readRawField(obj, field.jsonKey, field.jsonKeyFallback);
+        if (field.type === "string") {
+          itemValues[field.field] = readStringField(rawValue, field.truncateTo);
+        } else if (field.type === "number") {
+          const result = readNumberField(rawValue, field, fallbackIndex);
+          if (result.present) itemValues[field.field] = result.value;
+        } else {
+          itemValues[field.field] = readEnumField(rawValue, field);
+        }
+      }
+
+      // Same rule as `parseListOutput`: a validity field is satisfied by a
+      // non-empty string. A `stringList` field is satisfied by a non-empty
+      // list — the one addition, and the reason it is here rather than in
+      // `parseListOutput` is that only a composite item can hold one.
+      const isFieldSatisfied = (f: string) => {
+        const v = itemValues[f];
+        if (Array.isArray(v)) return v.length > 0;
+        return typeof v === "string" && v.length > 0;
+      };
+      const satisfied =
+        require === "all" ? validityFields.every(isFieldSatisfied) : validityFields.some(isFieldSatisfied);
+      if (!satisfied) return;
+
+      items.push(itemValues);
+    });
+
+    lists[list.key] = list.maxItems != null ? items.slice(0, list.maxItems) : items;
+  }
+
+  return { ok: true, kind: "composite", values, lists };
+}
+
 function parseOutput(raw: string, output: OperationDescriptor["output"]): RunOperationResult {
   if (output.kind === "list") return parseListOutput(raw, output);
   if (output.kind === "text") return parseTextOutput(raw, output);
+  if (output.kind === "composite") return parseCompositeOutput(raw, output);
   return parseObjectOutput(raw, output);
 }
 

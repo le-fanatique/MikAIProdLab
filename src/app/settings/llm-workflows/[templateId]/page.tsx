@@ -101,7 +101,14 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
             itemFields: descriptor.output.item.fields,
             formDataKey: descriptor.output.selection.formDataKey,
           }
-        : { kind: "text" as const, field: descriptor.output.field };
+        : descriptor.output.kind === "text"
+          ? { kind: "text" as const, field: descriptor.output.field }
+          // LLMW.OUTPUT.COMPOSITE.1 (B20a) — no bench render surface for a
+          // composite answer; `runBenchOperation` refuses it by name before
+          // anything reaches this pane. Mapped to the text shape with an empty
+          // field so this file stays total over `output.kind` rather than
+          // carrying a cast.
+          : { kind: "text" as const, field: "" };
 
   const anchorEntity = descriptor.anchor.entity;
   const requiredKeys = requiredAnchorIdKeys(anchorEntity);

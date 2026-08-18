@@ -378,11 +378,92 @@ function validateTextOutput(output: Record<string, unknown>): string | null {
   return null;
 }
 
+/**
+ * LLMW.OUTPUT.COMPOSITE.1 (B20a). Added in the same diff as the format
+ * widening, on B12b-2's lesson: a stored descriptor declaring a `kind` this
+ * validator does not know is refused at import, so a widening that skips this
+ * file ships a template that cannot be re-read.
+ *
+ * Reuses `validateListItemField` per list rather than a second item validator
+ * — the `"stringList"` variant is the only thing a composite list's item can
+ * carry that a plain list's cannot.
+ */
+function validateCompositeOutput(output: Record<string, unknown>): string | null {
+  if (!Array.isArray(output.scalars) || output.scalars.length === 0) {
+    return '"output.scalars" must be a non-empty array.';
+  }
+  for (let i = 0; i < output.scalars.length; i++) {
+    const entry = output.scalars[i];
+    if (!isPlainObject(entry)) return `"output.scalars[${i}]" must be an object.`;
+    if (entry.type !== "string" && entry.type !== "number") {
+      return `"output.scalars[${i}].type" must be "string" or "number".`;
+    }
+    if (typeof entry.field !== "string" || !entry.field) return `"output.scalars[${i}].field" is required.`;
+    if (typeof entry.jsonKey !== "string" || !entry.jsonKey) return `"output.scalars[${i}].jsonKey" is required.`;
+  }
+  if (output.require !== "all" && output.require !== "any") {
+    return '"output.require" must be "all" or "any".';
+  }
+
+  if (!Array.isArray(output.lists) || output.lists.length === 0) {
+    return '"output.lists" must be a non-empty array.';
+  }
+  const seenKeys = new Set<string>();
+  for (let i = 0; i < output.lists.length; i++) {
+    const list = output.lists[i];
+    if (!isPlainObject(list)) return `"output.lists[${i}]" must be an object.`;
+    if (typeof list.key !== "string" || !list.key) return `"output.lists[${i}].key" is required.`;
+    if (seenKeys.has(list.key)) return `"output.lists[${i}].key" duplicates "${list.key}".`;
+    seenKeys.add(list.key);
+    if (typeof list.arrayKey !== "string" || !list.arrayKey) return `"output.lists[${i}].arrayKey" is required.`;
+    if (!isPlainObject(list.item)) return `"output.lists[${i}].item" must be an object.`;
+    if (!Array.isArray(list.item.fields) || list.item.fields.length === 0) {
+      return `"output.lists[${i}].item.fields" must be a non-empty array.`;
+    }
+
+    const declaredFields = new Set<string>();
+    for (let j = 0; j < list.item.fields.length; j++) {
+      const field = list.item.fields[j];
+      const path = `output.lists[${i}].item.fields[${j}]`;
+      if (!isPlainObject(field)) return `"${path}" must be an object.`;
+      if (field.type === "stringList") {
+        if (typeof field.field !== "string" || !field.field) return `"${path}.field" is required.`;
+        if (typeof field.jsonKey !== "string" || !field.jsonKey) return `"${path}.jsonKey" is required.`;
+        declaredFields.add(field.field);
+        continue;
+      }
+      const result = validateListItemField(field, path);
+      if (typeof result === "string") return result;
+      declaredFields.add(field.field as string);
+    }
+
+    if (!isPlainObject(list.item.validity)) return `"output.lists[${i}].item.validity" must be an object.`;
+    if (!Array.isArray(list.item.validity.fields) || list.item.validity.fields.length === 0) {
+      return `"output.lists[${i}].item.validity.fields" must be a non-empty array.`;
+    }
+    for (const f of list.item.validity.fields) {
+      if (typeof f !== "string" || !declaredFields.has(f)) {
+        return `"output.lists[${i}].item.validity.fields" references an undeclared field "${String(f)}".`;
+      }
+    }
+    if (list.item.validity.require !== "all" && list.item.validity.require !== "any") {
+      return `"output.lists[${i}].item.validity.require" must be "all" or "any".`;
+    }
+  }
+
+  if (!isPlainObject(output.errors)) return '"output.errors" must be an object.';
+  for (const key of ["unparsable", "notArray", "empty"] as const) {
+    if (typeof output.errors[key] !== "string") return `"output.errors.${key}" is required and must be a string.`;
+  }
+  return null;
+}
+
 function validateOutput(output: Record<string, unknown>): string | null {
   if (output.kind === "object") return validateObjectOutput(output);
   if (output.kind === "list") return validateListOutput(output);
   if (output.kind === "text") return validateTextOutput(output);
-  return `"output.kind" must be "object", "list" or "text" (was ${output.kind === undefined ? "absent" : `"${String(output.kind)}"`}).`;
+  if (output.kind === "composite") return validateCompositeOutput(output);
+  return `"output.kind" must be "object", "list", "text" or "composite" (was ${output.kind === undefined ? "absent" : `"${String(output.kind)}"`}).`;
 }
 
 export function validateLlmTemplateJson(raw: string): TemplateValidationResult {

@@ -118,6 +118,15 @@ export async function runBenchOperation(input: {
     // `kind: "text"` commit path either, same reason.
     if (result.kind === "object") return { ok: true, kind: "object", values: result.values };
     if (result.kind === "list") return { ok: true, kind: "list", items: result.items };
+    // LLMW.OUTPUT.COMPOSITE.1 (B20a) — the bench has no composite render
+    // surface, and inventing one here would be guessing at a shape B20e has
+    // not settled. Refused by name rather than relayed as something it is
+    // not: the same treatment `applyBatchAssetDescriptionDraftsInline` gets
+    // in `commitBenchProposal` for a different reason. No descriptor declares
+    // this kind yet, so this is unreachable today by construction.
+    if (result.kind === "composite") {
+      return { ok: false, error: "Composite-output operations cannot be run from the bench yet." };
+    }
     return { ok: true, kind: "text", text: result.text };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

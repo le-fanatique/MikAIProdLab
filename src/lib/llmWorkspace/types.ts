@@ -395,6 +395,33 @@ export type ObjectOutputField =
     };
 
 /**
+ * A `kind: "composite"` list's item field — LLMW.OUTPUT.COMPOSITE.1 (B20a).
+ * `ListItemField` plus one variant it has no consumer for outside a composite
+ * answer: an **array of strings**.
+ *
+ * Deliberately a separate union rather than a widening of `ListItemField`
+ * itself. Adding `"stringList"` there would make every `kind: "list"` result's
+ * item values `string | number | string[]`, breaking ~14 declared consumers to
+ * express something none of them can produce — `castingSuggestions`,
+ * `sequenceShots`, `assetExtraction` and `sequenceGeneration` have no
+ * array-valued field between them. The widening happens where the need is.
+ *
+ * `referenceKeys` on `projectStyleReferenceAnalysis`'s candidate rules is the
+ * one real consumer (§5.9): every rule cites every reference supporting it.
+ * Whether those keys are *valid* is a different question, and not this type's
+ * — that is cross-item referential validity, B20b.
+ */
+export type CompositeListItemField =
+  | ListItemField
+  | {
+      type: "stringList";
+      field: string;
+      jsonKey: string;
+      /** Each member is trimmed; blank members are dropped. An absent or non-array value yields an empty list, never a refusal — item-level refusal is `validity`'s job. */
+      maxItems?: number;
+    };
+
+/**
  * The frozen descriptor shape — copied verbatim from §4.1, substituting the
  * auxiliary types above for their placeholders.
  */
@@ -689,6 +716,48 @@ export type OperationDescriptor = {
         //     the conformation stage (§5.5 of the product vision, ticket
         //     B13), not to the runner. Not added "just in case" — a field
         //     with no consumer is debt, not readiness.
+        // LLMW.OUTPUT.COMPOSITE.1 (B20a). One object holding a scalar AND
+        // several named lists at once — the shape
+        // `projectStyleReferenceAnalysis` answers with, and the second of the
+        // three format gaps §5.9 lists for B20 (the first, the image input,
+        // is closed by B16a).
+        //
+        // `output.kind` picks exactly one shape today: `"object"` for a flat
+        // record, `"list"` for one array, `"text"` for prose. That analysis
+        // returns `{summary, observations[], candidateRules[]}` — a scalar and
+        // *two* lists, each with its own item shape — which none of the three
+        // can express and which no combination of them can either, because
+        // `kind` is singular by construction.
+        //
+        // Deliberately NOT "an object output whose fields may be lists": the
+        // two lists need `item.validity`, `maxItems` and per-item field
+        // typing, all of which already exist on the list shape and none of
+        // which `ObjectOutputField` has. Reusing the list shape per named list
+        // is the smaller move, and it keeps one definition of what an item is.
+        kind: "composite";
+        target: { entity: EntityKind };
+        /** The scalar part. `ObjectOutputField` unchanged — `summary` is a plain string field and needs nothing new. */
+        scalars: ObjectOutputField[];
+        /** The named lists, in declaration order. Each carries its own model-side `arrayKey` and its own item contract — never one shared item shape across lists that hold different things. */
+        lists: Array<{
+          /** The key this list lands under in the result. Distinct from `arrayKey`: the model's own JSON key is its business, the result's key is the descriptor's. */
+          key: string;
+          arrayKey: string;
+          item: {
+            fields: CompositeListItemField[];
+            validity: { fields: string[]; require: "all" | "any" };
+          };
+          maxItems?: number;
+        }>;
+        /** Every declared scalar non-empty, or at least one — same vocabulary as the `"object"` shape's own `require`. */
+        require: "all" | "any";
+        errors: {
+          unparsable: string; // JSON.parse failed, or the shape is wrong
+          notArray: string; // a declared list's `arrayKey` is missing or not an array
+          empty: string; // the `require` rule over the scalars was not satisfied
+        };
+      }
+    | {
         kind: "text";
         target: { entity: EntityKind };
         // The single column the text lands in, from the same vocabulary as
