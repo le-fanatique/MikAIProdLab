@@ -537,6 +537,23 @@ product shape, not an implementation.
    that reads the current lighting value as one of its variables — the same
    shape as UC2's directed retake, applied to one field. No new primitive.
 
+**One step added by inference, 2026-08-18, and flagged for the author to
+overturn.** §5.9 names three levels but never says what a Shot with no lighting
+of its own should read. B14b needed an answer — it feeds a Shot's composed
+storyboard prompt and the "lighting missing" advisory — and took this one:
+**the Shot's own field wins; failing that, its Sequence's effective lighting**,
+which itself already falls back to the Sequence's environment Assets (B15a's
+rule, reused unmodified).
+
+It was accepted rather than escalated for three reasons: it mirrors the
+precedence the author already approved one level up; it **reads and never
+writes**, so nothing can be silently overwritten by it; and the alternative —
+a Shot inheriting nothing — would mean a lighting deliberately described on a
+Sequence never reaches any of its Shots' prompts, which contradicts this
+section's own premise that describing lighting once should propagate.
+
+It is an inference, not the author's decision. One word from him changes it.
+
 **Why this is not merely another field.** It is the first ingredient the
 *workspace* can derive from an image, and the first whose natural source is
 another entity's field rather than the user's keyboard. Both are worth more than
