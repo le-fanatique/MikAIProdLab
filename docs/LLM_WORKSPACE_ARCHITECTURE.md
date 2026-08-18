@@ -1347,6 +1347,9 @@ reconstructing it from struck-through rows.
 revised later the same day, after §5 and the author's rulings, to
 B12 → E1 → B15 → B16 → B13 → B14 → B20 → Chantier 2 → B17/B18/B19.
 
+**Chantier 1 is complete as of 2026-08-19.** Every item shipped except B20e,
+which the user deferred past Chantier 2 (see "B20e re-measured" below).
+
 **Revised 2026-08-18 after the vision's §5 was written** — B8 is dissolved and
 the queue re-derived; see "B8 dissolved" below for the full table and the
 reasoning. Chantier 1 now has seven tickets left:
@@ -1495,7 +1498,7 @@ ordering — read the list, not the numbers.
 | 4 | **B16** — lighting, assisted. **Split 2026-08-18 into B16a (`c30b6a7`, delivered), B16b and B16c.** B16a is the format brick: `ImageSourceId` and the closed image-source registry, `descriptor.images`, the eighth `Block` variant, call-time byte re-validation, and the runner's multimodal route. Supervisor-implemented under protocol §3 — no check can prove a format right. **B16b (`ef470fb`, delivered)** is `lighting.fromImage`: the first operation to declare an image input, anchored on the Asset, bench-only, writing `assets.lighting` through B15a's mono-column action. **B16c (`0231327`, delivered)** is the director's-note adjust — `shot.lightingDirected` and `sequence.lightingDirected`, `intent.freeText` over the current value, no new primitive. **B16 is complete.** | §5.9's other two fills. **Cheaper than first estimated:** the multimodal capability is already built and hardened in `src/lib/projectStyle/referenceAnalysis/` — byte re-validation at call time, one `ChatMessage` the router already translates for both provider families, a leak-proof error wrapper, a validated JSON answer, and a prompt that already asks about lighting by name. What is missing is that **the descriptor format cannot declare an image input**, so that capability sits outside the workspace, anchored on the Reference Board. B16 makes it reachable from another anchor and another question. Plus the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. **Design constraint from B20:** the image-input declaration must be designed against Reference Board analysis's needs — N ordered images with per-image keys, bytes re-validated at call time — not only against lighting's single-image case, or it will be widened immediately afterwards. |
 | 5 | **B13** — the conformation stage. **Split 2026-08-18 into B13a (`739ad6f`, delivered) and B13b.** B13a is the profile contract plus the reference rendering — supervisor-implemented, contract-defining; **B13b (`f1ce136`, delivered)** is the output discipline as findings. **B13 is complete.** | §5.4/§5.5: the engine formatting the app owns. Renders stored reference roles into the guide's named image modes, applies the word budget, the one-primary-camera rule and the tag caps. Placed after B15/B16 so it has lighting to render. Must be replaceable per engine, nothing named after Seedance — and per §5.6 it **must not hard-code today's camera shape**, since that shape is scheduled to change after Chantier 2. |
 | 6 | **B14** — the storyboard prompt under the workspace. **Split 2026-08-18 into B14a (`0a4f27a`) and B14b (`ae467e6`) — both delivered. B14 is complete.** B14a is `composeStoryboardShot`, the six-part composition over the pantry `buildSequenceGenerationPackage` already resolves and discards; B14b offers it beside the existing composition, chosen at generation time, the old one still the default and proven byte-identical. | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
-| 7 | **B20** — Reference Board analysis joins the registry | Ruled a **brick to build** by the author 2026-08-18, not an exception like chat/image generation/translation. `src/actions/projectStyleReferenceAnalysis.ts` is 1 259 hand-written lines doing exactly what the workspace exists to express. Its migration needs three format gaps closed, not one — an image input with per-image keys, a **composite output** (one scalar plus two lists, where `output.kind` picks one shape today), and cross-item referential validity. Three things must survive untouched: the file confinement/decode gate, the prompt's provenance hash, and the pre-call/in-transaction snapshot drift detection. See `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9. Big enough that it may split; scoped when reached. |
+| 7 | **B20** — Reference Board analysis joins the registry. **Split and partly delivered 2026-08-18/19: B20a (`ae174d4`), B20b (`77d020d`), B20c (`9ba1bb5`), B20d (`ad38206`). B20e — the migration itself — deferred after Chantier 2 by the user's decision**, because its blockers turned out to be orchestration, not format. See "B20e re-measured" below. | Ruled a **brick to build** by the author 2026-08-18, not an exception like chat/image generation/translation. `src/actions/projectStyleReferenceAnalysis.ts` is 1 259 hand-written lines doing exactly what the workspace exists to express. Its migration needs three format gaps closed, not one — an image input with per-image keys, a **composite output** (one scalar plus two lists, where `output.kind` picks one shape today), and cross-item referential validity. Three things must survive untouched: the file confinement/decode gate, the prompt's provenance hash, and the pre-call/in-transaction snapshot drift detection. See `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9. Big enough that it may split; scoped when reached. |
 
 **B12 split, 2026-08-18.** The schema change is put on a ticket boundary rather
 than in the middle of one, because `.agents/SUPERVISION_PROTOCOL.md` §5 makes an
@@ -1627,7 +1630,13 @@ the workspace's block assembler produces *different text*, therefore a different
 hash, therefore a different stored provenance for every run — a change to a
 security-relevant persisted value, in exchange for nothing the user asked for.
 
-So B20e is **not scoped as a ticket here**. The honest options are:
+**Decided by the user, 2026-08-19: B20e is deferred until after Chantier 2.**
+His 2026-08-18 ruling that this action is *a brick to build*, not an exception,
+**stands** — it is rescheduled, not reversed. The missing orchestration becomes
+its own chantier, designed with him, once the codebase cleanup has simplified
+the ground it sits on. **Chantier 1 ends here.**
+
+The options that were put to him, kept for the record:
 
 1. **A partial migration** — the descriptor expresses the prompt and the parse,
    the action keeps its orchestration. Cheap, but it changes the prompt text and
@@ -1650,6 +1659,14 @@ it ever migrates.
 
 **After Chantier 2 — decided 2026-08-18, with the reason each item waits:**
 
+- **B20e — Reference Board analysis, the migration.** Deferred here on
+  2026-08-19, after B20a–B20d closed every format gap and put a
+  mutation-proven net under the three properties §5.9 says must survive. What
+  blocks it is orchestration the workspace has never needed — a confirmation
+  handshake, an idempotency key, a two-phase transaction over four tables, and
+  revalidation inside the committing transaction — plus the fact that routing
+  its prompt through the workspace's assembler would change the provenance hash
+  of every run. A chantier, designed with the author, not a ticket.
 - **B17 — the media reference families.** The author's own call: tune
   `shot_reference_videos` (delivered, never exercised), give it the **role
   column** it lacks — the guide's video modes are keyed on roles — and add the
