@@ -754,3 +754,72 @@ export async function updateShotLighting(formData: FormData): Promise<void> {
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}shotLightingSaved=1`);
 }
+
+/**
+ * LLMW.LIGHTING.SHOTFILL.1 — the write side of the "Fill from sequence"
+ * button on the Edit Shot form (§5.9 of
+ * docs/LLM_WORKSPACE_PRODUCT_VISION.md). Never called automatically — a form
+ * submit, the same "the user clicks" discipline as every other action here.
+ *
+ * `updateShotLighting` above is this button's actual write path, not a
+ * parallel one: this action only ever computes the text to copy
+ * (`computeShotLightingFill`, `src/lib/llmWorkspace/shotLightingFill.ts` —
+ * which itself reuses `resolveSeqLighting`, the same effective-lighting
+ * resolution `SEQ.LIGHTING` uses, never a second query) and hands it to
+ * `updateShotLighting` as a plain FormData `lighting` value, exactly as a
+ * human typing it in would. Ownership, redirect shape and the
+ * blank-becomes-null rule are therefore inherited, not reimplemented.
+ *
+ * Refuses (no write) when there is nothing to copy — the Shot's Sequence has
+ * neither its own lighting nor an environment Asset with one — the same "no
+ * election rule, but no button that writes empty either" contract the page
+ * itself uses to decide whether to render the button at all. Both call sites
+ * share the one function so they cannot disagree.
+ */
+export async function fillShotLightingFromSequence(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const shotId = parseInt(formData.get("shotId") as string, 10);
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() ||
+    `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}shotLightingError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(shotId) || shotId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  // Ownership: shot → sequence → project
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
+  if (!shot || shot.sequenceId !== sequenceId) {
+    errRedirect("Shot not found or does not belong to this sequence.");
+  }
+
+  const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) {
+    errRedirect("Sequence not found or does not belong to this project.");
+  }
+
+  const { computeShotLightingFill } = await import("@/lib/llmWorkspace/shotLightingFill");
+  const fillText = await computeShotLightingFill(sequenceId);
+  if (fillText === null) {
+    errRedirect("This shot's sequence has no lighting — of its own or from an environment Asset — to copy.");
+  }
+
+  const writeFormData = new FormData();
+  writeFormData.set("projectId", String(projectId));
+  writeFormData.set("sequenceId", String(sequenceId));
+  writeFormData.set("shotId", String(shotId));
+  writeFormData.set("lighting", fillText);
+  writeFormData.set("returnTo", returnTo);
+
+  await updateShotLighting(writeFormData);
+}

@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import FormField from "@/components/FormField";
-import { updateShot } from "@/actions/shots";
+import { updateShot, fillShotLightingFromSequence } from "@/actions/shots";
+import { computeShotLightingFill } from "@/lib/llmWorkspace/shotLightingFill";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string }>;
@@ -26,6 +27,12 @@ export default async function EditShotPage({ params }: Props) {
   if (!shot || shot.sequenceId !== sid) notFound();
 
   const updateAction = updateShot.bind(null, shid, sid, pid);
+  // LLMW.LIGHTING.SHOTFILL.1 — the button is offered only when there is
+  // something to copy (§5.9: a bare button that would write empty is worse
+  // than no button). Computed once at render time so the page and the
+  // button's own action can never disagree.
+  const sequenceLightingFill = await computeShotLightingFill(sid);
+  const hasOwnLighting = Boolean(shot.lighting && shot.lighting.trim() !== "");
 
   return (
     <div>
@@ -38,6 +45,32 @@ export default async function EditShotPage({ params }: Props) {
         ]}
       />
       <h1 className="text-2xl font-semibold tracking-tight mb-8">Edit Shot</h1>
+
+      {sequenceLightingFill !== null && (
+        <form
+          action={fillShotLightingFromSequence}
+          className="max-w-xl mb-5 rounded border border-neutral-700 px-4 py-3 flex items-center justify-between gap-4"
+        >
+          <input type="hidden" name="projectId" value={pid} />
+          <input type="hidden" name="sequenceId" value={sid} />
+          <input type="hidden" name="shotId" value={shid} />
+          <input type="hidden" name="returnTo" value={`/projects/${pid}/sequences/${sid}/shots/${shid}/edit`} />
+          <p className="text-xs text-neutral-400">
+            Replaces the Lighting field below with this shot&apos;s sequence&apos;s
+            effective Lighting, and saves it immediately.
+            {hasOwnLighting && (
+              <span className="text-[#cf7b6b]"> This replaces what is already written there
+                — right away, not just in this form.</span>
+            )}
+          </p>
+          <button
+            type="submit"
+            className="shrink-0 rounded border border-neutral-700 text-neutral-200 px-4 py-2 text-sm hover:border-neutral-500 transition-colors"
+          >
+            Fill from sequence
+          </button>
+        </form>
+      )}
 
       <form action={updateAction} className="max-w-xl flex flex-col gap-5">
         <FormField
