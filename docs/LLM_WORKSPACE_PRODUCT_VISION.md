@@ -580,10 +580,17 @@ An accumulating render was built first and reverted: besides contradicting this
 convention, it would have printed the same ambiance twice — once raw from the
 environment, and again inside the Sequence's edited copy of it.
 
-**What is missing to complete the model:** there is a "Fill from environment"
-button on the Sequence (B15b) and **no equivalent on the Shot**. Filling a Shot
-from its Sequence has to be done by hand today. Not urgent, and not invented
-here — recorded so it is chosen rather than stumbled into.
+**Both levels of the gesture now exist.** "Fill from environment" on the
+Sequence (B15b) and **"Fill from sequence" on the Shot**
+(`LLMW.LIGHTING.SHOTFILL.1`, `8f00435`, added on the author's word 2026-08-19,
+once the override model was settled). Each copies the level above into the
+field, where it is then edited — which is the whole mechanism, since the
+composition renders one resolved value and never concatenates levels.
+
+Both buttons say in their own label that the write is **immediate**. That
+wording is not decoration: B15b's first attempt described the field as merely
+pre-filled, and a user who clicked, changed his mind and pressed Cancel would
+have believed nothing was saved while his manual lighting was already gone.
 
 **And nothing about lighting ever blocks generation** — his arbitration in the
 same breath:
