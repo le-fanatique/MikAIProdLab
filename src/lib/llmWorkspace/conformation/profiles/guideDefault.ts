@@ -20,7 +20,13 @@
 // ---------------------------------------------------------------------------
 
 import { normalizeReferenceImageRoleValue } from "@/lib/referenceImageRoles";
-import type { ConformationProfile, ConformationRequest, ConformedReference } from "../types";
+import type {
+  ConformationFinding,
+  ConformationInspectionRequest,
+  ConformationProfile,
+  ConformationRequest,
+  ConformedReference,
+} from "../types";
 
 /**
  * The guide's five named image modes, keyed by the catalogue role that carries
@@ -82,8 +88,112 @@ function conformReferences(request: ConformationRequest): ConformedReference[] {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Output discipline — LLMW.CONFORMATION.2 (B13b)
+//
+// §5.6, "Missing output discipline": nothing counted words against the
+// budget, enforced the one-primary-camera rule, or capped tags at the
+// engine's limits. This is that check, expressed as `inspect`.
+//
+// **Findings, never exceptions.** §5.4 is categorical: formatting is a
+// technical stage the app owns, never a rule the user obeys. A prompt over
+// budget is still a prompt — `inspect` reports what is off, it never throws
+// and never refuses.
+//
+// The guide's numbers live here as named constants, because — like the
+// image-mode table above — they are the guide's own knowledge, and nowhere
+// else in the codebase should know them (B13a's decision, carried forward).
+// ---------------------------------------------------------------------------
+
+/** The guide's word budget: 60–100 words is the target range. */
+const WORD_BUDGET_MIN = 60;
+const WORD_BUDGET_MAX = 100;
+/** The guide's hard cap, past which the prompt is well outside its intended shape. */
+const WORD_HARD_CAP = 150;
+/** The guide's per-engine tag caps: 9 images, 12 files total. */
+const IMAGE_TAG_CAP = 9;
+const FILE_TAG_CAP = 12;
+
+/**
+ * Splits on whitespace after trimming and drops empty strings. Not a smarter
+ * tokenizer on purpose — the guide gives a range, not a precise measure, and
+ * an exact word count does not exist.
+ */
+function countWords(body: string): number {
+  return body.trim().split(/\s+/).filter((word) => word.length > 0).length;
+}
+
+/** Non-blank camera phrases only — a blank entry does not count as an instruction. */
+function countCameraPhrases(cameraPhrases: string[]): number {
+  return cameraPhrases.filter((phrase) => phrase.trim().length > 0).length;
+}
+
+function inspect(request: ConformationInspectionRequest): ConformationFinding[] {
+  const findings: ConformationFinding[] = [];
+
+  const wordCount = countWords(request.body);
+  if (wordCount > WORD_HARD_CAP) {
+    findings.push({
+      code: "wordBudget",
+      severity: "warn",
+      message: `The prompt body is ${wordCount} words, past the guide's ${WORD_HARD_CAP}-word hard cap.`,
+    });
+  } else if (wordCount > WORD_BUDGET_MAX) {
+    findings.push({
+      code: "wordBudget",
+      severity: "warn",
+      message: `The prompt body is ${wordCount} words, over the guide's ${WORD_BUDGET_MIN}–${WORD_BUDGET_MAX} word budget.`,
+    });
+  } else if (wordCount < WORD_BUDGET_MIN) {
+    findings.push({
+      code: "wordBudget",
+      severity: "warn",
+      message: `The prompt body is ${wordCount} words, under the guide's ${WORD_BUDGET_MIN}–${WORD_BUDGET_MAX} word budget.`,
+    });
+  }
+
+  const cameraPhraseCount = countCameraPhrases(request.cameraPhrases);
+  if (cameraPhraseCount !== 1) {
+    findings.push({
+      code: "primaryCamera",
+      severity: "warn",
+      message:
+        cameraPhraseCount === 0
+          ? "No primary camera instruction is set; the guide wants exactly one."
+          : `${cameraPhraseCount} camera instructions are set; the guide wants exactly one primary instruction.`,
+    });
+  }
+
+  if (request.references.length > IMAGE_TAG_CAP) {
+    findings.push({
+      code: "imageTagCap",
+      severity: "warn",
+      message: `${request.references.length} images are referenced, past the engine's ${IMAGE_TAG_CAP}-image cap.`,
+    });
+  }
+
+  if (request.fileTagCount > FILE_TAG_CAP) {
+    findings.push({
+      code: "fileTagCap",
+      severity: "warn",
+      message: `${request.fileTagCount} files are referenced in total, past the engine's ${FILE_TAG_CAP}-file cap.`,
+    });
+  }
+
+  if (!request.lighting || request.lighting.trim().length === 0) {
+    findings.push({
+      code: "lightingMissing",
+      severity: "info",
+      message: "No lighting is set; the guide calls it the highest-leverage single element.",
+    });
+  }
+
+  return findings;
+}
+
 export const guideDefaultProfile: ConformationProfile = {
   id: "guide.default",
   name: "Default conformation guide",
   conformReferences,
+  inspect,
 };

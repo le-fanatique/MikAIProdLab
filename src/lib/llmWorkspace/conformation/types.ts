@@ -65,6 +65,51 @@ export type ConformationRequest = {
   cameraPhrases: string[];
 };
 
+/**
+ * The closed set of findings the output discipline (B13b) can report. Every
+ * code names a check §5.6 lists under "missing output discipline" — word
+ * budget, primary camera, the two tag caps, and lighting.
+ */
+export type ConformationFindingCode =
+  | "wordBudget"
+  | "primaryCamera"
+  | "imageTagCap"
+  | "fileTagCap"
+  | "lightingMissing";
+
+/**
+ * One constat. **Never an exception, never a refusal** — §5.4 puts formatting
+ * entirely in the app's hands and forbids turning it into a rule the user is
+ * asked to obey. Two severities only, and neither is blocking:
+ * `warn` — the guide is broken; `info` — something the guide counts is
+ * missing, without that being an infraction. There is no `"error"`: nothing
+ * here is refused.
+ */
+export type ConformationFinding = {
+  code: ConformationFindingCode;
+  severity: "info" | "warn";
+  message: string;
+};
+
+/**
+ * What `inspect` needs beyond `ConformationRequest`. A separate type, not
+ * `ConformationRequest` widened with optional fields — a type half of whose
+ * fields are optional no longer says what it requires.
+ */
+export type ConformationInspectionRequest = ConformationRequest & {
+  /** The prompt body to measure, exactly as the caller assembled it. This stage never fabricates it. */
+  body: string;
+  /** The resolved lighting, or its absence. */
+  lighting: string | null;
+  /**
+   * The total file count, images included. A number, not a per-family list:
+   * video carries no role column yet and audio has no entity at all (§5.6),
+   * so this ticket declares no shape for either. When they arrive, the caller
+   * passes a larger number and this module does not change.
+   */
+  fileTagCount: number;
+};
+
 export type ConformedReference = {
   /** `@Image1`, `@Image2`… The ordinal follows the request's own order, never the role. */
   tag: string;
@@ -95,4 +140,10 @@ export type ConformationProfile = {
   id: ConformationProfileId;
   name: string;
   conformReferences: (request: ConformationRequest) => ConformedReference[];
+  /**
+   * The output discipline (B13b): what the request stands off the guide
+   * against, reported as findings. Pure and deterministic, like
+   * `conformReferences` — it looks and reports, it never rewrites.
+   */
+  inspect: (request: ConformationInspectionRequest) => ConformationFinding[];
 };

@@ -25,6 +25,9 @@ export function getConformationProfile(id: ConformationProfileId): ConformationP
 }
 
 export type {
+  ConformationFinding,
+  ConformationFindingCode,
+  ConformationInspectionRequest,
   ConformationProfile,
   ConformationProfileId,
   ConformationReference,
