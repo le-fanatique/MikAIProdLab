@@ -537,22 +537,55 @@ product shape, not an implementation.
    that reads the current lighting value as one of its variables — the same
    shape as UC2's directed retake, applied to one field. No new primitive.
 
-**One step added by inference, 2026-08-18, and flagged for the author to
-overturn.** §5.9 names three levels but never says what a Shot with no lighting
-of its own should read. B14b needed an answer — it feeds a Shot's composed
-storyboard prompt and the "lighting missing" advisory — and took this one:
-**the Shot's own field wins; failing that, its Sequence's effective lighting**,
-which itself already falls back to the Sequence's environment Assets (B15a's
-rule, reused unmodified).
+**The three levels are a rig refined downstream, not a fallback — settled by
+the author 2026-08-19, and it corrected an inference.**
 
-It was accepted rather than escalated for three reasons: it mirrors the
-precedence the author already approved one level up; it **reads and never
-writes**, so nothing can be silently overwritten by it; and the alternative —
-a Shot inheriting nothing — would mean a lighting deliberately described on a
-Sequence never reaches any of its Shots' prompts, which contradicts this
-section's own premise that describing lighting once should propagate.
+B14b had needed an answer for what a Shot with no lighting of its own should
+read, and inferred a fallback: the Shot's own field wins, else the Sequence's.
+Asked to confirm, the author answered from his own trade — he was a lighting
+supervisor in animation — and the answer was a different shape entirely:
 
-It is an inference, not the author's decision. One word from him changes it.
+> le plus malin c'est de travailler ton rig d'eclairage en upstream et
+> d'affiner jusqu au shot. En d'autre terme, tu creer un environment, qui a une
+> ambiance lumineuse, ta sequence se trouve dans cet environment, tu ajuste
+> globalement ton rig de light herité de l'environment, par rapport à la
+> narration et les cameras axe master de la sequence. Une fois dans les shots,
+> tu fine tune ton rig de light pour mettre en valeur les personnage ou le sens
+> narratif du shot.
+
+So the levels **accumulate**: the environment carries the ambiance, the
+Sequence adjusts that rig globally against the narration and its master camera
+axes, and the Shot fine-tunes it for its characters or its narrative sense. A
+Shot's "rim-light the lead from behind" is a refinement of its environment's
+cold ambiance, not a replacement for it.
+
+The fallback reading was therefore wrong in a way that would have been hard to
+see: it would have silently thrown away the ambiance the whole scene is lit by
+every time a Shot had a line of its own. `composeStoryboardShot` renders all
+three, upstream first, each named for its level.
+
+**And nothing about lighting ever blocks generation** — his arbitration in the
+same breath:
+
+> je ne veux pas bloquer la machine si je n'ai pas encore defini les ambiances
+> lumineuse, surtout si mon environment n est pas encore locké, pour autant j
+> ai surement envi de pouvoir generer du contenu sans ligne directrice de
+> lighting, comme proof of concept de l'action et du cadrage. Rien ne
+> m'empechera d'updater plus tard la parti lighting, et apres relancer la
+> generation des shots avec le lighting de pris en compte.
+
+All three levels absent renders no lighting at all, and the conformation
+stage's `lightingMissing` stays an `info` finding — never a gate. This is also
+why the missing `PreconditionRef` variant (recorded in
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §4.1) is **not** worth building to gate the
+directed-lighting operation: a lock is precisely what he does not want.
+
+One tension left open, deliberately: `SEQ.LIGHTING`'s own precedence rule
+(B15a — the Sequence's own field wins, else the environment's) is a *fallback*,
+decided 2026-08-18, and it still governs the variable the bench and B16c read.
+The composition above does not use it that way. Both are in force in their own
+places; whether the variable should become a rig too is the author's call, not
+an implementation detail.
 
 **Why this is not merely another field.** It is the first ingredient the
 *workspace* can derive from an image, and the first whose natural source is

@@ -47,6 +47,11 @@ export type StoryboardCompositionPartId =
   | "action"
   | "environment"
   | "camera"
+  // LLMW.STORYBOARD.LIGHTING.1 — §5.5 lists six parts but separately requires
+  // "at least one lighting description, which it calls the single
+  // highest-leverage element". It is therefore its own part rather than a
+  // seventh member of the formula smuggled into Environment.
+  | "lighting"
   | "style"
   | "constraints";
 
@@ -73,8 +78,34 @@ export type StoryboardShotCompositionInput = {
    * resolves it — the workspace already has `PROJECT.STYLE` for that.
    */
   projectStyle: string | null;
-  /** The Shot's lighting (§5.9's field), for the guide's highest-leverage check. */
-  lighting: string | null;
+  /**
+   * The lighting rig, at the three levels it is built at — **not a fallback
+   * chain where the most specific value wins.**
+   *
+   * The author's own craft model (2026-08-19, as a former lighting supervisor
+   * in animation): *"le plus malin c'est de travailler ton rig d'éclairage en
+   * upstream et d'affiner jusqu'au shot"* — the environment carries the
+   * ambiance, the Sequence adjusts that rig globally against the narration and
+   * its master camera axes, and the Shot fine-tunes it to serve its characters
+   * or its narrative sense.
+   *
+   * So the three levels **accumulate**. A Shot saying "rim-light the lead from
+   * behind" is a refinement of its environment's cold ambiance, not a
+   * replacement for it, and a prompt that carried only the Shot's line would
+   * throw away the ambiance the whole scene is lit by.
+   *
+   * Any level may be absent. All three absent renders no lighting at all —
+   * the author is explicit that an undefined rig must never block generation
+   * (see `buildLighting` below).
+   */
+  lighting: {
+    /** The environment Assets' ambiance, in the order they were resolved. The upstream rig. */
+    environment: Array<{ name: string; lighting: string }>;
+    /** The Sequence's own field: the global adjustment on that rig. */
+    sequence: string | null;
+    /** The Shot's own field: the fine tune. */
+    shot: string | null;
+  };
   profileId?: ConformationProfileId;
 };
 
@@ -121,6 +152,34 @@ function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
     )
     .filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.map((line) => `- ${line}`).join("\n") : null;
+}
+
+/**
+ * Lighting — the rig, rendered upstream to downstream so the model reads it the
+ * way it was built: ambiance first, then the sequence's adjustment, then the
+ * shot's fine tune. Each line says which level it comes from, because "cold
+ * blue glow" and "rim-light the lead" are not competing descriptions — one is
+ * the room, the other is what was done to the subject inside it.
+ *
+ * **Absent when nothing is set, at any level, and never a refusal.** The
+ * author's arbitration, 2026-08-19: *"je ne veux pas bloquer la machine si je
+ * n'ai pas encore défini les ambiances lumineuses, surtout si mon environment
+ * n'est pas encore locké… j'ai sûrement envie de pouvoir générer du contenu
+ * sans ligne directrice de lighting, comme proof of concept de l'action et du
+ * cadrage."* Nothing here gates; the conformation stage's own
+ * `lightingMissing` finding stays `info`, which is exactly what it already is.
+ */
+function buildLighting(lighting: StoryboardShotCompositionInput["lighting"]): string | null {
+  const lines: string[] = [];
+  for (const environment of lighting.environment) {
+    const value = nonEmpty(environment.lighting);
+    if (value) lines.push(`- Environment (${environment.name}): ${value}`);
+  }
+  const sequence = nonEmpty(lighting.sequence);
+  if (sequence) lines.push(`- Sequence: ${sequence}`);
+  const shot = nonEmpty(lighting.shot);
+  if (shot) lines.push(`- Shot: ${shot}`);
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 /**
@@ -184,6 +243,11 @@ export function composeStoryboardShot(
       ),
     },
     { id: "camera", label: "Camera", text: cameraPhrases.length > 0 ? cameraPhrases.join(" — ") : null },
+    // Placed after Camera and before Style, because the Sequence's own
+    // adjustment is made "par rapport à la narration et les caméras axe master
+    // de la séquence" — the rig is read against the camera, not against the
+    // look.
+    { id: "lighting", label: "Lighting", text: buildLighting(input.lighting) },
     { id: "style", label: "Style", text: nonEmpty(input.projectStyle) },
     { id: "constraints", label: "Constraints", text: buildConstraints(context.castAssets) },
   ];
@@ -209,7 +273,10 @@ export function composeStoryboardShot(
     references: conformationReferences,
     cameraPhrases,
     body: text,
-    lighting: input.lighting,
+    // The whole rig, or nothing. `lightingMissing` therefore fires only when
+    // no level is set at all — which is the one case the author called "no
+    // lighting direction yet", and it stays an advisory, never a gate.
+    lighting: buildLighting(input.lighting),
     // Images only for now: video carries no role column and audio has no
     // entity at all (§5.6), so there is no second family to count yet.
     fileTagCount: conformationReferences.length,

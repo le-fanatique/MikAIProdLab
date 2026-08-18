@@ -65,11 +65,11 @@ import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { findTextInputKey } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
+import { resolveProjectStyle } from "@/lib/llmWorkspace/variables/registry";
 import {
-  resolveProjectStyle,
-  resolveSeqLighting,
-  type SeqLightingData,
-} from "@/lib/llmWorkspace/variables/registry";
+  resolveStoryboardLightingRig,
+  type StoryboardLightingRig,
+} from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 
 // ---------------------------------------------------------------------------
 // LLMW.STORYBOARD.COMPOSE.2 (B14b) — the two per-Shot compositions. The
@@ -103,28 +103,6 @@ async function resolveProjectStyleTextForComposition(projectId: number): Promise
     .filter((segment) => segment.length > 0)
     .join("\n\n");
   return joined.length > 0 ? joined : null;
-}
-
-/**
- * `composeStoryboardShot`'s `lighting` input, per Shot — a design decision
- * this ticket makes and documents rather than one the ticket froze: the
- * Shot's own `lighting` field (finest grain, §5.9) wins when set; otherwise
- * this Sequence's effective lighting, via `resolveSeqLighting` — the exact
- * precedence rule §5.9/B15a already encodes (Sequence's own field, else its
- * `environment`-type Assets) — reused here rather than re-derived. Several
- * environment Assets with a lighting value are rendered as
- * `"Name: lighting; Name: lighting"`; an environment Asset with no lighting
- * set contributes nothing. See `.agents/executor_report.md`.
- */
-function formatSeqLightingForComposition(data: SeqLightingData): string | null {
-  if (data.source === "own") return data.lighting;
-  if (data.source === "environment") {
-    const named = data.environments
-      .filter((e): e is { name: string; lighting: string } => !!e.lighting?.trim())
-      .map((e) => `${e.name}: ${e.lighting}`);
-    return named.length > 0 ? named.join("; ") : null;
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,16 +409,17 @@ async function buildSequenceStoryboardGenerationContext(
   // LLMW.STORYBOARD.COMPOSE.2 (B14b) — resolved only when the guide
   // composition is actually requested: the legacy default never pays for
   // these two extra queries, and never changes a single byte of its output.
-  let storyboardComposition: { projectStyle: string | null; lightingByShotId: Record<number, string | null> } | undefined;
+  let storyboardComposition:
+    | { projectStyle: string | null; lighting: StoryboardLightingRig }
+    | undefined;
   if (useGuideComposition) {
     const projectStyle = await resolveProjectStyleTextForComposition(projectId);
-    const sequenceLighting = formatSeqLightingForComposition(await resolveSeqLighting(sequenceId));
-    const lightingByShotId: Record<number, string | null> = {};
-    for (const s of shotList) {
-      const own = s.lighting?.trim();
-      lightingByShotId[s.id] = own ? own : sequenceLighting;
-    }
-    storyboardComposition = { projectStyle, lightingByShotId };
+
+    const lighting = await resolveStoryboardLightingRig(
+      sequenceId,
+      shotList.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
+    );
+    storyboardComposition = { projectStyle, lighting };
   }
 
   // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — the text sent to the Sequence

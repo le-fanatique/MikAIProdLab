@@ -61,7 +61,7 @@ function inputWith(
     context: contextWith(),
     continuity: { framing: "WS", cameraMovement: "static" },
     projectStyle: "Grainy anamorphic, muted palette.",
-    lighting: "Cold blue screen glow.",
+    lighting: { environment: [], sequence: null, shot: "Cold blue screen glow." },
     ...overrides,
   };
 }
@@ -75,6 +75,7 @@ describe("composeStoryboardShot", () => {
       "action",
       "environment",
       "camera",
+      "lighting",
       "style",
       "constraints",
     ]);
@@ -109,7 +110,7 @@ describe("composeStoryboardShot", () => {
       })
     );
 
-    expect(result.parts.map((p) => p.id)).toEqual(["action", "camera"]);
+    expect(result.parts.map((p) => p.id)).toEqual(["action", "camera", "lighting"]);
     expect(result.text).not.toContain("Subject:");
     expect(result.text).not.toContain("Environment:");
     expect(result.text).not.toContain("Style:");
@@ -136,7 +137,9 @@ describe("composeStoryboardShot", () => {
   });
 
   it("surfaces the conformation findings rather than acting on them", () => {
-    const result = composeStoryboardShot(inputWith({ lighting: null }));
+    const result = composeStoryboardShot(
+      inputWith({ lighting: { environment: [], sequence: null, shot: null } })
+    );
 
     // Three camera phrases, a short body, and no lighting — all reported.
     expect(result.findings.map((f) => f.code)).toContain("primaryCamera");
@@ -158,6 +161,50 @@ describe("composeStoryboardShot", () => {
     expect(result.parts.some((p) => p.id === "style")).toBe(false);
   });
 
+  // LLMW.STORYBOARD.LIGHTING.1 — the author's craft model, 2026-08-19: the rig
+  // is built upstream and refined down, so the three levels accumulate. A
+  // fallback that kept only the Shot's line would throw away the ambiance the
+  // whole scene is lit by.
+  it("accumulates the three lighting levels, upstream first, each named", () => {
+    const result = composeStoryboardShot(
+      inputWith({
+        lighting: {
+          environment: [{ name: "Server room", lighting: "Cold blue monitor glow." }],
+          sequence: "Warmer as the scene turns.",
+          shot: "Rim-light the lead from behind.",
+        },
+      })
+    );
+
+    const lighting = result.parts.find((p) => p.id === "lighting")!.text;
+    expect(lighting).toContain("Environment (Server room): Cold blue monitor glow.");
+    expect(lighting).toContain("Sequence: Warmer as the scene turns.");
+    expect(lighting).toContain("Shot: Rim-light the lead from behind.");
+    // Upstream to downstream, the order the rig is actually built in.
+    expect(lighting.indexOf("Environment")).toBeLessThan(lighting.indexOf("Sequence:"));
+    expect(lighting.indexOf("Sequence:")).toBeLessThan(lighting.indexOf("Shot:"));
+  });
+
+  it("renders whichever levels exist, and nothing at all when none do", () => {
+    const environmentOnly = composeStoryboardShot(
+      inputWith({
+        lighting: { environment: [{ name: "Alley", lighting: "Sodium vapour." }], sequence: null, shot: null },
+      })
+    );
+    expect(environmentOnly.parts.find((p) => p.id === "lighting")!.text).toBe(
+      "- Environment (Alley): Sodium vapour."
+    );
+
+    // The author's arbitration: an undefined rig must never block generation,
+    // and nothing goes up into the prompt.
+    const none = composeStoryboardShot(
+      inputWith({ lighting: { environment: [], sequence: null, shot: null } })
+    );
+    expect(none.parts.some((p) => p.id === "lighting")).toBe(false);
+    expect(none.text).not.toContain("Lighting:");
+    expect(none.text.length).toBeGreaterThan(0);
+  });
+
   it("is deterministic — the same input twice yields an identical composition", () => {
     expect(composeStoryboardShot(inputWith())).toEqual(composeStoryboardShot(inputWith()));
   });
@@ -173,7 +220,7 @@ describe("composeStoryboardShot", () => {
       }),
       continuity: { framing: null, cameraMovement: null },
       projectStyle: null,
-      lighting: null,
+      lighting: { environment: [], sequence: null, shot: null },
     });
 
     expect(result.parts.map((p) => p.id)).toEqual(["action"]);
