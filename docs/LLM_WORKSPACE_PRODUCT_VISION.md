@@ -1,7 +1,8 @@
 # LLM Workspace — Product Vision
 
 Status: reference document. Captures intent, not implementation.
-Date: 2026-08-13.
+Date: 2026-08-13. Revised 2026-08-18: §5 (prompt mechanics) added, and
+sections 5-8 renumbered to 6-9 to make room for it.
 Companion to `docs/LLM_WORKSPACE_ARCHITECTURE.md`, which holds the technical
 contract. This document holds the **why**, so that later tickets can be
 checked against the original intent rather than against a remembered version
@@ -216,11 +217,244 @@ contract, so nothing ever put these three cases back in front of whoever was
 scoping. `AGENTS.md` and `CLAUDE.md` were corrected the same day, and every LLM
 Workspace ticket now has to state its impact on UC1/UC2/UC3.
 
-## 5. Product Rules
+## 5. The Prompt Mechanics — Ingredients, Jars, Recipes
+
+**Written 2026-08-18, from the author's own account of how he works.** It exists
+because a session was about to migrate the Prompt Compiler faithfully — five
+presets, five source checkboxes, a hand-ordered image selection and a staleness
+fingerprint — before anyone asked whether that design was still wanted. It was
+not: the author had never used the presets. This section states the intended
+mechanics so that no later ticket has to infer them from the code that happens
+to exist.
+
+Like §4, this is an acceptance reference. A prompt-related design that
+contradicts it is the wrong design.
+
+### 5.1 The fields are ingredients
+
+> jusque la on a fait en sorte que toute les entity, ai des field avec des
+> informations. Cela pour moi, c est les ingredients, et la finalité c est de
+> prendres ces ingredients et les mettres formaté aux besoins pour feeder les
+> generateurs de contenu. Qu ils soit llm, ou workflow image/video comfyui
+
+This is the product's whole purpose stated in one sentence. Entity fields are
+not an end; they are stock. The end is to select from that stock, format it for
+a given engine, and feed it — an LLM, a ComfyUI image workflow, a video
+workflow. Everything below follows from that.
+
+### 5.2 Three states of the matter
+
+- **Raw ingredients** — the entity fields. Casting, action, camera, framing,
+  mood, location, project style, duration, reference images and their roles.
+- **Jars** (*bocaux*) — an ingredient already transformed and set aside so the
+  next recipe goes faster. The Shot Prompt is one: made once, then **consumed
+  as an ingredient** by the recipe above it.
+- **Recipes** — a named selection of ingredients for a recurring case, saved so
+  it need not be re-picked by hand every time.
+
+> J ai un plat cuisiné à base de legume à faire, je sort deja la recette qui me
+> donne toute la liste des legumes dont j ai besoin. C est un bon debut, mais si
+> j ai pas envi de preparer les legume du marché, c est peut etre malin d'avoir
+> déjà fait au préalable des bocaux qui permette d'aller plus vite dans la
+> preparation avant de passer à la cuisine du plat
+
+Two consequences. A recipe's output can itself become an ingredient — the
+pipeline is layered, not flat. And **cherry-picking is a first-class need**, not
+a power-user affordance:
+
+> j ai besoin de pouvoir cherry pick quand je suis en train de composer le
+> prompt pour un text prompt de workflow comfyui
+
+with saved lists so the same case is never re-picked click by click:
+
+> pour eviter de cliquer toujour sur les meme ingredient à chaque fois qu on a
+> le meme cas de figure, il est plutot intelligent de vouloir avoir des liste de
+> course sauvegardé pour pouvoir les sortir en cas de besoin
+
+### 5.3 Assembly and cooking are two stages, and only one of them stores
+
+The Composer/Compiler confusion in the current code is not a naming accident;
+the two are stages of one chain, and the author named the split himself:
+
+> on a besoin d une etape d'assembly des ingredients, mais apres soit on les
+> additionne et on feed comme ca. Soit en effet, c est une autre action, on a
+> peut etre envi d'utiliser c est ingredient, pour creer un nouveau contenu, non
+> visuel, mais text généré
+
+- **Stage 1 — assembly.** Gather the requested ingredients. Mechanical, no
+  model, and the same request always yields the same result.
+- **Stage 2 — cooking.** Hand those ingredients to a model, with the binder, and
+  get **new content** back.
+
+From which the answer to the author's own central question —
+
+> la vrai question, c est où va l output, et comment il est storé
+
+— falls out as a rule:
+
+**A deterministic assembly is never stored.** It is recomputed on demand, is
+identical every time, and cannot go stale. This is why a consumer does not need
+a frozen artefact but a *request*:
+
+> est ce qu on est vraiment obligé de devoir locker un resultat sur ce prompt
+> compiler […] ce n est pas simplement une requete du genre j ai besoin de
+> casting+camera+action+mood pour tout les plans de ce prompt storyboard, ou pr
+> le workflow comfy, j ai besoin de casting+action+camera+timeline prompt
+> +project style
+
+**Generated content is always stored.** It is not reproducible — re-running
+yields something else — so it needs a field to land in. And precisely because it
+is frozen, it is the only thing that can go stale when its ingredients move
+underneath it. Staleness machinery therefore belongs to jars and to nothing
+else.
+
+The author's name for that jar, on the Shot:
+
+> peut etre que ca serait quelque chose du genre "narrative prompt composer" […]
+> faire la grosse marmite qui melange les ingredients toujour de la meme
+> maniere, mais qui prose quelque chose de plus "narrativement sexy" en sorti
+
+Decided 2026-08-18: a generated narrative prompt is a **jar of its own**,
+cherry-pickable like any other ingredient — not a value merged into the field
+the user also types in by hand. Today the Prompt Compiler's output is poured
+into `shots.shot_prompt` through Replace/Append, and after that nobody can tell
+which half a human wrote.
+
+### 5.4 The user brings ingredients and binder; the app owns the format
+
+> Moi en tant qu artist je n aime pas ecrire du prompt, et encore moins en
+> anglais, et encore moins contraint par une structure precise de text.
+
+> Moi en tant que user je travail comme d'hab, c est à dire focalisé sur les
+> ingredient, et sur du "liant", c est à dire les director's note pour demander
+> à l'IA de lier certain ingredient entre eux. Et par contre le formatage final
+> doit etre au main de la technique de l'app , pas du user.
+
+This is §1's "as little technical friction as possible" made concrete for
+prompts. The user's two jobs are **choosing ingredients** and **writing the
+binder** — the director's note in plain language, which is `intent.freeText`
+(delivered by B9a and already surfaced on all three founding use cases).
+Engine-shaped formatting — word budgets, ordering, camera vocabulary, tag
+syntax, negative clauses — is a **technical stage on the way out**, applied by
+the app. It is never a rule the user is asked to obey, and never text the user
+is asked to write.
+
+### 5.5 The conformation reference, and why it is a norm and not a target
+
+The prompt structure work originates in engine constraints, Seedance's in
+particular, via the *Seedance 2.0 Complete Prompting Guide*
+(`https://github.com/issastash/AI_Complete_Prompting_Guides`).
+
+> l idee n etait pas de bloquer l app autour de seedance, mais tablé sur le fait
+> que cette logique de prompt et workflow de prompt etait plutot commune entre
+> les model, et utiliser ce guide comme regle de comformisation de prompt
+
+So the guide is the **default conformation rule**, not a supported product. The
+formatting stage must be replaceable per engine, and no ingredient, variable or
+entity field may be named after Seedance.
+
+What the guide asks for, in its own terms: a six-part formula (*Subject,
+Action, Environment, Camera, Style, Constraints*) inside a 60–100 word budget;
+**one** primary camera instruction from a closed vocabulary, phrased
+rhythmically rather than technically; at least one lighting description, which
+it calls the single highest-leverage element; explicit negative clauses on any
+character work; timecodes past five seconds; and an `@ImageN` / `@VideoN` /
+`@AudioN` tag system where each reference is used through a **named mode** —
+`as first frame`, `as last frame`, `as character reference`, `as style
+reference`, `as background environment`.
+
+### 5.6 Coverage measured against that guide, 2026-08-18
+
+Measured against the fields, variables and role catalogue that exist today.
+
+**Already covered by ingredients.** Subject (casting, asset visual identity),
+Action (`actionPitch`), Camera (`cameraPitch`, `framing`, `cameraMovement`),
+Environment (sequence `locationHint`, `mood`), Style (Project Style), Duration
+(`durationSeconds`), timecodes (Prompt Segments).
+
+**Covered as data, missing as rendering — the largest single item.** The
+reference-image role catalogue (`src/lib/referenceImageRoles.ts`) already
+carries `first_frame`, `last_frame`, `character`, `environment`, `style` — an
+almost exact match for the guide's five named image modes. The information the
+Prompt Compiler asks the user to restate by ticking and ordering images **is
+already stored on each image**, together with an explicit order. Nothing renders
+it into the engine's syntax. This is not a gap in the stock; it is the missing
+formatting stage of §5.4.
+
+**Genuinely missing ingredients.**
+
+1. **Lighting.** No lighting field exists on any entity — only a `lighting`
+   image role. The guide calls lighting the highest-leverage single element.
+2. **Negative constraints.** Nothing holds "avoid jitter / bent limbs / temporal
+   flicker / identity drift". The nearest thing is an Asset's
+   `forbiddenVariations`, which is per-asset and not per-shot or per-project.
+3. **A controlled camera vocabulary.** `cameraMovement` is free text; the guide
+   requires one primary instruction from eight terms, plus speed keywords.
+
+**Missing whole families, not gaps.** Video references (`@Video1..3`) and audio
+references (`@Audio1..3`) have no entity at all — so the guide's camera
+replication, motion imitation, rhythm matching and audio modes are unreachable,
+as are video-to-video and the extension/chaining syntax with its continuity
+locks. Roles like `motion`, `rhythm` and `camera` exist in the catalogue but
+only on image tables.
+
+**Missing output discipline.** Nothing counts words against the 60–100 / 150
+budget, enforces the one-primary-camera rule, or caps tags at the engine's
+limits (9 images, 12 files total). These are validations belonging to the
+formatting stage, not ingredients.
+
+### 5.7 The storyboard prompt, opened 2026-08-18
+
+The author flagged it as opaque and asked that it come under the workspace:
+
+> c est un peu blackbox actuellement […] je vais regarder le prompt qui va etre
+> feeder au workflow comfyui, et là j ai plusieur elements par shots […] il
+> devrait lui aussi etre soumis à llm workspace, avec des regle à etablir
+> ensemble
+
+Read on that date, the composition rule is this and nothing more. Per Shot,
+`formatSequenceGenerationPackageText` emits a header line — index, shot code,
+title, duration — followed by `compileShotPrompt(...)`, which is **only the Shot
+Prompt text**, plus a `Timeline:` block for video shots that have Prompt
+Segments. `buildSequenceStoryboardPrompt` wraps the whole package and prepends
+an `@ImageN` mapping of the casting references selected in Storyboard Assets.
+
+**So the storyboard prompt contains no ingredient other than the Shot Prompt.**
+No casting, no camera, no framing, no mood, no continuity, no project style —
+those reach the model only insofar as the author typed them into each Shot
+Prompt by hand. This is the exact case §5.3 describes: the recipe consumes one
+jar and has no access to the pantry. It also confirms why the jar matters, and
+why filling it well is worth more than any single generation surface.
+
+One defect noted in passing, not repaired here: `sequenceVideoGeneration.ts`
+formats its package with warnings included, so diagnostic lines such as
+`Shot Prompt is empty.` are sent to the model. The storyboard and image paths
+both pass `includeWarnings: false`.
+
+### 5.8 What this section makes obsolete
+
+Recorded so no future ticket pays to preserve them:
+
+- the Prompt Compiler's five presets — never used by the author, and the reason
+  this section was written;
+- its five source checkboxes;
+- its hand-ordered image selection — the stored roles and order already carry
+  that information (§5.6);
+- its fingerprint and staleness warning **in their current form**: they guard a
+  client-assembled context, where §5.3 puts staleness on jars only;
+- the `sessionStorage` handoff to the Generation Panel.
+
+None of these is to be reproduced by a migration. What survives is the intent
+underneath them: pick ingredients, bind them with a director's note, let the app
+format the result for the engine.
+
+---
+
+## 6. Product Rules
 
 These were decided during design and are binding until explicitly revisited.
 
-### 5.1 Nothing is written before approval
+### 6.1 Nothing is written before approval
 
 The assistant produces a proposal held in memory. The database is untouched
 until the user approves.
@@ -232,7 +466,7 @@ until the user approves.
 Applies to creation as well: in UC1 the Shot is created **on approval**, not
 before.
 
-### 5.2 No proposal history
+### 6.2 No proposal history
 
 > Il n y a pas besoin de stocker l historique de proposition de resultat de la
 > requete au llm.
@@ -242,7 +476,7 @@ This is a deliberate simplification, not an omission. Known consequence: two
 proposals cannot be compared side by side. If that need arises, the answer is
 to hold several proposals in memory, not to add persistence.
 
-### 5.3 The assistant proposes, the user decides
+### 6.3 The assistant proposes, the user decides
 
 Every write passes through an explicit human approval. There is no autonomous
 action, no silent overwrite, no background application of results. This is
@@ -250,7 +484,7 @@ consistent with the standing requirement recorded in `FB-20260811-004`:
 show suggestions and their reasons before applying them, and never silently
 replace existing user choices.
 
-### 5.4 The effective prompt must be visible
+### 6.4 The effective prompt must be visible
 
 The recurring complaint about the current assists is that they are opaque:
 
@@ -260,7 +494,7 @@ The recurring complaint about the current assists is that they are opaque:
 Visibility of the resolved context and of the effective prompt is a product
 requirement, in the workspace and in production — not a debugging convenience.
 
-### 5.5 Templates are global by default, project-pinnable when needed
+### 6.5 Templates are global by default, project-pinnable when needed
 
 > Je pense qu il faut que cela soit sans projet par defaut, mais si on a
 > besoin de forcer un workflow pr un projet en particulier il le faut. Car si
@@ -269,7 +503,7 @@ requirement, in the workspace and in production — not a debugging convenience.
 
 Different productions have different grammars. The system must not assume one.
 
-### 5.6 Adding an assist must not require touching product screens
+### 6.6 Adding an assist must not require touching product screens
 
 The product surfaces invoke a template by identifier and render a shared
 proposal component. A new creative workflow is a new template plus a button.
@@ -277,7 +511,7 @@ This is the direct expression of the "evolvable for TDs" half of section 1.
 
 ---
 
-## 6. What This Is Not
+## 7. What This Is Not
 
 - Not a chat. `SidebarLLMChat` already exists and serves a different purpose.
   The assistants are field-oriented operations with a review step.
@@ -292,7 +526,7 @@ This is the direct expression of the "evolvable for TDs" half of section 1.
 
 ---
 
-## 7. How We Will Know It Worked
+## 8. How We Will Know It Worked
 
 The feature succeeds if, six months from now:
 
@@ -309,7 +543,7 @@ against this document.
 
 ---
 
-## 8. Related Documents
+## 9. Related Documents
 
 - `docs/LLM_WORKSPACE_ARCHITECTURE.md` — technical contract, registries,
   template format, sequencing, out-of-scope list.

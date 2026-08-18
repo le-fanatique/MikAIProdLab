@@ -34,8 +34,11 @@ Codex uses supervisor-oriented progressive context:
   supervision, or review;
 - read `.agents/claude_report.md`, `.agents/codex_review.md`, and
   `.agents/codex_verdict.json` only for active review or closure;
-- **always read `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 before preparing,
-  implementing, or reviewing any LLM Workspace ticket.** It holds the user's
+- **always read `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 and §5 before
+  preparing, implementing, or reviewing any LLM Workspace ticket.** §5 (the
+  prompt mechanics: ingredients, jars, recipes) was added on 2026-08-18 and is
+  an acceptance reference exactly as §4 is — it is binding on anything that
+  assembles, generates, stores or formats a prompt. It holds the user's
   three founding use cases in their own words, and declares itself the
   acceptance reference. It was in no reading contract until 2026-08-15, and the
   drift that caused is documented in that file's own "Reachability" section —

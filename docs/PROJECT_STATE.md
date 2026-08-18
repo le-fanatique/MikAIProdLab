@@ -845,7 +845,7 @@ identical character for character to one built with no parameter. Removing the
 bounds check fails five of nine cases. **No existing test was modified**, which
 is the whole claim that no observable behaviour moved.
 
-**What it means beyond the bug.** §7.3 of the vision has the author prototyping
+**What it means beyond the bug.** §8.3 of the vision has the author prototyping
 without a dev ticket. A declaration the engine ignores is a trap for exactly
 that author: write `min: 1, max: 30` and watch nothing enforce it.
 
@@ -918,6 +918,87 @@ scheduled to become a real filter (queue row S2).
 and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
+
+### B8 is dissolved, and the prompt mechanics are written down (2026-08-18)
+
+No code changed. A ticket was prepared, costed, and then not written — which is
+the outcome worth recording.
+
+**What preparing B8 found.** Its two declared hard parts were the action's lack
+of database access and its staleness fingerprint. Reading the operation end to
+end found both to be misdescribed and a third fact to be the real one:
+
+- the fingerprint was never the adapter's. `PromptCompilerPanel` builds the
+  context and computes the fingerprint **client-side**; the server action's
+  returned fingerprint is a byte-identical echo of it, and the staleness check
+  in `PromptCompilerHandoffGate` is client-side too;
+- the expensive part was elsewhere and unnamed: **the context is chosen by the
+  user, not derived from the database.** Five presets, five source checkboxes,
+  and a hand-ordered subset of reference images whose click order becomes
+  `@Image1..N`. No variable can express an ordered user-ticked subset, so a
+  faithful migration meant inventing a primitive the workspace does not have.
+
+**The supervisor put the cost in front of the user before writing the ticket,
+and separated the constraints that came from the user from the ones it had
+given itself.** The second list — reproduce the current behaviour exactly, keep
+the five presets, keep the checkboxes, keep the manual image ordering, keep the
+staleness warning identical — was the whole cost. The user's answer: *je ne me
+sert jamais des presets du prompt compiler car il est pas bien pensé pour
+l'instant.*
+
+**The lesson, and it generalises past this ticket.** A migration inherits the
+authority of whatever it is migrating. Nobody had re-judged the Prompt Compiler
+since it was written — before the workspace existed, before UC1/UC2/UC3 ran —
+and a faithful migration would have carried that unexamined design forward,
+priced as engineering rather than as a product decision. **Before costing
+fidelity to an existing surface, ask whether the surface is still wanted.** The
+question cost one exchange; the answer removed about half the ticket and
+redirected the rest.
+
+**What replaced it.** The user gave a vision statement on prompt mechanics; it
+is now `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5, an acceptance reference beside
+§4, and both are named in `AGENTS.md` and `CLAUDE.md` so the §4 drift cannot
+repeat for §5. In short: entity fields are **ingredients**; a transformed output
+is a **jar**, cherry-pickable like any other ingredient; a saved ingredient
+selection is a **recipe**. Assembly and generation are two stages of one chain,
+and **only the generated one is stored** — which is why a deterministic
+assembly needs no staleness machinery, and why generated text needs a field of
+its own instead of being poured into the field the user types in by hand. The
+user chooses ingredients and writes the director's note; the app owns the
+engine formatting.
+
+**Two things measured while preparing it, both now in §5.**
+
+The Seedance guide the prompt work descends from was read and compared against
+what exists. Subject, action, camera, environment, style, duration and timecodes
+are all covered by ingredients. Three ingredients are genuinely missing —
+lighting (which the guide calls the highest-leverage single element), negative
+constraints, and a controlled camera vocabulary. Two whole families are missing
+rather than incomplete: video and audio references, with their extension chains.
+And the largest item is not a gap in the stock at all: the reference-image role
+catalogue already carries `first_frame` / `last_frame` / `character` /
+`environment` / `style` with an explicit stored order — an almost exact match
+for the guide's five named image modes. **The information the Prompt Compiler
+asks the user to restate by ticking and ordering images is already in the
+database.** What is missing is the rendering.
+
+The storyboard prompt, which the user called a black box, was opened. Per Shot
+it carries a header line and then `compileShotPrompt(...)` — which is **only the
+Shot Prompt text**, plus a `Timeline:` block on video shots with Prompt
+Segments. No casting, no camera, no framing, no mood, no continuity, no project
+style. The recipe consumes one jar and has no access to the pantry. One defect
+noted and not repaired: `sequenceVideoGeneration.ts` includes package warnings
+in the text sent to the model, where the storyboard and image paths both pass
+`includeWarnings: false`.
+
+**The queue, re-derived and delegated.** The user delegated the sequencing:
+**B12** (text output mode + the narrative jar, all that survives of B8), then
+**E1** (the template editor — his own "listes de course sauvegardées"), then
+**B13** (the conformation stage the app owns), then **B14** (the storyboard
+prompt brought under the workspace), then Chantier 2 unchanged. The missing
+ingredients wait on B13 to prove which are needed; video and audio references
+are their own chantier. Full table in
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3, "B8 dissolved".
 
 ### What is left, and the reporting error that hid part of it (2026-08-18)
 

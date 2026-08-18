@@ -1158,7 +1158,7 @@ special case into library growth.
 | ~~S3~~ | ~~Bench controls for boolean and multi-choice~~ | **Delivered 2026-08-18, commit `7a985ad`.** Two traps, both from the same fact that an unchecked box sends nothing in a GET form: a boolean whose default is `true` could never be set back to `false`, and — the serious one — an all-empty `multiEnum` would have become *absent*, restoring the default and making `assets.fromProject`'s « Select at least one asset type. » precondition unreachable from the bench, undoing the guarantee B7f-m spent half its proof establishing. A presence marker separates absent from present-and-empty from present-with-members. | none |
 | ~~S4~~ | ~~UC3 on the Asset page~~ | **Delivered 2026-08-18, commit `4210df8`.** A directed retake beside Enhance Description, committing through `updateAssetDescriptionFieldInline` with `mode` fixed to `"replace"` — one column, so notes and the three Bible fields are untouched **by construction**, not by careful carrying. The Bible advisory shows only when the Bible is genuinely stale (S1b's gate), proven in all three states. **The first version of this ticket was wrong and the executor refused it**: it insisted UC3 writes through the five-column action and that approving would erase notes and Bible — against the descriptor's own `commit`, the bench routing, `PROJECT_STATE` and an existing test, all four saying otherwise. Complying would have rewired UC3 to the wider write to guard against a danger that rewiring would itself have created. | **surfaces UC3** |
 | ~~S5~~ | ~~Field translation becomes a read-only popup~~ | **Delivered 2026-08-18, commit `e5c054c`.** Replace and Append are gone from eleven files; Copy and Cancel stay, since copying changes nothing. The panel was **not** turned into a floating modal: the supervisor read « popup » as « read-only », because the panel already displayed the translation without letting it be edited — what the request removed were the two buttons that *write*. A real overlay is a separate interface job and would have delivered nothing that was asked for. | none |
-| B8 | Text mode + `promptCompiler` | **Rescoped and deferred by the user 2026-08-17** — see "B8 rescoped" below. `translation` is permanently out, so `promptCompiler` is the only text-mode consumer left, and it is the heaviest operation in the repository. Deferred behind B11, B6c2 and C0, which it no longer blocks. | none |
+| ~~B8~~ | ~~Text mode + `promptCompiler`~~ | **Dissolved 2026-08-18.** Preparing it revealed that its cost was the price of reproducing a design the author had never used — the five presets, the five source checkboxes, the hand-ordered image selection. The user restated the intended prompt mechanics instead, now `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5. What survives is **B12** (text output mode + the narrative jar); the rest becomes B13, B14 and two deferred families. See "B8 dissolved" below. | none |
 | ~~B6c2~~ | ~~The variable library (§5.2)~~ | **Delivered 2026-08-18, commit `627e79a`.** `/settings/llm-workflows/variables`: the whole registry filtered by anchor, each variable resolved against a chosen test entity with its token cost. Derived from `VARIABLE_REGISTRY`, so a new variable appears the day it is registered, and the anchor comes from the identifier prefix mirroring `anchorIdForVariable` rather than a second table. The trap was resolving twenty-two at once: every resolver throws on a missing entity, and a plain `Promise.all` would blank the page on the first failure — each call sits in its own `try/catch` inside the async callback, so a broken variable keeps its row and shows its message. Read-only: no writes, no model call, no cost. | prepares all three |
 | ~~B9~~ | ~~`intent.freeText` + the UC2 descriptor~~ | **Delivered 2026-08-15, commits `865ae59` (B9a, the primitive) and `6aa8cbf` (B9b, `shot.retakeDirected`).** The first tickets of the phase to deliver a new capability rather than reorganise one. `intent.freeText` had been declared since B1a and deferred by B6b and B6c1 — each time on correct local reasoning, cumulatively deferring the one primitive all three founding use cases need. | **UC2 delivered** |
 | ~~B10~~ | ~~The UC3 descriptor~~ | **Delivered 2026-08-17, commit `41d16b8`.** Two rounds: the first left « Respond to the director's direction below » standing unconditionally in the *system* message — the B9b defect one message higher. Writing `description` alone means **no preservation trap at all**. No oracle: the prompt is written, so its quality is a human judgement, not a test result. | **delivers UC3** |
@@ -1176,18 +1176,21 @@ and §7's own third success criterion — and collapsing six cleanup tickets int
 one word. A reader of this file must be able to count what is left without
 reconstructing it from struck-through rows.
 
-**Order settled by the user 2026-08-18: B8, then E1, then Chantier 2.**
+**Order settled by the user 2026-08-18: B8, then E1, then Chantier 2** — and
+revised later the same day, after §5, to B12 → E1 → B13 → B14 → Chantier 2.
 
-Chantier 1, two tickets left:
+**Revised 2026-08-18 after the vision's §5 was written** — B8 is dissolved and
+the queue re-derived; see "B8 dissolved" below for the full table and the
+reasoning. Chantier 1 now has four tickets left:
 
-1. **B8** — text mode + `promptCompiler`. Rescoped: `translation` is
-   permanently out, so this is one heavy operation and it unblocks nothing else.
-   Its two hard parts are already written down under "B8 rescoped" below.
-2. **E1** — the template editor. **The last ticket of the chantier and the point
-   of it**: it turns the workspace from a thing that runs the eight built-ins
-   into a thing the user authors in. Scoped in
+1. **B12** — text output mode + the narrative jar. All that survives of B8.
+2. **E1** — the template editor, the user's own "saved shopping lists". **The
+   point of the chantier**: it turns the workspace from a thing that runs the
+   eight built-ins into a thing the user authors in. Scoped in
    `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`, and it **must** make
    `intent.freeText` editable — that file's own 2026-08-15 correction.
+3. **B13** — the conformation stage: the engine formatting the app owns.
+4. **B14** — the storyboard prompt brought under the workspace.
 
 Chantier 2, seven tickets plus three independents, all listed below: C0 (the
 prerequisite), C1, C2, C3, C4, C5, C6, then `ThemeModeToggle.tsx`,
@@ -1260,6 +1263,62 @@ will never be deleted by Phase C and stays hand-written. That is precisely what
 the governing rule above warns about — but it is the same status chat and image
 generation already hold, and it is the user's call about what the workspace is
 *for*, not a gap in what it can express.
+
+### B8 dissolved, and the queue re-derived — 2026-08-18
+
+**Everything below the horizontal rule in this subsection is superseded.** It is
+kept because the reasoning that killed it is worth reading beside it.
+
+B8 was scoped as "migrate `promptCompiler`", with two hard parts: the action
+reads no database, and its staleness fingerprint serialises the whole context.
+Preparing it required reading the operation end to end, and that reading found a
+third fact neither hard part named: **the context is chosen by the user, not
+derived from the database.** Five presets, five source checkboxes, and a
+hand-ordered subset of reference images whose click order becomes `@Image1..N`.
+No variable can express "the ordered subset the user just ticked", so the
+migration implied inventing a whole new primitive.
+
+The supervisor put that cost in front of the user before writing the ticket. The
+answer reframed the chantier: **the author has never used the presets.** The
+whole cost was the price of faithfully reproducing a design nobody had re-judged
+since it was written — before the workspace existed, before UC1/UC2/UC3 ran.
+
+What followed is now `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5, and it is
+binding: ingredients, jars and recipes; assembly and cooking as two stages of
+one chain, of which **only the generated one is stored**; the user owning
+ingredient choice and the director's note, the app owning the engine formatting.
+§5.8 lists what is deliberately not reproduced — the presets, the checkboxes,
+the manual image ordering, the fingerprint in its current form, the
+`sessionStorage` handoff.
+
+Two facts established by reading, recorded here because they are load-bearing:
+
+1. **The fingerprint was never the adapter's.** `PromptCompilerPanel` builds the
+   context and computes the fingerprint client-side; the action's returned
+   fingerprint is a byte-identical echo, and `PromptCompilerHandoffGate`
+   recomputes it client-side too. Under §5.3 the whole mechanism has no subject
+   left: staleness attaches to jars.
+2. **The reference roles already are the engine's reference modes.**
+   `src/lib/referenceImageRoles.ts` carries `first_frame`, `last_frame`,
+   `character`, `environment`, `style`, with an explicit stored order. The
+   information the panel asks the user to restate is already in the database.
+   What is missing is the rendering, which §5.4 assigns to the app.
+
+**Order settled 2026-08-18, after §5 was written.** The user delegated the
+sequencing. It is:
+
+| # | Ticket | Why here |
+| --- | --- | --- |
+| **B12** | Text output mode + the narrative jar | All that survives of B8. `output.kind: "text"` in the runner (`RunOperationResult` gains a third variant, breaking the ~14 declared consumers on purpose, B11-b1's pattern), plus the Shot column the generated narrative prompt lands in — §5.3's jar, distinct from `shots.shot_prompt` so a human's text and a model's are never merged again. Bench-only, like UC1 and UC3 were. Needs a schema authorization and a migration the user runs. |
+| **E1** | The template editor — the saved recipes | Unchanged in intent, and now named in the user's own vocabulary ("listes de course sauvegardées", §5.2). Placed after B12 because a recipe that can neither cook text nor fill a jar is a thin thing to author against. Must make `intent.freeText` editable — the 2026-08-15 correction in `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. |
+| **B13** | The conformation stage | §5.4/§5.5: the formatting the app owns. Renders stored reference roles into the engine's named modes, applies the word budget, the one-primary-camera rule and the tag caps. Must be replaceable per engine — nothing may be named after Seedance. |
+| **B14** | The storyboard prompt under the workspace | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
+| — | The missing ingredients | §5.6: lighting, negative constraints, a controlled camera vocabulary. Scheduled when B13 proves which it actually needs — not before, so no field is added on a guess. |
+| — | Video and audio references | §5.6: a whole entity family (`@VideoN`, `@AudioN`, extension chains). Its own chantier, explicitly not part of this one. |
+
+Chantier 2 (C0 → C6 and the independents) is unchanged and still follows.
+
+---
 
 ### B8 rescoped — deferred 2026-08-17
 
