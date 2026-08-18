@@ -1529,6 +1529,76 @@ unapplied migration a hard stop: the user runs `db:migrate` himself, always.
 Approve can no longer merge it into the field the user types by hand — proven end
 to end by `narrativePromptCompose.surface.test.ts`.
 
+### B20 scoped, 2026-08-18 — reached, and read before being planned
+
+§11.3 said B20 was *"big enough that it may split; scoped when reached."* It is
+reached. What follows is read off `src/actions/projectStyleReferenceAnalysis.ts`
+and `src/lib/projectStyle/referenceAnalysis/`, not assumed.
+
+**The 1 259 lines are not one operation.** They are:
+
+- `runReferenceAnalysisAction` (~490 lines) — the orchestration, and the only
+  part that is an *operation* in the workspace's sense;
+- `getReferenceAnalysisState` — a read model, which the workspace has no
+  vocabulary for and does not need one;
+- five observation / candidate-rule update, status and approval actions
+  (~390 lines) — plain **write actions**. They become `ACTION_REGISTRY`
+  entries, never descriptors.
+
+So the migration target is a third of the file, and two thirds is surrounding
+CRUD that migrates by declaration rather than by rewriting.
+
+**Of §5.9's three format gaps, one is already closed.** The image input is
+delivered (B16a, `c30b6a7`): the format declares `images`, the runner resolves,
+re-validates bytes at call time and builds the multimodal message. What B20
+still needs there is only a **second registry entry** for Project Style's
+references — small, mechanical, and the exact shape B16a was designed against
+(N ordered images, per-image keys, bytes re-validated).
+
+The two remaining gaps are real:
+
+1. **A composite output.** The answer is one object holding a scalar
+   (`summary`) **and two lists** (`observations`, `candidateRules`), while
+   `output.kind` picks exactly one shape. `candidateRules[].referenceKeys` is
+   itself an array of strings, which `ListItemField` has no variant for.
+2. **Cross-item referential validity.** Every observation must cite exactly one
+   attached reference; every candidate rule must cite every reference
+   supporting it. `item.validity` expresses only "these fields, all/any
+   non-empty", over string fields.
+
+**And the honest obstacle, which is not a format gap at all.** Three properties
+must survive untouched (§5.9), and all three live in the ~490 lines being
+rewritten:
+
+- the file confinement and decode gate;
+- the deterministic prompt's provenance hash (`sha256Hex(promptText)`);
+- the drift detection that compares the snapshot taken before the provider call
+  against a fresh read **inside the committing transaction** — two distinct
+  checks, `snapshot_changed` before acquiring and `provenance_mismatch` at
+  finalize.
+
+**None of it has a single test.** There is nothing under `tests/` for
+`projectStyleReferenceAnalysis` or for `referenceAnalysis/` — the same fact that
+made B16a leave `imageInputs.ts` alone rather than refactor it.
+
+**Therefore the split, and its order:**
+
+| # | Ticket | Nature |
+| --- | --- | --- |
+| B20a | The composite `output.kind`, and a `stringList` item field | format — supervisor |
+| B20b | Cross-item referential validity in `item.validity` | format — supervisor |
+| B20c | The Project Style image source, a second registry entry | mechanical — executor |
+| B20d | **Characterization tests over the three surviving properties** | executor |
+| B20e | The migration itself | supervisor, on B20d's evidence |
+
+**B20d comes before B20e and that is the whole point.** Rewriting an untested,
+hardened, security-bearing path and *then* checking it is how a provenance hash
+quietly stops being verified. The tests are written against the behaviour as it
+stands today, they must pass before anything moves, and they must still pass
+after. If they cannot be written — the action is `server-only`, transaction-
+bound and provider-bound — that is itself the finding, and B20e should not
+start.
+
 **Then Chantier 2** — C0 → C6 and the three independents, unchanged.
 
 **After Chantier 2 — decided 2026-08-18, with the reason each item waits:**
