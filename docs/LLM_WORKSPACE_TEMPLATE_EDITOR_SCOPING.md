@@ -77,9 +77,17 @@ incapables d'exprimer ce pour quoi l'atelier existe. Elle est donc éditable en
 E1, sans discussion.
 
 À noter : déclarer `freeText` dans un descripteur ne suffit pas — il faut aussi
-que le contrôle de saisie existe côté exécution (établi et surfaces produit).
-Ce contrôle n'est construit nulle part à ce jour ; c'est un ticket à part, et il
-conditionne UC1, UC2 et UC3.
+que le contrôle de saisie existe côté exécution.
+
+**Périmé, corrigé le 2026-08-18.** La phrase qui suivait disait que ce contrôle
+n'était construit nulle part et qu'il fallait un ticket à part. C'était vrai le
+2026-08-15 ; ça ne l'est plus. `LLMW.INTENT.FREETEXT.1` (B9a) l'a livré, puis
+B9b et B11 l'ont exercé : l'établi rend le champ dès qu'un descripteur déclare
+`intent.freeText` (`src/app/settings/llm-workflows/[templateId]/page.tsx`), et
+quatre descripteurs le déclarent aujourd'hui — `shotPrompt.assist`,
+`shotRetake.directed`, `assetRetake.directed`, `shot.insertDirected`. E1 n'a
+donc qu'à rendre `freeText` **déclarable dans l'éditeur** ; l'exécution suit
+toute seule. E1 est plus petit que ce cadrage ne le laissait croire.
 
 Hérité de la duplication, **non éditable en E1** : `anchor`, `output`,
 `commit`, `messages`, `preconditions`.
