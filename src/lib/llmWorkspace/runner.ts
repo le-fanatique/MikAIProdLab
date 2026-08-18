@@ -1265,10 +1265,18 @@ export type OperationPreviewResult =
 export async function resolveOperationPreview(
   descriptor: OperationDescriptor,
   ids: AnchorIds,
-  intent: OperationIntentInput = {}
+  intent: OperationIntentInput = {},
+  // LLMW.LIGHTING.FROMIMAGE.1 (B16b) — widened the same way `runOperation`
+  // already was by B16a: a descriptor declaring `images` refuses at Step 4b
+  // (`resolveDeclaredImages`) below `minCount` regardless of what the bench's
+  // "Test Entity" pane resolved, so the read-only preview must see the same
+  // selection the Run/Approve calls do, or the centre pane would show
+  // `messages.noneSelected` forever, even after the user picks images —
+  // never a second, independent image selection.
+  images?: OperationImagesInput
 ): Promise<OperationPreviewResult> {
   try {
-    const result = await resolvePromptInternal(descriptor, ids, intent, { requireLlmConfig: false });
+    const result = await resolvePromptInternal(descriptor, ids, intent, { requireLlmConfig: false }, images);
     if (!result.ok) return result;
     const variables = descriptor.context.variables.map((declared) => ({
       id: declared.id,

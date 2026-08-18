@@ -24,6 +24,7 @@ import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 import { assetsFromProjectDescriptor } from "./assetsFromProject";
 import { castingFromSequenceDescriptor } from "./castingFromSequence";
 import { narrativePromptComposeDescriptor } from "./narrativePrompt";
+import { lightingFromImageDescriptor } from "./lightingFromImage";
 
 export const DESCRIPTORS = {
   "story.generate": storyGenerateDescriptor,
@@ -42,6 +43,7 @@ export const DESCRIPTORS = {
   "assets.fromProject": assetsFromProjectDescriptor,
   "casting.fromSequence": castingFromSequenceDescriptor,
   "narrativePrompt.compose": narrativePromptComposeDescriptor,
+  "lighting.fromImage": lightingFromImageDescriptor,
 } as const satisfies Record<string, OperationDescriptor>;
 
 export {
@@ -61,4 +63,5 @@ export {
   assetsFromProjectDescriptor,
   castingFromSequenceDescriptor,
   narrativePromptComposeDescriptor,
+  lightingFromImageDescriptor,
 };

@@ -17,7 +17,11 @@ import { db } from "@/db";
 import { assets, shots } from "@/db/schema";
 import { loadBenchDescriptor } from "@/lib/llmWorkspace/benchDescriptor";
 import { planBenchCommit, preservedAssetDetailColumns } from "@/lib/llmWorkspace/benchRun";
-import { parseIntentInputFromSearchParams, type BenchSearchParams } from "@/lib/llmWorkspace/bench";
+import {
+  parseIntentInputFromSearchParams,
+  parseSelectedImageIdsFromSearchParams,
+  type BenchSearchParams,
+} from "@/lib/llmWorkspace/bench";
 import {
   requiredAnchorIdKeys,
   runOperation,
@@ -89,9 +93,18 @@ export async function runBenchOperation(input: {
 
   const descriptor = result.descriptor;
   const intent = parseIntentInputFromSearchParams(descriptor, input.searchParams);
+  // LLMW.LIGHTING.FROMIMAGE.1 (B16b) — the selection is re-read server-side
+  // from `searchParams`, exactly like `intent` above and for the same
+  // "no second reading rule, no trust in a client-built object" reason
+  // (`bench.ts`'s own header comment). `undefined` for a descriptor that
+  // declares no `images` — `runOperation` already treats an absent fourth
+  // argument as "no images", unchanged from before this ticket.
+  const images = descriptor.images
+    ? { selectedIds: parseSelectedImageIdsFromSearchParams(descriptor, input.searchParams) }
+    : undefined;
 
   try {
-    const result = await runOperation(descriptor, input.ids, intent);
+    const result = await runOperation(descriptor, input.ids, intent, images);
     if (!result.ok) return result;
     // Mirrors `RunOperationResult`'s own `kind` discriminant
     // (LLMW.OUTPUT.LIST.1, B7a) — the bench's Run now serves both output
@@ -307,16 +320,23 @@ export async function commitBenchProposal(input: {
     case "applyBatchAssetDescriptionDraftsInline":
       return { ok: false, error: "Batch operations cannot be approved from the bench." };
 
-    // LLMW.LIGHTING.1 (B15a) — `updateAssetLightingInline` widens `ActionId`
-    // to a tenth `returnValue` member, a mechanical consequence of
-    // `ActionRegistryEntry.response` this switch must stay exhaustive over
-    // (this file's own header comment), not something this ticket's own
-    // scope list names. Not reachable today: no descriptor's `commit` names
-    // it yet — this ticket delivers no surface, no descriptor (B15b/B16 are
-    // that consumer), the same "declared ahead of its own consumer"
-    // discipline `applyBatchAssetDescriptionDraftsInline` above illustrates
-    // for a different reason (batch, not unreachable-by-construction).
-    case "updateAssetLightingInline":
-      return { ok: false, error: "This operation is not wired to the bench yet." };
+    // LLMW.LIGHTING.FROMIMAGE.1 (B16b) — `updateAssetLightingInline`'s own
+    // commit branch, wiring what B15a declared and left unreachable (no
+    // descriptor named it yet). `lighting.fromImage` is `output.kind: "text"`
+    // (unlike `updateAssetDescriptionFieldInline`'s `"object"` case above),
+    // so the written field is read off `descriptor.output.field`, not
+    // `descriptor.output.fields[0]`.
+    case "updateAssetLightingInline": {
+      const field = descriptor.output.kind === "text" ? descriptor.output.field : undefined;
+      if (field !== "lighting") {
+        return { ok: false, error: "This template's output field cannot be routed to an update action." };
+      }
+      const assetId = input.ids.assetId as number;
+      return ACTION_BINDINGS.updateAssetLightingInline({
+        assetId,
+        projectId,
+        lighting: requireStringValue(input.values, field),
+      });
+    }
   }
 }

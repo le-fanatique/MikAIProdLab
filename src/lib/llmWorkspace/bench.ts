@@ -225,6 +225,49 @@ export function parseIntentInputFromSearchParams(
   return intent;
 }
 
+/**
+ * LLMW.LIGHTING.FROMIMAGE.1 (B16b) — the bench's counterpart to `intent`'s
+ * own query-string reading above, for a descriptor that declares `images`
+ * (LLMW.DESCRIPTOR.IMAGE.1, B16a). Read the same way `multiEnumBenchParam`
+ * reads a `"multiEnum"` `intent.parameters` entry: a repeated `imageIds`
+ * query key becomes the whole array, not just its first value — this is the
+ * bench's own re-reading of the selection server-side, from `searchParams`,
+ * per this file's own header rule ("no second reading rule, no trust in a
+ * client-built object") applied to the selection exactly as it already
+ * applies to `intent`.
+ *
+ * Returns `[]` for a descriptor that declares no `images` (nothing to read),
+ * and for a present-but-unparsable value (a non-integer, a non-positive
+ * integer) — the same "silently drop what does not parse" rule
+ * `parsePositiveIntParam` above already applies to `projectId`/`sequenceId`/
+ * `shotId`/`assetId`; the runner's own `minCount` refusal is what tells the
+ * user their selection did not take, not a parse-time throw here.
+ *
+ * **Order.** The array this returns is in the order `searchParams.imageIds`
+ * lists them — which, for the bench's own checkbox control (`page.tsx`), is
+ * the checkbox list's own display order (the Asset's reference images,
+ * insertion order), never the order the user actually clicked the boxes in:
+ * an HTML checkbox group serializes in DOM order regardless of click order,
+ * the same limitation `intent.parameters`'s own `"multiEnum"` checkboxes
+ * already have. This is reported rather than silently assumed — see
+ * `.agents/executor_report.md`.
+ */
+export function parseSelectedImageIdsFromSearchParams(
+  descriptor: OperationDescriptor,
+  searchParams: BenchSearchParams
+): number[] {
+  if (!descriptor.images) return [];
+  const raw = searchParams.imageIds;
+  if (raw == null) return [];
+  const values = Array.isArray(raw) ? raw : [raw];
+  const ids: number[] = [];
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isInteger(n) && n > 0) ids.push(n);
+  }
+  return ids;
+}
+
 // ---------------------------------------------------------------------------
 // §5.1 — per-variable rendering: resolved data serialised readable, its
 // character count, and its token estimate. `data === undefined` (a resolver

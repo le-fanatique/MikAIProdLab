@@ -84,6 +84,37 @@ type ListDraft = { items: Array<Record<string, string | number | boolean>>; sele
 // otherwise drive.
 type TextDraft = { text: string };
 
+// LLMW.LIGHTING.FROMIMAGE.1 (B16b) — the first bench render surface for a
+// descriptor that declares `images`. Server-resolved by the page (which
+// already queries the anchored Asset's reference images for
+// `resolveOperationPreview`'s own selection) and handed down as plain data,
+// the same discipline `output`/`plan`/`commitAdvisory` already follow: no
+// business logic lives here, only rendering.
+//
+// **Selection travels through the page's own "Test Entity" GET form, not
+// through local component state.** Every other run input this bench has
+// (`mode`, `intent.parameters`, `freeText`) already works this way — resolved
+// server-side from the URL, applied on the same "Apply" submit — and the
+// centre "Resolved Context" pane (server-rendered from that same URL) must
+// see the identical selection Run/Approve use, or the two panes would
+// silently disagree. The checkboxes below are therefore associated with the
+// page's form via the HTML `form` attribute (`formId`) rather than living in
+// a form of their own.
+//
+// **This control does not express the order the user checked boxes in.** An
+// HTML form serializes checked boxes in DOM order, not click order — the
+// same limitation `intent.parameters`'s own `"multiEnum"` checkboxes already
+// have. The order the runner keys `R1..Rn` by is therefore this list's own
+// display order (the Asset's reference images, in the order the page queried
+// them), never the order the user actually ticked them in. Reported rather
+// than silently assumed — see `.agents/executor_report.md`.
+type ImagesInput = {
+  available: Array<{ id: number; label: string | null }>;
+  selectedIds: number[];
+  minCount: number;
+  maxCount: number;
+};
+
 type Draft = ObjectDraft | ListDraft | TextDraft;
 
 type Output =
@@ -112,9 +143,27 @@ type Props = {
    * `returnValue` branch below — which is exactly the branch the three
    * advisory-bearing Asset descriptors commit through. */
   commitAdvisory?: string;
+  /** LLMW.LIGHTING.FROMIMAGE.1 (B16b). `null` for a descriptor that declares
+   * no `images` — no selector renders, "un descripteur qui n'en déclare pas
+   * ne montre rien de neuf" (the ticket's own words). */
+  imagesInput: ImagesInput | null;
+  /** The page's "Test Entity" `<form method="get">` id, so the images
+   * checkboxes below (rendered here, not inside that form) still submit
+   * with it via the HTML `form` attribute. */
+  testEntityFormId: string;
 };
 
-export default function BenchRunPanel({ templateId, ids, searchParams, plan, output, returnTo, commitAdvisory }: Props) {
+export default function BenchRunPanel({
+  templateId,
+  ids,
+  searchParams,
+  plan,
+  output,
+  returnTo,
+  commitAdvisory,
+  imagesInput,
+  testEntityFormId,
+}: Props) {
   const [showAdvisory, setShowAdvisory] = useState(false);
 
   const trigger: ProposalTrigger<Draft> = {
@@ -170,6 +219,28 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
                 returnTo,
               });
             },
+          },
+        ];
+      }
+
+      // LLMW.LIGHTING.FROMIMAGE.1 (B16b) — `updateAssetLightingInline`'s own
+      // branch: a `returnValue` action, like the `"object"` branch's own
+      // generic `plan.kind === "returnValue"` case further down, but the
+      // draft here is a `TextDraft` (one string, no per-field loop), so the
+      // `values` object `commitBenchProposal` expects is built from
+      // `output.field` rather than spread from the draft directly.
+      if (plan.kind === "returnValue") {
+        return [
+          {
+            kind: "returnValue",
+            id: "approve",
+            label: "Approve",
+            run: (current) =>
+              commitBenchProposal({
+                templateId,
+                ids,
+                values: { [output.field]: (current as TextDraft).text },
+              }),
           },
         ];
       }
@@ -427,6 +498,37 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
       // Run itself stays offered either way (§3.2 of the ticket).
       hints={
         <>
+          {imagesInput && (
+            <div className="flex flex-col gap-2 rounded border border-[#2c3035] bg-[#0d0e10] p-3">
+              <p className="text-[10px] uppercase tracking-wide text-[#6e767d]">
+                Reference images ({imagesInput.selectedIds.length} selected, {imagesInput.minCount}–
+                {imagesInput.maxCount} required)
+              </p>
+              {imagesInput.available.length === 0 ? (
+                <p className="text-xs text-[#6e767d]">This Asset has no reference images.</p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {imagesInput.available.map((image) => (
+                    <label key={image.id} className="flex items-center gap-2 text-xs text-[#a4abb2]">
+                      <input
+                        type="checkbox"
+                        name="imageIds"
+                        value={image.id}
+                        form={testEntityFormId}
+                        defaultChecked={imagesInput.selectedIds.includes(image.id)}
+                        className="h-3.5 w-3.5"
+                      />
+                      {image.label ?? `Reference image #${image.id}`}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-[#4b5158]">
+                Check the images to attach, then Apply above — the run keys them R1..Rn in this list&apos;s
+                own order, not the order they were checked in.
+              </p>
+            </div>
+          )}
           {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
           {showAdvisory && commitAdvisory && <p className="text-xs text-[#b89a5a]">{commitAdvisory}</p>}
         </>
@@ -461,6 +563,7 @@ export default function BenchRunPanel({ templateId, ids, searchParams, plan, out
 
               {plan.kind === "unsupported" && <p className="text-xs text-[#cf7b6b]">{plan.reason}</p>}
               {plan.kind !== "unsupported" &&
+                plan.kind !== "returnValue" &&
                 !(plan.kind === "redirectOnly" && plan.actionId === "updateShotNarrativePrompt") && (
                   <p className="text-xs text-[#cf7b6b]">
                     This template&apos;s commit action has no bench Approve path yet.

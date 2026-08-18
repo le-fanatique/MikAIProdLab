@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { assets, projects, sequences, shots } from "@/db/schema";
+import { assets, assetReferenceImages, projects, sequences, shots } from "@/db/schema";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
@@ -19,6 +19,7 @@ import {
   multiEnumPresenceParamName,
   normalizeBenchSelection,
   parseIntentInputFromSearchParams,
+  parseSelectedImageIdsFromSearchParams,
   parseSelectionFromSearchParams,
   type BenchSearchParams,
 } from "@/lib/llmWorkspace/bench";
@@ -162,6 +163,33 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
     assetIds: assetRows.map((r) => r.id),
   });
 
+  // LLMW.LIGHTING.FROMIMAGE.1 (B16b) — `lighting.fromImage`'s own selection
+  // surface: the Asset's reference images, queried only when a descriptor
+  // actually declares `images` and the anchored Asset is resolved. Ordered by
+  // `id` (insertion order) — the display order the checkboxes render in,
+  // which the runner keys `R1..Rn` by (see `ImagesInput`'s own comment in
+  // `BenchRunPanel.tsx` for why this is not the same as click order).
+  const referenceImageRows =
+    descriptor.images && needsAsset && selection.assetId != null
+      ? await db
+          .select({ id: assetReferenceImages.id, label: assetReferenceImages.label })
+          .from(assetReferenceImages)
+          .where(eq(assetReferenceImages.assetId, selection.assetId))
+          .orderBy(asc(assetReferenceImages.id))
+      : [];
+
+  const selectedImageIds = parseSelectedImageIdsFromSearchParams(descriptor, search);
+
+  const imagesInput = descriptor.images
+    ? {
+        available: referenceImageRows,
+        selectedIds: selectedImageIds,
+        minCount: descriptor.images.minCount,
+        maxCount: descriptor.images.maxCount,
+      }
+    : null;
+  const TEST_ENTITY_FORM_ID = "bench-test-entity-form";
+
   // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — `descriptor.commitAdvisory` only has a
   // reason to show when the selected Asset's Bible is actually `stale`.
   // Queried only when this descriptor could show one at all: asset-anchored
@@ -183,7 +211,14 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
   }
 
   const intentInput = complete ? parseIntentInputFromSearchParams(descriptor, search) : {};
-  const preview = complete ? await resolveOperationPreview(descriptor, selection, intentInput) : null;
+  // LLMW.LIGHTING.FROMIMAGE.1 (B16b) — the centre "Resolved Context" pane
+  // must see the same image selection Run/Approve use, or it would show
+  // `messages.noneSelected` forever even after the user checks a box: both
+  // read the same `search`-derived selection, never two independent ones.
+  const previewImages = descriptor.images ? { selectedIds: selectedImageIds } : undefined;
+  const preview = complete
+    ? await resolveOperationPreview(descriptor, selection, intentInput, previewImages)
+    : null;
 
   const isBatch = descriptor.anchor.kind === "entitySet";
 
@@ -252,7 +287,7 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
       />
 
       <Card title="Test Entity" className="mb-6">
-        <form method="get" className="flex flex-wrap items-end gap-3">
+        <form id={TEST_ENTITY_FORM_ID} method="get" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase tracking-wide text-[#6e767d]">Project</label>
             <AutoSubmitSelect
@@ -622,6 +657,8 @@ export default async function LlmWorkflowBenchPage({ params, searchParams }: Pro
               output={benchOutput}
               returnTo={returnTo}
               commitAdvisory={bibleFreshness === "stale" ? descriptor.commitAdvisory : undefined}
+              imagesInput={imagesInput}
+              testEntityFormId={TEST_ENTITY_FORM_ID}
             />
           )}
         </Card>
