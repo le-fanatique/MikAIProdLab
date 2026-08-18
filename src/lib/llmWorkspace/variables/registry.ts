@@ -291,6 +291,26 @@ export async function resolveShotCurrentPrompt(shotId: number): Promise<ShotCurr
 }
 
 // ---------------------------------------------------------------------------
+// SHOT.NARRATIVE_PROMPT — anchors: shot. LLMW.JAR.1 (B12a). Mirrors
+// SHOT.CURRENT_PROMPT exactly, over `narrativePrompt` instead of
+// `shotPrompt` — a one-field read, an explicit throw when the shot does not
+// exist, no bound.
+// ---------------------------------------------------------------------------
+
+export type ShotNarrativePromptData = {
+  narrativePrompt: string | null;
+};
+
+export async function resolveShotNarrativePrompt(shotId: number): Promise<ShotNarrativePromptData> {
+  const { db } = await import("@/db");
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
+  if (!shot) {
+    throw new Error(`resolveShotNarrativePrompt: shot ${shotId} not found.`);
+  }
+  return { narrativePrompt: shot.narrativePrompt };
+}
+
+// ---------------------------------------------------------------------------
 // SHOT.CAST — anchors: shot. No bound: `generateShotPromptDraft`'s cast
 // query carries none either (`orderBy(asc(assets.name))`, no `.limit`).
 // ---------------------------------------------------------------------------
@@ -2511,6 +2531,7 @@ export const VARIABLE_REGISTRY = {
   "SEQ.CURRENT_PROMPT": resolveSeqCurrentPrompt,
   "SHOT.CORE": resolveShotCore,
   "SHOT.CURRENT_PROMPT": resolveShotCurrentPrompt,
+  "SHOT.NARRATIVE_PROMPT": resolveShotNarrativePrompt,
   "SHOT.CAST": resolveShotCast,
   "SHOT.REFERENCES": resolveShotReferences,
   "ASSET.CORE": resolveAssetCore,

@@ -312,6 +312,12 @@ export const REDIRECT_CONFIRMATION_KEYS = {
   // above; deliberately given no wording in `resolveBenchConfirmation`
   // below (see this table's own header comment) — nothing reaches it yet.
   createShotAtPosition: { successKey: "shotInserted", errorKey: "shotInsertError" },
+  // LLMW.JAR.1 (B12a) — `updateShotNarrativePrompt` mirrors `updateShotPrompt`
+  // exactly (src/actions/shots.ts), redirect-only on both paths. Declared
+  // per the same type-level guardrail; deliberately given no wording in
+  // `resolveBenchConfirmation` below — no descriptor's `commit` reaches it
+  // yet (B12b, the next ticket, wires the jar's filling operation).
+  updateShotNarrativePrompt: { successKey: "narrativePromptSaved", errorKey: "narrativePromptError" },
 } as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
 
 // ---------------------------------------------------------------------------

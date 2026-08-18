@@ -345,6 +345,11 @@ describe("action registry — behaviour 4, ownership check and mutation are not 
       file: "src/actions/shots.ts",
       export: "updateShotNarrativeContext",
     },
+    {
+      id: "updateShotNarrativePrompt",
+      file: "src/actions/shots.ts",
+      export: "updateShotNarrativePrompt",
+    },
   ];
 
   it.each(cases)("$id: no db.transaction, at least one SELECT and one UPDATE", (testCase) => {

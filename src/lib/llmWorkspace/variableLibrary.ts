@@ -10,7 +10,7 @@
 // discipline as `bench.ts` for the sibling bench route.
 //
 // Assembled entirely from existing bricks (ticket §"L'essentiel existe déjà"):
-// `VARIABLE_REGISTRY` is the one list that fixes which 22 variables exist;
+// `VARIABLE_REGISTRY` is the one list that fixes which variables exist;
 // `estimateTokens` is the one token-cost function; the resolved-value
 // rendering (JSON, `undefined` -> `null`) matches `buildVariablePreviewRows`
 // (`bench.ts`) exactly, so the same value looks the same in both places.
@@ -77,7 +77,7 @@ function anchorIdForEntity(entity: EntityKind, ids: AnchorIds): number | undefin
 // Per-variable resolution — the ticket's central trap. A resolver throws
 // when its entity is not found (`resolveSeqShots: sequence 42 not found.`,
 // and the same shape everywhere in `variables/registry.ts`), and the library
-// resolves all 22 at once: a plain `Promise.all(entries.map(resolver))`
+// resolves them all at once: a plain `Promise.all(entries.map(resolver))`
 // would reject on the first throw and take the whole page down with it.
 //
 // This resolves the trap by never letting a rejection reach the aggregate at

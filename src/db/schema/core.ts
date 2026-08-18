@@ -67,6 +67,10 @@ export const shots = sqliteTable("shots", {
   continuityIn: text("continuity_in"),
   continuityOut: text("continuity_out"),
   shotPrompt: text("shot_prompt"),
+  // LLMW.JAR.1 (B12a) — the narrative prompt jar (§5.3): a generated
+  // narrative prompt, stored separately from `shotPrompt` because it is not
+  // reproducible. Nullable, no default, never merged into `shotPrompt`.
+  narrativePrompt: text("narrative_prompt"),
   approvedVideoPath: text("approved_video_path"),
   // Non-destructive editorial trim of the approved video (seconds, nullable)
   trimInSeconds: real("trim_in_seconds"),

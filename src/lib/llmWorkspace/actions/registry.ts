@@ -536,6 +536,30 @@ export const ACTION_REGISTRY = {
       "`revalidatePath(\"/\", \"layout\")` is called before the success redirect — present, like every `create*`/`applySelectedCastingSuggestions` insert entry above.",
     ],
   },
+
+  // LLMW.JAR.1 (B12a) — the narrative prompt jar's write side (§5.3). Not
+  // yet reachable from a descriptor's `commit` — the operation that fills
+  // the jar is B12b, the next ticket. Declared and proven against a real
+  // database ahead of that consumer, same discipline as
+  // `createGeneratedShots`/`applySelectedCastingSuggestions`/`createShotAtPosition`
+  // above.
+  updateShotNarrativePrompt: {
+    id: "updateShotNarrativePrompt",
+    operation: "update",
+    source: { module: "@/actions/shots", export: "updateShotNarrativePrompt" },
+    target: { entity: "shot" },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["narrativePrompt"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "Mirrors `updateShotPrompt` exactly (src/actions/shots.ts) — same FormData input shape, same shot→sequence→project ownership chain (two separate SELECTs, no db.transaction), same redirect-only outcome on both the success and the error path — over `narrativePrompt` instead of `shotPrompt`, and `shotPrompt` is never read or rewritten by this action. Proven by tests/actions/updateShotNarrativePrompt.test.ts, including a read-after-write assertion that `shotPrompt` stays unchanged.",
+      "Ownership check (src/actions/shots.ts, two SELECTs — shot→sequence, sequence→project) and mutation (UPDATE) are three separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+    ],
+  },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;
 
 export type ActionRegistryId = keyof typeof ACTION_REGISTRY;

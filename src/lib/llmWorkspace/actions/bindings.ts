@@ -20,7 +20,7 @@ import {
   updateAssetDescriptionFieldInline,
   applyBatchAssetDescriptionDraftsInline,
 } from "@/actions/assets";
-import { updateShotPrompt, updateShotNarrativeContext } from "@/actions/shots";
+import { updateShotPrompt, updateShotNarrativeContext, updateShotNarrativePrompt } from "@/actions/shots";
 import { updateSequencePrompt } from "@/actions/sequences";
 import { applyGeneratedStory } from "@/actions/llm/story";
 import { applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
@@ -59,4 +59,5 @@ export const ACTION_BINDINGS = {
   createGeneratedSequences,
   applySelectedCastingSuggestions,
   createShotAtPosition,
+  updateShotNarrativePrompt,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

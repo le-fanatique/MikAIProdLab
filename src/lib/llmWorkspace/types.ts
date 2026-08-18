@@ -151,7 +151,14 @@ export type VariableId =
   // "descriptive". The overlap with `SEQ.CONTEXT.title` is accepted: each
   // serves a different phrase of the prompt. See `variables/registry.ts` for
   // the resolver.
-  | "SEQ.IDENTITY";
+  | "SEQ.IDENTITY"
+  // LLMW.JAR.1 (B12a) — the narrative prompt jar itself, read back as an
+  // ingredient (§5.2: "a jar is an ingredient like any other"). Mirrors
+  // `SHOT.CURRENT_PROMPT` exactly, over the sibling column. Declared ahead of
+  // its own consumer (B12b fills the jar) — see `variables/registry.ts` for
+  // the resolver and `ActionId`'s own comment above for the same discipline
+  // applied to this ticket's write action.
+  | "SHOT.NARRATIVE_PROMPT";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque
@@ -220,7 +227,17 @@ export type ActionId =
   // silently assumed. Not yet reachable from a descriptor's `commit` (its
   // own descriptor is B11-bd) — declared ahead of being wired, the same
   // discipline every earlier insert `ActionId` followed.
-  | "createShotAtPosition";
+  | "createShotAtPosition"
+  // LLMW.JAR.1 (B12a) — the narrative prompt jar's write side (§5.3 of
+  // docs/LLM_WORKSPACE_PRODUCT_VISION.md): a generated narrative prompt is a
+  // jar of its own, stored on `shots.narrative_prompt`, never merged into
+  // `shotPrompt`. Not yet reachable from a descriptor's `commit` — the
+  // operation that fills the jar is B12b, the next ticket. Declared and
+  // proven against a real database ahead of that consumer, same discipline
+  // as every earlier action declared before its own descriptor
+  // (`createGeneratedShots`, `applySelectedCastingSuggestions`,
+  // `createShotAtPosition`).
+  | "updateShotNarrativePrompt";
 
 /**
  * Names a field on the operation's anchor entity, for a `messages.chainNotFound`
