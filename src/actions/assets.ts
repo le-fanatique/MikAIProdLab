@@ -174,6 +174,44 @@ export async function updateAssetDescriptionFieldInline(input: {
   return { ok: true };
 }
 
+/**
+ * LLMW.LIGHTING.1 (B15a) — the Asset-level lighting field's write side (§5.9
+ * of docs/LLM_WORKSPACE_PRODUCT_VISION.md). Same shape as
+ * `updateAssetDescriptionFieldInline` above — a caller-supplied object, not
+ * FormData; ownership check (SELECT) and mutation (UPDATE) as two separate
+ * statements, no db.transaction; `{ ok: true } | { ok: false; error }` — but
+ * narrowed to one field with no append/replace mode: lighting is always a
+ * full replacement, and a blank/whitespace-only value clears it to null, the
+ * same "blank becomes null" rule `updateShotLighting` and
+ * `updateSequenceLighting` (`src/actions/shots.ts`, `src/actions/sequences.ts`)
+ * follow. Writes `lighting` alone — no other column.
+ */
+export async function updateAssetLightingInline(input: {
+  assetId: number;
+  projectId: number;
+  lighting: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { assetId, projectId } = input;
+
+  const [existing] = await db
+    .select({ projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, assetId));
+
+  if (!existing || existing.projectId !== projectId) {
+    return { ok: false, error: "Asset not found." };
+  }
+
+  const value = input.lighting.trim() === "" ? null : input.lighting;
+
+  await db
+    .update(assets)
+    .set({ lighting: value, updatedAt: new Date().toISOString() })
+    .where(eq(assets.id, assetId));
+
+  return { ok: true };
+}
+
 export async function applyBatchAssetDescriptionDraftsInline(input: {
   projectId: number;
   mode: "replace" | "append";

@@ -39,7 +39,7 @@ import {
   shotReferenceImages,
   shots,
 } from "@/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { VariableId } from "../types";
 import { parseOutlineSections } from "@/lib/prompts/outlineSections";
 import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
@@ -240,6 +240,66 @@ export async function resolveSeqCurrentPrompt(sequenceId: number): Promise<SeqCu
 }
 
 // ---------------------------------------------------------------------------
+// SEQ.LIGHTING — anchors: sequence. LLMW.LIGHTING.1 (B15a), §5.9 of
+// docs/LLM_WORKSPACE_PRODUCT_VISION.md. The one variable of the three
+// carrying the user's own preséance rule, decided 2026-08-18:
+//
+//   1. if `sequences.lighting` is non-blank after `trim()`, it wins — the
+//      environment query below is never even issued;
+//   2. otherwise, this Sequence's `type: "environment"` Assets
+//      (`sequence_assets`, joined to `assets`), ordered by `assets.name`
+//      ascending — the same deterministic order `SHOT.CAST` already uses for
+//      its own cast read;
+//   3. otherwise, `source: "none"` — a Sequence with neither is a normal
+//      state, not an error.
+//
+// Zero or several environment Assets are both normal (§ of the ticket): the
+// query is never sliced or elected down to "the first one" — every matching
+// row is returned, in the order above, and the caller decides what to do
+// with more than one. `source` is always present on the returned data so a
+// consumer (and a test) can tell "own" from "environment" from "none"
+// without re-deriving the rule itself — an un-sourced lighting value would
+// be undebuggable, per this ticket's own instruction.
+// ---------------------------------------------------------------------------
+
+export type SeqLightingEnvironmentEntry = {
+  name: string;
+  lighting: string | null;
+};
+
+export type SeqLightingData =
+  | { source: "own"; lighting: string }
+  | { source: "environment"; environments: SeqLightingEnvironmentEntry[] }
+  | { source: "none" };
+
+export async function resolveSeqLighting(sequenceId: number): Promise<SeqLightingData> {
+  const { db } = await import("@/db");
+  const [sequence] = await db
+    .select({ lighting: sequences.lighting })
+    .from(sequences)
+    .where(eq(sequences.id, sequenceId));
+  if (!sequence) {
+    throw new Error(`resolveSeqLighting: sequence ${sequenceId} not found.`);
+  }
+
+  if (sequence.lighting != null && sequence.lighting.trim() !== "") {
+    return { source: "own", lighting: sequence.lighting };
+  }
+
+  const environments = await db
+    .select({ name: assets.name, lighting: assets.lighting })
+    .from(sequenceAssets)
+    .innerJoin(assets, eq(sequenceAssets.assetId, assets.id))
+    .where(and(eq(sequenceAssets.sequenceId, sequenceId), eq(assets.type, "environment")))
+    .orderBy(asc(assets.name));
+
+  if (environments.length === 0) {
+    return { source: "none" };
+  }
+  return { source: "environment", environments };
+}
+
+// ---------------------------------------------------------------------------
 // SHOT.CORE — anchors: shot. Matches `generateShotPromptDraft`'s Shot read
 // (`src/actions/llm/shotPrompt.ts`).
 // ---------------------------------------------------------------------------
@@ -308,6 +368,27 @@ export async function resolveShotNarrativePrompt(shotId: number): Promise<ShotNa
     throw new Error(`resolveShotNarrativePrompt: shot ${shotId} not found.`);
   }
   return { narrativePrompt: shot.narrativePrompt };
+}
+
+// ---------------------------------------------------------------------------
+// SHOT.LIGHTING — anchors: shot. LLMW.LIGHTING.1 (B15a), §5.9 of
+// docs/LLM_WORKSPACE_PRODUCT_VISION.md. Mirrors SHOT.CURRENT_PROMPT exactly,
+// over `lighting` — a one-field read, an explicit throw when the shot does
+// not exist, no bound, and no fallback: only SEQ.LIGHTING carries the
+// user's preséance rule, this is the Shot's own field alone.
+// ---------------------------------------------------------------------------
+
+export type ShotLightingData = {
+  lighting: string | null;
+};
+
+export async function resolveShotLighting(shotId: number): Promise<ShotLightingData> {
+  const { db } = await import("@/db");
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
+  if (!shot) {
+    throw new Error(`resolveShotLighting: shot ${shotId} not found.`);
+  }
+  return { lighting: shot.lighting };
 }
 
 // ---------------------------------------------------------------------------
@@ -1220,6 +1301,28 @@ export async function resolveAssetBible(assetId: number): Promise<AssetBibleData
     usageRules: asset.usageRules ?? null,
     forbiddenVariations: asset.forbiddenVariations ?? null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// ASSET.LIGHTING — anchors: asset. LLMW.LIGHTING.1 (B15a), §5.9 of
+// docs/LLM_WORKSPACE_PRODUCT_VISION.md. One-field read, on the model of
+// ASSET.CORE — an explicit throw when the asset does not exist, no bound.
+// Present on every Asset row regardless of `type` (the schema carries no
+// conditional column); it is `SEQ.LIGHTING`'s own resolver, below, that
+// reads this same column only through `type: "environment"` Assets.
+// ---------------------------------------------------------------------------
+
+export type AssetLightingData = {
+  lighting: string | null;
+};
+
+export async function resolveAssetLighting(assetId: number): Promise<AssetLightingData> {
+  const { db } = await import("@/db");
+  const [asset] = await db.select().from(assets).where(eq(assets.id, assetId));
+  if (!asset) {
+    throw new Error(`resolveAssetLighting: asset ${assetId} not found.`);
+  }
+  return { lighting: asset.lighting ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -2622,6 +2725,9 @@ export const VARIABLE_REGISTRY = {
   "PROJECT.ASSET_LIBRARY": resolveProjectAssetLibrary,
   "SEQ.EXISTING_CASTINGS": resolveSeqExistingCastings,
   "SEQ.IDENTITY": resolveSeqIdentity,
+  "SHOT.LIGHTING": resolveShotLighting,
+  "ASSET.LIGHTING": resolveAssetLighting,
+  "SEQ.LIGHTING": resolveSeqLighting,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
 
 // ---------------------------------------------------------------------------

@@ -166,7 +166,21 @@ export type VariableId =
   // its own consumer (B12b fills the jar) — see `variables/registry.ts` for
   // the resolver and `ActionId`'s own comment above for the same discipline
   // applied to this ticket's write action.
-  | "SHOT.NARRATIVE_PROMPT";
+  | "SHOT.NARRATIVE_PROMPT"
+  // LLMW.LIGHTING.1 (B15a) — the lighting field at its three levels (§5.9 of
+  // docs/LLM_WORKSPACE_PRODUCT_VISION.md). `SHOT.LIGHTING` / `ASSET.LIGHTING`
+  // are one-field reads, on the model of `SHOT.CURRENT_PROMPT`. `SEQ.LIGHTING`
+  // is the one variable of the three that carries the user's own preséance
+  // rule (2026-08-18): the Sequence's own field wins when non-blank after
+  // `trim()`; otherwise it reads its `type: "environment"` Assets through
+  // `sequence_assets`, ordered by `assets.name` — zero or several are both
+  // normal, rendered as-is, no election rule invented. Its resolved data
+  // carries its own source (`"own" | "environment" | "none"`) so a consumer
+  // can always tell where the value came from. See `variables/registry.ts`
+  // for the three resolvers and `SeqLightingData`'s own type.
+  | "SHOT.LIGHTING"
+  | "ASSET.LIGHTING"
+  | "SEQ.LIGHTING";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque
@@ -245,7 +259,21 @@ export type ActionId =
   // as every earlier action declared before its own descriptor
   // (`createGeneratedShots`, `applySelectedCastingSuggestions`,
   // `createShotAtPosition`).
-  | "updateShotNarrativePrompt";
+  | "updateShotNarrativePrompt"
+  // LLMW.LIGHTING.1 (B15a) — the lighting field's write side, one action per
+  // level (§5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md). `updateShotLighting`
+  // mirrors `updateShotNarrativePrompt` exactly, over `shots.lighting`;
+  // `updateSequenceLighting` mirrors `updateSequencePrompt` exactly, over
+  // `sequences.lighting`; `updateAssetLightingInline` mirrors
+  // `updateAssetDescriptionFieldInline` (one field, full replacement, no
+  // append mode), over `assets.lighting`. Not yet reachable from a
+  // descriptor's `commit` — this ticket delivers no surface, no descriptor,
+  // no model call (B15b/B16). Declared and proven against a real database
+  // ahead of that consumer, the same discipline every earlier action
+  // declared before its own descriptor.
+  | "updateShotLighting"
+  | "updateSequenceLighting"
+  | "updateAssetLightingInline";
 
 /**
  * Names a field on the operation's anchor entity, for a `messages.chainNotFound`

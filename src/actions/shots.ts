@@ -686,3 +686,60 @@ export async function updateShotNarrativePrompt(formData: FormData): Promise<voi
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}narrativePromptSaved=1`);
 }
+
+/**
+ * LLMW.LIGHTING.1 (B15a) — the Shot-level lighting field's write side (§5.9
+ * of docs/LLM_WORKSPACE_PRODUCT_VISION.md). Mirrors `updateShotNarrativePrompt`
+ * above exactly: same FormData input shape, same shot→sequence→project
+ * ownership chain (two separate SELECTs, no db.transaction), same
+ * redirect-only outcome on both the success and the error path. Writes
+ * `lighting` alone — no other column, per this ticket's own instruction.
+ */
+export async function updateShotLighting(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const shotId = parseInt(formData.get("shotId") as string, 10);
+  const lightingRaw = formData.get("lighting");
+  const lighting = typeof lightingRaw === "string" ? lightingRaw : "";
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() ||
+    `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}shotLightingError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0 ||
+    !Number.isInteger(shotId) || shotId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  // Ownership: shot → sequence → project
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
+  if (!shot || shot.sequenceId !== sequenceId) {
+    errRedirect("Shot not found or does not belong to this sequence.");
+  }
+
+  const [sequence] = await db
+    .select()
+    .from(sequences)
+    .where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) {
+    errRedirect("Sequence not found or does not belong to this project.");
+  }
+
+  // Store null when empty (avoids storing empty string)
+  const value = lighting.trim() === "" ? null : lighting;
+
+  await db
+    .update(shots)
+    .set({ lighting: value, updatedAt: new Date().toISOString() })
+    .where(eq(shots.id, shotId));
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${sep}shotLightingSaved=1`);
+}

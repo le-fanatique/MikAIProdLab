@@ -38,6 +38,11 @@ export const sequences = sqliteTable("sequences", {
   mood: text("mood"),
   locationHint: text("location_hint"),
   sequencePrompt: text("sequence_prompt"),
+  // LLMW.LIGHTING.1 (B15a) — §5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md.
+  // Nullable, no default. `SEQ.LIGHTING` reads this field first, and falls
+  // back to this sequence's environment Asset(s) only when it is empty
+  // (after trim()) — the resolver, not this column, carries that rule.
+  lighting: text("lighting"),
   orderIndex: int("order_index").notNull().default(0),
   // UX.MEDIA.PREVIEW.1 — same additive contract as projects.rowBackground*.
   rowBackgroundImagePath: text("row_background_image_path"),
@@ -71,6 +76,9 @@ export const shots = sqliteTable("shots", {
   // narrative prompt, stored separately from `shotPrompt` because it is not
   // reproducible. Nullable, no default, never merged into `shotPrompt`.
   narrativePrompt: text("narrative_prompt"),
+  // LLMW.LIGHTING.1 (B15a) — §5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md.
+  // Nullable, no default: the Shot's own lighting, at the finest grain.
+  lighting: text("lighting"),
   approvedVideoPath: text("approved_video_path"),
   // Non-destructive editorial trim of the approved video (seconds, nullable)
   trimInSeconds: real("trim_in_seconds"),

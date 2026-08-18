@@ -560,6 +560,69 @@ export const ACTION_REGISTRY = {
       "Ownership check (src/actions/shots.ts, two SELECTs — shot→sequence, sequence→project) and mutation (UPDATE) are three separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
     ],
   },
+
+  // LLMW.LIGHTING.1 (B15a) — the lighting field's write side, one action per
+  // level (§5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md). None of the three
+  // is yet reachable from a descriptor's `commit` — this ticket delivers no
+  // surface, no descriptor, no model call (B15b/B16 are that consumer).
+  // Declared and proven against a real database ahead of it, the same
+  // discipline every earlier action declared before its own descriptor
+  // (`createGeneratedShots`, `applySelectedCastingSuggestions`,
+  // `createShotAtPosition`, `updateShotNarrativePrompt`).
+  updateShotLighting: {
+    id: "updateShotLighting",
+    operation: "update",
+    source: { module: "@/actions/shots", export: "updateShotLighting" },
+    target: { entity: "shot" },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["lighting"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "Mirrors `updateShotNarrativePrompt` exactly (src/actions/shots.ts) — same FormData input shape, same shot→sequence→project ownership chain (two separate SELECTs, no db.transaction), same redirect-only outcome on both the success and the error path — over `lighting` instead of `narrativePrompt`, and neither `narrativePrompt` nor `shotPrompt` is ever read or rewritten by this action. Proven by tests/actions/updateShotLighting.test.ts, including a read-after-write assertion that both sibling columns stay unchanged.",
+      "Ownership check (src/actions/shots.ts, two SELECTs — shot→sequence, sequence→project) and mutation (UPDATE) are three separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+    ],
+  },
+
+  updateSequenceLighting: {
+    id: "updateSequenceLighting",
+    operation: "update",
+    source: { module: "@/actions/sequences", export: "updateSequenceLighting" },
+    target: { entity: "sequence" },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["lighting"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "Mirrors `updateSequencePrompt` exactly (src/actions/sequences.ts) — same FormData input shape, same sequence→project ownership check (one SELECT, no db.transaction), same redirect-only outcome on both the success and the error path — over `lighting` instead of `sequencePrompt`, and `sequencePrompt` is never read or rewritten by this action. Proven by tests/actions/updateSequenceLighting.test.ts, including a read-after-write assertion that `sequencePrompt` stays unchanged.",
+      "Ownership check (src/actions/sequences.ts, one SELECT) and mutation (UPDATE) are two separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+      "This action only ever writes the Sequence's own `lighting` column — it never reads or writes an environment Asset's `lighting`. `SEQ.LIGHTING` (variables/registry.ts) is the read side that combines the two; this action has no part in that fallback.",
+    ],
+  },
+
+  updateAssetLightingInline: {
+    id: "updateAssetLightingInline",
+    operation: "update",
+    source: { module: "@/actions/assets", export: "updateAssetLightingInline" },
+    target: { entity: "asset" },
+    response: "returnValue",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["lighting"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "Same shape as `updateAssetDescriptionFieldInline` (src/actions/assets.ts) — a caller-supplied object, not FormData; ownership check (SELECT) and mutation (UPDATE) as two separate statements, no db.transaction; `{ ok: true } | { ok: false; error }` — narrowed to one field with no append/replace mode: always a full replacement, and a blank/whitespace-only value clears the column to null. Proven by tests/actions/updateAssetLightingInline.test.ts, including a read-after-write assertion that `description`/`notes` stay unchanged.",
+      "Ownership check (src/actions/assets.ts, SELECT) and mutation (UPDATE) are two separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+    ],
+  },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;
 
 export type ActionRegistryId = keyof typeof ACTION_REGISTRY;

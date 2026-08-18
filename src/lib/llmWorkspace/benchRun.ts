@@ -324,6 +324,18 @@ export const REDIRECT_CONFIRMATION_KEYS = {
   // — see this table's own header for the previous "no wording yet" state
   // this replaces.
   updateShotNarrativePrompt: { successKey: "narrativePromptSaved", errorKey: "narrativePromptError" },
+  // LLMW.LIGHTING.1 (B15a) — `updateShotLighting` mirrors `updateShotNarrativePrompt`
+  // exactly (src/actions/shots.ts), `updateSequenceLighting` mirrors
+  // `updateSequencePrompt` exactly (src/actions/sequences.ts), both
+  // redirect-only on both paths. Declared per the same type-level guardrail;
+  // deliberately given no wording in `resolveBenchConfirmation` below (see
+  // this table's own header, and `createShotAtPosition`'s own precedent
+  // above) — no descriptor's `commit` reaches either action yet, this
+  // ticket delivers no surface (B15b/B16 are that consumer). `updateAssetLightingInline`
+  // is `response: "returnValue"`, not `redirectOnly` — it has no entry here,
+  // the same reason `updateAssetDescriptionFieldInline` has none either.
+  updateShotLighting: { successKey: "shotLightingSaved", errorKey: "shotLightingError" },
+  updateSequenceLighting: { successKey: "sequenceLightingSaved", errorKey: "sequenceLightingError" },
 } as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
 
 // ---------------------------------------------------------------------------

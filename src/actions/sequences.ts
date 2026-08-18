@@ -305,3 +305,51 @@ export async function updateSequencePrompt(formData: FormData): Promise<void> {
   const sep = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${sep}sequencePromptSaved=1`);
 }
+
+/**
+ * LLMW.LIGHTING.1 (B15a) — the Sequence-level lighting field's write side
+ * (§5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md). Mirrors `updateSequencePrompt`
+ * above exactly: same FormData input shape, same sequence→project ownership
+ * check (one SELECT, no db.transaction), same redirect-only outcome on both
+ * the success and the error path. Writes `lighting` alone — no other
+ * column, per this ticket's own instruction. `SEQ.LIGHTING` (the read side,
+ * `variables/registry.ts`) reads this same column first and only falls back
+ * to the sequence's environment Asset(s) when it is empty — this action
+ * never touches that fallback, it only ever writes the sequence's own field.
+ */
+export async function updateSequenceLighting(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
+  const lightingRaw = formData.get("lighting");
+  const lightingValue = typeof lightingRaw === "string" ? lightingRaw : "";
+  const returnTo =
+    (formData.get("returnTo") as string | null)?.trim() ||
+    `/projects/${projectId}/sequences/${sequenceId}`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}sequenceLightingError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(sequenceId) || sequenceId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  const [sequence] = await db.select().from(sequences).where(eq(sequences.id, sequenceId));
+  if (!sequence || sequence.projectId !== projectId) {
+    errRedirect("Sequence not found or does not belong to this project.");
+  }
+
+  const value = lightingValue.trim() === "" ? null : lightingValue;
+
+  await db
+    .update(sequences)
+    .set({ lighting: value, updatedAt: new Date().toISOString() })
+    .where(eq(sequences.id, sequenceId));
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${sep}sequenceLightingSaved=1`);
+}

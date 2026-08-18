@@ -19,9 +19,15 @@ import {
   updateAssetDetailsInline,
   updateAssetDescriptionFieldInline,
   applyBatchAssetDescriptionDraftsInline,
+  updateAssetLightingInline,
 } from "@/actions/assets";
-import { updateShotPrompt, updateShotNarrativeContext, updateShotNarrativePrompt } from "@/actions/shots";
-import { updateSequencePrompt } from "@/actions/sequences";
+import {
+  updateShotPrompt,
+  updateShotNarrativeContext,
+  updateShotNarrativePrompt,
+  updateShotLighting,
+} from "@/actions/shots";
+import { updateSequencePrompt, updateSequenceLighting } from "@/actions/sequences";
 import { applyGeneratedStory } from "@/actions/llm/story";
 import { applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
 // LLMW.ACTION.INSERT.1 (B7c-w) — the three insert-operation actions. Same
@@ -60,4 +66,7 @@ export const ACTION_BINDINGS = {
   applySelectedCastingSuggestions,
   createShotAtPosition,
   updateShotNarrativePrompt,
+  updateShotLighting,
+  updateSequenceLighting,
+  updateAssetLightingInline,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

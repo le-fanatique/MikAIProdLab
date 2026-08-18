@@ -379,6 +379,13 @@
       "when": 1787062432093,
       "tag": "0053_light_killraven",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1787071167659,
+      "tag": "0054_modern_wasp",
+      "breakpoints": true
     }
   ]
 }

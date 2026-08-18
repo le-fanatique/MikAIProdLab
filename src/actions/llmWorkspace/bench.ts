@@ -306,5 +306,17 @@ export async function commitBenchProposal(input: {
     // arrive here, and listing them would not compile.
     case "applyBatchAssetDescriptionDraftsInline":
       return { ok: false, error: "Batch operations cannot be approved from the bench." };
+
+    // LLMW.LIGHTING.1 (B15a) — `updateAssetLightingInline` widens `ActionId`
+    // to a tenth `returnValue` member, a mechanical consequence of
+    // `ActionRegistryEntry.response` this switch must stay exhaustive over
+    // (this file's own header comment), not something this ticket's own
+    // scope list names. Not reachable today: no descriptor's `commit` names
+    // it yet — this ticket delivers no surface, no descriptor (B15b/B16 are
+    // that consumer), the same "declared ahead of its own consumer"
+    // discipline `applyBatchAssetDescriptionDraftsInline` above illustrates
+    // for a different reason (batch, not unreachable-by-construction).
+    case "updateAssetLightingInline":
+      return { ok: false, error: "This operation is not wired to the bench yet." };
   }
 }

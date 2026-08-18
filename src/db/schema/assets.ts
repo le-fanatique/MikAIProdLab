@@ -43,6 +43,13 @@ export const assets = sqliteTable("assets", {
   // DB, and widening it would silently reclassify every already-reviewed
   // asset as "desynced" from the Project Style.
   bibleSourceFingerprint: text("bible_source_fingerprint"),
+  // LLMW.LIGHTING.1 (B15a) — §5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md.
+  // Nullable, no default, present on every Asset row (not only
+  // `type: "environment"`: SQLite has no conditional column, and §5.9 asks
+  // for no type constraint). It is a Sequence's own environment Asset that
+  // makes this field earn its place — `SEQ.LIGHTING`'s resolver reads it
+  // through `sequence_assets` when the Sequence's own field is empty.
+  lighting: text("lighting"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
