@@ -194,11 +194,14 @@ export type VariableId =
  * reason `VariableId` is: `images/registry.ts` is `server-only`, and a
  * descriptor's type must stay importable from a client component.
  *
- * One entry today. B20 adds Project Style's Reference Board when it migrates
- * `projectStyleReferenceAnalysis` into the workspace
- * (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3).
+ * Two entries. `PROJECT_STYLE.REFERENCES` was added by B20c, for the migration
+ * of `projectStyleReferenceAnalysis` into the workspace
+ * (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3) — the second family, and the
+ * one that proves the registry was worth having: it has its own storage root,
+ * its own confinement predicate and its own approval gate, none of which the
+ * first entry knows about.
  */
-export type ImageSourceId = "ASSET.REFERENCE_IMAGES";
+export type ImageSourceId = "ASSET.REFERENCE_IMAGES" | "PROJECT_STYLE.REFERENCES";
 
 export type KnowledgeId = string;
 

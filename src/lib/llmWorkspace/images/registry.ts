@@ -38,6 +38,10 @@ import {
   MAX_REFERENCE_IMAGE_SIZE_BYTES,
   isConfinedUploadedReferenceImagePath,
 } from "@/lib/uploadImage";
+import {
+  MAX_PROJECT_STYLE_IMAGE_SIZE_BYTES,
+  isConfinedReferenceImagePath,
+} from "@/lib/projectStyle/uploadReferenceImage";
 
 export type ResolveWorkspaceImagesResult =
   | { ok: true; images: ResolvedWorkspaceImage[] }
@@ -119,12 +123,100 @@ async function resolveAssetReferenceImages(
   return { ok: true, images };
 }
 
+/**
+ * Project Style's Reference Board, scoped to one Project — LLMW.IMAGE.SOURCE.2
+ * (B20c), the second family and the one B20e migrates onto.
+ *
+ * Three things differ from `ASSET.REFERENCE_IMAGES`, and they are exactly why
+ * the registry exists rather than one hard-coded query:
+ *
+ *   - a different storage root, so a different confinement predicate
+ *     (`isConfinedReferenceImagePath`, Project Style's own);
+ *   - a different per-file bound (`MAX_PROJECT_STYLE_IMAGE_SIZE_BYTES`);
+ *   - **an approval gate the other family does not have.**
+ *     `approved_for_analysis` is checked by `runReferenceAnalysisAction` today
+ *     (its `not_approved` branch), so a source that ignored it would silently
+ *     drop a gate the moment B20e switched over. Refused here, by name.
+ *
+ * `metadata` carries the four fields the analysis prompt already puts in words
+ * (`referenceAnalysis/prompt.ts`'s own context block): label, provenance
+ * notes, what interests the author, what to avoid. Deliberately **not**
+ * `sourceUrl` — that module refuses to mention it, and B20d recorded that the
+ * guarantee is enforced by `canonicalizeReferenceMetadata` dropping it. This
+ * source must not be the hole that reintroduces it.
+ */
+async function resolveProjectStyleReferences(
+  projectId: number,
+  selectedIds: number[]
+): Promise<ResolveWorkspaceImagesResult> {
+  const orderedIds: number[] = [];
+  const seen = new Set<number>();
+  for (const raw of selectedIds) {
+    if (!isValidId(raw)) return { ok: false, error: "Invalid reference id." };
+    if (seen.has(raw)) return { ok: false, error: "The same reference was selected twice." };
+    seen.add(raw);
+    orderedIds.push(raw);
+  }
+  if (orderedIds.length === 0) return { ok: true, images: [] };
+
+  const { db } = await import("@/db");
+  const { projectStyleReferenceImages } = await import("@/db/schema");
+  const { inArray } = await import("drizzle-orm");
+
+  const rows = await db
+    .select({
+      id: projectStyleReferenceImages.id,
+      projectId: projectStyleReferenceImages.projectId,
+      imagePath: projectStyleReferenceImages.imagePath,
+      label: projectStyleReferenceImages.label,
+      provenanceNotes: projectStyleReferenceImages.provenanceNotes,
+      whatInterestsMe: projectStyleReferenceImages.whatInterestsMe,
+      whatToAvoid: projectStyleReferenceImages.whatToAvoid,
+      approvedForAnalysis: projectStyleReferenceImages.approvedForAnalysis,
+    })
+    .from(projectStyleReferenceImages)
+    .where(inArray(projectStyleReferenceImages.id, orderedIds));
+
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const images: ResolvedWorkspaceImage[] = [];
+  for (const id of orderedIds) {
+    const row = byId.get(id);
+    if (!row) return { ok: false, error: "One or more selected references were not found." };
+    if (row.projectId !== projectId) {
+      return { ok: false, error: "One or more selected references belong to a different Project." };
+    }
+    if (!row.approvedForAnalysis) {
+      return { ok: false, error: `Reference ${row.id} is not approved for analysis.` };
+    }
+    if (!isConfinedReferenceImagePath(row.imagePath)) {
+      return { ok: false, error: `Reference ${row.id} has a path outside the expected storage root — refusing to use it.` };
+    }
+    images.push({
+      id: row.id,
+      imagePath: row.imagePath,
+      metadata: {
+        label: row.label,
+        provenanceNotes: row.provenanceNotes,
+        whatInterestsMe: row.whatInterestsMe,
+        whatToAvoid: row.whatToAvoid,
+      },
+    });
+  }
+  return { ok: true, images };
+}
+
 export const IMAGE_SOURCE_REGISTRY = {
   "ASSET.REFERENCE_IMAGES": {
     anchor: "asset",
     maxFileBytes: MAX_REFERENCE_IMAGE_SIZE_BYTES,
     isConfined: isConfinedUploadedReferenceImagePath,
     resolve: resolveAssetReferenceImages,
+  },
+  "PROJECT_STYLE.REFERENCES": {
+    anchor: "project",
+    maxFileBytes: MAX_PROJECT_STYLE_IMAGE_SIZE_BYTES,
+    isConfined: isConfinedReferenceImagePath,
+    resolve: resolveProjectStyleReferences,
   },
 } satisfies Record<ImageSourceId, ImageSourceEntry>;
 
