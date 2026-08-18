@@ -1177,11 +1177,12 @@ one word. A reader of this file must be able to count what is left without
 reconstructing it from struck-through rows.
 
 **Order settled by the user 2026-08-18: B8, then E1, then Chantier 2** — and
-revised later the same day, after §5, to B12 → E1 → B13 → B14 → Chantier 2.
+revised later the same day, after §5 and the author's rulings, to
+B12 → E1 → B15 → B16 → B13 → B14 → Chantier 2 → B17/B18/B19.
 
 **Revised 2026-08-18 after the vision's §5 was written** — B8 is dissolved and
 the queue re-derived; see "B8 dissolved" below for the full table and the
-reasoning. Chantier 1 now has four tickets left:
+reasoning. Chantier 1 now has six tickets left:
 
 1. **B12** — text output mode + the narrative jar. All that survives of B8.
 2. **E1** — the template editor, the user's own "saved shopping lists". **The
@@ -1189,8 +1190,14 @@ reasoning. Chantier 1 now has four tickets left:
    eight built-ins into a thing the user authors in. Scoped in
    `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`, and it **must** make
    `intent.freeText` editable — that file's own 2026-08-15 correction.
-3. **B13** — the conformation stage: the engine formatting the app owns.
-4. **B14** — the storyboard prompt brought under the workspace.
+3. **B15** — lighting, the field, at Shot / Sequence / Environment Asset level.
+4. **B16** — lighting, assisted: the vision fill and the director's-note adjust.
+5. **B13** — the conformation stage: the engine formatting the app owns.
+6. **B14** — the storyboard prompt brought under the workspace.
+
+Three more are scheduled **after** Chantier 2 rather than inside it — the media
+reference families (B17), negative constraints (B18) and the camera redesign
+(B19). Reasons per item in "B8 dissolved" below.
 
 Chantier 2, seven tickets plus three independents, all listed below: C0 (the
 prerequisite), C1, C2, C3, C4, C5, C6, then `ThemeModeToggle.tsx`,
@@ -1304,19 +1311,42 @@ Two facts established by reading, recorded here because they are load-bearing:
    information the panel asks the user to restate is already in the database.
    What is missing is the rendering, which §5.4 assigns to the app.
 
-**Order settled 2026-08-18, after §5 was written.** The user delegated the
-sequencing. It is:
+**Order settled 2026-08-18, after §5 was written, and revised the same day once
+the author had ruled on lighting, negative constraints, the camera and the media
+families.** The user delegated the sequencing and asked explicitly which items
+would be better off *after* Chantier 2. Ticket ids are stable labels, not an
+ordering — read the list, not the numbers.
+
+**Chantier 1 — finishing the workspace, in this order:**
 
 | # | Ticket | Why here |
 | --- | --- | --- |
-| **B12** | Text output mode + the narrative jar | All that survives of B8. `output.kind: "text"` in the runner (`RunOperationResult` gains a third variant, breaking the ~14 declared consumers on purpose, B11-b1's pattern), plus the Shot column the generated narrative prompt lands in — §5.3's jar, distinct from `shots.shot_prompt` so a human's text and a model's are never merged again. Bench-only, like UC1 and UC3 were. Needs a schema authorization and a migration the user runs. |
-| **E1** | The template editor — the saved recipes | Unchanged in intent, and now named in the user's own vocabulary ("listes de course sauvegardées", §5.2). Placed after B12 because a recipe that can neither cook text nor fill a jar is a thin thing to author against. Must make `intent.freeText` editable — the 2026-08-15 correction in `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. |
-| **B13** | The conformation stage | §5.4/§5.5: the formatting the app owns. Renders stored reference roles into the engine's named modes, applies the word budget, the one-primary-camera rule and the tag caps. Must be replaceable per engine — nothing may be named after Seedance. |
-| **B14** | The storyboard prompt under the workspace | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
-| — | The missing ingredients | §5.6: lighting, negative constraints, a controlled camera vocabulary. Scheduled when B13 proves which it actually needs — not before, so no field is added on a guess. |
-| — | Video and audio references | §5.6: a whole entity family (`@VideoN`, `@AudioN`, extension chains). Its own chantier, explicitly not part of this one. |
+| 1 | **B12** — text output mode + the narrative jar | All that survives of B8. `output.kind: "text"` in the runner (`RunOperationResult` gains a third variant, breaking the ~14 declared consumers on purpose, B11-b1's pattern), plus the Shot column the generated narrative prompt lands in — §5.3's jar, distinct from `shots.shot_prompt` so a human's text and a model's are never merged again. Bench-only, like UC1 and UC3 were. Needs a schema authorization and a migration the user runs. |
+| 2 | **E1** — the template editor, the saved recipes | Unchanged in intent, and now named in the user's own vocabulary ("listes de course sauvegardées", §5.2). After B12 because a recipe that can neither cook text nor fill a jar is a thin thing to author against. Must make `intent.freeText` editable — the 2026-08-15 correction in `docs/LLM_WORKSPACE_TEMPLATE_EDITOR_SCOPING.md`. |
+| 3 | **B15** — lighting, the field | §5.9. Three levels: Shot, Sequence, and Environment Asset — the last being the point, since a Sequence can then read its environment's lighting instead of inventing one. Manual fill, plus the reuse path. No model involved. |
+| 4 | **B16** — lighting, assisted | §5.9's other two fills: a vision operation describing an image's lighting — **the first workspace operation whose input includes an image**, a real brick, though the transport already exists unused (`ChatMessage.content` image parts, `ChatMessage.images`) — and the director's-note adjustment at Shot and Sequence level, which is `intent.freeText` over the current value and needs no new primitive. |
+| 5 | **B13** — the conformation stage | §5.4/§5.5: the engine formatting the app owns. Renders stored reference roles into the guide's named image modes, applies the word budget, the one-primary-camera rule and the tag caps. Placed after B15/B16 so it has lighting to render. Must be replaceable per engine, nothing named after Seedance — and per §5.6 it **must not hard-code today's camera shape**, since that shape is scheduled to change after Chantier 2. |
+| 6 | **B14** — the storyboard prompt under the workspace | §5.7 opened it: per Shot it carries **only** the Shot Prompt text. Becomes a recipe that cherry-picks ingredients and consumes jars, instead of depending on what the author typed by hand into each Shot. |
 
-Chantier 2 (C0 → C6 and the independents) is unchanged and still follows.
+**Then Chantier 2** — C0 → C6 and the three independents, unchanged.
+
+**After Chantier 2 — decided 2026-08-18, with the reason each item waits:**
+
+- **B17 — the media reference families.** The author's own call: tune
+  `shot_reference_videos` (delivered, never exercised), give it the **role
+  column** it lacks — the guide's video modes are keyed on roles — and add the
+  audio family. He asked for it *après qu'on aura terminé le chantier llm
+  workspace et le clean de code base*.
+- **B18 — negative constraints.** He named it a real gap in his own work and
+  **explicitly not MVP**. Nothing depends on it.
+- **B19 — the camera redesign.** *On devrait designer quelque chose pour
+  améliorer ce qu'on a déjà* — a design job on the existing fields, not the
+  adoption of a foreign vocabulary. It waits because it touches Shot forms and
+  component layout, and C4–C6 are about to move all of that: doing it first
+  means doing it twice.
+- The code-level token-efficiency audit and the roadmap reconciliation, as
+  already scheduled.
+
 
 ---
 

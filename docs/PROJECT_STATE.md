@@ -991,14 +991,38 @@ noted and not repaired: `sequenceVideoGeneration.ts` includes package warnings
 in the text sent to the model, where the storyboard and image paths both pass
 `includeWarnings: false`.
 
-**The queue, re-derived and delegated.** The user delegated the sequencing:
-**B12** (text output mode + the narrative jar, all that survives of B8), then
-**E1** (the template editor — his own "listes de course sauvegardées"), then
-**B13** (the conformation stage the app owns), then **B14** (the storyboard
-prompt brought under the workspace), then Chantier 2 unchanged. The missing
-ingredients wait on B13 to prove which are needed; video and audio references
-are their own chantier. Full table in
-`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3, "B8 dissolved".
+**The author then ruled on each gap, and one correction was needed.** Lighting
+is accepted and he designed it on the spot — a field at Shot, Sequence and
+**Environment Asset** level, the last being the point, since a Sequence can then
+read its environment's lighting instead of inventing one; fillable by hand, by a
+**vision model reading an uploaded or referenced image**, or by a director's note
+that *adjusts* the existing value rather than regenerating it. That vision fill
+is the first workspace operation whose input would include an image; the
+transport already exists and is unused by any field operation
+(`ChatMessage.content` image parts, `ChatMessage.images` for Ollama). Negative
+constraints he named a real gap in his own work and **explicitly not MVP**. The
+camera he framed as a design job on what already exists, not the adoption of the
+guide's vocabulary. All three, plus the media families, are in
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.6 and §5.9.
+
+**The correction:** the first draft of §5.6 said video and audio references had
+no entity at all. `shot_reference_videos` is delivered — upload, ordering,
+label, notes, probed duration and dimensions, file quarantine on cascade. It has
+never been exercised by the author, and it carries **no role column**, which is
+precisely what the guide's video modes are keyed on. Audio genuinely has
+nothing.
+
+**The queue, re-derived and delegated.** The user delegated the sequencing and
+asked which items belonged after the cleanup. Chantier 1: **B12** (text mode +
+the narrative jar), **E1** (the template editor — his own "listes de course
+sauvegardées"), **B15** (the lighting field), **B16** (lighting assisted),
+**B13** (the conformation stage), **B14** (the storyboard prompt under the
+workspace). Then Chantier 2 unchanged. Then **B17** (video roles, tuning, and
+the audio family — his own call to wait), **B18** (negative constraints, not
+MVP), **B19** (the camera redesign, waiting because C4–C6 are about to move the
+Shot forms it would touch, so doing it first means doing it twice). B13 carries
+a constraint from that last one: it must not hard-code today's camera shape.
+Full table in `docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3, "B8 dissolved".
 
 ### What is left, and the reporting error that hid part of it (2026-08-18)
 

@@ -385,18 +385,39 @@ formatting stage of §5.4.
 
 1. **Lighting.** No lighting field exists on any entity — only a `lighting`
    image role. The guide calls lighting the highest-leverage single element.
+   **Accepted 2026-08-18, and designed by the author** — see §5.9.
 2. **Negative constraints.** Nothing holds "avoid jitter / bent limbs / temporal
    flicker / identity drift". The nearest thing is an Asset's
    `forbiddenVariations`, which is per-asset and not per-shot or per-project.
-3. **A controlled camera vocabulary.** `cameraMovement` is free text; the guide
-   requires one primary instruction from eight terms, plus speed keywords.
+   **Acknowledged by the author as a real gap in his own work, and explicitly
+   not MVP** — scheduled after Chantier 2.
+3. **The camera.** `cameraMovement` is free text; the guide requires one primary
+   instruction from a closed vocabulary of eight terms plus speed keywords. The
+   author's framing, 2026-08-18, is not "adopt the guide's vocabulary" but
+   *on a des choses de notre côté pour donner des informations de caméra pour les
+   shots, peut-être on devrait designer quelque chose pour améliorer ce qu'on a
+   déjà* — a design job on the existing fields, not a replacement. Scheduled
+   after Chantier 2, so it is not done inside a component layout C4–C6 is about
+   to dismantle. **The conformation stage (§5.4) must therefore not hard-code
+   today's camera shape.**
 
-**Missing whole families, not gaps.** Video references (`@Video1..3`) and audio
-references (`@Audio1..3`) have no entity at all — so the guide's camera
-replication, motion imitation, rhythm matching and audio modes are unreachable,
-as are video-to-video and the extension/chaining syntax with its continuity
-locks. Roles like `motion`, `rhythm` and `camera` exist in the catalogue but
-only on image tables.
+**Video and audio — corrected 2026-08-18.** An earlier draft of this section
+said both had no entity at all. That is wrong for video: `shot_reference_videos`
+exists and is delivered (upload, ordering, label, notes, probed duration and
+dimensions, file quarantine on cascade), deliberately separate from Shot
+Outputs. Two things are true about it. It has **never been exercised by the
+author**, so everything about it is still to be tuned. And it carries **no role
+column**, unlike the image tables — which is exactly what the guide's video
+modes are keyed on: camera replication, motion imitation, effect replication,
+rhythm matching. `motion`, `rhythm` and `camera` exist in the role catalogue but
+are offered on images only.
+
+Audio has no entity of any kind, so `@AudioN` is genuinely unreachable, as are
+video-to-video and the extension/chaining syntax with its continuity locks.
+
+**Decided 2026-08-18:** the whole media-reference family — tuning video, giving
+it roles, and adding audio — is scheduled **after Chantier 2**, once the LLM
+workspace is finished and the codebase cleanup has run. The author's call.
 
 **Missing output discipline.** Nothing counts words against the 60–100 / 150
 budget, enforces the one-primary-camera rule, or caps tags at the engine's
@@ -447,6 +468,57 @@ Recorded so no future ticket pays to preserve them:
 None of these is to be reproduced by a migration. What survives is the intent
 underneath them: pick ingredients, bind them with a director's note, let the app
 format the result for the engine.
+
+---
+
+### 5.9 Lighting, designed by the author 2026-08-18
+
+Accepted the day §5.6 measured it missing, and designed in the same breath. It
+is written here rather than in a ticket because the interesting part is a
+product shape, not an implementation.
+
+**A field at three levels, and one of them is the point.**
+
+- **Environment Asset** — and this is the level that earns the feature. A
+  Sequence set in an environment can read **that environment's** lighting
+  directly instead of inventing one of its own. The author's own words:
+
+  > à l'environment c est encore plus interessant, car on pourrait comme ca par
+  > exemple dans la sequence X, utiliser direct le field lighting de
+  > l'environment, plutot que de le generer at sequence level
+
+  This is §5.2's jar, one layer up: lighting described once on the environment
+  becomes an ingredient every Sequence and Shot using it can consume.
+- **Sequence** — its own lighting, when the environment's is not the answer.
+- **Shot** — the same, at the finest grain.
+
+**Three ways to fill it, in increasing order of assistance.**
+
+1. **By hand.** Always available, always the fallback.
+2. **From an image, by a vision model.** Feed an uploaded image, or a reference
+   image of a cast Asset, and ask the model to describe that image's lighting.
+   This is a **new brick for the workspace**: the first operation whose input
+   includes an image rather than only resolved text variables. The transport
+   already exists and is unused by any field operation — `ChatMessage.content`
+   accepts OpenAI-style `image_url` parts, and `ChatMessage.images` carries
+   Ollama vision. What is missing is the descriptor's ability to declare an
+   image input at all.
+3. **By director's note, at Shot and Sequence level.** Not a regeneration — an
+   *adjustment of what is already there*:
+
+   > ok tu utilise le field lighting actuel, mais j'aimerai que tu l'ajust pour
+   > prendre en compte le fait qu au debut le personnage est dans l'ombre au
+   > debut, alors qu a la fin il est eclairé par les ecran
+
+   Mechanically this is `intent.freeText` (delivered by B9a) over an operation
+   that reads the current lighting value as one of its variables — the same
+   shape as UC2's directed retake, applied to one field. No new primitive.
+
+**Why this is not merely another field.** It is the first ingredient in the
+product that can be *derived from an image*, and the first whose natural source
+is another entity's field rather than the user's keyboard. Both are library
+growth in the sense of §11.3's governing rule, and both are worth more than the
+lighting text itself.
 
 ---
 
