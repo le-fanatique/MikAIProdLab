@@ -21,6 +21,8 @@ import StatusBadge from "@/components/StatusBadge";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
 import PublishBasicSequenceResultButton from "@/components/PublishBasicSequenceResultButton";
 import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
+import InsertShotDirectedButton from "@/components/InsertShotDirectedButton";
+import { shotInsertDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/shotInsertDirected";
 import Collapsible from "@/components/Collapsible";
 import SequenceContextInlineEditor from "@/components/SequenceContextInlineEditor";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
@@ -214,6 +216,21 @@ export default async function SequencePage({ params, searchParams }: Props) {
 
   const rawDeleteShotError = resolvedSearchParams["deleteShotError"];
   const deleteShotError = typeof rawDeleteShotError === "string" ? rawDeleteShotError : Array.isArray(rawDeleteShotError) ? rawDeleteShotError[0] : null;
+
+  // LLMW.UC1.SURFACE.1 (S6) — `createShotAtPosition`'s own redirect
+  // contract (`shotInsertion.ts`), read the same way `shotsCreated` /
+  // `shotsCreateError` already are above.
+  const rawShotInserted = resolvedSearchParams["shotInserted"];
+  const shotInserted = rawShotInserted === "1" || (Array.isArray(rawShotInserted) && rawShotInserted[0] === "1");
+
+  const rawShotInsertError = resolvedSearchParams["shotInsertError"];
+  const shotInsertError =
+    typeof rawShotInsertError === "string" ? rawShotInsertError : Array.isArray(rawShotInsertError) ? rawShotInsertError[0] : null;
+
+  // Resolved server-side and passed down as plain data — `InsertShotDirectedButton`
+  // never imports the descriptor itself (same discipline `BenchRunPanel`
+  // already follows for its own `output` prop).
+  const shotInsertFields = shotInsertDirectedDescriptor.output.kind === "object" ? shotInsertDirectedDescriptor.output.fields : [];
 
   const llmSettings = await getLLMSettings();
 
@@ -662,6 +679,17 @@ npx -y pnpm@11.7.0 dev`}
         </div>
       )}
 
+      {shotInserted && (
+        <div className="mb-4 rounded border border-[#6b9e72]/40 bg-[#6b9e72]/10 px-4 py-2 text-sm text-[#6b9e72]">
+          Shot inserted.
+        </div>
+      )}
+      {shotInsertError && (
+        <div className="mb-4 rounded border border-[#cf7b6b]/40 bg-[#cf7b6b]/10 px-4 py-2 text-sm text-[#cf7b6b]">
+          {shotInsertError}
+        </div>
+      )}
+
       {shotList.length === 0 ? (
         <EmptyState
           title="No shots yet."
@@ -753,12 +781,21 @@ npx -y pnpm@11.7.0 dev`}
                     </tr>
                     <tr className="border-b border-[#1a1d20] last:border-0 bg-[#2c3035]">
                       <td colSpan={6} className="px-4 py-1.5">
-                        <InsertShotFromEditorialButton
-                          projectId={pid}
-                          sequenceId={sid}
-                          insertAfterShotId={shot.id}
-                          label="Insert Shot Here"
-                        />
+                        <div className="flex flex-wrap items-center gap-4">
+                          <InsertShotFromEditorialButton
+                            projectId={pid}
+                            sequenceId={sid}
+                            insertAfterShotId={shot.id}
+                            label="Insert Shot Here"
+                          />
+                          <InsertShotDirectedButton
+                            projectId={pid}
+                            sequenceId={sid}
+                            afterShotId={shot.id}
+                            returnTo={sequenceReturnTo}
+                            fields={shotInsertFields}
+                          />
+                        </div>
                       </td>
                     </tr>
                   </Fragment>
@@ -766,12 +803,21 @@ npx -y pnpm@11.7.0 dev`}
               })}
               <tr className="last:border-0 bg-[#2c3035]">
                 <td colSpan={6} className="px-4 py-1.5">
-                  <InsertShotFromEditorialButton
-                    projectId={pid}
-                    sequenceId={sid}
-                    insertAfterShotId={shotList[shotList.length - 1].id}
-                    label="Insert New Shot"
-                  />
+                  <div className="flex flex-wrap items-center gap-4">
+                    <InsertShotFromEditorialButton
+                      projectId={pid}
+                      sequenceId={sid}
+                      insertAfterShotId={shotList[shotList.length - 1].id}
+                      label="Insert New Shot"
+                    />
+                    <InsertShotDirectedButton
+                      projectId={pid}
+                      sequenceId={sid}
+                      afterShotId={shotList[shotList.length - 1].id}
+                      returnTo={sequenceReturnTo}
+                      fields={shotInsertFields}
+                    />
+                  </div>
                 </td>
               </tr>
             </tbody>
