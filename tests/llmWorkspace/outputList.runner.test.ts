@@ -587,8 +587,17 @@ describe("equality — assetExtraction.ts (generateAssetCandidatesDraft) vs. the
 
     mockedLLM().mockResolvedValueOnce(JSON.stringify({ assets: rawAssets }));
     const { generateAssetCandidatesDraft } = await import("@/actions/llm/assetExtraction");
+    // `includeOther` is requested alongside `includeCharacters` since
+    // LLMW.ASSETS.TYPEFILTER.1 (S2): the third candidate's unrecognised
+    // "spaceship" normalizes to the `"other"` enum default, and the real
+    // action now drops a candidate whose type was not requested. This test
+    // exists to prove *field parsing* — enum defaults and dual-key
+    // fallbacks — against a synthetic descriptor that declares no
+    // postResponse, so both types are requested to keep the two sides
+    // comparable. S2's own filtering is proven in
+    // `assetsFromProject.postResponse.test.ts`, not weakened here.
     const actionResult = await generateAssetCandidatesDraft(
-      form({ projectId: String(projectId), includeCharacters: "true" })
+      form({ projectId: String(projectId), includeCharacters: "true", includeOther: "true" })
     );
     expect(actionResult.ok).toBe(true);
     if (!actionResult.ok) throw new Error("unreachable");

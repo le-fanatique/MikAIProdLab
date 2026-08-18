@@ -2596,7 +2596,36 @@ export function renderSequencesFromOutlinePinTitlesToSections(
   });
 }
 
+// ---------------------------------------------------------------------------
+// `assetsFromProject.filterByType` — the `postResponse` form for
+// LLMW.ASSETS.TYPEFILTER.1 (S2). Unlike every other `postResponse` form in
+// this table, this one does not reproduce its oracle: `generateAssetCandidatesDraft`
+// / `parseAssetsResult` never filtered on `assetType` at all (`9fdda6a`'s
+// bench run is the observable proof). This is the deliberate divergence the
+// user decided on 2026-08-17 (`docs/ARCHITECTURE_DECISIONS.md`, "Four
+// Arbitrations Taken 2026-08-17", point 2), made expressible only now that
+// the pipeline has a post-response stage (LLMW.POSTRESPONSE.1, B7c-n3) — see
+// `assetsFromProjectDescriptor.postResponse`'s own header note for the full
+// account.
+//
+// `assetTypes` is the normalized `"multiEnum"` parameter — always an array
+// once normalized (the descriptor declares a `default`), never `undefined`.
+// A candidate's `assetType` is one of the six `ASSET_TYPE_VALUES`
+// (`assetsFromProject.ts`), including `"other"` — the `item.validity`
+// fallback `readEnumField` (`runner.ts`) always substitutes when the model's
+// own value is not one of the six, so an item that reaches this form already
+// carries a valid member, never the model's raw string. `"other"` receives no
+// special treatment here: like every other member, it survives only when the
+// caller's `assetTypes` requested it.
+// ---------------------------------------------------------------------------
+
+export function renderAssetsFromProjectFilterByType(input: PostResponseFormInput): Array<Record<string, string | number | boolean>> {
+  const assetTypes = input.parameters.assetTypes as string[];
+  return input.items.filter((item) => assetTypes.includes(item.assetType as string));
+}
+
 export const POST_RESPONSE_FORMS = {
   "sequencesFromOutline.pinTitlesToSections": renderSequencesFromOutlinePinTitlesToSections,
   "castingFromSequence.filterAndEnrich": renderCastingFromSequenceFilterAndEnrich,
+  "assetsFromProject.filterByType": renderAssetsFromProjectFilterByType,
 } as const satisfies Record<string, (input: PostResponseFormInput) => Array<Record<string, string | number | boolean>>>;

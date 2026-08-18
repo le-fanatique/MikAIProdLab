@@ -204,9 +204,26 @@ export const assetsFromProjectDescriptor: OperationDescriptor = {
     },
   },
 
-  // No `postResponse`: this operation has none — `parseAssetsResult` only
-  // parses the model's JSON, it never transforms the result afterward
-  // (unlike `sequences.fromOutline`'s deterministic title/summary pin).
+  // LLMW.ASSETS.TYPEFILTER.1 (S2). Not a reproduction of the oracle: a
+  // deliberate behaviour change, decided by the user on 2026-08-17
+  // (`docs/ARCHITECTURE_DECISIONS.md`, "Four Arbitrations Taken 2026-08-17",
+  // point 2), made possible only now that the pipeline has a post-response
+  // stage at all (LLMW.POSTRESPONSE.1, B7c-n3). `generateAssetCandidatesDraft`
+  // asks the model for the checked types, but the model sometimes answers
+  // with another — its own output schema lists all six, and a bench run
+  // requesting three types once returned a `vehicle` (`9fdda6a`). The prompt
+  // builder said the same thing before this migration, byte for byte: that
+  // observable slippage is preexisting, not introduced here. What changes is
+  // the decision to stop tolerating it: a candidate whose `assetType` was not
+  // among the requested `assetTypes` is now dropped, in the one stage able to
+  // look at the parsed answer after the fact. See
+  // `renderAssetsFromProjectFilterByType` (`variables/registry.ts`) for the
+  // filter itself.
+  postResponse: {
+    form: "assetsFromProject.filterByType",
+    variables: [],
+    parameters: ["assetTypes"],
+  },
 
   // `createSelectedAssets` (`src/actions/llm/assetExtraction.ts:198-259`) is
   // already declared in `ACTION_REGISTRY` as an `"insert"` entry

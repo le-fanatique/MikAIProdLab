@@ -30,6 +30,15 @@ import { insertProject, insertSequence } from "../actions/helpers/fixtures";
 // empty-`assetTypes` guard are proven at the adapter level — the runner-level
 // proof for both already exists in `assetsFromProject.runner.test.ts`; this
 // file proves the *adapter* reproduces them, not the runner in isolation.
+//
+// LLMW.ASSETS.TYPEFILTER.1 (S2, 2026-08-17) narrows "indiscernible" above:
+// the migrated chain now drops a candidate whose `assetType` was not among
+// the requested `assetTypes` (`assetsFromProject.filterByType`,
+// `variables/registry.ts`), which the pre-migration chain never did. That is
+// a deliberate, user-decided divergence (`docs/ARCHITECTURE_DECISIONS.md`,
+// "Four Arbitrations Taken 2026-08-17", point 2), not a defect in either
+// chain — see the "form-to-intent conversion" case below, the one place in
+// this file that exercises it.
 // ---------------------------------------------------------------------------
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -212,7 +221,26 @@ describe("generateAssetCandidatesDraft — old/new equality (LLMW.MIGRATE.LIST.3
 describe("generateAssetCandidatesDraft — the form-to-intent conversion (LLMW.MIGRATE.LIST.3, B7f-m)", () => {
   it("only includeVehicles and includeCharacters checked -> assetTypes: ['character', 'vehicle'], in that order (not the checkbox order)", async () => {
     callLLMJson.mockClear();
-    callLLMJson.mockResolvedValueOnce(JSON.stringify({ assets: [{ name: "Getaway Bike", assetType: "vehicle" }] }));
+    // "Neon Alley" carries a type ("prop") that was not requested (only
+    // "vehicle" and "character" are checked below). Before LLMW.ASSETS.TYPEFILTER.1
+    // (S2, 2026-08-17), the pre-migration chain never filtered on `assetType`
+    // at all, so this item would have survived unchanged — this test's own
+    // proof of indiscernibility, prior to this ticket, covered exactly this
+    // shape. The user decided on 2026-08-17 to stop tolerating that slippage
+    // (`docs/ARCHITECTURE_DECISIONS.md`, "Four Arbitrations Taken
+    // 2026-08-17", point 2): a candidate whose type was not requested is now
+    // dropped by the migrated chain's `postResponse` filter
+    // (`assetsFromProject.filterByType`, `variables/registry.ts`) — a
+    // deliberate, dated divergence from the pre-migration oracle, not a
+    // defect either chain has.
+    callLLMJson.mockResolvedValueOnce(
+      JSON.stringify({
+        assets: [
+          { name: "Getaway Bike", assetType: "vehicle" },
+          { name: "Neon Alley", assetType: "prop" },
+        ],
+      })
+    );
 
     const result = await generateAssetCandidatesDraft(
       form({ projectId: String(projectId), includeVehicles: "true", includeCharacters: "true" })
@@ -223,9 +251,14 @@ describe("generateAssetCandidatesDraft — the form-to-intent conversion (LLMW.M
     // only thing that can be observed — via the rendered prompt, which joins
     // `assetTypes` as-is (`assets-from-project.ts:52`).
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
     expect(callLLMJson).toHaveBeenCalledTimes(1);
     const [prompt] = callLLMJson.mock.calls[0] as [{ system: string; user: string }, unknown];
     expect(prompt.system).toContain("Asset types to extract: character, vehicle");
+    // The deliberate divergence itself: "Neon Alley" (type "prop", not
+    // requested) is dropped; "Getaway Bike" (type "vehicle", requested)
+    // survives.
+    expect(result.assets.map((a) => a.name)).toEqual(["Getaway Bike"]);
   });
 });
 
