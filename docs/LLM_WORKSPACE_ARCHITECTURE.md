@@ -1599,6 +1599,53 @@ after. If they cannot be written — the action is `server-only`, transaction-
 bound and provider-bound — that is itself the finding, and B20e should not
 start.
 
+### B20e re-measured, 2026-08-19 — the format gaps were not the hard part
+
+B20a (`ae174d4`), B20b (`77d020d`) and B20c (`9ba1bb5`) closed all three format
+gaps §5.9 named, and B20d (`ad38206`) put a mutation-proven net under the three
+properties that must survive. B20e was then scoped as "the migration itself".
+
+**Reading the action's orchestration says it is not one ticket, and not for a
+format reason.** What `runReferenceAnalysisAction` does around the model call:
+
+| It does | The workspace's vocabulary for it |
+| --- | --- |
+| a confirmation handshake — the user re-confirms provider/model by fingerprint before any read, write or call | none |
+| idempotency keyed on `(projectId, requestKey)`, replaying a prior run | none |
+| a **two-phase transaction**: acquire (run row + run-reference rows), then finalize | none |
+| writes **four tables** in the finalize transaction — observations, candidate rules, candidate-rule-references, and the run | `commit: ActionId[]` is one action taking flat `values` |
+| re-verifies provenance and per-reference drift **inside** the committing transaction | none |
+
+`runOperation` resolves, calls and parses. `proposalCommit` applies one declared
+action. Neither has a run row, a transaction, an idempotency key, or a
+pre-commit revalidation step, and none of those is a format gap — they are
+orchestration the workspace has never needed before.
+
+**And one specific trap.** The provenance hash is `sha256Hex(promptText)` over
+the text `buildReferenceAnalysisPrompt` produces. Routing that prompt through
+the workspace's block assembler produces *different text*, therefore a different
+hash, therefore a different stored provenance for every run — a change to a
+security-relevant persisted value, in exchange for nothing the user asked for.
+
+So B20e is **not scoped as a ticket here**. The honest options are:
+
+1. **A partial migration** — the descriptor expresses the prompt and the parse,
+   the action keeps its orchestration. Cheap, but it changes the prompt text and
+   therefore the provenance hash, which is the one thing §5.9 says must survive
+   untouched. Poor trade.
+2. **Build the missing orchestration bricks** — a transactional multi-table
+   commit with pre-commit revalidation, plus a confirmation handshake and an
+   idempotency key. That is library growth under §11.3's governing rule, and it
+   is a chantier rather than a ticket.
+3. **Leave the action as a deliberate exception**, like chat, image generation
+   and field translation — reversing the author's 2026-08-18 ruling that it is
+   a brick to build. His ruling stands unless he changes it.
+
+**What is not in doubt:** the four delivered tickets are worth having on their
+own. The composite output, referential validity and the second image source are
+general bricks, and the characterization net protects the action whether or not
+it ever migrates.
+
 **Then Chantier 2** — C0 → C6 and the three independents, unchanged.
 
 **After Chantier 2 — decided 2026-08-18, with the reason each item waits:**
