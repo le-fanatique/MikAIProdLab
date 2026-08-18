@@ -919,6 +919,51 @@ and asset sourcing metadata, the asset-type filter becomes real, the bench gains
 boolean and multi-choice controls, and the two untracked `.agents/` files stay
 untracked on purpose.
 
+### B15a — lighting, and a relation that already existed (2026-08-18)
+
+Commit `f163da6`, migration `0054_modern_wasp` (three additive nullable columns,
+applied by the user). §5.9's field at three levels — Shot, Sequence, Environment
+Asset — with the write actions and the reads. No surface, no model call: B15b
+brings the forms, B16 the assistance.
+
+**The reason the migration is three columns and not four.** Scoping asked how a
+Sequence knows its environment, and the answer was already in the schema:
+`sequence_assets` links a Sequence to its assets, and `assets.type` already
+carries `"environment"`. Nothing to model, only to traverse. Worth remembering
+as a habit — the question "what relation do we need" should first be asked as
+"what relation do we have".
+
+**The user's decision, 2026-08-18.** Asked whether a Sequence *uses* its
+environment's lighting by reading it at prompt time or by copying it into its own
+field, he chose **both**, with a precedence rule: the Sequence's own field wins
+when filled, otherwise the variable reads the environment. B15a delivers the
+variable and the rule; the copy button is a surface, so B15b.
+
+`SEQ.LIGHTING` implements it: own field when non-blank **after `trim()`** — so
+`"   "` does not beat the environment — otherwise the `type: "environment"`
+assets of its cast ordered by name, **all of them**, otherwise nothing. No
+election rule was invented; several environments return several entries, the way
+`SHOT.CAST` returns several cast members. A "first one wins" would have been a
+product decision nobody took.
+
+**The resolver reports its source** (`"own"` / `"environment"` / `"none"`). This
+is the half of the ticket that mattered: a lighting value displayed without its
+provenance is undebuggable, since nothing distinguishes an inherited value from a
+typed one. Any later field that can be inherited should carry the same.
+
+**Accepted deliberately, so it is not "fixed" later:** `source: "environment"`
+can return entries whose own `lighting` is `null` — an environment nobody has
+described yet. Collapsing that to `"none"` would lose information, since
+`"none"` means "no environment at all"; the entries carry the environment names,
+so the gap is visible rather than silent.
+
+One touch outside the ticket's file list, mechanically forced and reported rather
+than slipped in: `bench.ts`'s switch over `returnValue` actions must stay
+exhaustive, so the new asset action required a branch there — answered with a
+named refusal.
+
+**UC impact: none.** Library growth, §11.3's governing rule.
+
 ### E1b — the editor screen, and the boundary only the build can see (2026-08-18)
 
 Commit `638832f`. E1 is complete: authoring a workflow no longer means leaving
