@@ -44,6 +44,23 @@ import {
 // not exist on disk — `validateInputImage`'s `fs.stat` rejects it before any
 // subprocess is ever spawned, so this exercises real production code and
 // stays 100% deterministic across machines.
+//
+// ---------------------------------------------------------------------------
+// The `CHARACTERIZATION:` tests below are NOT specifications. Each records a
+// behaviour that surprised the reader, kept because IND.STORYBOARD.1 promised
+// no behaviour change:
+//
+//   - decimal coordinates are silently truncated by a plain `parseInt`;
+//   - `skipExtractionRegion` never clears `targetShotId`, unlike its
+//     counterpart in `sequenceVideoSplit`;
+//   - the `status !== "ready"` guard is on `addExtractionRegion` alone —
+//     `skip`, `delete` and `resize` all lack it.
+//
+// **The author was shown all three on 2026-08-19 and ruled: leave them.**
+// ("ca marche pour l'instant"). So a future ticket meeting one of these must
+// not treat it as a bug to fix on sight — it is accepted behaviour until he
+// says otherwise. Changing any of them means changing these tests, which is
+// the point: it cannot happen quietly.
 // ---------------------------------------------------------------------------
 
 const { mockRunDetect, mockRunCrop } = vi.hoisted(() => ({
