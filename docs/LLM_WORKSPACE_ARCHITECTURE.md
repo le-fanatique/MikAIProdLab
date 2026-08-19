@@ -1497,6 +1497,46 @@ generation path long ago. Prising them out is an untangling ticket that touches
 `src/lib/comfy/`, not part of this removal, and it should be scoped on its own
 terms rather than smuggled into a deletion.
 
+#### The unification, scoped 2026-08-19 after the beta
+
+Measured on the nine panels and the fifteen actions. **What each panel
+hand-codes, its descriptor already declares:**
+
+| The panel hard-codes | The descriptor already declares |
+| --- | --- |
+| which action to call | the descriptor id itself |
+| a free-text box, a parameter input | `intent.freeText`, `intent.parameters` |
+| how to shape the draft | `output` (`object` / `list` / `text` / `composite`) |
+| whether Approve returns a value or redirects | `commit: ActionId[]` → `ACTION_REGISTRY[...].response` |
+| what to do on Approve | `commit` + `ACTION_BINDINGS` |
+
+Nothing in that column is a judgement call: it is all declared and already read
+by `runBenchOperation`, which runs **all nineteen descriptors** through one
+action and one panel today. Generalising it is not a design, it is a promotion.
+
+**Split along what can be proven**, which is the same line every ticket this
+session has followed:
+
+- **the generic server action is provable.** It is server-side, node-testable,
+  and `runBenchOperation` is the working prototype. Its tests look exactly like
+  `narrativePromptCompose.surface.test.ts`;
+- **the generic panel is not.** No DOM harness (the author's standing decision,
+  re-confirmed by a beta that surfaced no interface bug), so `tsc` plus review
+  is all there is.
+
+**Therefore the order, and it is incremental rather than a big-bang:**
+
+1. add the generic action **beside** the fifteen, with its own tests;
+2. migrate **one panel at a time** onto it, deleting that panel's action in the
+   same commit. Nine small, reversible steps instead of one rewrite of every
+   assist surface;
+3. once every panel is migrated, collapse the nine into the generic panel — by
+   then the risky half is already done and proven.
+
+The point of the order is that at no moment is more than one surface in flight.
+The author validated these nine surfaces in his beta; they should not all move
+at once.
+
 **But it rewires nine production surfaces**, which is a poor thing to do
 immediately before the author's from-scratch beta. Recommended order:
 
