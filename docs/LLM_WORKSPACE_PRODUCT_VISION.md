@@ -460,6 +460,30 @@ instruction, so that any change in generated output after B14 cannot be
 confused with it. Warning *detection* is untouched; only the rendering into
 that one text form is skipped.
 
+### 5.7b The beta ruled, 2026-08-19
+
+The author ran his from-scratch beta and reported himself *plutôt content du
+résultat*. Two things it settled, both of which had been deliberately left open
+until it happened:
+
+1. **The guide composition is better, and becomes the default.** B14b had
+   shipped it opt-in with the legacy body as the default, at his request, so he
+   could compare on a real shot before committing. He exercised it and judged
+   it. The default flipped in `LLMW.STORYBOARD.DEFAULT.1`; the legacy body is
+   untouched and still reachable by asking for `legacy` explicitly, and its
+   byte-identical snapshots still guard it.
+2. **No interface bugs surfaced.** So the standing decision against adding a
+   DOM test harness (jsdom, testing-library) holds: 133 components remain
+   untested, and none of them misbehaved in real use. The method stays
+   "extract the pure logic and test that in node", which is what
+   `IND.THEME.1` and `IND.EDITORIAL.1` did.
+
+The trigger for revisiting the harness is unchanged and still stands: a ticket
+that needs to **rewrite** a stateful flow rather than move it.
+
+This also unblocks the Prompt Compiler's removal, which was held back for
+exactly one reason — its replacement had not been judged.
+
 ### 5.8 What this section makes obsolete
 
 Recorded so no future ticket pays to preserve them:

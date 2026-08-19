@@ -343,11 +343,15 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
 
   // LLMW.STORYBOARD.COMPOSE.2 (B14b) — read server-side from the same
   // `searchParams` every other control on this page already reads, never a
-  // client-built object (B16b's discipline). Anything but the literal
-  // `"guide"` (including absent) keeps the legacy composition, which is the
-  // ticket's own non-negotiable default.
-  const storyboardCompositionParam = currentSearchParams["storyboardComposition"] ?? "legacy";
-  const useGuideComposition = storyboardCompositionParam === "guide";
+  // client-built object (B16b's discipline).
+  //
+  // LLMW.STORYBOARD.DEFAULT.1 — **the guide composition is the default**, and
+  // only the literal `"legacy"` opts out. B14b shipped the reverse so the
+  // author could compare before committing; he ran his beta on 2026-08-19,
+  // exercised it and found it better, so the default flipped. The legacy path
+  // is untouched and still reachable.
+  const storyboardCompositionParam = currentSearchParams["storyboardComposition"] ?? "guide";
+  const useGuideComposition = storyboardCompositionParam !== "legacy";
 
   const storyboardRefsParam = currentSearchParams["storyboardRefs"] ?? "";
   const storyboardSelectedRefIds = storyboardRefsParam
@@ -698,7 +702,8 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   // "Update Preview" GET form and the Generate redirect's returnTo.
   const storyboardPreserveParamsEntries: [string, string][] = [];
   if (storyboardRefsParam) storyboardPreserveParamsEntries.push(["storyboardRefs", storyboardRefsParam]);
-  if (useGuideComposition) storyboardPreserveParamsEntries.push(["storyboardComposition", "guide"]);
+  // Only the non-default choice needs carrying through a round trip.
+  if (!useGuideComposition) storyboardPreserveParamsEntries.push(["storyboardComposition", "legacy"]);
   const storyboardPreserveParams: Record<string, string> | undefined =
     storyboardPreserveParamsEntries.length > 0 ? Object.fromEntries(storyboardPreserveParamsEntries) : undefined;
 

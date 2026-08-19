@@ -26,8 +26,12 @@ type Props = {
 };
 
 const OPTIONS = [
-  { value: "legacy", label: "Legacy — Shot Prompt only (default)" },
-  { value: "guide", label: "Guide composition — subject, action, environment, camera, style, constraints" },
+  // LLMW.STORYBOARD.DEFAULT.1 — the guide composition became the default on
+  // 2026-08-19, after the author exercised it in his from-scratch beta and
+  // found it better. It leads the list and carries the "(default)" marker;
+  // the legacy body stays offered, since nothing about it changed.
+  { value: "guide", label: "Guide composition — subject, action, environment, camera, style, constraints, lighting (default)" },
+  { value: "legacy", label: "Legacy — Shot Prompt only" },
 ];
 
 export default function StoryboardCompositionChoice({ basePath, currentSearchParams, currentValue }: Props) {

@@ -81,8 +81,21 @@ import {
 // applied to `imageIds` (`parseSelectedImageIdsFromSearchParams`).
 // ---------------------------------------------------------------------------
 
+/**
+ * LLMW.STORYBOARD.DEFAULT.1 — **the guide composition is now the default**,
+ * and the legacy one is reached only by asking for it explicitly.
+ *
+ * B14b shipped the reverse (`value === "guide"`), deliberately: the author had
+ * not yet judged the new composition and wanted to compare on a real shot
+ * before switching. He ran his from-scratch beta on 2026-08-19, exercised it,
+ * and found it better — so the default flips.
+ *
+ * Only the literal `"legacy"` opts out. The legacy path itself is untouched
+ * and still reachable, and `formatSequenceGenerationPackageText`'s own option
+ * is unchanged — which is why its byte-identical snapshots still prove it.
+ */
 function isGuideComposition(value: string | null | undefined): boolean {
-  return value === "guide";
+  return value !== "legacy";
 }
 
 /**
