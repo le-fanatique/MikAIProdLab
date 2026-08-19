@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import {
-  generateCastingSuggestionsDraft,
   applySelectedCastingSuggestions,
 } from "@/actions/llm/castingSuggestions";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import type { GeneratedCastingSuggestion } from "@/types/llm";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
@@ -39,6 +39,26 @@ type Props = {
   isConfigured: boolean;
 };
 
+/**
+ * Presentation only — the shaping the deleted adapter did, moved here because a
+ * client component may not import descriptor internals. `reason` alone is
+ * filled back from `""` to `null`, exactly as before.
+ */
+function toSuggestion(item: Record<string, string | number | boolean>): GeneratedCastingSuggestion {
+  const reason = item.reason;
+  return {
+    targetType: item.targetType as GeneratedCastingSuggestion["targetType"],
+    targetId: item.targetId as number,
+    targetLabel: item.targetLabel as string,
+    assetId: item.assetId as number,
+    assetName: item.assetName as string,
+    assetType: item.assetType as GeneratedCastingSuggestion["assetType"],
+    reason: typeof reason === "string" && reason !== "" ? reason : null,
+    confidence: item.confidence as GeneratedCastingSuggestion["confidence"],
+    alreadyAssigned: item.alreadyAssigned === true,
+  };
+}
+
 export default function CastingSuggestionsPanel({
   projectId,
   sequenceId,
@@ -53,22 +73,25 @@ export default function CastingSuggestionsPanel({
 
   async function handleGenerate() {
     setState({ status: "loading" });
-    const fd = new FormData();
-    fd.set("projectId", String(projectId));
-    fd.set("sequenceId", String(sequenceId));
-    fd.set("includeSequenceLevel", String(includeSequenceLevel));
-    const result = await generateCastingSuggestionsDraft(fd);
-    if (result.ok) {
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId, sequenceId },
+      intent: { parameters: { includeSequenceLevel } },
+    });
+    if (result.ok && result.kind === "list") {
+      // LLMW.UNIFY.PANEL.4 — items already carry the model's own keys, and
+      // `alreadyAssigned` (attached by the descriptor's `postResponse` stage,
+      // not declared as an item field) survives the translation since
+      // LLMW.UNIFY.LIST.1's fix. Only presentation happens here.
+      const suggestions = result.items.map(toSuggestion);
       // Select all by default except alreadyAssigned
       const defaultSelected = new Set(
-        result.suggestions
-          .map((_, i) => i)
-          .filter((i) => !result.suggestions[i].alreadyAssigned)
+        suggestions.map((_, i) => i).filter((i) => !suggestions[i].alreadyAssigned)
       );
-      setState({ status: "success", suggestions: result.suggestions });
+      setState({ status: "success", suggestions });
       setSelected(defaultSelected);
     } else {
-      setState({ status: "error", message: result.error });
+      setState({ status: "error", message: result.ok ? "Unexpected result shape." : result.error });
     }
   }
 

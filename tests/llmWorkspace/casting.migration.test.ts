@@ -23,12 +23,12 @@ const callLLMJson = vi.fn<(prompt: unknown, config: unknown) => Promise<string>>
 vi.mock("@/lib/llm", () => ({ callLLMJson: (...args: [unknown, unknown]) => callLLMJson(...args) }));
 
 let ctx: TempDb;
-let generateCastingSuggestionsDraft: typeof import("@/actions/llm/castingSuggestions").generateCastingSuggestionsDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 
 beforeAll(async () => {
   ctx = await setupTempDb();
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
-  ({ generateCastingSuggestionsDraft } = await import("@/actions/llm/castingSuggestions"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
 });
 
 afterAll(() => ctx.cleanup());
@@ -169,7 +169,10 @@ describe("generateCastingSuggestionsDraft — old/new equality on every field-le
         assetId: f.assetBId,
         assetName: "Van",
         assetType: "vehicle",
-        reason: null, // absent -> str(undefined) -> null (old) / "" -> null fill-back (new)
+        // LLMW.UNIFY.PANEL.4 — RAW shape now: the `"" -> null` fill-back moved
+        // into the panel with the rest of the presentation, so it is no longer
+        // proven here. Stated rather than quietly dropped.
+        reason: "",
         confidence: "medium",
         alreadyAssigned: false,
       },
@@ -189,15 +192,17 @@ describe("generateCastingSuggestionsDraft — old/new equality on every field-le
     ];
 
     callLLMJson.mockResolvedValueOnce(rawModelResponse);
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId) })
-    );
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId: f.projectId, sequenceId: f.sequenceId },
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     // Deep equality on the whole array — not field by field — so an extra
     // or missing key fails the test too.
-    expect(result.suggestions).toEqual(expectedSuggestions);
+    if (!result.ok || result.kind !== "list") throw new Error("expected a list result");
+    expect(result.items).toEqual(expectedSuggestions);
   });
 
   // Isolated from the array above on purpose: mixing an unrecognised
@@ -241,23 +246,26 @@ describe("generateCastingSuggestionsDraft — old/new equality on every field-le
     }));
 
     callLLMJson.mockResolvedValueOnce(JSON.stringify({ suggestions: rawItems }));
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId) })
-    );
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId: f.projectId, sequenceId: f.sequenceId },
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
-    expect(result.suggestions).toEqual(expectedSuggestions);
-    expect(result.suggestions.length).toBe(60);
+    if (result.kind !== "list") throw new Error("expected a list result");
+    expect(result.items).toEqual(expectedSuggestions);
+    expect(result.items.length).toBe(60);
   });
 
   it("reproduces the exact 'unparsable' message on a non-JSON model response", async () => {
     const f = await makeFixture();
     callLLMJson.mockResolvedValueOnce("not json at all");
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId) })
-    );
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId: f.projectId, sequenceId: f.sequenceId },
+    });
     expect(result).toEqual({
       ok: false,
       error: "The model returned an unexpected format. Try again.",
@@ -268,9 +276,10 @@ describe("generateCastingSuggestionsDraft — old/new equality on every field-le
     const f = await makeFixture();
     callLLMJson.mockResolvedValueOnce(JSON.stringify({ nope: [] }));
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId) })
-    );
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId: f.projectId, sequenceId: f.sequenceId },
+    });
     expect(result).toEqual({
       ok: false,
       error: "The model did not return a suggestions array. Try again.",
@@ -281,9 +290,10 @@ describe("generateCastingSuggestionsDraft — old/new equality on every field-le
     const f = await makeFixture();
     callLLMJson.mockResolvedValueOnce(JSON.stringify({ suggestions: [{ targetType: "" }] }));
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId) })
-    );
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId: f.projectId, sequenceId: f.sequenceId },
+    });
     expect(result).toEqual({
       ok: false,
       error: "The model returned no valid suggestions. Try again.",
@@ -316,11 +326,9 @@ describe("generateCastingSuggestionsDraft — old/new equality on every field-le
       })
     );
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId), includeSequenceLevel: "true" })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: f.projectId, sequenceId: f.sequenceId }, intent: { parameters: { includeSequenceLevel: true } } });
 
-    expect(result).toEqual({ ok: true, suggestions: [] });
+    expect(result).toEqual({ ok: true, kind: "list", items: [] });
   });
 });
 
@@ -331,9 +339,7 @@ describe("generateCastingSuggestionsDraft — the two preconditions, verbatim, w
     await insertAsset(ctx, projectId, { name: "Asset", type: "character" });
     callLLMJson.mockClear();
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId) })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: projectId, sequenceId: sequenceId } });
 
     expect(result).toEqual({ ok: false, error: "No shots in this sequence. Add shots first." });
     expect(callLLMJson).not.toHaveBeenCalled();
@@ -345,9 +351,7 @@ describe("generateCastingSuggestionsDraft — the two preconditions, verbatim, w
     await insertShot(ctx, sequenceId, { title: "A shot" });
     callLLMJson.mockClear();
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId) })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: projectId, sequenceId: sequenceId } });
 
     expect(result).toEqual({
       ok: false,
@@ -363,9 +367,7 @@ describe("generateCastingSuggestionsDraft — includeSequenceLevel (LLMW.MIGRATE
 
     callLLMJson.mockClear();
     callLLMJson.mockResolvedValueOnce(JSON.stringify({ suggestions: [] }));
-    await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId), includeSequenceLevel: "false" })
-    );
+    await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: f.projectId, sequenceId: f.sequenceId }, intent: { parameters: { includeSequenceLevel: false } } });
     const [promptFalse] = callLLMJson.mock.calls[0] as [{ system: string; user: string }, unknown];
     expect(promptFalse.system).not.toContain("Sequence-level casting");
 
@@ -398,15 +400,13 @@ describe("generateCastingSuggestionsDraft — includeSequenceLevel (LLMW.MIGRATE
         ],
       })
     );
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId), includeSequenceLevel: "true" })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: f.projectId, sequenceId: f.sequenceId }, intent: { parameters: { includeSequenceLevel: true } } });
     const [promptTrue] = callLLMJson.mock.calls[0] as [{ system: string; user: string }, unknown];
     expect(promptTrue.system).toContain("Sequence-level casting");
 
     expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("unreachable");
-    expect(result.suggestions).toEqual([
+    if (!result.ok || result.kind !== "list") throw new Error("unreachable");
+    expect(result.items).toEqual([
       {
         targetType: "sequence",
         targetId: f.sequenceId,
@@ -414,7 +414,9 @@ describe("generateCastingSuggestionsDraft — includeSequenceLevel (LLMW.MIGRATE
         assetId: f.assetBId,
         assetName: "Van",
         assetType: "vehicle",
-        reason: null,
+        // RAW shape (LLMW.UNIFY.PANEL.4): the `"" -> null` fill-back is the
+        // panel's job now, so it is no longer proven here.
+        reason: "",
         confidence: "high",
         alreadyAssigned: false,
       },
@@ -460,11 +462,9 @@ describe("generateCastingSuggestionsDraft — the declared divergence (A.5, arbi
       })
     );
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId), includeSequenceLevel: "true" })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: f.projectId, sequenceId: f.sequenceId }, intent: { parameters: { includeSequenceLevel: true } } });
 
-    expect(result).toEqual({ ok: true, suggestions: [] });
+    expect(result).toEqual({ ok: true, kind: "list", items: [] });
   });
 
   it("family B — every item has a recognised targetType but an id that is not a positive integer -> { ok: true, suggestions: [] }, where the old chain threw the 'empty' message", async () => {
@@ -497,10 +497,8 @@ describe("generateCastingSuggestionsDraft — the declared divergence (A.5, arbi
       })
     );
 
-    const result = await generateCastingSuggestionsDraft(
-      form({ projectId: String(f.projectId), sequenceId: String(f.sequenceId), includeSequenceLevel: "true" })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "casting.fromSequence", ids: { projectId: f.projectId, sequenceId: f.sequenceId }, intent: { parameters: { includeSequenceLevel: true } } });
 
-    expect(result).toEqual({ ok: true, suggestions: [] });
+    expect(result).toEqual({ ok: true, kind: "list", items: [] });
   });
 });
