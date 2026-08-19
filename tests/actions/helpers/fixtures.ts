@@ -243,6 +243,48 @@ export async function readShotReferenceImages({ db, schema }: TempDb, shotId: nu
     .orderBy(asc(schema.shotReferenceImages.orderIndex));
 }
 
+// ---------------------------------------------------------------------------
+// IND.EDITORIAL.3 — sequence_editorial_items builders/readers, same
+// convention as the IND.VIDEOSPLIT.1 / IND.STORYBOARD.1 builders above.
+// ---------------------------------------------------------------------------
+
+export async function insertEditorialItem(
+  { db, schema }: TempDb,
+  sequenceId: number,
+  values: Partial<typeof schema.sequenceEditorialItems.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.sequenceEditorialItems)
+    .values({
+      sequenceId,
+      type: "shot",
+      orderIndex: 0,
+      trackIndex: 0,
+      ...values,
+    })
+    .returning({ id: schema.sequenceEditorialItems.id });
+  return row.id;
+}
+
+export async function readEditorialItems({ db, schema }: TempDb, sequenceId: number) {
+  return db
+    .select()
+    .from(schema.sequenceEditorialItems)
+    .where(eq(schema.sequenceEditorialItems.sequenceId, sequenceId))
+    .orderBy(
+      asc(schema.sequenceEditorialItems.trackIndex),
+      asc(schema.sequenceEditorialItems.orderIndex)
+    );
+}
+
+export async function readEditorialItem({ db, schema }: TempDb, itemId: number) {
+  const [row] = await db
+    .select()
+    .from(schema.sequenceEditorialItems)
+    .where(eq(schema.sequenceEditorialItems.id, itemId));
+  return row;
+}
+
 // Full-row readers: the write tests compare every column, not only the field
 // under test, so a collateral write cannot pass unnoticed.
 
