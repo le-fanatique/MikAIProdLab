@@ -123,7 +123,29 @@ export async function runWorkspaceOperation(
         throw new Error("runWorkspaceOperation: a list result from a non-list descriptor.");
       }
       const fields = descriptor.output.item.fields;
-      return { ok: true, kind: "list", items: result.items.map((item) => mapListItemToModelKeys(fields, item)) };
+      const declared = new Set(fields.map((field) => field.field));
+      return {
+        ok: true,
+        kind: "list",
+        items: result.items.map((item) => {
+          const mapped = mapListItemToModelKeys(fields, item);
+          // A `postResponse` form may attach a field the descriptor never
+          // declared — `casting.fromSequence` computes `alreadyAssigned` that
+          // way (`variables/registry.ts`). `mapListItemToModelKeys` emits only
+          // DECLARED fields, by its own documented contract, so those extras
+          // were being dropped here in silence.
+          //
+          // Found by the migration criterion rather than by review: a panel's
+          // success assertion would have changed VALUE, not shape.
+          //
+          // Such a key needs no translation — it was computed server-side and
+          // never came from the model — so it passes through untouched.
+          for (const [key, value] of Object.entries(item)) {
+            if (!declared.has(key)) mapped[key] = value;
+          }
+          return mapped;
+        }),
+      };
     }
     if (result.kind === "text") return { ok: true, kind: "text", text: result.text };
     return { ok: true, kind: "composite", values: result.values, lists: result.lists };

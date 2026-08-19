@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "./helpers/tempDb";
-import { insertProject, insertSequence, insertShot } from "./helpers/fixtures";
+import { insertAsset, insertProject, insertSequence, insertShot } from "./helpers/fixtures";
 import { eq } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ let callLLMText: typeof import("@/lib/llm").callLLMText;
 let projectId: number;
 let sequenceId: number;
 let shotId: number;
+let assetId: number;
 
 function mockedJson() {
   return callLLMJson as unknown as ReturnType<typeof vi.fn>;
@@ -49,6 +50,7 @@ beforeAll(async () => {
     .where(eq(ctx.schema.projects.id, projectId));
   sequenceId = await insertSequence(ctx, projectId, { title: "Rooftop" });
   shotId = await insertShot(ctx, sequenceId, { title: "Wide establishing" });
+  assetId = await insertAsset(ctx, projectId, { name: "Mara" });
 });
 
 afterAll(() => ctx.cleanup());
@@ -185,6 +187,32 @@ describe("runWorkspaceOperation — a list comes back in the model's own keys", 
     // A field the model omitted stays omitted — never filled with null or ""
     // — so each write action's own absence handling still applies.
     expect("duration_seconds" in result.items[1]).toBe(false);
+  });
+
+  it("keeps a field a postResponse form attached, which no descriptor declares", async () => {
+    // `casting.fromSequence` computes `alreadyAssigned` in its postResponse
+    // stage; it is not in `output.item.fields`, and the key translation used
+    // to drop it silently. A panel's success assertion would have changed
+    // VALUE — the one thing this migration forbids.
+    mockedJson()
+      .mockReset()
+      .mockResolvedValue(
+        JSON.stringify({
+          suggestions: [
+            { targetType: "shot", targetId: shotId, targetLabel: "SH010", assetId, assetName: "Mara", assetType: "character" },
+          ],
+        })
+      );
+
+    const result = await runWorkspaceOperation({
+      descriptorId: "casting.fromSequence",
+      ids: { projectId, sequenceId },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "list") throw new Error("expected a list result");
+    expect(result.items).toHaveLength(1);
+    expect("alreadyAssigned" in result.items[0]).toBe(true);
   });
 });
 
