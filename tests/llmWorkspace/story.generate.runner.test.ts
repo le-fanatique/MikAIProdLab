@@ -31,7 +31,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateStory: typeof import("@/actions/llm/story").generateStory;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
@@ -42,7 +42,7 @@ beforeAll(async () => {
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateStory } = await import("@/actions/llm/story"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
 
@@ -58,8 +58,11 @@ afterAll(() => ctx.cleanup());
 
 describe("story.generate — runner proof (LLMW.RUNNER.1a)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
-    const result = await generateStory(projectId);
-    expect(result).toEqual({ ok: true, story: "A generated story." });
+    const result = await runWorkspaceOperation({ descriptorId: "story.generate", ids: { projectId: projectId } });
+    // LLMW.UNIFY.PANEL.1 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged, which is the point of this
+    // proof: the migration moved the boundary, not the behaviour.
+    expect(result).toEqual({ ok: true, kind: "object", values: { story: "A generated story." } });
 
     const expectedPrompt = { system: `You are a professional screenwriter and narrative consultant.
 Your task is to write a concise story synopsis from a project pitch.
@@ -83,7 +86,7 @@ Write a story synopsis for this project.` };
   it("2. refuses a project that does not exist, with the same message generateStory produces", async () => {
     const nonExistentProjectId = projectId + 9000;
 
-    const actionResult = await generateStory(nonExistentProjectId);
+    const actionResult = await runWorkspaceOperation({ descriptorId: "story.generate", ids: { projectId: nonExistentProjectId } });
     expect(actionResult).toEqual({ ok: false, error: "Project not found." });
 
     const runnerResult = await resolveOperationPrompt(storyGenerateDescriptor, { projectId: nonExistentProjectId });
@@ -93,7 +96,7 @@ Write a story synopsis for this project.` };
   it("2b. the precondition mirrors generateStory's own 'Add a pitch first.' guard", async () => {
     const noPitchProjectId = await insertProject(ctx, "No pitch project");
 
-    const actionResult = await generateStory(noPitchProjectId);
+    const actionResult = await runWorkspaceOperation({ descriptorId: "story.generate", ids: { projectId: noPitchProjectId } });
     expect(actionResult).toEqual({ ok: false, error: "Add a pitch first." });
 
     const runnerResult = await resolveOperationPrompt(storyGenerateDescriptor, { projectId: noPitchProjectId });

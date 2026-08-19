@@ -1,6 +1,6 @@
 "use client";
 
-import { generateStory } from "@/actions/llm/story";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildApplyGeneratedStoryArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
@@ -27,9 +27,21 @@ export default function StoryGenerationPanel({ projectId, pitch, existingStory, 
     label: "Generate Story from Pitch",
     disabled: noPitch,
     loadingLabel: "Generating story — this may take a few seconds...",
+    // LLMW.UNIFY.PANEL.1 — the first panel onto the generic action. It names
+    // the operation; nothing about `story.generate` is encoded here any more.
+    //
+    // The narrowing that follows is not defensive noise: `runOperation`'s
+    // result is `kind`-discriminated and its `"object"` values are
+    // `string | number`, while this descriptor declares one `type: "string"`
+    // field. Neither branch is reachable — they are refused loudly rather
+    // than coerced, exactly as the adapter this replaces did.
     run: async () => {
-      const result = await generateStory(projectId);
-      return result.ok ? { ok: true, draft: { story: result.story } } : { ok: false, error: result.error };
+      const result = await runWorkspaceOperation({ descriptorId: "story.generate", ids: { projectId } });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const { story } = result.values;
+      if (typeof story !== "string") return { ok: false, error: "Unexpected non-text value for the story." };
+      return { ok: true, draft: { story } };
     },
   };
 

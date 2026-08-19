@@ -36,7 +36,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateStory: typeof import("@/actions/llm/story").generateStory;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveProjectIdentity: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectIdentity;
 let projectId: number;
 
@@ -48,7 +48,7 @@ beforeAll(async () => {
   // mock.
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateStory } = await import("@/actions/llm/story"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ resolveProjectIdentity } = await import("@/lib/llmWorkspace/variables/registry"));
 
   projectId = await insertProject(ctx, "Story project");
@@ -63,8 +63,11 @@ afterAll(() => ctx.cleanup());
 
 describe("story.generate descriptor — context equality", () => {
   it("resolving PROJECT.IDENTITY against the same anchor equals the row generateStory reads (name, pitch, description)", async () => {
-    const result = await generateStory(projectId);
-    expect(result).toEqual({ ok: true, story: "A generated story." });
+    const result = await runWorkspaceOperation({ descriptorId: "story.generate", ids: { projectId: projectId } });
+    // LLMW.UNIFY.PANEL.1 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged, which is the point of this
+    // proof: the migration moved the boundary, not the behaviour.
+    expect(result).toEqual({ ok: true, kind: "object", values: { story: "A generated story." } });
 
     // The descriptor declares exactly the one variable this operation uses.
     expect(storyGenerateDescriptor.context.variables.map((v) => v.id)).toEqual(["PROJECT.IDENTITY"]);
