@@ -6,8 +6,8 @@ import Card from "@/components/Card";
 import EditorialTimeline, {
   type EditorialTimelineShot,
   type EditorialItemView,
-} from "@/components/EditorialTimeline";
-import EditorialShotList from "@/components/EditorialShotList";
+} from "@/components/editorial/EditorialTimeline";
+import EditorialShotList from "@/components/editorial/EditorialShotList";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import { initializeEditorialTimeline } from "@/actions/shots";
 import { moveEditorialItemOrder } from "@/actions/editorialOrder";

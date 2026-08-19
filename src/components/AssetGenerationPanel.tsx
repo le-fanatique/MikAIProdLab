@@ -23,8 +23,8 @@ import {
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
-import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
-import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
+import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
 import { suggestImageForNode } from "@/lib/imageSuggestions";
 import { buildAssetFillSources } from "@/lib/assetFillSources";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";

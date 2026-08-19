@@ -19,7 +19,7 @@ import WorkflowPayloadPreviewPanel from "@/components/WorkflowPayloadPreviewPane
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
-import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
+import CompiledShotPromptPreviewPanel from "@/components/prompts/CompiledShotPromptPreviewPanel";
 import InlineShotPromptEditor from "@/components/InlineShotPromptEditor";
 import ShotPanelImagePreviewForm from "@/components/ShotPanelImagePreviewForm";
 import type { ShotPanelImageNode } from "@/components/ShotPanelImagePreviewForm";
@@ -44,8 +44,8 @@ import {
   approveVideoOutput,
 } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
-import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
-import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
+import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
 import { saveVideoOutputToLibrary } from "@/actions/shotVideoLibrary";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { suggestImageForNode } from "@/lib/imageSuggestions";

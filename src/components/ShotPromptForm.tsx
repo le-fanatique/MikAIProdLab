@@ -1,5 +1,5 @@
 import { updateShotPrompt } from "@/actions/shots";
-import ShotPromptLLMAssistPanel from "@/components/ShotPromptLLMAssistPanel";
+import ShotPromptLLMAssistPanel from "@/components/llmWorkspace/ShotPromptLLMAssistPanel";
 import PromptTextareaWithTranslate from "@/components/PromptTextareaWithTranslate";
 
 type Props = {

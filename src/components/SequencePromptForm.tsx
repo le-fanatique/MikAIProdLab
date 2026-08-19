@@ -1,5 +1,5 @@
 import { updateSequencePrompt } from "@/actions/sequences";
-import SequencePromptLLMAssistPanel from "@/components/SequencePromptLLMAssistPanel";
+import SequencePromptLLMAssistPanel from "@/components/llmWorkspace/SequencePromptLLMAssistPanel";
 import PromptTextareaWithTranslate from "@/components/PromptTextareaWithTranslate";
 
 type Props = {

@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import { computeContentCropRect, type ContentCropMode } from "@/lib/storyboardExtraction/contentCrop";
-import { REGION_RECT_APPLIED_EVENT } from "@/components/RegionCropBox";
+import { REGION_RECT_APPLIED_EVENT } from "@/components/storyboardExtraction/RegionCropBox";
 
 type Props = {
   regionIds: number[];

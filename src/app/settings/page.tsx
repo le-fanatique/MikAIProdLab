@@ -11,7 +11,7 @@ import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
 import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
 import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
 import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
-import ThemeModeToggle from "@/components/ThemeModeToggle";
+import ThemeModeToggle from "@/components/theme/ThemeModeToggle";
 import SettingsTabs from "@/components/SettingsTabs";
 import { getAllLLMSettings, getActiveProvider, getComfySettings, getComfyLocalPresets, getCustomThemePresets, getLLMConfig, getChatProviderInfo, getResearchProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";

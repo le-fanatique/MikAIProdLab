@@ -101,26 +101,26 @@ describe("ACTION_BINDINGS — the seven Approve-side callers switched over", () 
   // ShotPromptForm.tsx, SequencePromptForm.tsx, InlineShotPromptEditor.tsx,
   // PromptCompilerPanel.tsx, PromptComposerPanel.tsx) are never swept in.
   const switchedFiles: Array<{ file: string; actionNames: string[] }> = [
-    { file: "src/components/StoryGenerationPanel.tsx", actionNames: ["applyGeneratedStory"] },
-    { file: "src/components/OutlineGenerationPanel.tsx", actionNames: ["applyGeneratedOutline"] },
+    { file: "src/components/llmWorkspace/StoryGenerationPanel.tsx", actionNames: ["applyGeneratedStory"] },
+    { file: "src/components/llmWorkspace/OutlineGenerationPanel.tsx", actionNames: ["applyGeneratedOutline"] },
     {
-      file: "src/components/AssetBibleEnhancePanel.tsx",
+      file: "src/components/llmWorkspace/AssetBibleEnhancePanel.tsx",
       actionNames: ["updateAssetDetailsInline"],
     },
     {
-      file: "src/components/AssetDescriptionEnhancePanel.tsx",
+      file: "src/components/llmWorkspace/AssetDescriptionEnhancePanel.tsx",
       actionNames: ["updateAssetDescriptionFieldInline"],
     },
     {
-      file: "src/components/BatchAssetDescriptionEnhancePanel.tsx",
+      file: "src/components/llmWorkspace/BatchAssetDescriptionEnhancePanel.tsx",
       actionNames: [
         "updateAssetDescriptionFieldInline",
         "applyBatchAssetDescriptionDraftsInline",
       ],
     },
-    { file: "src/components/ShotPromptLLMAssistPanel.tsx", actionNames: ["updateShotPrompt"] },
+    { file: "src/components/llmWorkspace/ShotPromptLLMAssistPanel.tsx", actionNames: ["updateShotPrompt"] },
     {
-      file: "src/components/SequencePromptLLMAssistPanel.tsx",
+      file: "src/components/llmWorkspace/SequencePromptLLMAssistPanel.tsx",
       actionNames: ["updateSequencePrompt"],
     },
   ];

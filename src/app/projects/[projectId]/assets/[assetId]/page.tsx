@@ -17,14 +17,14 @@ import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/actions/assetReferenceImages";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
-import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/AssetDescriptionEnhancePanel";
+import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/llmWorkspace/AssetDescriptionEnhancePanel";
 import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
 import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
-import AssetRetakeDirectedPanel from "@/components/AssetRetakeDirectedPanel";
+import AssetRetakeDirectedPanel from "@/components/llmWorkspace/AssetRetakeDirectedPanel";
 import { assetRetakeDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/assetRetakeDirected";
-import AssetBibleEnhancePanel from "@/components/AssetBibleEnhancePanel";
+import AssetBibleEnhancePanel from "@/components/llmWorkspace/AssetBibleEnhancePanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
-import AssetAlignmentPanel from "@/components/AssetAlignmentPanel";
+import AssetAlignmentPanel from "@/components/projectStyle/AssetAlignmentPanel";
 import { getAssetAlignmentStatusAction, type GetAssetAlignmentStatusResult } from "@/actions/assetAlignment";
 import { readAssetBibleFreshness } from "@/lib/assetBible/freshness";
 

@@ -6,7 +6,7 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
-import NlePrototypeWorkspace from "@/components/NlePrototypeWorkspace";
+import NlePrototypeWorkspace from "@/components/editorial/NlePrototypeWorkspace";
 import type { PreviewShot, PreviewItem } from "@/components/SequencePreviewPlayer";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getOpenReelSidecarUrl, getMikAIPublicBaseUrl } from "@/lib/settings";

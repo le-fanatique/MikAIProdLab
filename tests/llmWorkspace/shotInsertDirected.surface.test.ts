@@ -27,11 +27,11 @@ import { shotInsertDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/sho
  */
 
 let ctx: TempDb;
-let buildInsertShotDirectedHiddenFields: typeof import("@/components/InsertShotDirectedButton")["buildInsertShotDirectedHiddenFields"];
+let buildInsertShotDirectedHiddenFields: typeof import("@/components/llmWorkspace/InsertShotDirectedButton")["buildInsertShotDirectedHiddenFields"];
 
 beforeAll(async () => {
   ctx = await setupTempDb();
-  ({ buildInsertShotDirectedHiddenFields } = await import("@/components/InsertShotDirectedButton"));
+  ({ buildInsertShotDirectedHiddenFields } = await import("@/components/llmWorkspace/InsertShotDirectedButton"));
 });
 
 afterAll(() => ctx.cleanup());

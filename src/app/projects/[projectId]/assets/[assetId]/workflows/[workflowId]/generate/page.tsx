@@ -29,8 +29,8 @@ import type { BatchImageGroup, BatchExpansionPreview } from "@/components/Dynami
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
-import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
-import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
+import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
 import { buildAssetFillSources } from "@/lib/assetFillSources";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";

@@ -26,8 +26,8 @@ import StoryboardAssetsPanel, { type StoryboardCastAsset } from "@/components/St
 import SequenceStoryboardDraftsPanel, {
   type SequenceStoryboardDraft,
 } from "@/components/SequenceStoryboardDraftsPanel";
-import SequenceVideoDraftsPanel, { type SequenceVideoDraftItem } from "@/components/SequenceVideoDraftsPanel";
-import SequenceGenerationPackagePanel from "@/components/SequenceGenerationPackagePanel";
+import SequenceVideoDraftsPanel, { type SequenceVideoDraftItem } from "@/components/media/SequenceVideoDraftsPanel";
+import SequenceGenerationPackagePanel from "@/components/prompts/SequenceGenerationPackagePanel";
 import { uploadSequenceStoryboardImage, deleteSequenceStoryboardImage } from "@/actions/sequenceStoryboard";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { compileShotPrompt } from "@/lib/prompts/compileShotPrompt";

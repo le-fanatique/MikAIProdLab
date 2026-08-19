@@ -6,7 +6,7 @@ import SequencePreviewPlayer, {
   type PreviewShot,
   type PreviewItem,
 } from "@/components/SequencePreviewPlayer";
-import NlePrototypeTimeline from "@/components/NlePrototypeTimeline";
+import NlePrototypeTimeline from "@/components/editorial/NlePrototypeTimeline";
 import {
   deriveEmptySpaces,
   getEmptySpacePreviewItemId,

@@ -31,7 +31,7 @@ import { refImageUrl } from "@/lib/refImageUrl";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
-import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
+import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
 
 function SectionLabel({ label }: { label: string }) {
   return (

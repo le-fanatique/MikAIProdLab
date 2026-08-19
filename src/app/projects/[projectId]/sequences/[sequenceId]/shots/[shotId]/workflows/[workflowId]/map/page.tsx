@@ -35,15 +35,15 @@ import ShotPanelVideoSelectionForm from "@/components/ShotPanelVideoSelectionFor
 import type { ShotPanelVideoNode } from "@/components/ShotPanelVideoSelectionForm";
 import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRuntimeVideoOptions";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
-import CompiledShotPromptPreviewPanel from "@/components/CompiledShotPromptPreviewPanel";
+import CompiledShotPromptPreviewPanel from "@/components/prompts/CompiledShotPromptPreviewPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runWorkflowGenerationFromForm, runShotStoryboardGenerationFromForm, attachOutputAsShotReference } from "@/actions/generation";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
-import ProjectStyleGenerationPreview from "@/components/ProjectStyleGenerationPreview";
-import ProjectStyleAppendCheckbox from "@/components/ProjectStyleAppendCheckbox";
+import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
+import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";

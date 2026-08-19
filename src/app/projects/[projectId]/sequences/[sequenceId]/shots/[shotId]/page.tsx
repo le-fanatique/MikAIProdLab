@@ -12,8 +12,8 @@ import Collapsible from "@/components/Collapsible";
 import CastingPanel from "@/components/CastingPanel";
 import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
-import CompiledPromptPanel from "@/components/CompiledPromptPanel";
-import PromptComposerPanel from "@/components/PromptComposerPanel";
+import CompiledPromptPanel from "@/components/prompts/CompiledPromptPanel";
+import PromptComposerPanel from "@/components/prompts/PromptComposerPanel";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import ShotPromptForm from "@/components/ShotPromptForm";
@@ -39,7 +39,7 @@ import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import VideoFrameReviewPlayer, { type CaptureDestination } from "@/components/VideoFrameReviewPlayer";
 import ShotNarrativeContextEditor from "@/components/ShotNarrativeContextEditor";
-import ShotRetakeDirectedPanel from "@/components/ShotRetakeDirectedPanel";
+import ShotRetakeDirectedPanel from "@/components/llmWorkspace/ShotRetakeDirectedPanel";
 import ShotVideoLibraryPanel, { type ShotVideoLibraryRow } from "@/components/shotVideoLibrary/ShotVideoLibraryPanel";
 
 type Props = {
