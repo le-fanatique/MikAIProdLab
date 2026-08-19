@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, insertSequence, readProject, readSequence } from "../actions/helpers/fixtures";
+import { insertProject, insertSequence } from "../actions/helpers/fixtures";
 import { sequencePromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/sequencePrompt";
-import { buildSequencePromptFromContextPrompt } from "@/lib/prompts/sequence-prompt-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -62,22 +61,6 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
-async function expectedPrompt(mode: "generate" | "enhance" | "rewrite" | "shorten" | "expand") {
-  const [project, sequence] = await Promise.all([readProject(ctx, projectId), readSequence(ctx, sequenceId)]);
-  return buildSequencePromptFromContextPrompt({
-    assistMode: mode,
-    projectName: project.name,
-    projectPitch: project.pitch,
-    projectStory: project.story,
-    sequenceTitle: sequence.title,
-    sequenceSummary: sequence.summary,
-    sequenceDescription: sequence.description,
-    sequenceMood: sequence.mood,
-    sequenceLocationHint: sequence.locationHint,
-    currentSequencePrompt: sequence.sequencePrompt,
-  });
-}
-
 describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte (enhance mode)", async () => {
     const result = await generateSequencePromptDraft(
@@ -85,7 +68,21 @@ describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
     );
     expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
 
-    const expected = await expectedPrompt("enhance");
+    const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
+Enhance the existing sequence prompt by adding visual and narrative detail: atmosphere, lighting quality, camera approach, dramatic arc. Preserve the original intent. Do not change the core subject or setting dramatically.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.`, user: `Current prompt:
+An existing sequence prompt.
+
+Sequence context (background only):
+Mood: Tense
+Location: Rooftop, dusk
+Summary: A short summary.
+
+Transform the prompt as instructed.` };
 
     const runnerResult = await resolveOperationPrompt(
       sequencePromptAssistDescriptor,
@@ -105,7 +102,24 @@ describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
     );
     expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
 
-    const expected = await expectedPrompt("generate");
+    const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
+Write a Sequence Prompt that describes the visual atmosphere, dramatic arc, camera approach, lighting, setting, and mood of the sequence.
+Focus on: what is felt and seen across the sequence as a whole. Do not list individual shots.
+Do not mention project names or sequence names explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.`, user: `Project: Sequence project
+Pitch: A compelling pitch.
+Story: A previously generated story.
+Sequence: Opening sequence
+Summary: A short summary.
+Description: A longer description.
+Mood: Tense
+Location: Rooftop, dusk
+
+Write a sequence prompt for this sequence.` };
 
     const runnerResult = await resolveOperationPrompt(
       sequencePromptAssistDescriptor,

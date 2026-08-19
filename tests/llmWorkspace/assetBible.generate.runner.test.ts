@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetBibleGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetBible";
-import { buildAssetBibleFromContextPrompt } from "@/lib/prompts/asset-bible-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -85,27 +84,34 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
-async function expectedPrompt() {
-  return buildAssetBibleFromContextPrompt({
-    asset: {
-      name: "Hero Robot",
-      type: "character",
-      description: "A weathered combat robot.",
-      notes: "Appears throughout Act 2.",
-      visualIdentity: "Existing visual identity.",
-      usageRules: "Existing usage rule.",
-      forbiddenVariations: "Existing forbidden variation.",
-    },
-    style: { worldSegment: "", visualSegment: "", rulesSegment: "" },
-  });
-}
-
 describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateAssetBibleDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
     expect(result.ok).toBe(true);
 
-    const expected = await expectedPrompt();
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
+
+Rules:
+- Use only the provided Description and Notes as your source of truth. Do not invent story facts, events, or canon not present in the input.
+- If an existing Asset Bible value is provided, treat it as context to improve or complete — never discard useful existing content without reason, and never contradict it without a clear basis in Description/Notes.
+- visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
+- usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
+- forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+Always respond with a valid JSON object matching exactly this schema:
+{ "visual_identity": "<defining silhouette, colors, materials, proportions>", "usage_rules": "<how this asset should behave or be framed/used across shots>", "forbidden_variations": "<colors, props, poses or traits that must never appear>" }
+No markdown. No explanation. Only the JSON object.`, user: `Asset: Hero Robot
+Type: character
+Description: A weathered combat robot.
+Notes: Appears throughout Act 2.
+
+Existing Asset Bible (improve/complete, do not contradict without reason):
+Current Visual Identity: Existing visual identity.
+Current Usage Rules: Existing usage rule.
+Current Forbidden Variations: Existing forbidden variation.
+
+Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "Hero Robot".` };
 
     const runnerResult = await resolveOperationPrompt(assetBibleGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);

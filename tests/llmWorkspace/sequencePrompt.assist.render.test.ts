@@ -12,10 +12,6 @@ import {
   type SeqCurrentPromptData,
   type SequencePromptAssistModeId,
 } from "@/lib/llmWorkspace/variables/registry";
-import {
-  buildSequencePromptFromContextPrompt,
-  type BuildSequencePromptFromContextInput,
-} from "@/lib/prompts/sequence-prompt-from-context";
 import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
@@ -72,21 +68,6 @@ function assemble(fixture: Fixture) {
   );
 }
 
-function toBuilderInput(fixture: Fixture): BuildSequencePromptFromContextInput {
-  return {
-    assistMode: fixture.mode,
-    projectName: fixture.project.name,
-    projectPitch: fixture.project.pitch,
-    projectStory: fixture.project.story,
-    sequenceTitle: fixture.seq.title,
-    sequenceSummary: fixture.seq.summary,
-    sequenceDescription: fixture.seq.description,
-    sequenceMood: fixture.seq.mood,
-    sequenceLocationHint: fixture.seq.locationHint,
-    currentSequencePrompt: fixture.currentPrompt.sequencePrompt,
-  };
-}
-
 describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
   it("matches buildSequencePromptFromContextPrompt for generate mode, complete context", () => {
     const fixture: Fixture = {
@@ -108,7 +89,24 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
       },
       currentPrompt: { sequencePrompt: "An existing prompt that generate mode ignores." },
     };
-    const expected = buildSequencePromptFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
+Write a Sequence Prompt that describes the visual atmosphere, dramatic arc, camera approach, lighting, setting, and mood of the sequence.
+Focus on: what is felt and seen across the sequence as a whole. Do not list individual shots.
+Do not mention project names or sequence names explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.`, user: `Project: Neon Skyline
+Pitch: A courier races across a rain-soaked megacity.
+Story: A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A lo
+Sequence: The Chase
+Summary: A rooftop pursuit.
+Description: Fast cuts, neon reflections.
+Mood: Tense
+Location: Downtown rooftops
+
+Write a sequence prompt for this sequence.` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);
@@ -121,7 +119,18 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
       seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null, narrativePurpose: null },
       currentPrompt: { sequencePrompt: null },
     };
-    const expected = buildSequencePromptFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
+Write a Sequence Prompt that describes the visual atmosphere, dramatic arc, camera approach, lighting, setting, and mood of the sequence.
+Focus on: what is felt and seen across the sequence as a whole. Do not list individual shots.
+Do not mention project names or sequence names explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.`, user: `Project: Untitled Project
+Sequence: Untitled Sequence
+
+Write a sequence prompt for this sequence.` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);
@@ -141,7 +150,21 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
       },
       currentPrompt: { sequencePrompt: "A courier sprints across rain-slicked rooftops at night." },
     };
-    const expected = buildSequencePromptFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
+Enhance the existing sequence prompt by adding visual and narrative detail: atmosphere, lighting quality, camera approach, dramatic arc. Preserve the original intent. Do not change the core subject or setting dramatically.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.`, user: `Current prompt:
+A courier sprints across rain-slicked rooftops at night.
+
+Sequence context (background only):
+Mood: Tense
+Location: Downtown rooftops
+Summary: A rooftop pursuit.
+
+Transform the prompt as instructed.` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);
@@ -154,7 +177,16 @@ describe("sequencePrompt.assist descriptor — strict prompt equality", () => {
       seq: { title: "Untitled Sequence", summary: null, description: null, mood: null, locationHint: null, narrativePurpose: null },
       currentPrompt: { sequencePrompt: null },
     };
-    const expected = buildSequencePromptFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
+Rewrite the existing sequence prompt to be cleaner, more cinematic, and more evocative. Preserve the meaning and intent. Remove awkward phrasing. Make it flow naturally as a visual and narrative description.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one or two paragraphs maximum.
+Always respond with a valid JSON object matching exactly this schema:
+{ "sequence_prompt": "<your sequence prompt here>" }
+No explanation. Only the JSON object.`, user: `Current prompt:
+
+
+Transform the prompt as instructed.` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);

@@ -10,7 +10,6 @@ import {
   type AssetBibleData,
   type ProjectStyleData,
 } from "@/lib/llmWorkspace/variables/registry";
-import { buildAssetBibleFromContextPrompt, type AssetBibleFromContextInput } from "@/lib/prompts/asset-bible-from-context";
 import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
@@ -46,28 +45,6 @@ function assemble(fixture: Fixture) {
   });
 }
 
-function toBuilderInput(fixture: Fixture): AssetBibleFromContextInput {
-  return {
-    asset: {
-      name: fixture.core.name,
-      type: fixture.core.type,
-      description: fixture.core.description,
-      notes: fixture.core.notes,
-      visualIdentity: fixture.bible.visualIdentity,
-      usageRules: fixture.bible.usageRules,
-      forbiddenVariations: fixture.bible.forbiddenVariations,
-    },
-    style:
-      fixture.style.mode === "active"
-        ? {
-            worldSegment: fixture.style.worldSegment,
-            visualSegment: fixture.style.visualSegment,
-            rulesSegment: fixture.style.rulesSegment,
-          }
-        : { worldSegment: "", visualSegment: "", rulesSegment: "" },
-  };
-}
-
 describe("assetBible.generate descriptor — strict prompt equality", () => {
   it("matches buildAssetBibleFromContextPrompt for a complete Asset (existing Bible, active Style)", () => {
     const fixture: Fixture = {
@@ -89,7 +66,37 @@ describe("assetBible.generate descriptor — strict prompt equality", () => {
         rulesSegment: "Never show daylight.",
       },
     };
-    const expected = buildAssetBibleFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
+
+Rules:
+- Use only the provided Description and Notes as your source of truth. Do not invent story facts, events, or canon not present in the input.
+- If an existing Asset Bible value is provided, treat it as context to improve or complete — never discard useful existing content without reason, and never contradict it without a clear basis in Description/Notes.
+- visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
+- usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
+- forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+- A Project Style is provided below. Respect its World & Design Language, Visual Treatment and any listed rules; never contradict them.
+Always respond with a valid JSON object matching exactly this schema:
+{ "visual_identity": "<defining silhouette, colors, materials, proportions>", "usage_rules": "<how this asset should behave or be framed/used across shots>", "forbidden_variations": "<colors, props, poses or traits that must never appear>" }
+No markdown. No explanation. Only the JSON object.`, user: `Asset: Hero Robot
+Type: character
+Description: A weathered combat robot.
+Notes: Appears throughout Act 2.
+
+Existing Asset Bible (improve/complete, do not contradict without reason):
+Current Visual Identity: Matte grey chassis, one glowing blue optic.
+Current Usage Rules: Always framed from a low angle in combat.
+Current Forbidden Variations: Never shown with bright colors.
+
+Project Style:
+A rain-soaked megacity.
+
+Neon and chrome.
+
+Never show daylight.
+
+Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "Hero Robot".` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);
@@ -101,7 +108,24 @@ describe("assetBible.generate descriptor — strict prompt equality", () => {
       bible: { visualIdentity: null, usageRules: null, forbiddenVariations: null },
       style: { mode: "none" },
     };
-    const expected = buildAssetBibleFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the "Asset Bible" — three short, factual guidance fields used to keep this asset visually and behaviorally consistent across AI-assisted image and video generation.
+
+Rules:
+- Use only the provided Description and Notes as your source of truth. Do not invent story facts, events, or canon not present in the input.
+- If an existing Asset Bible value is provided, treat it as context to improve or complete — never discard useful existing content without reason, and never contradict it without a clear basis in Description/Notes.
+- visual_identity: defining silhouette, colors, materials, proportions, distinguishing visual traits. Max 3 concise sentences. Write in English.
+- usage_rules: how this asset should behave, be framed, or be used consistently across shots (performance, camera, staging constraints). Max 3 concise sentences. Write in English.
+- forbidden_variations: colors, props, poses, or traits that must never appear on this asset, to preserve consistency. Max 3 concise sentences. Write in English.
+- If Description and Notes are too limited to support a field, return an empty string for that field rather than inventing content.
+Always respond with a valid JSON object matching exactly this schema:
+{ "visual_identity": "<defining silhouette, colors, materials, proportions>", "usage_rules": "<how this asset should behave or be framed/used across shots>", "forbidden_variations": "<colors, props, poses or traits that must never appear>" }
+No markdown. No explanation. Only the JSON object.`, user: `Asset: Placeholder Prop
+Type: prop
+Description: (none)
+Notes: (none)
+
+Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variations) for "Placeholder Prop".` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);

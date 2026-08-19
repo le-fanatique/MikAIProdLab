@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
-import { buildAssetNotesOnlyPrompt } from "@/lib/prompts/asset-description-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -64,33 +63,34 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
-function expectedPrompt() {
-  return buildAssetNotesOnlyPrompt({
-    project: {
-      name: "Asset Notes project",
-      pitch: "A compelling pitch.",
-      story: "A previously generated story.",
-      outline: "An outline.",
-    },
-    asset: {
-      name: "Sidekick Drone",
-      type: "prop",
-      description: "A hovering support drone.",
-      notes: "Assists the protagonist in Act 1.",
-    },
-    sequenceContexts: [],
-    shotContexts: [],
-    refImageMeta: [],
-    style: { worldSegment: "", rulesSegment: "" },
-  });
-}
-
 describe("assetNotes.generate — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateAssetNotesOnlyDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
     expect(result).toEqual({ ok: true, draft: "A generated note." });
 
-    const expected = expectedPrompt();
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich ONLY the notes for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
+- If the asset already has notes, improve and complete them — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.
+- Do not write a visual/production description — that belongs to Description, which is not requested here.
+Always respond with a valid JSON object matching exactly this schema:
+{ "notes_draft": "<narrative role, usage context, design constraints>" }
+No markdown. No explanation. Only the JSON object.`, user: `Project: Asset Notes project
+Pitch: A compelling pitch.
+Story: A previously generated story.
+Outline: An outline.
+
+Asset: Sidekick Drone
+Type: prop
+Current description: A hovering support drone.
+Current notes: Assists the protagonist in Act 1.
+
+Write or enrich only the notes for "Sidekick Drone".` };
 
     const runnerResult = await resolveOperationPrompt(assetNotesGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);

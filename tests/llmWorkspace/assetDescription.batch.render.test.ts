@@ -16,7 +16,6 @@ import {
   type AssetReferenceEntry,
   type ProjectStyleData,
 } from "@/lib/llmWorkspace/variables/registry";
-import { buildAssetDescriptionFromContextPrompt, type AssetDescriptionFromContextInput } from "@/lib/prompts/asset-description-from-context";
 import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescriptorMessages";
 
 // ---------------------------------------------------------------------------
@@ -61,30 +60,6 @@ function assemble(fixture: Fixture) {
   });
 }
 
-function toBuilderInput(fixture: Fixture): AssetDescriptionFromContextInput {
-  return {
-    project: {
-      name: fixture.project.name,
-      pitch: fixture.project.pitch,
-      story: fixture.project.story,
-      outline: fixture.project.outline,
-    },
-    asset: {
-      name: fixture.asset.name,
-      type: fixture.asset.type,
-      description: fixture.asset.description,
-      notes: fixture.asset.notes,
-    },
-    sequenceContexts: fixture.seq,
-    shotContexts: fixture.shots,
-    refImageMeta: fixture.refs,
-    style:
-      fixture.style.mode === "active"
-        ? { worldSegment: fixture.style.worldSegment, rulesSegment: fixture.style.rulesSegment }
-        : { worldSegment: "", rulesSegment: "" },
-  };
-}
-
 describe("assetDescription.batch descriptor — strict prompt equality", () => {
   it("matches buildAssetDescriptionFromContextPrompt for a complete Asset (with Style, appearances, references)", () => {
     const fixture: Fixture = {
@@ -115,7 +90,45 @@ describe("assetDescription.batch descriptor — strict prompt equality", () => {
       ],
       style: { mode: "active", worldSegment: "A rain-soaked megacity.", visualSegment: "Neon and chrome.", rulesSegment: "Never show daylight." },
     };
-    const expected = buildAssetDescriptionFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the description and notes for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
+- notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
+- If the asset already has a description or notes, improve and complete them — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.
+- A Project Style is provided below. Respect its World & Design Language and any listed rules; never contradict them.
+Always respond with a valid JSON object matching exactly this schema:
+{ "description_draft": "<visual and production description>", "notes_draft": "<narrative role, usage context, design constraints>" }
+No markdown. No explanation. Only the JSON object.`, user: `Project: Neon Skyline
+Pitch: A courier races across a rain-soaked megacity.
+Story: A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story text.A long story
+Outline: An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An outline.An 
+
+Asset: Hero Robot
+Type: character
+Current description: A weathered combat robot.
+Current notes: Appears throughout Act 2.
+
+Sequences this asset appears in:
+- Sequence 0 | mood: Tense | location: Rooftop | purpose: Introduce hero | summary: Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Summary 0Sum
+- Sequence 1
+
+Shots this asset appears in:
+- S1 — Arrival | Description textDescription textDescription textDescription textDescription textDescription textDesc | action: RunsRunsRunsRunsRunsRunsRunsRunsRunsRuns | camera: TrackingTrackingTrackingTrackingTrackingTrackingTrackingTrackingTrackingTracking
+- Reveal
+
+Reference images: Front view, side.png
+
+Project Style:
+A rain-soaked megacity.
+
+Never show daylight.
+
+Write or enrich the description and notes for "Hero Robot".` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);
@@ -130,7 +143,25 @@ describe("assetDescription.batch descriptor — strict prompt equality", () => {
       refs: [],
       style: { mode: "none" },
     };
-    const expected = buildAssetDescriptionFromContextPrompt(toBuilderInput(fixture));
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich the description and notes for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
+- notes_draft: narrative role, usage context across sequences and shots, design constraints, casting intent. Max 5 concise sentences. Write in English.
+- If the asset already has a description or notes, improve and complete them — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.
+Always respond with a valid JSON object matching exactly this schema:
+{ "description_draft": "<visual and production description>", "notes_draft": "<narrative role, usage context, design constraints>" }
+No markdown. No explanation. Only the JSON object.`, user: `Project: Untitled Project
+
+Asset: Placeholder Prop
+Type: prop
+Current description: (none)
+
+Write or enrich the description and notes for "Placeholder Prop".` };
     const assembled = assemble(fixture);
     expect(assembled.system).toBe(expected.system);
     expect(assembled.user).toBe(expected.user);

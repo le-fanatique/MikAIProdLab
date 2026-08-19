@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertAsset } from "../actions/helpers/fixtures";
 import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
-import { buildAssetDescriptionOnlyPrompt } from "@/lib/prompts/asset-description-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for
@@ -69,27 +68,6 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
-function expectedPrompt() {
-  return buildAssetDescriptionOnlyPrompt({
-    project: {
-      name: "Asset Description project",
-      pitch: "A compelling pitch.",
-      story: "A previously generated story.",
-      outline: "An outline.",
-    },
-    asset: {
-      name: "Hero Robot",
-      type: "character",
-      description: "A weathered combat robot.",
-      notes: "Appears throughout Act 2.",
-    },
-    sequenceContexts: [],
-    shotContexts: [],
-    refImageMeta: [],
-    style: { worldSegment: "", rulesSegment: "" },
-  });
-}
-
 describe("assetDescription.generate — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
     const result = await generateAssetDescriptionOnlyDraft(
@@ -97,7 +75,29 @@ describe("assetDescription.generate — runner proof (LLMW.RUNNER.1b)", () => {
     );
     expect(result).toEqual({ ok: true, draft: "A generated description." });
 
-    const expected = expectedPrompt();
+    const expected = { system: `You are a production asset supervisor for a film or animation project.
+Your task is to write or enrich ONLY the visual/production description for a specific asset.
+
+Rules:
+- Use only the provided context. Do not invent story facts not present in the input.
+- description_draft: visual and production-oriented. What the asset looks like, its physical traits, style, materials. Suitable for use as an AI image generation prompt. Max 3 concise sentences. Write in English.
+- If the asset already has a description, improve and complete it — do not discard useful existing content.
+- If context is limited, produce a cautious but useful draft based on the asset type and project tone.
+- Do not mention missing information unless it is useful as a design note.
+- Do not write narrative role, usage context or design constraints — that belongs to Notes, which is not requested here.
+Always respond with a valid JSON object matching exactly this schema:
+{ "description_draft": "<visual and production description>" }
+No markdown. No explanation. Only the JSON object.`, user: `Project: Asset Description project
+Pitch: A compelling pitch.
+Story: A previously generated story.
+Outline: An outline.
+
+Asset: Hero Robot
+Type: character
+Current description: A weathered combat robot.
+Current notes: Appears throughout Act 2.
+
+Write or enrich only the description for "Hero Robot".` };
 
     const runnerResult = await resolveOperationPrompt(assetDescriptionGenerateDescriptor, { projectId, assetId });
     expect(runnerResult.ok).toBe(true);

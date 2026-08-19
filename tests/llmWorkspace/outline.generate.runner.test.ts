@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, readProject } from "../actions/helpers/fixtures";
+import { insertProject } from "../actions/helpers/fixtures";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
-import { buildOutlineFromStoryPrompt } from "@/lib/prompts/outline-from-story";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for `outline.generate`
@@ -55,13 +54,24 @@ describe("outline.generate — runner proof (LLMW.RUNNER.1a)", () => {
     const result = await generateOutlineDraft(form({ projectId: String(projectId), targetSections: "6" }));
     expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
 
-    const project = await readProject(ctx, projectId);
-    const expectedPrompt = buildOutlineFromStoryPrompt({
-      name: project.name,
-      pitch: project.pitch,
-      story: project.story,
-      targetSections: 6,
-    });
+    const expectedPrompt = { system: `You are a professional film production supervisor and narrative consultant.
+Your task is to write a Project Outline: a structured narrative blueprint for a short film or video project.
+
+FORMAT RULES — follow exactly:
+- Each section must start with "## " followed by a short title (e.g. "## Opening — The Arrival").
+- Under each section header, write 2 to 4 sentences describing: narrative content, mood, setting or location, dramatic function, and production relevance where useful.
+- Do not use any other markdown syntax (no bold, no lists, no sub-headers).
+- Sections should map naturally to future production sequences (distinct locations, narrative phases, or dramatic beats).
+- Write exactly 6 sections.
+
+OUTPUT RULES:
+Always respond with a valid JSON object matching exactly this schema:
+{ "outline": "<full outline as a single markdown string with ## headers and paragraph text>" }
+No markdown outside the JSON string. No explanation. No text before or after. Only the JSON object.`, user: `Project title: Outline project
+Pitch: A compelling pitch.
+Story: A previously generated story.
+
+Write a Project Outline for this project. Each section should clearly define its narrative role and production context.` };
 
     const runnerResult = await resolveOperationPrompt(
       outlineGenerateDescriptor,
@@ -79,13 +89,24 @@ describe("outline.generate — runner proof (LLMW.RUNNER.1a)", () => {
     const result = await generateOutlineDraft(form({ projectId: String(projectId) }));
     expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
 
-    const project = await readProject(ctx, projectId);
-    const expectedPrompt = buildOutlineFromStoryPrompt({
-      name: project.name,
-      pitch: project.pitch,
-      story: project.story,
-      targetSections: null,
-    });
+    const expectedPrompt = { system: `You are a professional film production supervisor and narrative consultant.
+Your task is to write a Project Outline: a structured narrative blueprint for a short film or video project.
+
+FORMAT RULES — follow exactly:
+- Each section must start with "## " followed by a short title (e.g. "## Opening — The Arrival").
+- Under each section header, write 2 to 4 sentences describing: narrative content, mood, setting or location, dramatic function, and production relevance where useful.
+- Do not use any other markdown syntax (no bold, no lists, no sub-headers).
+- Sections should map naturally to future production sequences (distinct locations, narrative phases, or dramatic beats).
+- Choose a natural number of sections based on the story structure (typically 4 to 8).
+
+OUTPUT RULES:
+Always respond with a valid JSON object matching exactly this schema:
+{ "outline": "<full outline as a single markdown string with ## headers and paragraph text>" }
+No markdown outside the JSON string. No explanation. No text before or after. Only the JSON object.`, user: `Project title: Outline project
+Pitch: A compelling pitch.
+Story: A previously generated story.
+
+Write a Project Outline for this project. Each section should clearly define its narrative role and production context.` };
 
     const runnerResult = await resolveOperationPrompt(outlineGenerateDescriptor, { projectId });
     expect(runnerResult.ok).toBe(true);

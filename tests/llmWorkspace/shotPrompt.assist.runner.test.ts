@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, insertSequence, insertShot, readProject, readSequence, readShot } from "../actions/helpers/fixtures";
+import { insertProject, insertSequence, insertShot } from "../actions/helpers/fixtures";
 import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotPrompt";
-import { buildShotPromptFromContextPrompt } from "@/lib/prompts/shot-prompt-from-context";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for `shotPrompt.assist`
@@ -82,36 +81,6 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
-async function expectedPrompt(mode: "generate" | "enhance" | "rewrite" | "shorten" | "expand", targetShotId: number) {
-  const [project, sequence, shot] = await Promise.all([
-    readProject(ctx, projectId),
-    readSequence(ctx, sequenceId),
-    readShot(ctx, targetShotId),
-  ]);
-  return buildShotPromptFromContextPrompt({
-    projectName: project.name,
-    projectPitch: project.pitch,
-    projectStory: project.story,
-    sequenceTitle: sequence.title,
-    sequenceSummary: sequence.summary,
-    sequenceDescription: sequence.description,
-    sequenceMood: sequence.mood,
-    sequenceLocationHint: sequence.locationHint,
-    shotTitle: shot.title,
-    shotCode: shot.shotCode,
-    shotDescription: shot.description,
-    actionPitch: shot.actionPitch,
-    cameraPitch: shot.cameraPitch,
-    framing: shot.framing,
-    cameraMovement: shot.cameraMovement,
-    durationSeconds: shot.durationSeconds,
-    currentShotPrompt: shot.shotPrompt,
-    castSummary: [],
-    referenceSummary: [],
-    assistMode: mode,
-  });
-}
-
 describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte (enhance mode)", async () => {
     const result = await generateShotPromptDraft(
@@ -124,7 +93,21 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
     );
     expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
 
-    const expected = await expectedPrompt("enhance", shotId);
+    const expected = { system: `You are an expert at writing visual generation prompts for AI image and video diffusion models.
+Enhance the existing visual prompt by adding detail: camera angle precision, lighting nuances, atmospheric quality, compositional elements. Preserve the original intent and action. Do not change the core subject or scene dramatically.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one paragraph.
+Always respond with a valid JSON object matching exactly this schema:
+{ "shot_prompt": "<your visual prompt here>" }
+No explanation. Only the JSON object.`, user: `Current prompt:
+An existing shot prompt.
+
+Shot context (background only):
+Shot: The hero steps into frame.
+Mood: Tense
+Location: Rooftop, dusk
+
+Transform the prompt as instructed.` };
 
     const runnerResult = await resolveOperationPrompt(
       shotPromptAssistDescriptor,
@@ -149,7 +132,32 @@ describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
     );
     expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
 
-    const expected = await expectedPrompt("generate", shotId);
+    const expected = { system: `You are an expert at writing visual generation prompts for AI image and video diffusion models.
+Write a clean, dense, cinematic visual prompt for the given shot context.
+Focus on: visible action, subject, composition, camera angle, lighting, atmosphere, environment, and cinematic style.
+Do not mention project names, sequence names, or shot codes explicitly in the prompt.
+Do not include labels, headers, explanations, bullet points, or markdown.
+Write in English. Output one paragraph.
+Always respond with a valid JSON object matching exactly this schema:
+{ "shot_prompt": "<your visual prompt here>" }
+No explanation. Only the JSON object.`, user: `Project: Shot Prompt project
+Pitch: A compelling pitch.
+Story: A previously generated story.
+Sequence: Opening sequence
+Sequence summary: A short summary.
+Sequence description: A longer description.
+Mood: Tense
+Location: Rooftop, dusk
+Shot: SH01 — Hero enters
+Duration: 4s
+Description: The hero steps into frame.
+Action: Walks forward, looks up.
+Camera intent: Slow push-in.
+Framing: Medium shot
+Camera movement: Dolly
+Existing prompt draft: An existing shot prompt.
+
+Write a visual generation prompt for this shot.` };
 
     const runnerResult = await resolveOperationPrompt(
       shotPromptAssistDescriptor,

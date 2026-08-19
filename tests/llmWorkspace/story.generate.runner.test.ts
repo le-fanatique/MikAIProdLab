@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
-import { insertProject, readProject } from "../actions/helpers/fixtures";
+import { insertProject } from "../actions/helpers/fixtures";
 import { storyGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/story";
-import { buildStoryFromPitchPrompt } from "@/lib/prompts/story-from-pitch";
 
 // ---------------------------------------------------------------------------
 // Proof required by the ticket's "Obligations de preuve" for `story.generate`:
@@ -62,12 +61,16 @@ describe("story.generate — runner proof (LLMW.RUNNER.1a)", () => {
     const result = await generateStory(projectId);
     expect(result).toEqual({ ok: true, story: "A generated story." });
 
-    const project = await readProject(ctx, projectId);
-    const expectedPrompt = buildStoryFromPitchPrompt({
-      name: project.name,
-      pitch: project.pitch,
-      description: project.description,
-    });
+    const expectedPrompt = { system: `You are a professional screenwriter and narrative consultant.
+Your task is to write a concise story synopsis from a project pitch.
+The story should be 200 to 400 words, written in a cinematic style suitable for production use.
+Always respond with a valid JSON object matching exactly this schema:
+{ "story": "<narrative text>" }
+No markdown. No explanation. Only the JSON object.`, user: `Project title: Story project
+Pitch: A compelling pitch.
+Additional notes: Extra notes for the writer.
+
+Write a story synopsis for this project.` };
 
     const runnerResult = await resolveOperationPrompt(storyGenerateDescriptor, { projectId });
     expect(runnerResult.ok).toBe(true);

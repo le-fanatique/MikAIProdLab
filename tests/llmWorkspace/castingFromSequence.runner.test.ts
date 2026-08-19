@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupTempDb, type TempDb } from "../actions/helpers/tempDb";
 import { insertProject, insertSequence, insertShot, insertAsset } from "../actions/helpers/fixtures";
 import { castingFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/castingFromSequence";
-import { buildCastingFromSequencePrompt } from "@/lib/prompts/casting-from-sequence";
 
 // ---------------------------------------------------------------------------
 // Level-2 proof required by the ticket ("Validation attendue" §2): the real
@@ -52,34 +51,55 @@ async function makeProjectAndSequence(): Promise<{ projectId: number; sequenceId
 describe("casting.fromSequence — runner prompt-equality proof", () => {
   it("includeSequenceLevel=false: matches buildCastingFromSequencePrompt", async () => {
     const { projectId, sequenceId } = await makeProjectAndSequence();
-    const shotId = await insertShot(ctx, sequenceId, { title: "Shot One", shotCode: "SH010", orderIndex: 0 });
-    const assetId = await insertAsset(ctx, projectId, { name: "Kira", type: "character", orderIndex: 0 });
+    await insertShot(ctx, sequenceId, { title: "Shot One", shotCode: "SH010", orderIndex: 0 });
+    await insertAsset(ctx, projectId, { name: "Kira", type: "character", orderIndex: 0 });
 
     const runnerResult = await resolveOperationPrompt(castingFromSequenceDescriptor, { projectId, sequenceId });
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    const { eq } = await import("drizzle-orm");
-    const [project] = await ctx.db.select().from(ctx.schema.projects).where(eq(ctx.schema.projects.id, projectId));
-    const [sequence] = await ctx.db.select().from(ctx.schema.sequences).where(eq(ctx.schema.sequences.id, sequenceId));
+    const expected = { system: `You are a casting director and production supervisor for the project "Neon Skyline".
 
-    const expected = buildCastingFromSequencePrompt({
-      project: { name: project.name, pitch: project.pitch, story: project.story, outline: project.outline },
-      sequence: {
-        id: sequence.id,
-        title: sequence.title,
-        summary: sequence.summary,
-        description: sequence.description,
-        narrativePurpose: sequence.narrativePurpose,
-        mood: sequence.mood,
-        locationHint: sequence.locationHint,
-      },
-      shots: [{ id: shotId, shotCode: "SH010", title: "Shot One", description: null, actionPitch: null, continuityIn: null, continuityOut: null }],
-      assets: [{ id: assetId, name: "Kira", type: "character", description: null, notes: null }],
-      existingShotCastings: [],
-      existingSequenceCastings: [],
-      includeSequenceLevel: false,
-    });
+Your task is to suggest which assets from the project's asset library should be cast into the provided shots.
+
+CASTING RULES:
+- Use ONLY the asset IDs and shot IDs provided below. Never invent IDs or names.
+- Prioritize: characters visible or implied in the action; environments matching the location; props, vehicles, or crowds clearly present or useful.
+- Do not cast every asset into every shot. Be selective and production-relevant.
+- Do not suggest castings that are already assigned (listed under "Already assigned").
+- Make suggestions that will help the shot generation pipeline: cast assets that will appear in the visual output.
+- confidence must be "high", "medium", or "low".
+- reason must be one short sentence or null.
+- Maximum 60 suggestions total.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "suggestions": [
+    {
+      "targetType": "shot",
+      "targetId": <number — exact ID from the provided lists>,
+      "targetLabel": "string — shot code + title, or sequence title",
+      "assetId": <number — exact ID from the provided asset list>,
+      "assetName": "string — asset name",
+      "assetType": "character | environment | prop | vehicle | crowd | other",
+      "reason": "string or null — one sentence explaining why this asset fits this shot",
+      "confidence": "high | medium | low"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.
+Maximum 60 suggestions total.`, user: `Project: Neon Skyline
+
+SEQUENCE [ID: 1]: Chase Sequence
+Summary: The courier is pursued across rooftops.
+
+ASSET LIBRARY:
+[ASSET ID: 1] Kira — character
+
+SHOTS:
+[SHOT ID: 1] SH010 — Shot One
+
+Suggest which assets should be cast into each shot. Use only the exact IDs provided above. Do not invent IDs, asset names, or shot names.` };
 
     expect(runnerResult.prompt.system).toBe(expected.system);
     expect(runnerResult.prompt.user).toBe(expected.user);
@@ -87,8 +107,8 @@ describe("casting.fromSequence — runner prompt-equality proof", () => {
 
   it("includeSequenceLevel=true: matches buildCastingFromSequencePrompt", async () => {
     const { projectId, sequenceId } = await makeProjectAndSequence();
-    const shotId = await insertShot(ctx, sequenceId, { title: "Shot One", shotCode: "SH010", orderIndex: 0 });
-    const assetId = await insertAsset(ctx, projectId, { name: "Kira", type: "character", orderIndex: 0 });
+    await insertShot(ctx, sequenceId, { title: "Shot One", shotCode: "SH010", orderIndex: 0 });
+    await insertAsset(ctx, projectId, { name: "Kira", type: "character", orderIndex: 0 });
 
     const runnerResult = await resolveOperationPrompt(
       castingFromSequenceDescriptor,
@@ -98,27 +118,49 @@ describe("casting.fromSequence — runner prompt-equality proof", () => {
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
 
-    const { eq } = await import("drizzle-orm");
-    const [project] = await ctx.db.select().from(ctx.schema.projects).where(eq(ctx.schema.projects.id, projectId));
-    const [sequence] = await ctx.db.select().from(ctx.schema.sequences).where(eq(ctx.schema.sequences.id, sequenceId));
+    const expected = { system: `You are a casting director and production supervisor for the project "Neon Skyline".
 
-    const expected = buildCastingFromSequencePrompt({
-      project: { name: project.name, pitch: project.pitch, story: project.story, outline: project.outline },
-      sequence: {
-        id: sequence.id,
-        title: sequence.title,
-        summary: sequence.summary,
-        description: sequence.description,
-        narrativePurpose: sequence.narrativePurpose,
-        mood: sequence.mood,
-        locationHint: sequence.locationHint,
-      },
-      shots: [{ id: shotId, shotCode: "SH010", title: "Shot One", description: null, actionPitch: null, continuityIn: null, continuityOut: null }],
-      assets: [{ id: assetId, name: "Kira", type: "character", description: null, notes: null }],
-      existingShotCastings: [],
-      existingSequenceCastings: [],
-      includeSequenceLevel: true,
-    });
+Your task is to suggest which assets from the project's asset library should be cast into the provided shots and optionally into the sequence itself.
+
+CASTING RULES:
+- Use ONLY the asset IDs and shot IDs provided below. Never invent IDs or names.
+- Prioritize: characters visible or implied in the action; environments matching the location; props, vehicles, or crowds clearly present or useful.
+- Do not cast every asset into every shot. Be selective and production-relevant.
+- Do not suggest castings that are already assigned (listed under "Already assigned").
+- Make suggestions that will help the shot generation pipeline: cast assets that will appear in the visual output.
+- Sequence-level casting: use targetType="sequence" and targetId=2 only for assets that are thematically relevant to the full sequence (e.g., the main character or primary location).
+- confidence must be "high", "medium", or "low".
+- reason must be one short sentence or null.
+- Maximum 60 suggestions total.
+
+Always respond with a valid JSON object matching exactly this schema:
+{
+  "suggestions": [
+    {
+      "targetType": "shot | sequence",
+      "targetId": <number — exact ID from the provided lists>,
+      "targetLabel": "string — shot code + title, or sequence title",
+      "assetId": <number — exact ID from the provided asset list>,
+      "assetName": "string — asset name",
+      "assetType": "character | environment | prop | vehicle | crowd | other",
+      "reason": "string or null — one sentence explaining why this asset fits this shot",
+      "confidence": "high | medium | low"
+    }
+  ]
+}
+No markdown. No explanation. Only the JSON object.
+Maximum 60 suggestions total.`, user: `Project: Neon Skyline
+
+SEQUENCE [ID: 2]: Chase Sequence
+Summary: The courier is pursued across rooftops.
+
+ASSET LIBRARY:
+[ASSET ID: 2] Kira — character
+
+SHOTS:
+[SHOT ID: 2] SH010 — Shot One
+
+Suggest which assets should be cast into each shot. You may also suggest sequence-level castings (targetType="sequence", targetId=2) for assets that are central to the whole sequence. Use only the exact IDs provided above. Do not invent IDs, asset names, or shot names.` };
 
     expect(runnerResult.prompt.system).toBe(expected.system);
     expect(runnerResult.prompt.user).toBe(expected.user);
