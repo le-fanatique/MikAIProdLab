@@ -10,11 +10,11 @@ import EditorialTimeline, {
 import EditorialShotList from "@/components/EditorialShotList";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import { initializeEditorialTimeline } from "@/actions/shots";
+import { moveEditorialItemOrder } from "@/actions/editorialOrder";
 import {
-  moveEditorialItemOrder,
   updateEditorialItemTrim,
   deleteEditorialGap,
-} from "@/actions/editorialTimeline";
+} from "@/actions/editorialTrim";
 import InsertShotFromEditorialButton from "@/components/InsertShotFromEditorialButton";
 import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import type { VideoSourceMode } from "@/lib/editorial/videoSourceMode";

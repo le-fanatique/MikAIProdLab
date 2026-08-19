@@ -16,9 +16,12 @@ import {
 
 // ---------------------------------------------------------------------------
 // sequenceVideoSplit — IND.VIDEOSPLIT.1. Characterization tests: they lock
-// down `src/actions/sequenceVideoSplit.ts` exactly as it behaves today, as
-// the net the future split of this 1 828-line file will land on. No
-// production behavior is changed by this ticket.
+// down `src/actions/sequenceVideoSplitDetection.ts`,
+// `src/actions/sequenceVideoSplitCleanup.ts`,
+// `src/actions/sequenceVideoSplitSegments.ts`, and
+// `src/actions/sequenceVideoSplitValidate.ts` (split from the former
+// 1 828-line `src/actions/sequenceVideoSplit.ts` by IND.SPLIT.1) exactly as
+// they behave today. No production behavior is changed by this ticket.
 //
 // Real-file-dependent actions (adjustSegmentBoundary, splitSegmentAt,
 // splitSegmentAtFrame, mergeSegment) resolve `run.sourceVideoPathSnapshot`
@@ -37,7 +40,10 @@ import {
 // ---------------------------------------------------------------------------
 
 let ctx: TempDb;
-let actions: typeof import("@/actions/sequenceVideoSplit");
+let actions: typeof import("@/actions/sequenceVideoSplitDetection") &
+  typeof import("@/actions/sequenceVideoSplitCleanup") &
+  typeof import("@/actions/sequenceVideoSplitSegments") &
+  typeof import("@/actions/sequenceVideoSplitValidate");
 
 let projectId: number;
 let sequenceId: number;
@@ -68,7 +74,12 @@ function form(fields: Record<string, string>): FormData {
 
 beforeAll(async () => {
   ctx = await setupTempDb();
-  actions = await import("@/actions/sequenceVideoSplit");
+  actions = {
+    ...(await import("@/actions/sequenceVideoSplitDetection")),
+    ...(await import("@/actions/sequenceVideoSplitCleanup")),
+    ...(await import("@/actions/sequenceVideoSplitSegments")),
+    ...(await import("@/actions/sequenceVideoSplitValidate")),
+  };
   await mkdir(FIXTURE_ABSOLUTE_DIR, { recursive: true });
   await writeFile(path.join(FIXTURE_ABSOLUTE_DIR, "fixture.mp4"), Buffer.from("not a real video file", "utf8"));
 

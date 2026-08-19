@@ -18,9 +18,11 @@ import {
 
 // ---------------------------------------------------------------------------
 // storyboardExtraction — IND.STORYBOARD.1. Characterization tests: they lock
-// down `src/actions/storyboardExtraction.ts` exactly as it behaves today, as
-// the net the future split of this 1 016-line file will land on. No
-// production behavior is changed by this ticket.
+// down `src/actions/storyboardExtractionStart.ts`,
+// `src/actions/storyboardExtractionRegions.ts`, and
+// `src/actions/storyboardExtractionConfirm.ts` (split from the former
+// 1 016-line `src/actions/storyboardExtraction.ts` by IND.SPLIT.1) exactly as
+// they behave today. No production behavior is changed by this ticket.
 //
 // `startStoryboardExtraction` and `confirmStoryboardExtraction` are the only
 // two actions that reach `src/lib/storyboardExtraction/opencvWorker.ts`
@@ -74,7 +76,9 @@ vi.mock("@/lib/storyboardExtraction/opencvWorker", async (importOriginal) => {
 });
 
 let ctx: TempDb;
-let actions: typeof import("@/actions/storyboardExtraction");
+let actions: typeof import("@/actions/storyboardExtractionStart") &
+  typeof import("@/actions/storyboardExtractionRegions") &
+  typeof import("@/actions/storyboardExtractionConfirm");
 let actualRunDetect: typeof import("@/lib/storyboardExtraction/opencvWorker")["runDetect"];
 let actualRunCrop: typeof import("@/lib/storyboardExtraction/opencvWorker")["runCrop"];
 
@@ -108,7 +112,11 @@ function form(fields: Record<string, string>): FormData {
 
 beforeAll(async () => {
   ctx = await setupTempDb();
-  actions = await import("@/actions/storyboardExtraction");
+  actions = {
+    ...(await import("@/actions/storyboardExtractionStart")),
+    ...(await import("@/actions/storyboardExtractionRegions")),
+    ...(await import("@/actions/storyboardExtractionConfirm")),
+  };
   const real = await vi.importActual<typeof import("@/lib/storyboardExtraction/opencvWorker")>(
     "@/lib/storyboardExtraction/opencvWorker"
   );

@@ -5,7 +5,7 @@ import { updateSequenceShotDurations, updateShotTrim } from "@/actions/shots";
 import {
   updateEditorialItemTrim,
   resetAllEditorialItemTrims,
-} from "@/actions/editorialTimeline";
+} from "@/actions/editorialTrim";
 
 // Editorial status colors
 const COLOR_APPROVED = "#6b9e72";

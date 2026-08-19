@@ -18,7 +18,9 @@ import {
 
 // ---------------------------------------------------------------------------
 // editorialTimeline — IND.EDITORIAL.3. Characterization tests: they lock down
-// `src/actions/editorialTimeline.ts` exactly as it behaves today, the last
+// `src/actions/editorialTrim.ts` and `src/actions/editorialOrder.ts` (split
+// from the former `src/actions/editorialTimeline.ts` by IND.SPLIT.1) exactly
+// as they behave today, the last
 // server path in the repo without a net. No production behavior is changed
 // by this ticket.
 //
@@ -41,7 +43,7 @@ import {
 // ---------------------------------------------------------------------------
 
 let ctx: TempDb;
-let actions: typeof import("@/actions/editorialTimeline");
+let actions: typeof import("@/actions/editorialTrim") & typeof import("@/actions/editorialOrder");
 
 let projectId: number;
 let sequenceId: number;
@@ -55,7 +57,10 @@ function form(fields: Record<string, string>): FormData {
 
 beforeAll(async () => {
   ctx = await setupTempDb();
-  actions = await import("@/actions/editorialTimeline");
+  actions = {
+    ...(await import("@/actions/editorialTrim")),
+    ...(await import("@/actions/editorialOrder")),
+  };
 
   projectId = await insertProject(ctx, "Editorial timeline project");
   sequenceId = await insertSequence(ctx, projectId);

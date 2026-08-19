@@ -13,7 +13,7 @@ import {
   toTimelineEditorData,
   type TimelineEditorActionLike,
 } from "@/lib/editorial/toTimelineEditorData";
-import { moveEditorialItem } from "@/actions/editorialTimeline";
+import { moveEditorialItem } from "@/actions/editorialOrder";
 
 type Props = {
   document: EditorialDocument;

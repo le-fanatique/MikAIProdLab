@@ -40,9 +40,9 @@ import {
   restoreSegment,
   reassignSegmentShot,
   assignAllSegments,
-  validateSplitPlan,
   detectSplitsInSegment,
-} from "@/actions/sequenceVideoSplit";
+} from "@/actions/sequenceVideoSplitSegments";
+import { validateSplitPlan } from "@/actions/sequenceVideoSplitValidate";
 
 export type SplitSegmentDTO = {
   id: number;

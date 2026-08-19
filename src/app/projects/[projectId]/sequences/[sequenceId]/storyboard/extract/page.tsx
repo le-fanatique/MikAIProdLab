@@ -35,17 +35,17 @@ import {
   type ContentCropBaseRects,
 } from "@/lib/storyboardExtraction/contentCrop";
 import { isRatioPreset, RATIO_PRESETS, type RatioPreset } from "@/lib/storyboardExtraction/ratioCrop";
+import { startStoryboardExtraction } from "@/actions/storyboardExtractionStart";
 import {
-  startStoryboardExtraction,
   addExtractionRegion,
   resizeExtractionRegion,
   reassignExtractionRegion,
   skipExtractionRegion,
   deleteExtractionRegion,
-  confirmStoryboardExtraction,
   resizeAllExtractionRegions,
   assignAllExtractionRegions,
-} from "@/actions/storyboardExtraction";
+} from "@/actions/storyboardExtractionRegions";
+import { confirmStoryboardExtraction } from "@/actions/storyboardExtractionConfirm";
 
 export const dynamic = "force-dynamic";
 
