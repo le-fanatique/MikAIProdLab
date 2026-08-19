@@ -1445,6 +1445,52 @@ Prompt Compiler's removal → C3 → C4/C5/C6. The independents
 (`ThemeModeToggle.tsx`, `sequenceVideoSplit.ts`, the large storyboard and
 editorial files) remain schedulable at any time and touch none of this.
 
+### C1/C2 re-measured, 2026-08-19 — the plan's lines are stale
+
+Measured after C0 landed, before writing a C1 ticket.
+
+**C1 is already delivered in substance.** The plan reads *"Remove the 10 assist
+panels in favour of the proposal component — ~2 541 lines replaced"*. That
+replacement **already happened**, during B5 and the migration tickets:
+`src/components/llmWorkspace/ProposalPanel.tsx` (326 shared lines) is imported
+by **10 consumers today**, and what remains in each is per-operation glue
+averaging ~146 lines — which action to call, what to label the button, how to
+map a result into a draft, which commit binding to use. `StoryGenerationPanel`
+is 76 lines of exactly that.
+
+There is no pile of duplicated panel logic left to delete. Writing a C1 ticket
+against that line would have produced either a no-op or a gratuitous rewrite.
+
+**C2 as written is not possible.** The plan reads *"Remove the 15 LLM actions in
+favour of runner + descriptors"*. Those actions are `"use server"` — they **are**
+the RPC boundary through which a client panel reaches the server. `runOperation`
+is server-only and a client component cannot call it. Removing them is not
+deleting debt; it would be deleting the only door.
+
+**What C1/C2 actually are, then.** Not removal — **unification**. Nine
+per-operation panels and fifteen per-operation server actions collapse into one
+descriptor-driven panel plus one generic server action taking a descriptor id.
+
+And that shape is not speculative: **the bench already is it.**
+`BenchRunPanel` + `runBenchOperation` run any of the 19 descriptors from one
+surface through one action. The work is generalising a proven pair, not
+inventing one.
+
+**But it rewires nine production surfaces**, which is a poor thing to do
+immediately before the author's from-scratch beta. Recommended order:
+
+1. the **independents** — `ThemeModeToggle.tsx` (1 835 lines),
+  `src/actions/sequenceVideoSplit.ts` (1 828), the large storyboard and
+  editorial files. They touch none of this and are pure gain;
+2. the **beta**, on a product whose surfaces have not just moved;
+3. **then** the unification, and the Prompt Compiler's removal with it — the
+  author decided 2026-08-19 to keep the Prompt Compiler until the beta has
+  judged its replacement.
+
+C3 (prompt builders → declarative templates) is unblocked by C0 and can run at
+any point after it; C4/C5/C6 are reorganisation and want the unification done
+first, since it is what makes ~10 components disappear.
+
 ### The ordering the user settled, and what B7a changed
 
 **Order settled by the user on 2026-08-15**, revised as above:
