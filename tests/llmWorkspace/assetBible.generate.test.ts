@@ -30,25 +30,19 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateAssetBibleDraft: typeof import("@/actions/llm/assetBible").generateAssetBibleDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveAssetCore: typeof import("@/lib/llmWorkspace/variables/registry").resolveAssetCore;
 let resolveAssetBible: typeof import("@/lib/llmWorkspace/variables/registry").resolveAssetBible;
 let resolveProjectStyle: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectStyle;
 let projectId: number;
 let assetId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateAssetBibleDraft } = await import("@/actions/llm/assetBible"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ resolveAssetCore, resolveAssetBible, resolveProjectStyle } = await import(
     "@/lib/llmWorkspace/variables/registry"
   ));
@@ -69,12 +63,13 @@ afterAll(() => ctx.cleanup());
 
 describe("assetBible.generate descriptor — context equality", () => {
   it("resolving ASSET.CORE, ASSET.BIBLE and PROJECT.STYLE equals what generateAssetBibleDraft passes to its builder", async () => {
-    const result = await generateAssetBibleDraft(
-      form({ projectId: String(projectId), assetId: String(assetId) })
-    );
+    const result = await runWorkspaceOperation({ descriptorId: "assetBible.generate", ids: { projectId, assetId } });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
     expect(result).toEqual({
       ok: true,
-      draft: {
+      kind: "object",
+      values: {
         visualIdentity: "A generated visual identity.",
         usageRules: "A generated usage rule.",
         forbiddenVariations: "A generated forbidden variation.",

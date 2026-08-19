@@ -27,7 +27,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateAssetDescriptionOnlyDraft: typeof import("@/actions/llm/assetDescription").generateAssetDescriptionOnlyDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
@@ -35,18 +35,12 @@ let projectId: number;
 let otherProjectId: number;
 let assetId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateAssetDescriptionOnlyDraft } = await import("@/actions/llm/assetDescription"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
 
@@ -70,10 +64,10 @@ afterAll(() => ctx.cleanup());
 
 describe("assetDescription.generate — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
-    const result = await generateAssetDescriptionOnlyDraft(
-      form({ projectId: String(projectId), assetId: String(assetId) })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated description." });
+    const result = await runWorkspaceOperation({ descriptorId: "assetDescription.generate", ids: { projectId, assetId } });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { description: "A generated description." } });
 
     const expected = { system: `You are a production asset supervisor for a film or animation project.
 Your task is to write or enrich ONLY the visual/production description for a specific asset.
@@ -108,9 +102,10 @@ Write or enrich only the description for "Hero Robot".` };
   });
 
   it("2. refuses an Asset belonging to a different Project, with the same message generateAssetDescriptionOnlyDraft produces", async () => {
-    const actionResult = await generateAssetDescriptionOnlyDraft(
-      form({ projectId: String(otherProjectId), assetId: String(assetId) })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "assetDescription.generate",
+      ids: { projectId: otherProjectId, assetId },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Asset not found." });
 
     const runnerResult = await resolveOperationPrompt(assetDescriptionGenerateDescriptor, {
@@ -123,9 +118,10 @@ Write or enrich only the description for "Hero Robot".` };
   it("2b. refuses a Project that does not exist, with the same message generateAssetDescriptionOnlyDraft produces", async () => {
     const nonExistentProjectId = projectId + 9000;
 
-    const actionResult = await generateAssetDescriptionOnlyDraft(
-      form({ projectId: String(nonExistentProjectId), assetId: String(assetId) })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "assetDescription.generate",
+      ids: { projectId: nonExistentProjectId, assetId },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Project not found." });
 
     const runnerResult = await resolveOperationPrompt(assetDescriptionGenerateDescriptor, {

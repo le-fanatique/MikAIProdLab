@@ -27,23 +27,17 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateAssetRetakeDraft: typeof import("@/actions/llm/assetRetake").generateAssetRetakeDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let buildAssetDescriptionFieldCommitArgs: typeof import("@/lib/llmWorkspace/actions/proposalCommit").buildAssetDescriptionFieldCommitArgs;
 let updateAssetDescriptionFieldInline: typeof import("@/actions/assets").updateAssetDescriptionFieldInline;
 
 let projectId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateAssetRetakeDraft } = await import("@/actions/llm/assetRetake"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ buildAssetDescriptionFieldCommitArgs } = await import("@/lib/llmWorkspace/actions/proposalCommit"));
   ({ updateAssetDescriptionFieldInline } = await import("@/actions/assets"));
 
@@ -52,17 +46,25 @@ beforeAll(async () => {
 
 afterAll(() => ctx.cleanup());
 
-describe("generateAssetRetakeDraft — thin adapter over runOperation", () => {
+describe("asset.retakeDirected — via runWorkspaceOperation (LLMW.UNIFY.PANEL.2)", () => {
   it("returns the model's description as a draft", async () => {
     const assetId = await insertAsset(ctx, projectId, {
       name: "Courier",
       description: "A rugged courier in a weathered leather jacket.",
     });
 
-    const draft = await generateAssetRetakeDraft(
-      form({ projectId: String(projectId), assetId: String(assetId), freeText: "soften the jawline, less masculine" })
-    );
-    expect(draft).toEqual({ ok: true, draft: { description: "A softened, androgynous courier silhouette." } });
+    const draft = await runWorkspaceOperation({
+      descriptorId: "asset.retakeDirected",
+      ids: { projectId, assetId },
+      intent: { freeText: "soften the jawline, less masculine" },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(draft).toEqual({
+      ok: true,
+      kind: "object",
+      values: { description: "A softened, androgynous courier silhouette." },
+    });
   });
 });
 
@@ -78,11 +80,15 @@ describe("AssetRetakeDirectedPanel's write path — commits description alone (v
     });
     const before = await readAsset(ctx, assetId);
 
-    const draft = await generateAssetRetakeDraft(
-      form({ projectId: String(projectId), assetId: String(assetId), freeText: "soften the jawline, less masculine" })
-    );
+    const draft = await runWorkspaceOperation({
+      descriptorId: "asset.retakeDirected",
+      ids: { projectId, assetId },
+      intent: { freeText: "soften the jawline, less masculine" },
+    });
     expect(draft.ok).toBe(true);
-    if (!draft.ok) throw new Error("unreachable");
+    if (!draft.ok || draft.kind !== "object") throw new Error("unreachable");
+    const draftDescription = draft.values.description;
+    if (typeof draftDescription !== "string") throw new Error("unreachable");
 
     // Same call shape `AssetRetakeDirectedPanel`'s Approve action uses:
     // `buildAssetDescriptionFieldCommitArgs` with a fixed `field: "description",
@@ -92,7 +98,7 @@ describe("AssetRetakeDirectedPanel's write path — commits description alone (v
       projectId,
       field: "description",
       mode: "replace",
-      content: draft.draft.description,
+      content: draftDescription,
     });
     const commitResult = await updateAssetDescriptionFieldInline(...args);
     expect(commitResult).toEqual({ ok: true });

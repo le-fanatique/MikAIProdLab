@@ -23,7 +23,7 @@ let ctx: TempDb;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
-let generateShotRetakeDraft: typeof import("@/actions/llm/shotRetake").generateShotRetakeDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let updateShotNarrativeContext: typeof import("@/actions/shots").updateShotNarrativeContext;
 let buildShotRetakeCommitArgs: typeof import("@/lib/llmWorkspace/actions/proposalCommit").buildShotRetakeCommitArgs;
 
@@ -33,19 +33,13 @@ let shotId: number;
 let otherProjectId: number;
 let otherSequenceId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
-  ({ generateShotRetakeDraft } = await import("@/actions/llm/shotRetake"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ updateShotNarrativeContext } = await import("@/actions/shots"));
   ({ buildShotRetakeCommitArgs } = await import("@/lib/llmWorkspace/actions/proposalCommit"));
 
@@ -244,14 +238,26 @@ describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of
       JSON.stringify({ description: "", action_pitch: "A brand new action.", camera_pitch: "" })
     );
 
-    const draft = await generateShotRetakeDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId), shotId: String(retakeShotId) })
-    );
+    const draft = await runWorkspaceOperation({
+      descriptorId: "shot.retakeDirected",
+      ids: { projectId, sequenceId, shotId: retakeShotId },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
     expect(draft).toEqual({
       ok: true,
-      draft: { description: "", actionPitch: "A brand new action.", cameraPitch: "" },
+      kind: "object",
+      values: { description: "", actionPitch: "A brand new action.", cameraPitch: "" },
     });
-    if (!draft.ok) throw new Error("unreachable");
+    if (!draft.ok || draft.kind !== "object") throw new Error("unreachable");
+    const { description: draftDescription, actionPitch: draftActionPitch, cameraPitch: draftCameraPitch } = draft.values;
+    if (
+      typeof draftDescription !== "string" ||
+      typeof draftActionPitch !== "string" ||
+      typeof draftCameraPitch !== "string"
+    ) {
+      throw new Error("unreachable");
+    }
 
     const before = await readShot(ctx, retakeShotId);
     const args = buildShotRetakeCommitArgs({
@@ -259,7 +265,7 @@ describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of
       sequenceId,
       projectId,
       existing: { description: before.description, actionPitch: before.actionPitch, cameraPitch: before.cameraPitch },
-      applied: draft.draft,
+      applied: { description: draftDescription, actionPitch: draftActionPitch, cameraPitch: draftCameraPitch },
     });
     const commitResult = await updateShotNarrativeContext(...args);
     expect(commitResult).toEqual({ ok: true });

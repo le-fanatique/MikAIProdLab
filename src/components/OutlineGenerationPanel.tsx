@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateOutlineDraft } from "@/actions/llm/outlineGeneration";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildApplyGeneratedOutlineArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
@@ -37,12 +37,27 @@ export default function OutlineGenerationPanel({
     label: "Generate Outline Draft",
     disabled: noPitch,
     loadingLabel: "Generating outline — this may take a few seconds...",
+    // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a
+    // function for it. `targetSections` travels through `intent.parameters`,
+    // the descriptor's own declared shape; an invalid or absent value
+    // (`NaN`) is dropped by the runner's own `normalizeIntentParameters`,
+    // the same behaviour the deleted adapter relied on. The narrowing below
+    // is not defensive noise: `runOperation`'s `"object"` values are
+    // `string | number`, while this descriptor declares its one field
+    // `type: "string"`. The impossible branch is refused loudly rather than
+    // coerced, exactly as the deleted adapter did.
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      if (targetSections.trim()) fd.set("targetSections", targetSections.trim());
-      const result = await generateOutlineDraft(fd);
-      return result.ok ? { ok: true, draft: { outline: result.outline } } : { ok: false, error: result.error };
+      const rawSections = parseInt(targetSections, 10);
+      const result = await runWorkspaceOperation({
+        descriptorId: "outline.generate",
+        ids: { projectId },
+        intent: { parameters: { targetSections: rawSections } },
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const { outline } = result.values;
+      if (typeof outline !== "string") return { ok: false, error: "Unexpected non-text value for the outline." };
+      return { ok: true, draft: { outline } };
     },
   };
 

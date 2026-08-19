@@ -18,7 +18,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateSequencePromptDraft: typeof import("@/actions/llm/sequencePrompt").generateSequencePromptDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
@@ -26,18 +26,12 @@ let projectId: number;
 let sequenceId: number;
 let otherProjectId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateSequencePromptDraft } = await import("@/actions/llm/sequencePrompt"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
 
@@ -63,10 +57,14 @@ afterAll(() => ctx.cleanup());
 
 describe("sequencePrompt.assist — runner proof (LLMW.RUNNER.1a)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte (enhance mode)", async () => {
-    const result = await generateSequencePromptDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId), mode: "enhance" })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId, sequenceId },
+      intent: { mode: "enhance" },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { sequencePrompt: "A generated sequence prompt." } });
 
     const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
 Enhance the existing sequence prompt by adding visual and narrative detail: atmosphere, lighting quality, camera approach, dramatic arc. Preserve the original intent. Do not change the core subject or setting dramatically.
@@ -97,10 +95,12 @@ Transform the prompt as instructed.` };
   });
 
   it("1b. matches for generate mode too (the branch that never reads SEQ.CURRENT_PROMPT)", async () => {
-    const result = await generateSequencePromptDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId), mode: "generate" })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId, sequenceId },
+      intent: { mode: "generate" },
+    });
+    expect(result).toEqual({ ok: true, kind: "object", values: { sequencePrompt: "A generated sequence prompt." } });
 
     const expected = { system: `You are an expert at writing visual and narrative direction prompts for film sequences.
 Write a Sequence Prompt that describes the visual atmosphere, dramatic arc, camera approach, lighting, setting, and mood of the sequence.
@@ -134,9 +134,11 @@ Write a sequence prompt for this sequence.` };
   });
 
   it("2. refuses a Sequence belonging to a different Project, with the same message generateSequencePromptDraft produces", async () => {
-    const actionResult = await generateSequencePromptDraft(
-      form({ projectId: String(otherProjectId), sequenceId: String(sequenceId), mode: "generate" })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId: otherProjectId, sequenceId },
+      intent: { mode: "generate" },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Sequence not found." });
 
     const runnerResult = await resolveOperationPrompt(
@@ -150,9 +152,11 @@ Write a sequence prompt for this sequence.` };
   it("2b. refuses a Project that does not exist, with the same message generateSequencePromptDraft produces", async () => {
     const nonExistentProjectId = projectId + 9000;
 
-    const actionResult = await generateSequencePromptDraft(
-      form({ projectId: String(nonExistentProjectId), sequenceId: String(sequenceId), mode: "generate" })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId: nonExistentProjectId, sequenceId },
+      intent: { mode: "generate" },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Project not found." });
 
     const runnerResult = await resolveOperationPrompt(
@@ -192,9 +196,11 @@ Write a sequence prompt for this sequence.` };
   it("4. a transform mode against an empty sequencePrompt is refused before the LLM call, with the exact precondition message", async () => {
     const emptySequenceId = await insertSequence(ctx, projectId, { sequencePrompt: null });
 
-    const actionResult = await generateSequencePromptDraft(
-      form({ projectId: String(projectId), sequenceId: String(emptySequenceId), mode: "enhance" })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId, sequenceId: emptySequenceId },
+      intent: { mode: "enhance" },
+    });
     expect(actionResult).toEqual({
       ok: false,
       error: "A Sequence Prompt is required for this assist mode.",
@@ -219,9 +225,11 @@ Write a sequence prompt for this sequence.` };
   it("4b. generate mode has no such precondition, even against an empty sequencePrompt", async () => {
     const emptySequenceId = await insertSequence(ctx, projectId, { sequencePrompt: null, title: "Blank for generate" });
 
-    const actionResult = await generateSequencePromptDraft(
-      form({ projectId: String(projectId), sequenceId: String(emptySequenceId), mode: "generate" })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId, sequenceId: emptySequenceId },
+      intent: { mode: "generate" },
+    });
     expect(actionResult.ok).toBe(true);
 
     const runnerResult = await resolveOperationPrompt(

@@ -24,7 +24,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateShotPromptDraft: typeof import("@/actions/llm/shotPrompt").generateShotPromptDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
@@ -34,18 +34,12 @@ let shotId: number;
 let otherProjectId: number;
 let otherSequenceId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateShotPromptDraft } = await import("@/actions/llm/shotPrompt"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
 
@@ -83,15 +77,14 @@ afterAll(() => ctx.cleanup());
 
 describe("shotPrompt.assist — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte (enhance mode)", async () => {
-    const result = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(shotId),
-        mode: "enhance",
-      })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId },
+      intent: { mode: "enhance" },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { shotPrompt: "A generated shot prompt." } });
 
     const expected = { system: `You are an expert at writing visual generation prompts for AI image and video diffusion models.
 Enhance the existing visual prompt by adding detail: camera angle precision, lighting nuances, atmospheric quality, compositional elements. Preserve the original intent and action. Do not change the core subject or scene dramatically.
@@ -122,15 +115,12 @@ Transform the prompt as instructed.` };
   });
 
   it("1b. matches for generate mode too (the branch that never reads SHOT.CURRENT_PROMPT)", async () => {
-    const result = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(shotId),
-        mode: "generate",
-      })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId },
+      intent: { mode: "generate" },
+    });
+    expect(result).toEqual({ ok: true, kind: "object", values: { shotPrompt: "A generated shot prompt." } });
 
     const expected = { system: `You are an expert at writing visual generation prompts for AI image and video diffusion models.
 Write a clean, dense, cinematic visual prompt for the given shot context.
@@ -172,14 +162,11 @@ Write a visual generation prompt for this shot.` };
   });
 
   it("2. refuses a Shot belonging to a different Sequence chain, with the same message generateShotPromptDraft produces", async () => {
-    const actionResult = await generateShotPromptDraft(
-      form({
-        projectId: String(otherProjectId),
-        sequenceId: String(otherSequenceId),
-        shotId: String(shotId),
-        mode: "generate",
-      })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId: otherProjectId, sequenceId: otherSequenceId, shotId },
+      intent: { mode: "generate" },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Shot not found." });
 
     const runnerResult = await resolveOperationPrompt(
@@ -193,14 +180,11 @@ Write a visual generation prompt for this shot.` };
   it("2b. refuses a Project that does not exist, with the same message generateShotPromptDraft produces", async () => {
     const nonExistentProjectId = projectId + 9000;
 
-    const actionResult = await generateShotPromptDraft(
-      form({
-        projectId: String(nonExistentProjectId),
-        sequenceId: String(sequenceId),
-        shotId: String(shotId),
-        mode: "generate",
-      })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId: nonExistentProjectId, sequenceId, shotId },
+      intent: { mode: "generate" },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Project not found." });
 
     const runnerResult = await resolveOperationPrompt(
@@ -240,14 +224,11 @@ Write a visual generation prompt for this shot.` };
   it("4. a transform mode against an empty shotPrompt is refused before the LLM call, with the exact precondition message", async () => {
     const emptyShotId = await insertShot(ctx, sequenceId, { shotPrompt: null });
 
-    const actionResult = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(emptyShotId),
-        mode: "enhance",
-      })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId: emptyShotId },
+      intent: { mode: "enhance" },
+    });
     expect(actionResult).toEqual({
       ok: false,
       error: "A Shot Prompt is required for this assist mode.",
@@ -272,14 +253,11 @@ Write a visual generation prompt for this shot.` };
   it("4b. generate mode has no such precondition, even against an empty shotPrompt", async () => {
     const emptyShotId = await insertShot(ctx, sequenceId, { shotPrompt: null, title: "Blank for generate" });
 
-    const actionResult = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(emptyShotId),
-        mode: "generate",
-      })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId: emptyShotId },
+      intent: { mode: "generate" },
+    });
     expect(actionResult.ok).toBe(true);
 
     const runnerResult = await resolveOperationPrompt(
@@ -294,14 +272,11 @@ Write a visual generation prompt for this shot.` };
     const mockedCallLLMJson = callLLMJson as unknown as ReturnType<typeof vi.fn>;
     mockedCallLLMJson.mockClear();
 
-    const actionResult = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(shotId),
-        mode: "not-a-real-mode",
-      })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId },
+      intent: { mode: "not-a-real-mode" },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Invalid assist mode." });
     expect(mockedCallLLMJson).not.toHaveBeenCalled();
   });

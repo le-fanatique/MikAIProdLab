@@ -1,6 +1,6 @@
 "use client";
 
-import { generateSequencePromptDraft } from "@/actions/llm/sequencePrompt";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import type { SequencePromptAssistMode } from "@/lib/prompts/sequence-prompt-from-context";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildUpdateSequencePromptHiddenFields } from "@/lib/llmWorkspace/actions/proposalCommit";
@@ -48,18 +48,29 @@ export default function SequencePromptLLMAssistPanel({
 }: Props) {
   const hasExistingPrompt = Boolean(currentSequencePrompt?.trim());
 
+  // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a function
+  // for it. The mode — the descriptor's own `intent.mode` — travels through
+  // `intent`, not reconstructed here. The narrowing below is not defensive
+  // noise: `runOperation`'s `"object"` values are `string | number`, while
+  // this descriptor declares its one field `type: "string"`. The impossible
+  // branch is refused loudly rather than coerced, exactly as the deleted
+  // adapter did.
   const triggers: ProposalTrigger<Draft>[] = MODES.map((mode) => ({
     id: mode,
     label: MODE_BUTTON_LABELS[mode],
     disabled: mode !== "generate" && !hasExistingPrompt,
     loadingLabel: `Generating ${MODE_BUTTON_LABELS[mode].toLowerCase()}...`,
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      fd.set("sequenceId", String(sequenceId));
-      fd.set("mode", mode);
-      const result = await generateSequencePromptDraft(fd);
-      return result.ok ? { ok: true, draft: { mode, text: result.draft } } : { ok: false, error: result.error };
+      const result = await runWorkspaceOperation({
+        descriptorId: "sequencePrompt.assist",
+        ids: { projectId, sequenceId },
+        intent: { mode },
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const { sequencePrompt } = result.values;
+      if (typeof sequencePrompt !== "string") return { ok: false, error: "Unexpected non-text value for the prompt." };
+      return { ok: true, draft: { mode, text: sequencePrompt } };
     },
   }));
 

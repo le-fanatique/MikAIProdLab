@@ -27,22 +27,16 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateOutlineDraft: typeof import("@/actions/llm/outlineGeneration").generateOutlineDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveProjectIdentity: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectIdentity;
 let projectId: number;
-
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
 
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateOutlineDraft } = await import("@/actions/llm/outlineGeneration"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ resolveProjectIdentity } = await import("@/lib/llmWorkspace/variables/registry"));
 
   projectId = await insertProject(ctx, "Outline project");
@@ -57,10 +51,14 @@ afterAll(() => ctx.cleanup());
 
 describe("outline.generate descriptor — context equality", () => {
   it("resolving PROJECT.IDENTITY against the same anchor equals the row generateOutlineDraft reads (name, pitch, story)", async () => {
-    const result = await generateOutlineDraft(
-      form({ projectId: String(projectId), targetSections: "6" })
-    );
-    expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "outline.generate",
+      ids: { projectId },
+      intent: { parameters: { targetSections: 6 } },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { outline: "## A section\nBody." } });
 
     expect(outlineGenerateDescriptor.context.variables.map((v) => v.id)).toEqual(["PROJECT.IDENTITY"]);
 

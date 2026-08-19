@@ -29,24 +29,18 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateAssetNotesOnlyDraft: typeof import("@/actions/llm/assetDescription").generateAssetNotesOnlyDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveProjectIdentity: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectIdentity;
 let resolveAssetCore: typeof import("@/lib/llmWorkspace/variables/registry").resolveAssetCore;
 let projectId: number;
 let assetId: number;
-
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
 
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateAssetNotesOnlyDraft } = await import("@/actions/llm/assetDescription"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ resolveProjectIdentity, resolveAssetCore } = await import("@/lib/llmWorkspace/variables/registry"));
 
   projectId = await insertProject(ctx, "Asset Notes project");
@@ -92,8 +86,10 @@ describe("assetNotes.generate descriptor — context equality", () => {
   });
 
   it("resolving PROJECT.IDENTITY and ASSET.CORE equals the seeded rows generateAssetNotesOnlyDraft reads", async () => {
-    const result = await generateAssetNotesOnlyDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
-    expect(result).toEqual({ ok: true, draft: "A generated note." });
+    const result = await runWorkspaceOperation({ descriptorId: "assetNotes.generate", ids: { projectId, assetId } });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { notes: "A generated note." } });
 
     const [identity, core] = await Promise.all([resolveProjectIdentity(projectId), resolveAssetCore(assetId)]);
 

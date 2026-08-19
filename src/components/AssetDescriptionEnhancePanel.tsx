@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateAssetDescriptionOnlyDraft, generateAssetNotesOnlyDraft } from "@/actions/llm/assetDescription";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildAssetDescriptionFieldCommitArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
@@ -43,16 +43,23 @@ const FIELD_ACTION: Record<Field, string> = { description: "Enhance Description"
 function FieldEnhancePanel({ field, projectId, assetId, hasExisting, isConfigured, hasUsageContext, commitAdvisory }: Props & { field: Field }) {
   const [showAdvisory, setShowAdvisory] = useState(false);
 
+  // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a function
+  // for it. The narrowing below is not defensive noise: `runOperation`'s
+  // `"object"` values are `string | number`, while both descriptors declare
+  // their one field `type: "string"`. Neither branch is reachable — they are
+  // refused loudly rather than coerced, exactly as the deleted adapter did.
   const trigger: ProposalTrigger<Draft> = {
     id: field,
     label: FIELD_ACTION[field],
     loadingLabel: "Analyzing asset context...",
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      fd.set("assetId", String(assetId));
-      const result = field === "description" ? await generateAssetDescriptionOnlyDraft(fd) : await generateAssetNotesOnlyDraft(fd);
-      return result.ok ? { ok: true, draft: { text: result.draft } } : { ok: false, error: result.error };
+      const descriptorId = field === "description" ? "assetDescription.generate" : "assetNotes.generate";
+      const result = await runWorkspaceOperation({ descriptorId, ids: { projectId, assetId } });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const text = result.values[field];
+      if (typeof text !== "string") return { ok: false, error: "Unexpected non-text value for the draft." };
+      return { ok: true, draft: { text } };
     },
   };
 

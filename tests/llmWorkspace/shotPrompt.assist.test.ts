@@ -30,7 +30,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateShotPromptDraft: typeof import("@/actions/llm/shotPrompt").generateShotPromptDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveProjectIdentity: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectIdentity;
 let resolveSeqContext: typeof import("@/lib/llmWorkspace/variables/registry").resolveSeqContext;
 let resolveShotCore: typeof import("@/lib/llmWorkspace/variables/registry").resolveShotCore;
@@ -40,12 +40,6 @@ let resolveShotReferences: typeof import("@/lib/llmWorkspace/variables/registry"
 let projectId: number;
 let sequenceId: number;
 let shotId: number;
-
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
 
 // Reproduces the pre-switch castSummary formatting rule verbatim.
 function formatCastSummary(entries: Array<{ name: string; type: string; description: string | null; notes: string | null }>): string[] {
@@ -67,7 +61,7 @@ beforeAll(async () => {
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateShotPromptDraft } = await import("@/actions/llm/shotPrompt"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ resolveProjectIdentity, resolveSeqContext, resolveShotCore, resolveShotCurrentPrompt, resolveShotCast, resolveShotReferences } =
     await import("@/lib/llmWorkspace/variables/registry"));
 
@@ -120,15 +114,14 @@ afterAll(() => ctx.cleanup());
 
 describe("shotPrompt.assist descriptor — context equality", () => {
   it("resolving the six declared variables equals the context fields the pre-switch builder read", async () => {
-    const result = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(shotId),
-        mode: "enhance",
-      })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated shot prompt." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId },
+      intent: { mode: "enhance" },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { shotPrompt: "A generated shot prompt." } });
 
     expect(shotPromptAssistDescriptor.context.variables.map((v) => v.id)).toEqual([
       "PROJECT.IDENTITY",
@@ -230,14 +223,11 @@ describe("shotPrompt.assist descriptor — context equality", () => {
     // Cross-check against the action's real guard: a transform mode against
     // an empty shotPrompt is refused before the LLM call.
     const emptyShotId = await insertShot(ctx, sequenceId, { title: "Empty prompt shot", shotPrompt: null });
-    const refused = await generateShotPromptDraft(
-      form({
-        projectId: String(projectId),
-        sequenceId: String(sequenceId),
-        shotId: String(emptyShotId),
-        mode: "enhance",
-      })
-    );
+    const refused = await runWorkspaceOperation({
+      descriptorId: "shotPrompt.assist",
+      ids: { projectId, sequenceId, shotId: emptyShotId },
+      intent: { mode: "enhance" },
+    });
     expect(refused).toEqual({
       ok: false,
       error: "A Shot Prompt is required for this assist mode.",

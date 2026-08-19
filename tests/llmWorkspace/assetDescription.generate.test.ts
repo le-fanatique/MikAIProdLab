@@ -29,7 +29,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateAssetDescriptionOnlyDraft: typeof import("@/actions/llm/assetDescription").generateAssetDescriptionOnlyDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveProjectIdentity: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectIdentity;
 let resolveAssetCore: typeof import("@/lib/llmWorkspace/variables/registry").resolveAssetCore;
 let resolveAssetSeqAppearances: typeof import("@/lib/llmWorkspace/variables/registry").resolveAssetSeqAppearances;
@@ -39,18 +39,12 @@ let resolveProjectStyle: typeof import("@/lib/llmWorkspace/variables/registry").
 let projectId: number;
 let assetId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateAssetDescriptionOnlyDraft } = await import("@/actions/llm/assetDescription"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({
     resolveProjectIdentity,
     resolveAssetCore,
@@ -129,10 +123,10 @@ afterAll(() => ctx.cleanup());
 
 describe("assetDescription.generate descriptor — context equality", () => {
   it("resolving the six declared variables equals the seeded rows the operation reads", async () => {
-    const result = await generateAssetDescriptionOnlyDraft(
-      form({ projectId: String(projectId), assetId: String(assetId) })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated description." });
+    const result = await runWorkspaceOperation({ descriptorId: "assetDescription.generate", ids: { projectId, assetId } });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { description: "A generated description." } });
 
     expect(assetDescriptionGenerateDescriptor.context.variables.map((v) => v.id)).toEqual([
       "PROJECT.IDENTITY",

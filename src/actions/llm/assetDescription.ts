@@ -4,71 +4,18 @@ import { db } from "@/db";
 import { assets, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { runOperation } from "@/lib/llmWorkspace/runner";
-import { assetDescriptionGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescription";
-import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/assetNotes";
 import { assetDescriptionBatchDescriptor } from "@/lib/llmWorkspace/descriptors/assetDescriptionBatch";
 import { getLLMConfig } from "@/lib/settings";
 import type { GeneratedAssetDescriptionDraft } from "@/types/llm";
 
 const BATCH_LIMIT = 10;
 
-// ── Independent single-field actions (UX.PRODUCTIVITY.POLISH.1 — Lot C) ────
-//
-// Thin adapters over `runOperation` (LLMW.MIGRATE.FLATJSON.1b, B3b):
-// translate `FormData` into `AnchorIds`, then translate `values` back to the
-// exact `{ok:true, draft}` return shape their components depend on. Id
-// validation, ownership, and context assembly — previously
-// `fetchAssetContextInput` (deleted in this same diff, its two callers were
-// this file's `generateForAsset` and `generateFieldForAsset`) — now happen
-// inside the runner, against each descriptor's own declared `messages`.
-
-async function generateSingleField(
-  formData: FormData,
-  field: "description" | "notes"
-): Promise<{ ok: true; draft: string } | { ok: false; error: string }> {
-  try {
-    const projectId = parseInt(formData.get("projectId") as string, 10);
-    const assetId = parseInt(formData.get("assetId") as string, 10);
-
-    const descriptor = field === "description" ? assetDescriptionGenerateDescriptor : assetNotesGenerateDescriptor;
-    const result = await runOperation(descriptor, { projectId, assetId });
-    if (!result.ok) return { ok: false, error: result.error };
-    // Both descriptors' `output.kind` is always `"object"` — the guard
-    // exists because `RunOperationResult` is `kind`-discriminated
-    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
-    if (result.kind !== "object") {
-      throw new Error("generateSingleField: expected an object-kind result.");
-    }
-    // `RunOperationResult`'s `"object"` branch widened to `Record<string,
-    // string | number>` (LLMW.OUTPUT.OBJECT_NUMBER.1, B11-b1) — but both
-    // `assetDescriptionGenerateDescriptor` and `assetNotesGenerateDescriptor`
-    // declare their one field `type: "string"`, so a number can never
-    // actually arrive here. Refused loudly rather than silently returned as
-    // this function's own `draft: string`, on the same discipline
-    // `generateAssetCandidatesDraft` (`src/actions/llm/assetExtraction.ts`)
-    // already applies to an unexpected boolean.
-    const draft = field === "description" ? result.values.description : result.values.notes;
-    if (typeof draft === "number") {
-      throw new Error("generateSingleField: unexpected numeric value in a string field.");
-    }
-    return { ok: true, draft };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";
-    return { ok: false, error: message };
-  }
-}
-
-export async function generateAssetDescriptionOnlyDraft(
-  formData: FormData
-): Promise<{ ok: true; draft: string } | { ok: false; error: string }> {
-  return generateSingleField(formData, "description");
-}
-
-export async function generateAssetNotesOnlyDraft(
-  formData: FormData
-): Promise<{ ok: true; draft: string } | { ok: false; error: string }> {
-  return generateSingleField(formData, "notes");
-}
+// LLMW.UNIFY.PANEL.2 — the single-field generate actions
+// (`generateAssetDescriptionOnlyDraft`, `generateAssetNotesOnlyDraft`) are
+// deleted: `AssetDescriptionEnhancePanel` now calls `runWorkspaceOperation`
+// directly, naming `assetDescription.generate` / `assetNotes.generate`
+// itself. `generateBatchAssetDescriptionDrafts` below is untouched — it is
+// `BatchAssetDescriptionEnhancePanel`'s own adapter, migrated separately.
 
 // ── Batch action ─────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateShotPromptDraft } from "@/actions/llm/shotPrompt";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import type { ShotPromptAssistMode } from "@/lib/prompts/shot-prompt-from-context";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildUpdateShotPromptHiddenFields } from "@/lib/llmWorkspace/actions/proposalCommit";
@@ -60,20 +60,29 @@ export default function ShotPromptLLMAssistPanel({
   // `projectId` / `sequenceId` / `shotId` / `mode`.
   const [freeText, setFreeText] = useState("");
 
+  // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a function
+  // for it. The mode and the director's note both travel through `intent`,
+  // the descriptor's own declared shape — not reconstructed here. The
+  // narrowing below is not defensive noise: `runOperation`'s `"object"`
+  // values are `string | number`, while this descriptor declares its one
+  // field `type: "string"`. The impossible branch is refused loudly rather
+  // than coerced, exactly as the deleted adapter did.
   const triggers: ProposalTrigger<Draft>[] = MODES.map((mode) => ({
     id: mode,
     label: MODE_BUTTON_LABELS[mode],
     disabled: mode !== "generate" && !hasExistingPrompt,
     loadingLabel: `Generating ${MODE_BUTTON_LABELS[mode].toLowerCase()}...`,
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      fd.set("sequenceId", String(sequenceId));
-      fd.set("shotId", String(shotId));
-      fd.set("mode", mode);
-      fd.set("freeText", freeText);
-      const result = await generateShotPromptDraft(fd);
-      return result.ok ? { ok: true, draft: { mode, text: result.draft } } : { ok: false, error: result.error };
+      const result = await runWorkspaceOperation({
+        descriptorId: "shotPrompt.assist",
+        ids: { projectId, sequenceId, shotId },
+        intent: { mode, freeText: freeText || undefined },
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const { shotPrompt } = result.values;
+      if (typeof shotPrompt !== "string") return { ok: false, error: "Unexpected non-text value for the prompt." };
+      return { ok: true, draft: { mode, text: shotPrompt } };
     },
   }));
 

@@ -33,7 +33,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
-import { generateShotInsertDraft } from "@/actions/llm/shotInsertDirected";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildCreateShotAtPositionHiddenFields } from "@/lib/llmWorkspace/actions/proposalCommit";
 import { buildShotJsonPayload, type ObjectOutputFields } from "@/lib/llmWorkspace/benchRun";
@@ -117,14 +117,25 @@ export default function InsertShotDirectedButton({
     // still costs a model call.
     disabled: !hasDirection,
     loadingLabel: "Directing the shot...",
+    // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a
+    // function for it. The director's note and `afterShotId` both travel
+    // through `intent`, the descriptor's own declared shape — not
+    // reconstructed here. `result.values` is handed to `Draft` as-is, the
+    // same widening `generateShotInsertDraft` and `runBenchOperation`
+    // already made for this descriptor (LLMW.UC1.BENCH.1, B11-b3) — no
+    // second flattening.
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      fd.set("sequenceId", String(sequenceId));
-      fd.set("afterShotId", afterShotId != null ? String(afterShotId) : "");
-      fd.set("freeText", freeText);
-      const result = await generateShotInsertDraft(fd);
-      return result.ok ? { ok: true, draft: result.draft } : { ok: false, error: result.error };
+      const result = await runWorkspaceOperation({
+        descriptorId: "shot.insertDirected",
+        ids: { projectId, sequenceId },
+        intent: {
+          freeText: freeText || undefined,
+          parameters: afterShotId !== undefined ? { afterShotId } : {},
+        },
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      return { ok: true, draft: result.values };
     },
   };
 

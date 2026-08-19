@@ -18,24 +18,18 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateOutlineDraft: typeof import("@/actions/llm/outlineGeneration").generateOutlineDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
 let projectId: number;
-
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
 
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateOutlineDraft } = await import("@/actions/llm/outlineGeneration"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
 
@@ -51,8 +45,14 @@ afterAll(() => ctx.cleanup());
 
 describe("outline.generate — runner proof (LLMW.RUNNER.1a)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
-    const result = await generateOutlineDraft(form({ projectId: String(projectId), targetSections: "6" }));
-    expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "outline.generate",
+      ids: { projectId },
+      intent: { parameters: { targetSections: 6 } },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { outline: "## A section\nBody." } });
 
     const expectedPrompt = { system: `You are a professional film production supervisor and narrative consultant.
 Your task is to write a Project Outline: a structured narrative blueprint for a short film or video project.
@@ -86,8 +86,8 @@ Write a Project Outline for this project. Each section should clearly define its
   });
 
   it("1b. matches without targetSections too (the mid-system parameter block's other branch)", async () => {
-    const result = await generateOutlineDraft(form({ projectId: String(projectId) }));
-    expect(result).toEqual({ ok: true, outline: "## A section\nBody." });
+    const result = await runWorkspaceOperation({ descriptorId: "outline.generate", ids: { projectId } });
+    expect(result).toEqual({ ok: true, kind: "object", values: { outline: "## A section\nBody." } });
 
     const expectedPrompt = { system: `You are a professional film production supervisor and narrative consultant.
 Your task is to write a Project Outline: a structured narrative blueprint for a short film or video project.
@@ -119,7 +119,7 @@ Write a Project Outline for this project. Each section should clearly define its
   it("2. refuses a project that does not exist, with the same message generateOutlineDraft produces", async () => {
     const nonExistentProjectId = projectId + 9000;
 
-    const actionResult = await generateOutlineDraft(form({ projectId: String(nonExistentProjectId) }));
+    const actionResult = await runWorkspaceOperation({ descriptorId: "outline.generate", ids: { projectId: nonExistentProjectId } });
     expect(actionResult).toEqual({ ok: false, error: "Project not found." });
 
     const runnerResult = await resolveOperationPrompt(outlineGenerateDescriptor, { projectId: nonExistentProjectId });

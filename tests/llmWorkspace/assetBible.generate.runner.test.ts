@@ -45,7 +45,7 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateAssetBibleDraft: typeof import("@/actions/llm/assetBible").generateAssetBibleDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let runOperation: typeof import("@/lib/llmWorkspace/runner").runOperation;
 let resolveOperationPrompt: typeof import("@/lib/llmWorkspace/runner").resolveOperationPrompt;
 let callLLMJson: typeof import("@/lib/llm").callLLMJson;
@@ -53,18 +53,12 @@ let projectId: number;
 let otherProjectId: number;
 let assetId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateAssetBibleDraft } = await import("@/actions/llm/assetBible"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ runOperation, resolveOperationPrompt } = await import("@/lib/llmWorkspace/runner"));
   ({ callLLMJson } = await import("@/lib/llm"));
 
@@ -86,7 +80,7 @@ afterAll(() => ctx.cleanup());
 
 describe("assetBible.generate — runner proof (LLMW.RUNNER.1b)", () => {
   it("1. the runner's {system, user} equals the frozen oracle called directly against the same seeded row, byte-for-byte", async () => {
-    const result = await generateAssetBibleDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
+    const result = await runWorkspaceOperation({ descriptorId: "assetBible.generate", ids: { projectId, assetId } });
     expect(result.ok).toBe(true);
 
     const expected = { system: `You are a production asset supervisor for a film or animation project.
@@ -122,9 +116,10 @@ Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variati
   });
 
   it("2. refuses an Asset belonging to a different Project, with the same message generateAssetBibleDraft produces", async () => {
-    const actionResult = await generateAssetBibleDraft(
-      form({ projectId: String(otherProjectId), assetId: String(assetId) })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "assetBible.generate",
+      ids: { projectId: otherProjectId, assetId },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Asset not found." });
 
     const runnerResult = await resolveOperationPrompt(assetBibleGenerateDescriptor, {
@@ -137,9 +132,10 @@ Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variati
   it("2b. refuses a Project that does not exist, with the same message generateAssetBibleDraft produces", async () => {
     const nonExistentProjectId = projectId + 9000;
 
-    const actionResult = await generateAssetBibleDraft(
-      form({ projectId: String(nonExistentProjectId), assetId: String(assetId) })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "assetBible.generate",
+      ids: { projectId: nonExistentProjectId, assetId },
+    });
     expect(actionResult).toEqual({ ok: false, error: "Project not found." });
 
     const runnerResult = await resolveOperationPrompt(assetBibleGenerateDescriptor, {
@@ -213,15 +209,15 @@ Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variati
     expect(runnerResult.values.visualIdentity).toHaveLength(MAX_ASSET_BIBLE_FIELD_LENGTH);
     expect(runnerResult.values.visualIdentity).toBe(oversized.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH));
 
-    // The adapter passes the runner's already-truncated value through
+    // The generic action passes the runner's already-truncated value through
     // unchanged — no `.slice()` of its own left to prove.
     mockedCallLLMJson.mockResolvedValueOnce(
       JSON.stringify({ visual_identity: oversized, usage_rules: "", forbidden_variations: "" })
     );
-    const actionResult = await generateAssetBibleDraft(form({ projectId: String(projectId), assetId: String(assetId) }));
+    const actionResult = await runWorkspaceOperation({ descriptorId: "assetBible.generate", ids: { projectId, assetId } });
     expect(actionResult.ok).toBe(true);
-    if (!actionResult.ok) throw new Error("unreachable");
-    expect(actionResult.draft.visualIdentity).toBe(oversized.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH));
+    if (!actionResult.ok || actionResult.kind !== "object") throw new Error("unreachable");
+    expect(actionResult.values.visualIdentity).toBe(oversized.slice(0, MAX_ASSET_BIBLE_FIELD_LENGTH));
   });
 
   it("4. both Description and Notes empty is refused before the LLM call, with the exact precondition message", async () => {
@@ -232,9 +228,10 @@ Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variati
       notes: null,
     });
 
-    const actionResult = await generateAssetBibleDraft(
-      form({ projectId: String(projectId), assetId: String(emptyAssetId) })
-    );
+    const actionResult = await runWorkspaceOperation({
+      descriptorId: "assetBible.generate",
+      ids: { projectId, assetId: emptyAssetId },
+    });
     expect(actionResult).toEqual({
       ok: false,
       error: "Add a Description or Notes to this asset before generating an Asset Bible draft.",
@@ -266,9 +263,10 @@ Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variati
       notes: "A lone note.",
     });
 
-    const descriptionOnlyAction = await generateAssetBibleDraft(
-      form({ projectId: String(projectId), assetId: String(descriptionOnlyId) })
-    );
+    const descriptionOnlyAction = await runWorkspaceOperation({
+      descriptorId: "assetBible.generate",
+      ids: { projectId, assetId: descriptionOnlyId },
+    });
     expect(descriptionOnlyAction.ok).toBe(true);
     const descriptionOnlyRunner = await resolveOperationPrompt(assetBibleGenerateDescriptor, {
       projectId,
@@ -276,9 +274,10 @@ Write or enrich the Asset Bible (Visual Identity, Usage Rules, Forbidden Variati
     });
     expect(descriptionOnlyRunner.ok).toBe(true);
 
-    const notesOnlyAction = await generateAssetBibleDraft(
-      form({ projectId: String(projectId), assetId: String(notesOnlyId) })
-    );
+    const notesOnlyAction = await runWorkspaceOperation({
+      descriptorId: "assetBible.generate",
+      ids: { projectId, assetId: notesOnlyId },
+    });
     expect(notesOnlyAction.ok).toBe(true);
     const notesOnlyRunner = await resolveOperationPrompt(assetBibleGenerateDescriptor, {
       projectId,

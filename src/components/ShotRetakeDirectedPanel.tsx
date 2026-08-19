@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateShotRetakeDraft } from "@/actions/llm/shotRetake";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { buildShotRetakeCommitArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import type { GeneratedShotRetakeDraft } from "@/types/llm";
@@ -48,14 +48,26 @@ export default function ShotRetakeDirectedPanel({
     // (now neutral) closing instruction to somehow compensate.
     disabled: !hasDirection,
     loadingLabel: "Working out a retake...",
+    // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a
+    // function for it. The director's note travels through `intent`, the
+    // descriptor's own declared shape — not reconstructed here. The
+    // narrowing below is not defensive noise: `runOperation`'s `"object"`
+    // values are `string | number`, while all three fields this descriptor
+    // declares are `type: "string"`. The impossible branch is refused
+    // loudly rather than coerced, exactly as the deleted adapter did.
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      fd.set("sequenceId", String(sequenceId));
-      fd.set("shotId", String(shotId));
-      fd.set("freeText", freeText);
-      const result = await generateShotRetakeDraft(fd);
-      return result.ok ? { ok: true, draft: result.draft } : { ok: false, error: result.error };
+      const result = await runWorkspaceOperation({
+        descriptorId: "shot.retakeDirected",
+        ids: { projectId, sequenceId, shotId },
+        intent: { freeText: freeText || undefined },
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const { description, actionPitch, cameraPitch } = result.values;
+      if (typeof description !== "string" || typeof actionPitch !== "string" || typeof cameraPitch !== "string") {
+        return { ok: false, error: "Unexpected non-text value in a string field." };
+      }
+      return { ok: true, draft: { description, actionPitch, cameraPitch } };
     },
   };
 

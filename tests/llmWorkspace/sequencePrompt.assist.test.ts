@@ -25,25 +25,19 @@ vi.mock("@/lib/llm", () => ({
 }));
 
 let ctx: TempDb;
-let generateSequencePromptDraft: typeof import("@/actions/llm/sequencePrompt").generateSequencePromptDraft;
+let runWorkspaceOperation: typeof import("@/actions/llmWorkspace/runOperationAction").runWorkspaceOperation;
 let resolveProjectIdentity: typeof import("@/lib/llmWorkspace/variables/registry").resolveProjectIdentity;
 let resolveSeqContext: typeof import("@/lib/llmWorkspace/variables/registry").resolveSeqContext;
 let resolveSeqCurrentPrompt: typeof import("@/lib/llmWorkspace/variables/registry").resolveSeqCurrentPrompt;
 let projectId: number;
 let sequenceId: number;
 
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
-}
-
 beforeAll(async () => {
   ctx = await setupTempDb();
 
   await ctx.db.insert(ctx.schema.appSettings).values({ key: "llm_ollama_model", value: "test-model" });
 
-  ({ generateSequencePromptDraft } = await import("@/actions/llm/sequencePrompt"));
+  ({ runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction"));
   ({ resolveProjectIdentity, resolveSeqContext, resolveSeqCurrentPrompt } = await import(
     "@/lib/llmWorkspace/variables/registry"
   ));
@@ -69,10 +63,14 @@ afterAll(() => ctx.cleanup());
 
 describe("sequencePrompt.assist descriptor — context equality", () => {
   it("resolving the three declared variables equals the rows generateSequencePromptDraft's builder reads", async () => {
-    const result = await generateSequencePromptDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId), mode: "enhance" })
-    );
-    expect(result).toEqual({ ok: true, draft: "A generated sequence prompt." });
+    const result = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId, sequenceId },
+      intent: { mode: "enhance" },
+    });
+    // LLMW.UNIFY.PANEL.2 — the shape is the generic action's now, not the
+    // deleted adapter's. The VALUE is unchanged.
+    expect(result).toEqual({ ok: true, kind: "object", values: { sequencePrompt: "A generated sequence prompt." } });
 
     expect(sequencePromptAssistDescriptor.context.variables.map((v) => v.id)).toEqual([
       "PROJECT.IDENTITY",
@@ -148,9 +146,11 @@ describe("sequencePrompt.assist descriptor — context equality", () => {
     // Cross-check against the action's real guard: a transform mode against
     // an empty sequencePrompt is refused before the LLM call.
     const emptySequenceId = await insertSequence(ctx, projectId, { sequencePrompt: null });
-    const refused = await generateSequencePromptDraft(
-      form({ projectId: String(projectId), sequenceId: String(emptySequenceId), mode: "enhance" })
-    );
+    const refused = await runWorkspaceOperation({
+      descriptorId: "sequencePrompt.assist",
+      ids: { projectId, sequenceId: emptySequenceId },
+      intent: { mode: "enhance" },
+    });
     expect(refused).toEqual({
       ok: false,
       error: "A Sequence Prompt is required for this assist mode.",

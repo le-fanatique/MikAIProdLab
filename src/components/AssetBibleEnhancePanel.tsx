@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateAssetBibleDraft } from "@/actions/llm/assetBible";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { preserveAssetBibleField } from "@/lib/prompts/assetBibleDraft";
 import type { GeneratedAssetBibleDraft } from "@/types/llm";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
@@ -40,16 +40,24 @@ export default function AssetBibleEnhancePanel({
 }: Props) {
   const [justUpdated, setJustUpdated] = useState(false);
 
+  // LLMW.UNIFY.PANEL.2 — names its operation instead of importing a function
+  // for it. The narrowing below is not defensive noise: `runOperation`'s
+  // `"object"` values are `string | number`, while all three fields this
+  // descriptor declares are `type: "string"`. The impossible branch is
+  // refused loudly rather than coerced, exactly as the deleted adapter did.
   const trigger: ProposalTrigger<GeneratedAssetBibleDraft> = {
     id: "enhance",
     label: "Enhance Asset Bible",
     loadingLabel: "Analyzing description and notes...",
     run: async () => {
-      const fd = new FormData();
-      fd.set("projectId", String(projectId));
-      fd.set("assetId", String(assetId));
-      const result = await generateAssetBibleDraft(fd);
-      return result.ok ? { ok: true, draft: result.draft } : { ok: false, error: result.error };
+      const result = await runWorkspaceOperation({ descriptorId: "assetBible.generate", ids: { projectId, assetId } });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
+      const { visualIdentity, usageRules, forbiddenVariations } = result.values;
+      if (typeof visualIdentity !== "string" || typeof usageRules !== "string" || typeof forbiddenVariations !== "string") {
+        return { ok: false, error: "Unexpected non-text value in a string field." };
+      }
+      return { ok: true, draft: { visualIdentity, usageRules, forbiddenVariations } };
     },
   };
 
