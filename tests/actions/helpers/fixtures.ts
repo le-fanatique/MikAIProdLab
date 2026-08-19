@@ -151,6 +151,98 @@ export async function readSplitSegments({ db, schema }: TempDb, splitRunId: numb
     .orderBy(asc(schema.sequenceVideoSplitSegments.orderIndex));
 }
 
+// ---------------------------------------------------------------------------
+// IND.STORYBOARD.1 — sequence_storyboard_images / sequence_storyboard_extractions
+// / sequence_storyboard_extraction_regions builders, same convention as the
+// IND.VIDEOSPLIT.1 builders above.
+// ---------------------------------------------------------------------------
+
+export async function insertSequenceStoryboardImage(
+  { db, schema }: TempDb,
+  sequenceId: number,
+  values: Partial<typeof schema.sequenceStoryboardImages.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.sequenceStoryboardImages)
+    .values({
+      sequenceId,
+      imagePath: "uploads/sequence-storyboard-images/fixture.jpg",
+      ...values,
+    })
+    .returning({ id: schema.sequenceStoryboardImages.id });
+  return row.id;
+}
+
+export async function insertStoryboardExtraction(
+  { db, schema }: TempDb,
+  sequenceId: number,
+  values: Partial<typeof schema.sequenceStoryboardExtractions.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.sequenceStoryboardExtractions)
+    .values({
+      sequenceId,
+      sourceImagePath: "uploads/sequence-storyboard-images/fixture.jpg",
+      sourceWidth: 1000,
+      sourceHeight: 800,
+      status: "ready",
+      ...values,
+    })
+    .returning({ id: schema.sequenceStoryboardExtractions.id });
+  return row.id;
+}
+
+export async function insertExtractionRegion(
+  { db, schema }: TempDb,
+  extractionId: number,
+  values: Partial<typeof schema.sequenceStoryboardExtractionRegions.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.sequenceStoryboardExtractionRegions)
+    .values({
+      extractionId,
+      orderIndex: 0,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      confidence: 1,
+      detectionMode: "border",
+      status: "pending",
+      ...values,
+    })
+    .returning({ id: schema.sequenceStoryboardExtractionRegions.id });
+  return row.id;
+}
+
+export async function readExtraction({ db, schema }: TempDb, extractionId: number) {
+  const [row] = await db
+    .select()
+    .from(schema.sequenceStoryboardExtractions)
+    .where(eq(schema.sequenceStoryboardExtractions.id, extractionId));
+  return row;
+}
+
+export async function readExtractionRegions({ db, schema }: TempDb, extractionId: number) {
+  return db
+    .select()
+    .from(schema.sequenceStoryboardExtractionRegions)
+    .where(eq(schema.sequenceStoryboardExtractionRegions.extractionId, extractionId))
+    .orderBy(asc(schema.sequenceStoryboardExtractionRegions.orderIndex));
+}
+
+export async function readStoryboardImagesByShot({ db, schema }: TempDb, shotId: number) {
+  return db.select().from(schema.storyboardImages).where(eq(schema.storyboardImages.shotId, shotId));
+}
+
+export async function readShotReferenceImages({ db, schema }: TempDb, shotId: number) {
+  return db
+    .select()
+    .from(schema.shotReferenceImages)
+    .where(eq(schema.shotReferenceImages.shotId, shotId))
+    .orderBy(asc(schema.shotReferenceImages.orderIndex));
+}
+
 // Full-row readers: the write tests compare every column, not only the field
 // under test, so a collateral write cannot pass unnoticed.
 
