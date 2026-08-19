@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
-  MIKROS_TOKEN_KEYS,
-  MIKROS_TOKEN_LABELS,
   MIKROS_DEFAULT_PALETTE,
   MIKROS_DEFAULT_DISPLAY_FONT,
   MIKROS_DEFAULT_BODY_FONT,
@@ -15,12 +13,9 @@ import {
   MIKROS_DISPLAY_FONT_SIZE_MAX_PX,
   MIKROS_BODY_FONT_SIZE_MIN_PX,
   MIKROS_BODY_FONT_SIZE_MAX_PX,
-  MIKROS_FONT_WEIGHTS,
-  MIKROS_FONT_STYLES,
   MIKROS_DEFAULT_TYPOGRAPHY_DETAILS,
   THEME_MODE_STORAGE_KEY,
   THEME_CLASS,
-  CUSTOM_MODE_PREFIX,
   type MikrosPalette,
   type MikrosTokenKey,
   type CustomTheme,
@@ -47,7 +42,6 @@ import {
   sniffImageMimeFromBytes,
   clampFontSizePx,
   LOCAL_CONFLICT_ID_SUFFIX,
-  isConflictDisplayId,
 } from "@/lib/mikrosTheme";
 import { parseMikrosThemeImportJson, type MikrosThemeImportResult } from "@/lib/mikrosThemeImport";
 import type { CustomThemePresetsDocument } from "@/lib/mikrosThemePresets";
@@ -62,6 +56,14 @@ import {
   stripConflictDisplayId,
   resolveModeAfterReconciliation,
 } from "@/lib/theme/customThemes";
+import ModeRadioGroup from "@/components/theme/ModeRadioGroup";
+import CustomThemesList from "@/components/theme/CustomThemesList";
+import ThemeJsonImportSection from "@/components/theme/ThemeJsonImportSection";
+import PaletteFieldsGrid from "@/components/theme/PaletteFieldsGrid";
+import TypographySection from "@/components/theme/TypographySection";
+import LogoSection from "@/components/theme/LogoSection";
+import TextureUploadSection from "@/components/theme/TextureUploadSection";
+import SaveThemeDialog from "@/components/theme/SaveThemeDialog";
 
 const FONT_OTHER = "__other__";
 type FontRole = "display" | "body";
@@ -828,6 +830,25 @@ export default function ThemeModeToggle({ initialCustomThemePresets, initialCust
     setPasteJsonError(null);
   }
 
+  /** IND.THEME.2 — same body as the Paste JSON textarea's former inline onChange, named so it can be passed as a prop to ThemeJsonImportSection. */
+  function handlePasteJsonTextChange(value: string) {
+    setPasteJsonText(value);
+    setPasteJsonError(null);
+  }
+
+  /** IND.THEME.2 — same body as the Cancel button's former inline onClick, named so it can be passed as a prop to SaveThemeDialog. */
+  function handleCancelSaveDialog() {
+    if (editingThemeId !== null) {
+      // Abandon the unsaved edit and return to the official Custom preset —
+      // same reset path as picking "Custom".
+      handleModeChange("mikros");
+    } else {
+      setSaveNameOpen(false);
+      setSaveName("");
+      setSaveError(null);
+    }
+  }
+
   function handleResetLogo() {
     setDraftLogo(null);
     setLogoError(null);
@@ -1092,139 +1113,27 @@ export default function ThemeModeToggle({ initialCustomThemePresets, initialCust
       <legend className="text-xs text-[#6e767d] mb-1">
         Choose the visual appearance for MikAI. Default matches the current look exactly.
       </legend>
-      <div className="flex flex-col gap-1">
-        <div role="radiogroup" aria-label="Visual mode" className="flex flex-wrap gap-3">
-          <label
-            className={`flex items-center gap-2 rounded border px-3 py-2 text-sm cursor-pointer transition-colors ${
-              mode === "default"
-                ? "border-[#5b93d6] text-[#e7e9ec] bg-[#5b93d6]/10"
-                : "border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046]"
-            }`}
-          >
-            <input
-              type="radio"
-              name="mikai-theme-mode"
-              value="default"
-              checked={hasMounted ? mode === "default" : true}
-              onChange={() => handleModeChange("default")}
-              className="accent-[#5b93d6]"
-            />
-            Default
-          </label>
-          <label
-            className={`flex items-center gap-2 rounded border px-3 py-2 text-sm cursor-pointer transition-colors ${
-              isMikros
-                ? "border-[#9079F2] text-[#e7e9ec] bg-[#9079F2]/10"
-                : "border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046]"
-            }`}
-          >
-            <input
-              type="radio"
-              name="mikai-theme-mode"
-              value="mikros"
-              checked={hasMounted ? isMikros : false}
-              onChange={() => handleModeChange("mikros")}
-              className="accent-[#9079F2]"
-            />
-            Custom
-          </label>
-          {customThemes.map((theme) => (
-            <label
-              key={theme.id}
-              className={`flex items-center gap-2 rounded border px-3 py-2 text-sm cursor-pointer transition-colors ${
-                activeCustomId === theme.id
-                  ? "border-[#9079F2] text-[#e7e9ec] bg-[#9079F2]/10"
-                  : "border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046]"
-              }`}
-            >
-              <input
-                type="radio"
-                name="mikai-theme-mode"
-                value={`${CUSTOM_MODE_PREFIX}${theme.id}`}
-                checked={hasMounted ? activeCustomId === theme.id : false}
-                onChange={() => handleModeChange(customModeValue(theme.id))}
-                className="accent-[#9079F2]"
-              />
-              {isConflictDisplayId(theme.id) ? `${theme.name} (Local, unsynced)` : theme.name}
-            </label>
-          ))}
-        </div>
-        <p className="text-[10px] text-[#4b5158]">
-          Applies immediately, no reload needed. Which one is active stays local to this browser — presets themselves are saved on the server (see below).
-        </p>
-      </div>
+      <ModeRadioGroup
+        mode={mode}
+        hasMounted={hasMounted}
+        isMikros={isMikros}
+        activeCustomId={activeCustomId}
+        customThemes={customThemes}
+        onModeChange={handleModeChange}
+      />
 
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">
-            Custom themes
-          </span>
-          <button
-            type="button"
-            onClick={handleReloadPresets}
-            disabled={presetSyncPending}
-            className="text-[10px] text-[#6e767d] hover:text-[#a4abb2] transition-colors disabled:opacity-40"
-          >
-            Reload presets
-          </button>
-        </div>
-        <p className="text-[10px] text-[#4b5158]">
-          Saved on the server — available after a restart and from any browser. The active choice above stays local to this browser.
-        </p>
-        {presetsCorrupted && (
-          <p className="text-xs text-[#cf7b6b]">
-            Stored presets could not be read (corrupted data). Saving, editing and deleting are disabled until this
-            is resolved — your currently applied theme is unaffected.
-          </p>
-        )}
-        {legacyImportNotice && <p className="text-xs text-[#cda24f]">{legacyImportNotice}</p>}
-        {presetSyncError && <p className="text-xs text-[#cf7b6b]">{presetSyncError}</p>}
-        {deleteError && <p className="text-xs text-[#cf7b6b]">{deleteError}</p>}
-        {customThemes.length > 0 && (
-          <div className="flex flex-col gap-1">
-            {customThemes.map((theme) => (
-              <div key={theme.id} className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-[#a4abb2]">
-                  {theme.name}
-                  {isConflictDisplayId(theme.id) && (
-                    <span className="ml-1.5 text-[10px] text-[#cda24f]">(local, unsynced)</span>
-                  )}
-                </span>
-                <div className="flex items-center gap-3">
-                  {isConflictDisplayId(theme.id) ? (
-                    <button
-                      type="button"
-                      onClick={() => handleDiscardConflictedLocal(theme.id)}
-                      className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors"
-                    >
-                      Discard local copy
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleEditTheme(theme)}
-                        disabled={presetSyncPending}
-                        className="text-[#4b5158] hover:text-[#a4abb2] transition-colors disabled:opacity-40"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCustom(theme.id)}
-                        disabled={presetSyncPending || presetsCorrupted}
-                        className="text-[#4b5158] hover:text-[#cf7b6b] transition-colors disabled:opacity-40"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <CustomThemesList
+        customThemes={customThemes}
+        presetSyncPending={presetSyncPending}
+        presetsCorrupted={presetsCorrupted}
+        legacyImportNotice={legacyImportNotice}
+        presetSyncError={presetSyncError}
+        deleteError={deleteError}
+        onReloadPresets={handleReloadPresets}
+        onEditTheme={handleEditTheme}
+        onDeleteCustom={handleDeleteCustom}
+        onDiscardConflictedLocal={handleDiscardConflictedLocal}
+      />
 
       {showEditor && (
         <div className="flex flex-col gap-3 rounded border border-[#2c3035] p-3">
@@ -1241,477 +1150,111 @@ export default function ThemeModeToggle({ initialCustomThemePresets, initialCust
             </button>
           </div>
 
-          <div className="flex flex-col gap-1.5 border-b border-[#1e2124] pb-3">
-            <label className="flex items-center gap-2">
-              <span className="text-[10px] text-[#6e767d] whitespace-nowrap">Import palette JSON</span>
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={handleImportFileChange}
-                disabled={importBusy}
-                aria-label="Import palette JSON"
-                className="flex-1 text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
-              />
-            </label>
-            {importError && <p className="text-[10px] text-[#cf7b6b]">{importError}</p>}
-            <p className="text-[10px] text-[#4b5158]">
-              Pre-fills the eight fields below from a JSON file — adjust them, then use Save as custom to keep it.
-            </p>
-          </div>
+          <ThemeJsonImportSection
+            importBusy={importBusy}
+            importError={importError}
+            onImportFileChange={handleImportFileChange}
+            pasteJsonText={pasteJsonText}
+            pasteJsonError={pasteJsonError}
+            onPasteJsonTextChange={handlePasteJsonTextChange}
+            onPasteJsonApply={handlePasteJsonApply}
+            onPasteJsonClear={handlePasteJsonClear}
+          />
 
-          <details className="flex flex-col gap-2 border-b border-[#1e2124] pb-3">
-            <summary className="text-[10px] text-[#6e767d] cursor-pointer select-none hover:text-[#a4abb2] transition-colors">
-              Paste JSON
-            </summary>
-            <div className="flex flex-col gap-2 pt-1">
-              <label htmlFor="mikros-paste-json" className="sr-only">
-                Palette JSON text
-              </label>
-              <textarea
-                id="mikros-paste-json"
-                value={pasteJsonText}
-                onChange={(e) => {
-                  setPasteJsonText(e.target.value);
-                  setPasteJsonError(null);
-                }}
-                rows={6}
-                placeholder='{"name": "Annecy Paper", "tokens": {"canvas": "#ECE5D8", ...}}'
-                aria-label="Palette JSON text"
-                aria-invalid={pasteJsonError !== null}
-                className={`rounded border bg-[#0e1013] text-xs text-[#e7e9ec] font-mono px-2 py-1.5 focus:outline-none resize-y ${
-                  pasteJsonError
-                    ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
-                    : "border-[#2c3035] focus:border-[#3a4046]"
-                }`}
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePasteJsonApply}
-                  className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-                >
-                  Apply JSON
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePasteJsonClear}
-                  className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
-                >
-                  Clear
-                </button>
-              </div>
-              {pasteJsonError && <p className="text-[10px] text-[#cf7b6b]">{pasteJsonError}</p>}
-            </div>
-          </details>
+          <PaletteFieldsGrid
+            draftPalette={draftPalette}
+            rawHex={rawHex}
+            hexErrors={hexErrors}
+            onColorPickerChange={handleColorPickerChange}
+            onHexTextChange={handleHexTextChange}
+            draftTopBarColor={draftTopBarColor}
+            rawTopBarColorHex={rawTopBarColorHex}
+            topBarColorError={topBarColorError}
+            onTopBarColorPickerChange={handleTopBarColorPickerChange}
+            onTopBarColorTextChange={handleTopBarColorTextChange}
+          />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {MIKROS_TOKEN_KEYS.map((key) => {
-              const error = hexErrors[key];
-              return (
-                <div key={key} className="flex flex-col gap-1">
-                  <label htmlFor={`mikros-token-${key}`} className="text-[10px] text-[#6e767d]">
-                    {MIKROS_TOKEN_LABELS[key]}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id={`mikros-token-${key}`}
-                      type="color"
-                      value={draftPalette[key]}
-                      onChange={(e) => handleColorPickerChange(key, e.target.value)}
-                      className="w-8 h-8 rounded border border-[#2c3035] bg-transparent cursor-pointer shrink-0"
-                      aria-label={`${MIKROS_TOKEN_LABELS[key]} color picker`}
-                    />
-                    <input
-                      type="text"
-                      value={rawHex[key] ?? draftPalette[key]}
-                      onChange={(e) => handleHexTextChange(key, e.target.value)}
-                      aria-label={`${MIKROS_TOKEN_LABELS[key]} hex value`}
-                      aria-invalid={error !== undefined}
-                      className={`flex-1 rounded border bg-[#0e1013] text-xs text-[#e7e9ec] font-mono px-2 py-1.5 focus:outline-none ${
-                        error
-                          ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
-                          : "border-[#2c3035] focus:border-[#3a4046]"
-                      }`}
-                    />
-                  </div>
-                  {error && <p className="text-[10px] text-[#cf7b6b]">{error}</p>}
-                </div>
-              );
-            })}
+          <TypographySection
+            draftDisplayFont={draftDisplayFont}
+            draftBodyFont={draftBodyFont}
+            displayFontIsOther={displayFontIsOther}
+            bodyFontIsOther={bodyFontIsOther}
+            otherFontText={otherFontText}
+            fontErrors={fontErrors}
+            onFontSelectChange={handleFontSelectChange}
+            onFontTextChange={handleFontTextChange}
+            draftTypography={draftTypography}
+            onDisplaySizeChange={handleDisplaySizeChange}
+            onBodySizeChange={handleBodySizeChange}
+            onTypographyFieldChange={commitTypographyChange}
+          />
 
-            <div className="flex flex-col gap-1">
-              <label htmlFor="mikros-topbar-color" className="text-[10px] text-[#6e767d]">
-                Top bar color
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="mikros-topbar-color"
-                  type="color"
-                  value={draftTopBarColor}
-                  onChange={(e) => handleTopBarColorPickerChange(e.target.value)}
-                  className="w-8 h-8 rounded border border-[#2c3035] bg-transparent cursor-pointer shrink-0"
-                  aria-label="Top bar color picker"
-                />
-                <input
-                  type="text"
-                  value={rawTopBarColorHex ?? draftTopBarColor}
-                  onChange={(e) => handleTopBarColorTextChange(e.target.value)}
-                  aria-label="Top bar color hex value"
-                  aria-invalid={topBarColorError !== undefined}
-                  className={`flex-1 rounded border bg-[#0e1013] text-xs text-[#e7e9ec] font-mono px-2 py-1.5 focus:outline-none ${
-                    topBarColorError
-                      ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
-                      : "border-[#2c3035] focus:border-[#3a4046]"
-                  }`}
-                />
-              </div>
-              {topBarColorError && <p className="text-[10px] text-[#cf7b6b]">{topBarColorError}</p>}
-              <p className="text-[10px] text-[#4b5158]">
-                Fill color used behind a Top bar texture (opaque areas). Starts equal to Surface.
-              </p>
-            </div>
-          </div>
+          <LogoSection
+            draftLogo={draftLogo}
+            logoBusy={logoBusy}
+            logoError={logoError}
+            onReset={handleResetLogo}
+            onFileChange={handleLogoFileChange}
+          />
 
-          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
-            <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Typography</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-font-display" className="text-[10px] text-[#6e767d]">
-                  Display font
-                </label>
-                <select
-                  id="mikros-font-display"
-                  value={displayFontIsOther ? FONT_OTHER : draftDisplayFont}
-                  onChange={(e) => handleFontSelectChange("display", e.target.value)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                >
-                  {MIKROS_FONT_CHOICES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                  <option value={FONT_OTHER}>Other (installed font)…</option>
-                </select>
-                {displayFontIsOther && (
-                  <input
-                    type="text"
-                    value={otherFontText.display}
-                    onChange={(e) => handleFontTextChange("display", e.target.value)}
-                    placeholder="e.g. Helvetica Neue"
-                    aria-label="Display font family name"
-                    aria-invalid={fontErrors.display !== undefined}
-                    className={`rounded border bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none ${
-                      fontErrors.display
-                        ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
-                        : "border-[#2c3035] focus:border-[#3a4046]"
-                    }`}
-                  />
-                )}
-                {fontErrors.display && <p className="text-[10px] text-[#cf7b6b]">{fontErrors.display}</p>}
-              </div>
+          <TextureUploadSection
+            title="Top bar texture"
+            resetLabel="↺ Reset Top bar texture"
+            fileInputSrLabel="Upload a Top bar texture (PNG, JPEG or WebP)"
+            value={draftTopBarTexture}
+            busy={topBarTextureBusy}
+            error={topBarTextureError}
+            onReset={handleResetTopBarTexture}
+            onFileChange={handleTopBarTextureFileChange}
+            description={
+              <>
+                PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
+                {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Used as a shape
+                mask only — opaque areas show Top bar color, transparent areas show Canvas, the texture&apos;s own
+                colors are ignored. Empty by default — no texture is applied unless a file is chosen here.
+              </>
+            }
+          />
 
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-font-body" className="text-[10px] text-[#6e767d]">
-                  Body font
-                </label>
-                <select
-                  id="mikros-font-body"
-                  value={bodyFontIsOther ? FONT_OTHER : draftBodyFont}
-                  onChange={(e) => handleFontSelectChange("body", e.target.value)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                >
-                  {MIKROS_FONT_CHOICES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                  <option value={FONT_OTHER}>Other (installed font)…</option>
-                </select>
-                {bodyFontIsOther && (
-                  <input
-                    type="text"
-                    value={otherFontText.body}
-                    onChange={(e) => handleFontTextChange("body", e.target.value)}
-                    placeholder="e.g. Helvetica Neue"
-                    aria-label="Body font family name"
-                    aria-invalid={fontErrors.body !== undefined}
-                    className={`rounded border bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none ${
-                      fontErrors.body
-                        ? "border-[#cf7b6b] focus:border-[#cf7b6b]"
-                        : "border-[#2c3035] focus:border-[#3a4046]"
-                    }`}
-                  />
-                )}
-                {fontErrors.body && <p className="text-[10px] text-[#cf7b6b]">{fontErrors.body}</p>}
-              </div>
-            </div>
-            <p className="text-[10px] text-[#4b5158]">
-              A font not installed on this device falls back to the system default automatically.
-              ↺ Reset Custom palette also restores the official fonts.
-            </p>
+          <TextureUploadSection
+            title="Appearance preview texture"
+            resetLabel="↺ Reset Appearance preview texture"
+            fileInputSrLabel="Upload an Appearance preview texture (PNG, JPEG or WebP)"
+            value={draftPreviewTexture}
+            busy={previewTextureBusy}
+            error={previewTextureError}
+            onReset={handleResetPreviewTexture}
+            onFileChange={handlePreviewTextureFileChange}
+            description={
+              <>
+                PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
+                {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Empty by default —
+                no texture is applied unless a file is chosen here.
+              </>
+            }
+          />
 
-            {/* Bounded size/weight/style controls (FB-20260715-006) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-display-size" className="text-[10px] text-[#6e767d]">
-                  Display size ({MIKROS_DISPLAY_FONT_SIZE_MIN_PX}–{MIKROS_DISPLAY_FONT_SIZE_MAX_PX}px)
-                </label>
-                <input
-                  id="mikros-display-size"
-                  type="number"
-                  min={MIKROS_DISPLAY_FONT_SIZE_MIN_PX}
-                  max={MIKROS_DISPLAY_FONT_SIZE_MAX_PX}
-                  step={1}
-                  value={draftTypography.displayFontSizePx}
-                  onChange={(e) => handleDisplaySizeChange(e.target.value)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-body-size" className="text-[10px] text-[#6e767d]">
-                  Body/UI size ({MIKROS_BODY_FONT_SIZE_MIN_PX}–{MIKROS_BODY_FONT_SIZE_MAX_PX}px)
-                </label>
-                <input
-                  id="mikros-body-size"
-                  type="number"
-                  min={MIKROS_BODY_FONT_SIZE_MIN_PX}
-                  max={MIKROS_BODY_FONT_SIZE_MAX_PX}
-                  step={1}
-                  value={draftTypography.bodyFontSizePx}
-                  onChange={(e) => handleBodySizeChange(e.target.value)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-display-weight" className="text-[10px] text-[#6e767d]">
-                  Display weight
-                </label>
-                <select
-                  id="mikros-display-weight"
-                  value={draftTypography.displayFontWeight}
-                  onChange={(e) => commitTypographyChange("displayFontWeight", Number(e.target.value) as MikrosFontWeight)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                >
-                  {MIKROS_FONT_WEIGHTS.map((w) => (
-                    <option key={w} value={w}>{w}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-body-weight" className="text-[10px] text-[#6e767d]">
-                  Body/UI weight
-                </label>
-                <select
-                  id="mikros-body-weight"
-                  value={draftTypography.bodyFontWeight}
-                  onChange={(e) => commitTypographyChange("bodyFontWeight", Number(e.target.value) as MikrosFontWeight)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                >
-                  {MIKROS_FONT_WEIGHTS.map((w) => (
-                    <option key={w} value={w}>{w}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-display-style" className="text-[10px] text-[#6e767d]">
-                  Display style
-                </label>
-                <select
-                  id="mikros-display-style"
-                  value={draftTypography.displayFontStyle}
-                  onChange={(e) => commitTypographyChange("displayFontStyle", e.target.value as MikrosFontStyle)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                >
-                  {MIKROS_FONT_STYLES.map((s) => (
-                    <option key={s} value={s}>{s === "normal" ? "Normal" : "Italic"}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="mikros-body-style" className="text-[10px] text-[#6e767d]">
-                  Body/UI style
-                </label>
-                <select
-                  id="mikros-body-style"
-                  value={draftTypography.bodyFontStyle}
-                  onChange={(e) => commitTypographyChange("bodyFontStyle", e.target.value as MikrosFontStyle)}
-                  className="rounded border border-[#2c3035] bg-[#0e1013] text-xs text-[#e7e9ec] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                >
-                  {MIKROS_FONT_STYLES.map((s) => (
-                    <option key={s} value={s}>{s === "normal" ? "Normal" : "Italic"}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Custom logo</span>
-              {draftLogo && (
-                <button
-                  type="button"
-                  onClick={handleResetLogo}
-                  className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors"
-                >
-                  ↺ Reset custom logo
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-md bg-[#5b93d6] flex items-center justify-center text-[10px] font-bold text-white leading-none select-none shrink-0 overflow-hidden bg-cover bg-center"
-                style={draftLogo ? { backgroundImage: `url("${draftLogo}")`, color: "transparent" } : undefined}
-                aria-hidden="true"
-              >
-                M
-              </div>
-              <label className="flex-1">
-                <span className="sr-only">Upload a custom logo (PNG, JPEG or WebP)</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={handleLogoFileChange}
-                  disabled={logoBusy}
-                  className="w-full text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
-                />
-              </label>
-            </div>
-            {logoError && <p className="text-[10px] text-[#cf7b6b]">{logoError}</p>}
-            <p className="text-[10px] text-[#4b5158]">
-              PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
-              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Replaces the “M”
-              mark in the top bar for this theme only.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Top bar texture</span>
-              {draftTopBarTexture && (
-                <button
-                  type="button"
-                  onClick={handleResetTopBarTexture}
-                  className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors"
-                >
-                  ↺ Reset Top bar texture
-                </button>
-              )}
-            </div>
-            <label className="flex-1">
-              <span className="sr-only">Upload a Top bar texture (PNG, JPEG or WebP)</span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handleTopBarTextureFileChange}
-                disabled={topBarTextureBusy}
-                className="w-full text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
-              />
-            </label>
-            {topBarTextureError && <p className="text-[10px] text-[#cf7b6b]">{topBarTextureError}</p>}
-            <p className="text-[10px] text-[#4b5158]">
-              PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
-              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Used as a shape
-              mask only — opaque areas show Top bar color, transparent areas show Canvas, the texture&apos;s own
-              colors are ignored. Empty by default — no texture is applied unless a file is chosen here.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-[#4b5158]">Appearance preview texture</span>
-              {draftPreviewTexture && (
-                <button
-                  type="button"
-                  onClick={handleResetPreviewTexture}
-                  className="text-[10px] text-[#cda24f] hover:text-[#e0bc72] transition-colors"
-                >
-                  ↺ Reset Appearance preview texture
-                </button>
-              )}
-            </div>
-            <label className="flex-1">
-              <span className="sr-only">Upload an Appearance preview texture (PNG, JPEG or WebP)</span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handlePreviewTextureFileChange}
-                disabled={previewTextureBusy}
-                className="w-full text-xs text-[#a4abb2] file:mr-2 file:rounded file:border file:border-[#2c3035] file:bg-[#0e1013] file:text-[#a4abb2] file:text-xs file:px-2 file:py-1 file:cursor-pointer hover:file:border-[#3a4046] disabled:opacity-50"
-              />
-            </label>
-            {previewTextureError && <p className="text-[10px] text-[#cf7b6b]">{previewTextureError}</p>}
-            <p className="text-[10px] text-[#4b5158]">
-              PNG, JPEG or WebP, max {Math.round(MIKROS_LOGO_MAX_BYTES / 1024)} KB and{" "}
-              {MIKROS_LOGO_MAX_DIMENSION_PX}×{MIKROS_LOGO_MAX_DIMENSION_PX}px. SVG is not accepted. Empty by default —
-              no texture is applied unless a file is chosen here.
-            </p>
-          </div>
-
-          <div className="border-t border-[#1e2124] pt-3">
-            {!saveNameOpen ? (
-              <button
-                type="button"
-                onClick={() => setSaveNameOpen(true)}
-                className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-xs hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-              >
-                Save as custom
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <label htmlFor="mikros-save-name" className="text-[10px] text-[#6e767d]">
-                  Theme name
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="mikros-save-name"
-                    type="text"
-                    value={saveName}
-                    onChange={(e) => {
-                      setSaveName(e.target.value);
-                      setSaveError(null);
-                    }}
-                    placeholder="e.g. My Mikros"
-                    className="flex-1 rounded border border-[#2c3035] bg-[#0e1013] text-sm text-[#e7e9ec] placeholder-[#4b5158] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveAsCustom}
-                    disabled={
-                      presetSyncPending ||
-                      presetsCorrupted ||
-                      Object.values(hexErrors).some((e) => e !== undefined) ||
-                      Object.values(fontErrors).some((e) => e !== undefined) ||
-                      topBarColorError !== undefined
-                    }
-                    className="rounded border border-[#9079F2]/50 text-[#9079F2] px-3 py-1.5 text-xs hover:border-[#9079F2] hover:bg-[#9079F2]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                  >
-                    {presetSyncPending ? "Saving…" : isEditingTheme ? "Update theme" : "Save"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isEditingTheme) {
-                        // Abandon the unsaved edit and return to the official
-                        // Custom preset — same reset path as picking "Custom".
-                        handleModeChange("mikros");
-                      } else {
-                        setSaveNameOpen(false);
-                        setSaveName("");
-                        setSaveError(null);
-                      }
-                    }}
-                    className="text-xs text-[#6e767d] hover:text-[#a4abb2] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {saveError && <p className="text-xs text-[#cf7b6b]">{saveError}</p>}
-              </div>
-            )}
-          </div>
+          <SaveThemeDialog
+            saveNameOpen={saveNameOpen}
+            onOpen={() => setSaveNameOpen(true)}
+            saveName={saveName}
+            onSaveNameChange={(value) => {
+              setSaveName(value);
+              setSaveError(null);
+            }}
+            onSave={handleSaveAsCustom}
+            onCancel={handleCancelSaveDialog}
+            saveError={saveError}
+            saveDisabled={
+              presetSyncPending ||
+              presetsCorrupted ||
+              Object.values(hexErrors).some((e) => e !== undefined) ||
+              Object.values(fontErrors).some((e) => e !== undefined) ||
+              topBarColorError !== undefined
+            }
+            presetSyncPending={presetSyncPending}
+            isEditingTheme={isEditingTheme}
+          />
         </div>
       )}
     </fieldset>
