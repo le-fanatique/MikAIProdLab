@@ -90,7 +90,7 @@ export function validateEditorialTimingPatchShape(input: unknown): PatchShapeVal
   }
 
   let sourceEditorialSnapshot: EditorialSnapshot | undefined;
-  if (obj.sourceEditorialSnapshot !== undefined) {
+  if (obj.sourceEditorialSnapshot !== undefined && obj.sourceEditorialSnapshot !== null) {
     const snap = obj.sourceEditorialSnapshot as Record<string, unknown> | null;
     if (
       !snap ||
@@ -234,6 +234,29 @@ export function planEditorialTimingPatch(args: {
           message: `Patch targets project ${patch.projectId}/sequence ${patch.sequenceId}, but this endpoint is for project ${projectId}/sequence ${sequenceId}.`,
         },
       ],
+      items: [],
+    };
+  }
+
+  // Duplicate item ids are refused outright: in apply mode each entry
+  // becomes an UPDATE on the same row, so two entries for the same id would
+  // silently pick the last one in array order rather than making an
+  // explicit choice.
+  const seenItemIds = new Set<number>();
+  const duplicateItemIds = new Set<number>();
+  for (const patchItem of patch.items) {
+    if (seenItemIds.has(patchItem.id)) {
+      duplicateItemIds.add(patchItem.id);
+    }
+    seenItemIds.add(patchItem.id);
+  }
+  if (duplicateItemIds.size > 0) {
+    return {
+      ok: false,
+      errors: [...duplicateItemIds].map((itemId) => ({
+        itemId,
+        message: `Item ${itemId} appears more than once in this patch.`,
+      })),
       items: [],
     };
   }

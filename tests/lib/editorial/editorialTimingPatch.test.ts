@@ -14,6 +14,34 @@ import { EDITORIAL_SNAPSHOT_SCHEMA_VERSION } from "@/lib/editorial/editorialSnap
 // pure functions. They describe the behavior AS IT IS, not as its name
 // suggests. Any surprise found while writing them is noted here and in the
 // executor report, never corrected.
+//
+// IND.EDITORIAL.2 (2026-08-19) revisited the four surprises IND.EDITORIAL.1
+// found and fixed two of them, turning their characterization tests below
+// into specifications (the `CHARACTERIZATION:` prefix was removed from
+// those):
+//
+//   - a duplicate item id within a patch is now refused outright — in apply
+//     mode it would otherwise produce two UPDATEs on the same row, last one
+//     in array order winning silently;
+//   - `sourceEditorialSnapshot: null` is now treated exactly like an absent
+//     field, since a JSON serializer emitting `null` for an optional field
+//     it left unset is the normal case, not a malformed patch.
+//
+// **The author was shown all four on 2026-08-19 and ruled: fix these two,
+// leave the other two.** Still accepted as-is, by that same decision:
+//
+//   - an array passes the top-level "must be an object" guard (arrays are
+//     `typeof "object"`) and only fails later on missing fields — the
+//     request is refused either way, so the only difference is which
+//     message comes back;
+//   - `createdAt` falls back to a live clock read when missing or not a
+//     string — non-deterministic, but nothing hashes or compares this plan
+//     today.
+//
+// A future ticket touching either of those two must not treat them as bugs
+// to fix on sight — they are accepted behaviour until the user says
+// otherwise. Changing them means changing the tests below, which is the
+// point: it cannot happen quietly.
 // ---------------------------------------------------------------------------
 
 const SOURCE_SCHEMA_VERSION = "mikai-editorial-export-v1";
@@ -158,18 +186,13 @@ describe("validateEditorialTimingPatchShape", () => {
       if (result.ok) expect(result.patch.sourceEditorialSnapshot).toEqual(snap);
     });
 
-    it("rejects null explicitly passed for sourceEditorialSnapshot (present but not a valid object)", () => {
+    it("treats sourceEditorialSnapshot: null exactly like an absent field", () => {
       const result = validateEditorialTimingPatchShape(validPatchInput({ sourceEditorialSnapshot: null }));
-      // Characterization: `snap !== undefined` is checked via
-      // `obj.sourceEditorialSnapshot !== undefined`, and `null !== undefined`
-      // is true, so null is NOT treated as "absent" — it goes through the
-      // shape check and fails it.
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.errors).toContainEqual({
-          message: `sourceEditorialSnapshot, if present, must be a valid "${EDITORIAL_SNAPSHOT_SCHEMA_VERSION}" object.`,
-        });
-      }
+      // Spec (IND.EDITORIAL.2, 2026-08-19): a JSON serializer emitting
+      // `null` for an optional field it left unset is the normal case, not
+      // a malformed patch — `null` must not be refused.
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.patch.sourceEditorialSnapshot).toBeUndefined();
     });
 
     it("rejects a snapshot with the wrong schemaVersion", () => {
@@ -611,7 +634,10 @@ describe("planEditorialTimingPatch", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("characterization — duplicate patch entries for the same item id both produce a plan item (no de-duplication guard)", () => {
+  it("refuses the whole patch when an item id appears more than once, naming the duplicated id", () => {
+    // Spec (IND.EDITORIAL.2, 2026-08-19): in apply mode, two entries for the
+    // same item id would produce two UPDATEs on the same row — last one in
+    // array order wins silently. A refusal replaces that arbitrary choice.
     const result = planEditorialTimingPatch({
       projectId: 1,
       sequenceId: 2,
@@ -621,9 +647,27 @@ describe("planEditorialTimingPatch", () => {
       ]),
       existingItems: [existingShot({ id: 10, shotId: 100, startSeconds: 0, durationSeconds: 5 })],
     });
-    expect(result.ok).toBe(true);
-    expect(result.items).toHaveLength(2);
-    expect(result.items.map((i) => i.nextStartSeconds)).toEqual([1, 2]);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([{ itemId: 10, message: "Item 10 appears more than once in this patch." }]);
+    expect(result.items).toEqual([]);
+  });
+
+  it("refuses a patch with duplicate ids even when other items and errors would otherwise be valid", () => {
+    const result = planEditorialTimingPatch({
+      projectId: 1,
+      sequenceId: 2,
+      patch: patchFor([
+        { id: 11, shotId: 200, startSeconds: 30, durationSeconds: 5 },
+        { id: 10, shotId: 100, startSeconds: 1, durationSeconds: 5 },
+        { id: 10, shotId: 100, startSeconds: 2, durationSeconds: 5 },
+      ]),
+      existingItems: [
+        existingShot({ id: 10, shotId: 100, startSeconds: 0, durationSeconds: 5 }),
+        existingShot({ id: 11, shotId: 200, startSeconds: 20, durationSeconds: 5 }),
+      ],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([{ itemId: 10, message: "Item 10 appears more than once in this patch." }]);
   });
 
   it("empty patch items produces an ok, empty plan", () => {
