@@ -1476,6 +1476,27 @@ And that shape is not speculative: **the bench already is it.**
 surface through one action. The work is generalising a proven pair, not
 inventing one.
 
+**The Prompt Compiler's removal, done 2026-08-19 — and it is smaller than the
+plan implied.** The beta judged its replacement better, which was the one thing
+holding it back. But "remove the Prompt Compiler" turned out to name **two
+different things**, and only one of them could go:
+
+- **removable, and removed**: `PromptCompilerPanel.tsx`, its action
+  `actions/llm/promptCompiler.ts`, and `promptCompilerSystemPrompt.ts` — each
+  used by exactly one caller, ending at the Shot detail page's own card;
+- **not removable**: `promptCompilerPresets.ts` is imported by
+  `src/lib/comfy/workflowProfiles.ts`, which `AGENTS.md` protects;
+  `promptCompilerHandoff.ts` and `PromptCompilerHandoffGate.tsx` are used by
+  `ShotGenerationPanel`, `WorkflowProfilePanel` and the Shot map page — they
+  resolve **which workflow node receives the text**, which is generation
+  plumbing wearing the compiler's name; and `buildPromptCompilationContext.ts`
+  has thirteen consumers, including `composeStoryboardShot` itself.
+
+So the compiler's *preset vocabulary* and its *node handoff* leaked into the
+generation path long ago. Prising them out is an untangling ticket that touches
+`src/lib/comfy/`, not part of this removal, and it should be scoped on its own
+terms rather than smuggled into a deletion.
+
 **But it rewires nine production surfaces**, which is a poor thing to do
 immediately before the author's from-scratch beta. Recommended order:
 

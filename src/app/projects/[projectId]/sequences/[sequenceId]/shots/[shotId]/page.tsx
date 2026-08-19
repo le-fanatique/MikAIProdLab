@@ -14,7 +14,6 @@ import PromptSegmentsPanel from "@/components/PromptSegmentsPanel";
 import ReferenceImagesPanel from "@/components/ReferenceImagesPanel";
 import CompiledPromptPanel from "@/components/CompiledPromptPanel";
 import PromptComposerPanel from "@/components/PromptComposerPanel";
-import PromptCompilerPanel from "@/components/PromptCompilerPanel";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import GenerationJobsPanel from "@/components/GenerationJobsPanel";
 import ShotPromptForm from "@/components/ShotPromptForm";
@@ -384,78 +383,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   // ── Prompt Compiler (PROMPT.COMPILER.2) — real data feeding the panel's
   // buildPromptCompilationContext input. No selection logic here: the panel
   // itself lets the user pick/order reference images and toggle sources. ──
-  const hasRealPromptSegments = segmentList.length > 0;
-
-  const promptCompilerShot = {
-    title: shot.title,
-    description: shot.description,
-    actionPitch: shot.actionPitch,
-    cameraPitch: shot.cameraPitch,
-    durationSeconds: shot.durationSeconds,
-    shotPrompt: shot.shotPrompt,
-    compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
-    hasPromptSegments: hasRealPromptSegments,
-    hasMissingTiming: compiledPrompt.hasMissingTiming,
-  };
-
-  const promptCompilerCastAssets = assignedRows.map((r) => ({
-    assetId: r.assetId,
-    assetName: r.assetName,
-    assetType: r.assetType,
-    description: r.assetDescription,
-    notes: r.assetNotes,
-  }));
-
-  const promptCompilerAssetBibles = assignedRows.map((r) => ({
-    assetId: r.assetId,
-    assetName: r.assetName,
-    assetType: r.assetType,
-    visualIdentity: r.assetVisualIdentity,
-    usageRules: r.assetUsageRules,
-    forbiddenVariations: r.assetForbiddenVariations,
-  }));
-
-  const promptCompilerAvailableReferences = [
-    ...refImages.map((img) => ({
-      refId: `shot-${img.id}`,
-      source: "shot" as const,
-      assetId: null,
-      assetName: null,
-      label: img.label,
-      role: img.imageRole,
-      variantState: null,
-      usageNotes: null,
-      approvedForGeneration: null,
-    })),
-    ...castAssetRefImageRows.map((img) => {
-      const asset = assignedRows.find((r) => r.assetId === img.assetId);
-      return {
-        refId: `asset-${img.assetId}-${img.id}`,
-        source: "asset" as const,
-        assetId: img.assetId,
-        assetName: asset?.assetName ?? null,
-        label: img.label,
-        role: img.imageRole,
-        variantState: img.variantState,
-        usageNotes: img.usageNotes,
-        approvedForGeneration: img.approvedForGeneration,
-      };
-    }),
-  ];
-
-  const promptCompilerSequenceContext = {
-    title: sequence.title,
-    summary: sequence.summary,
-    mood: sequence.mood,
-    locationHint: sequence.locationHint,
-    narrativePurpose: sequence.narrativePurpose,
-  };
-
-  const promptCompilerProjectContext = {
-    name: project.name,
-    pitch: project.pitch,
-    story: project.story,
-  };
 
   const defaultPromptProposal = buildDefaultShotPromptProposal({
     description: shot.description,
@@ -903,22 +830,6 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             hasExistingShotPrompt={Boolean(shot.shotPrompt?.trim())}
             segmentCount={segmentList.length}
             ingredients={composerIngredients}
-          />
-        </Card>
-
-        <Card title="Prompt Compiler">
-          <PromptCompilerPanel
-            projectId={pid}
-            sequenceId={sid}
-            shotId={shid}
-            returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`}
-            currentShotPrompt={shot.shotPrompt}
-            shot={promptCompilerShot}
-            castAssets={promptCompilerCastAssets}
-            assetBibles={promptCompilerAssetBibles}
-            availableReferences={promptCompilerAvailableReferences}
-            sequenceContext={promptCompilerSequenceContext}
-            projectContext={promptCompilerProjectContext}
           />
         </Card>
 
