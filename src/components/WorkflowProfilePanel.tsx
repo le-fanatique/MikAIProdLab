@@ -1,10 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import {
-  getPromptCompilerHandoffStorageKey,
-  sanitizePromptCompilerHandoff,
-} from "@/lib/prompts/promptCompilerHandoff";
+import { useMemo, type FormEvent, type ReactNode } from "react";
 import {
   diagnoseWorkflowGeneration,
   type WorkflowProfile,
@@ -12,7 +8,6 @@ import {
 } from "@/lib/comfy/workflowProfiles";
 
 type Props = {
-  shotId: number;
   profile: WorkflowProfile | null;
   nodeState: WorkflowNodeState;
   hasTextPromptValue: boolean;
@@ -37,14 +32,12 @@ const SUPPORTED_INPUT_LABELS: Record<string, string> = {
 
 /**
  * Wraps the "Suggested Inputs" → "Generate" region of a Generation Panel
- * surface (ShotGenerationPanel / the /map page), alongside
- * PromptCompilerHandoffGate. Shows the resolved Workflow profile (or
- * "Generic workflow") and blocks the wrapped Generate form's submit only
- * for a blocking diagnostic — a generic workflow never runs specialized
- * validation and behaves exactly as before this ticket.
+ * surface (ShotGenerationPanel / the /map page). Shows the resolved
+ * Workflow profile (or "Generic workflow") and blocks the wrapped Generate
+ * form's submit only for a blocking diagnostic — a generic workflow never
+ * runs specialized validation and behaves exactly as before this ticket.
  */
 export default function WorkflowProfilePanel({
-  shotId,
   profile,
   nodeState,
   hasTextPromptValue,
@@ -57,28 +50,12 @@ export default function WorkflowProfilePanel({
   lastFrameSelectedImageRole,
   children,
 }: Props) {
-  const [presetId, setPresetId] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(getPromptCompilerHandoffStorageKey(shotId));
-      if (!raw) {
-        setPresetId(null);
-        return;
-      }
-      const handoff = sanitizePromptCompilerHandoff(JSON.parse(raw));
-      setPresetId(handoff && handoff.shotId === shotId ? handoff.presetId : null);
-    } catch {
-      setPresetId(null);
-    }
-  }, [shotId]);
-
   const result = useMemo(
     () =>
       diagnoseWorkflowGeneration({
         profile,
         nodeState,
-        presetId,
+        presetId: null,
         hasTextPromptValue,
         selectedImageCount,
         dynamicBatchActive,
@@ -91,7 +68,6 @@ export default function WorkflowProfilePanel({
     [
       profile,
       nodeState,
-      presetId,
       hasTextPromptValue,
       selectedImageCount,
       dynamicBatchActive,

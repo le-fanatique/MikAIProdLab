@@ -1,0 +1,22 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`resolvePromptCompilerTextNode > fails when more than one generic candidate is present 1`] = `
+{
+  "ok": false,
+  "reason": "Multiple possible Text Prompt (Input) fields were detected on this workflow. Choose the field manually — the Compiled Prompt Draft was not applied automatically.",
+}
+`;
+
+exports[`resolvePromptCompilerTextNode > fails when zero generic candidates are present 1`] = `
+{
+  "ok": false,
+  "reason": "No Text Prompt (Input) field was detected on this workflow. The Compiled Prompt Draft cannot be applied automatically.",
+}
+`;
+
+exports[`resolvePromptCompilerTextNode > resolves the single generic candidate 1`] = `
+{
+  "nodeId": "5",
+  "ok": true,
+}
+`;
