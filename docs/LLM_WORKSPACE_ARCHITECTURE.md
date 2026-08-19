@@ -1537,6 +1537,42 @@ The point of the order is that at no moment is more than one surface in flight.
 The author validated these nine surfaces in his beta; they should not all move
 at once.
 
+#### C4/C5/C6 measured 2026-08-20 — and not started, on purpose
+
+Measured before committing to the largest remaining item. Three findings, and
+together they say this should not be done blind.
+
+**C4 and C6 contradict each other.** C4 says *reorganise the flat components in
+`src/components/`*; C6 says *migrate to `src/features/`*. Doing C4 first means
+grouping 131 files into `src/components/<domain>/` and then moving the same 131
+into `src/features/<domain>/` — every file moved twice, every import rewritten
+twice, for one end state.
+
+**The taxonomy is a product judgement, not a mechanical one.** 64 of the 131 fall
+into obvious name prefixes (Sequence, Workflow, Asset, Shot…), but the hard
+cases are the ones that matter: is `AssetGenerationPanel` the LLM domain or
+image generation? Is `CastingPanel` casting or assets? Getting those wrong bakes
+a bad structure into the repository, and the imports make it expensive to
+revisit. **Only the author can answer them**, and the existing folders
+(`cameraLab`, `projectStyle`, `theme`…) show he already has opinions about where
+things belong.
+
+There is no large unambiguous slice to do meanwhile: exactly **two** flat
+components obviously belong to an existing folder. That is not worth a
+restructuring ticket.
+
+**C5's premise is already satisfied.** It reads *"Break up large UI files
+hosting assist surfaces — they shrink first"*. They shrank: the assist panels
+now hold presentation only, after the unification moved their plumbing behind
+one action. What remains large is a different set — `SidebarLLMChat` (1 617
+lines, a deliberate exception), `EditorialTimeline` (1 086),
+`ShotGenerationPanel` (1 059) — none of them an assist surface. C5 as written
+has no subject left; splitting those three is a new ticket with its own
+justification, and two of them are client components with no test harness.
+
+**So C4/C5/C6 waits for one decision from the author: the target structure and
+the domain boundaries.** Everything else in the cleanup is done.
+
 #### C3 measured and partly done, 2026-08-20
 
 The plan reads *"Convert the 25 prompt builders into declarative templates"*.
