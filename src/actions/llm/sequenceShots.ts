@@ -9,9 +9,6 @@ import type { GeneratedSequenceShot } from "@/lib/prompts/shots-from-sequence";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 import { generateSequentialCodes } from "@/lib/nomenclature";
-import { runOperation } from "@/lib/llmWorkspace/runner";
-import { shotsFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/shotsFromSequence";
-import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 
 function str(value: unknown, maxLen = 1000): string | null {
   if (typeof value !== "string") return null;
@@ -47,95 +44,14 @@ function normalizeShot(raw: unknown): GeneratedSequenceShot | null {
   };
 }
 
-/**
- * Thin adapter over `runOperation(shotsFromSequenceDescriptor, ...)`
- * (LLMW.MIGRATE.LIST.1, B7e): keeps the exact `{ok:true, shots}` return
- * shape `SequenceShotsLLMAssistPanel` depends on. The 1-30 bound and the 6
- * default for `shotCount` are declared on the descriptor's own
- * `intent.parameters` (`descriptors/shotsFromSequence.ts`), but the runner
- * does not enforce that bound itself — the render forms
- * (`variables/registry.ts`) only apply `?? 6` when `targetCount` is
- * `undefined`, never clamping an out-of-range value back into [1, 30]. That
- * gap is reported, not papered over here with a re-implemented bound check
- * (see `.agents/executor_report.md`): an absent/non-integer `shotCount`
- * still defaults to 6 (parameters omitted entirely), matching the old
- * behaviour; an out-of-range integer now reaches the prompt unclamped, which
- * the old code never allowed.
- *
- * `result.items` are keyed by entity field name (`shotCode`,
- * `durationSeconds`); `mapListItemToModelKeys` (`benchRun.ts`, B7d's bridge
- * extracted for reuse) translates each item to the model's own JSON keys
- * (`shot_code`, `duration_seconds`), matching `GeneratedSequenceShot`'s own
- * field names one for one. Two gaps remain after that translation, both
- * named in the ticket's own risk section: `readStringField` (`runner.ts`)
- * always produces a value — `""` where the old `normalizeShot` produced
- * `null` for an absent or blank field — and `readNumberField`'s
- * `fallback: "omit"` drops an out-of-bounds `duration_seconds` from the
- * object entirely, where the old code kept the key with a `null` value. Both
- * are filled back to `null` below so this adapter's output is indiscernible
- * from the pre-migration `parseShotsResult` + `normalizeShot` chain
- * (`tests/llmWorkspace/shotsFromSequence.migration.test.ts`). `title` is
- * never `null` — `item.validity` already filtered out any item missing it.
- */
-export async function generateShotsFromSequenceDraft(
-  formData: FormData
-): Promise<{ ok: true; shots: GeneratedSequenceShot[] } | { ok: false; error: string }> {
-  try {
-    const projectId = parseInt(formData.get("projectId") as string, 10);
-    const sequenceId = parseInt(formData.get("sequenceId") as string, 10);
-    const shotCountRaw = parseInt(formData.get("shotCount") as string, 10);
-
-    const result = await runOperation(
-      shotsFromSequenceDescriptor,
-      { projectId, sequenceId },
-      { parameters: Number.isInteger(shotCountRaw) ? { targetCount: shotCountRaw } : {} }
-    );
-    if (!result.ok) return { ok: false, error: result.error };
-    // `shotsFromSequenceDescriptor.output.kind` is always `"list"` — the
-    // guard exists because `RunOperationResult` is `kind`-discriminated
-    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
-    if (result.kind !== "list") {
-      throw new Error("generateShotsFromSequenceDraft: expected a list-kind result.");
-    }
-    if (shotsFromSequenceDescriptor.output.kind !== "list") {
-      throw new Error("generateShotsFromSequenceDraft: descriptor output is not list-kind.");
-    }
-
-    const fields = shotsFromSequenceDescriptor.output.item.fields;
-    const generatedShots: GeneratedSequenceShot[] = result.items.map((item) => {
-      const mapped = mapListItemToModelKeys(fields, item);
-      const shot: Record<string, string | number | null> = {};
-      for (const field of fields) {
-        const key = field.jsonKey;
-        if (!(key in mapped)) {
-          shot[key] = null;
-          continue;
-        }
-        const value = mapped[key];
-        // `mapListItemToModelKeys` now returns `string | number | boolean`
-        // (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1) — but
-        // `shotsFromSequenceDescriptor.output.item.fields` declares no
-        // boolean-typed field, so `value` can never actually be a `boolean`
-        // here. Explicit rather than left to an invented fallback: refuse
-        // loudly, on the same "impossible input throws" discipline
-        // `anchorIdForVariable` (`runner.ts`) already uses, rather than
-        // silently coerce a boolean into `GeneratedSequenceShot`'s
-        // `string | number | null` fields with no oracle to say how.
-        if (typeof value === "boolean") {
-          throw new Error(`generateShotsFromSequenceDraft: unexpected boolean value for field "${key}".`);
-        }
-        shot[key] = value === "" ? null : value;
-      }
-      return shot as unknown as GeneratedSequenceShot;
-    });
-
-    return { ok: true, shots: generatedShots };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unexpected error. Please try again.";
-    return { ok: false, error: message };
-  }
-}
-
+// LLMW.UNIFY.PANEL.3 — `generateShotsFromSequenceDraft` is deleted:
+// `SequenceShotsLLMAssistPanel` now calls `runWorkspaceOperation` directly,
+// naming `shots.fromSequence` itself. There is no server-side translation
+// left for this adapter to perform — `runWorkspaceOperation` already returns
+// `result.items` keyed by the model's own JSON keys (LLMW.UNIFY.LIST.1), the
+// one gap that used to block this panel. `createGeneratedShots` below is
+// untouched — it is the panel's own commit binding, not a generation
+// function.
 export async function createGeneratedShots(formData: FormData): Promise<void> {
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const sequenceId = parseInt(formData.get("sequenceId") as string, 10);

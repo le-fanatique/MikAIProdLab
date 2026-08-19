@@ -1,11 +1,49 @@
 "use client";
 
 import { useState } from "react";
-import {
-  generateSequencesFromOutlineDraft,
-  createGeneratedSequences,
-} from "@/actions/llm/sequenceGeneration";
+import { createGeneratedSequences } from "@/actions/llm/sequenceGeneration";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import type { LLMPreviewState, GeneratedSequence, GenerateSequencesResult } from "@/types/llm";
+
+// LLMW.UNIFY.PANEL.3 — this panel now names `sequences.fromOutline` directly
+// instead of importing a generation function for it
+// (`generateSequencesFromOutlineDraft`, deleted alongside this migration,
+// `src/actions/llm/sequenceGeneration.ts`). `runWorkspaceOperation` already
+// returns `result.items` keyed by the model's own JSON keys
+// (LLMW.UNIFY.LIST.1). What remains here is presentation, kept identical to
+// what the deleted adapter did: the `"" -> null` fill-back for the six
+// `type: "string"` fields — `order_index` needs no fill, the descriptor's
+// own `fallback: "index"` guarantees it is always present as a number. The
+// boolean guard mirrors the deleted adapter's own "impossible input throws"
+// discipline — no `output.item.fields` entry is ever boolean-typed for this
+// descriptor.
+function toSequence(item: Record<string, string | number | boolean>): GeneratedSequence {
+  function strField(key: string): string | null {
+    const value = item[key];
+    if (value === undefined) return null;
+    if (typeof value === "boolean") {
+      throw new Error(`SequencesGenerationPanel: unexpected boolean value for field "${key}".`);
+    }
+    return value === "" ? null : String(value);
+  }
+  const title = item.title;
+  if (typeof title !== "string") {
+    throw new Error('SequencesGenerationPanel: expected a string "title" on every item.');
+  }
+  const orderIndex = item.order_index;
+  if (typeof orderIndex !== "number") {
+    throw new Error('SequencesGenerationPanel: expected a numeric "order_index" on every item.');
+  }
+  return {
+    title,
+    summary: strField("summary"),
+    description: strField("description"),
+    narrative_purpose: strField("narrative_purpose"),
+    mood: strField("mood"),
+    location_hint: strField("location_hint"),
+    order_index: orderIndex,
+  };
+}
 
 type Props = {
   projectId: number;
@@ -40,14 +78,28 @@ export default function SequencesGenerationPanel({
 
   async function handleGenerate() {
     setState({ status: "loading" });
-    const fd = new FormData();
-    fd.set("projectId", String(projectId));
-    if (targetCount.trim()) fd.set("targetCount", targetCount.trim());
-    const result = await generateSequencesFromOutlineDraft(fd);
-    if (result.ok) {
-      setState({ status: "success", result: { sequences: result.sequences } });
-    } else {
+    const rawCount = parseInt(targetCount, 10);
+    const result = await runWorkspaceOperation({
+      descriptorId: "sequences.fromOutline",
+      ids: { projectId },
+      intent: { parameters: Number.isInteger(rawCount) ? { targetCount: rawCount } : {} },
+    });
+    if (!result.ok) {
       setState({ status: "error", message: result.error });
+      return;
+    }
+    if (result.kind !== "list") {
+      setState({ status: "error", message: "Expected a list-kind result." });
+      return;
+    }
+    try {
+      const sequences = result.items.map(toSequence);
+      setState({ status: "success", result: { sequences } });
+    } catch (err) {
+      setState({
+        status: "error",
+        message: err instanceof Error ? err.message : "An unexpected error occurred. Please try again.",
+      });
     }
   }
 

@@ -1,8 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { generateShotsFromSequenceDraft, createGeneratedShots } from "@/actions/llm/sequenceShots";
+import { createGeneratedShots } from "@/actions/llm/sequenceShots";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import type { GeneratedSequenceShot } from "@/lib/prompts/shots-from-sequence";
+
+// LLMW.UNIFY.PANEL.3 — this panel now names `shots.fromSequence` directly
+// instead of importing a generation function for it
+// (`generateShotsFromSequenceDraft`, deleted alongside this migration,
+// `src/actions/llm/sequenceShots.ts`). `runWorkspaceOperation` already
+// returns `result.items` keyed by the model's own JSON keys
+// (LLMW.UNIFY.LIST.1). What remains here is presentation, kept identical to
+// what the deleted adapter did: the `"" -> null` fill-back for every
+// `type: "string"` field, and `duration_seconds` staying `null` when the
+// runner omitted it (out of range or absent). The boolean guard mirrors the
+// deleted adapter's own "impossible input throws" discipline — no
+// `output.item.fields` entry is ever boolean-typed for this descriptor.
+function toShot(item: Record<string, string | number | boolean>): GeneratedSequenceShot {
+  function strField(key: string): string | null {
+    const value = item[key];
+    if (value === undefined) return null;
+    if (typeof value === "boolean") {
+      throw new Error(`SequenceShotsLLMAssistPanel: unexpected boolean value for field "${key}".`);
+    }
+    return value === "" ? null : String(value);
+  }
+  const title = item.title;
+  if (typeof title !== "string") {
+    throw new Error('SequenceShotsLLMAssistPanel: expected a string "title" on every item.');
+  }
+  const durationRaw = item.duration_seconds;
+  if (durationRaw !== undefined && typeof durationRaw !== "number") {
+    throw new Error('SequenceShotsLLMAssistPanel: expected a numeric "duration_seconds" when present.');
+  }
+  return {
+    title,
+    shot_code: strField("shot_code"),
+    description: strField("description"),
+    duration_seconds: durationRaw ?? null,
+    continuity_in: strField("continuity_in"),
+    action_pitch: strField("action_pitch"),
+    camera_pitch: strField("camera_pitch"),
+    framing: strField("framing"),
+    camera_movement: strField("camera_movement"),
+    continuity_out: strField("continuity_out"),
+    shot_prompt: strField("shot_prompt"),
+  };
+}
 
 type State =
   | { status: "idle" }
@@ -35,15 +79,27 @@ export default function SequenceShotsLLMAssistPanel({
 
   async function handleGenerate() {
     setState({ status: "loading" });
-    const fd = new FormData();
-    fd.set("projectId", String(projectId));
-    fd.set("sequenceId", String(sequenceId));
-    fd.set("shotCount", String(shotCount));
-    const result = await generateShotsFromSequenceDraft(fd);
-    if (result.ok) {
-      setState({ status: "success", shots: result.shots });
-    } else {
+    const result = await runWorkspaceOperation({
+      descriptorId: "shots.fromSequence",
+      ids: { projectId, sequenceId },
+      intent: { parameters: { targetCount: shotCount } },
+    });
+    if (!result.ok) {
       setState({ status: "error", message: result.error });
+      return;
+    }
+    if (result.kind !== "list") {
+      setState({ status: "error", message: "Expected a list-kind result." });
+      return;
+    }
+    try {
+      const shots = result.items.map(toShot);
+      setState({ status: "success", shots });
+    } catch (err) {
+      setState({
+        status: "error",
+        message: err instanceof Error ? err.message : "Unexpected error. Please try again.",
+      });
     }
   }
 

@@ -8,9 +8,6 @@ import { revalidatePath } from "next/cache";
 import { getNomenclatureSettings } from "@/lib/settings";
 import type { GeneratedSequence } from "@/types/llm";
 import { generateSequentialCodes } from "@/lib/nomenclature";
-import { runOperation } from "@/lib/llmWorkspace/runner";
-import { sequencesFromOutlineDescriptor } from "@/lib/llmWorkspace/descriptors/sequencesFromOutline";
-import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,93 +45,16 @@ function normalizeSequence(raw: unknown, fallbackIndex: number): GeneratedSequen
 // Server Actions
 // ---------------------------------------------------------------------------
 
-/**
- * Thin adapter over `runOperation(sequencesFromOutlineDescriptor, ...)`
- * (LLMW.MIGRATE.LIST.2, B7g-m), on the model of
- * `generateShotsFromSequenceDraft` (`src/actions/llm/sequenceShots.ts`,
- * post-B7e): keeps the exact `{ok:true, sequences}` return shape
- * `SequencesGenerationPanel` depends on.
- *
- * The deterministic title/summary override that used to live here
- * (`sequenceGeneration.ts:148-158` pre-migration) is now the descriptor's own
- * `postResponse` (`sequencesFromOutlineDescriptor.postResponse`,
- * LLMW.POSTRESPONSE.1, B7g) — `runOperation` applies it itself once the
- * result is a successful list. No local copy of that rule is kept here: it
- * is idempotent, so keeping it would not have broken anything observably,
- * which is exactly why it had to be found and removed by reading rather than
- * by a failing test (see `.agents/executor_report.md`, mutation control).
- *
- * `result.items` are keyed by entity field name (`orderIndex`); the same
- * `mapListItemToModelKeys` bridge `generateShotsFromSequenceDraft` uses
- * translates each item back to the model's own JSON keys (`order_index`),
- * matching `GeneratedSequence`'s own field names. Only the six string fields
- * need the `"" -> null` fill-back `readStringField` (`runner.ts`) does not
- * do itself — `order_index` does not: the descriptor declares
- * `fallback: "index"` for it (not `fallback: "omit"`, unlike
- * `duration_seconds` on the shots side), and `readNumberField` makes that
- * fallback branch `present: true` unconditionally, so the field is always
- * in `result.items` and never needs a null fill. `title` is never `null` —
- * `item.validity` already filtered out any item missing it.
- */
-export async function generateSequencesFromOutlineDraft(
-  formData: FormData
-): Promise<{ ok: true; sequences: GeneratedSequence[] } | { ok: false; error: string }> {
-  try {
-    const projectId = parseInt(formData.get("projectId") as string, 10);
-    const rawCount = parseInt(formData.get("targetCount") as string, 10);
-
-    const result = await runOperation(
-      sequencesFromOutlineDescriptor,
-      { projectId },
-      { parameters: Number.isInteger(rawCount) ? { targetCount: rawCount } : {} }
-    );
-    if (!result.ok) return { ok: false, error: result.error };
-    // `sequencesFromOutlineDescriptor.output.kind` is always `"list"` — the
-    // guard exists because `RunOperationResult` is `kind`-discriminated
-    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
-    if (result.kind !== "list") {
-      throw new Error("generateSequencesFromOutlineDraft: expected a list-kind result.");
-    }
-    if (sequencesFromOutlineDescriptor.output.kind !== "list") {
-      throw new Error("generateSequencesFromOutlineDraft: descriptor output is not list-kind.");
-    }
-
-    const fields = sequencesFromOutlineDescriptor.output.item.fields;
-    const generatedSequences: GeneratedSequence[] = result.items.map((item) => {
-      const mapped = mapListItemToModelKeys(fields, item);
-      const seq: Record<string, string | number | null> = {};
-      for (const field of fields) {
-        const key = field.jsonKey;
-        if (!(key in mapped)) {
-          seq[key] = null;
-          continue;
-        }
-        const value = mapped[key];
-        // `mapListItemToModelKeys` now returns `string | number | boolean`
-        // (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1) — but
-        // `sequencesFromOutlineDescriptor.output.item.fields` declares no
-        // boolean-typed field, so `value` can never actually be a `boolean`
-        // here. Explicit rather than left to an invented fallback: refuse
-        // loudly, on the same "impossible input throws" discipline
-        // `anchorIdForVariable` (`runner.ts`) already uses, rather than
-        // silently coerce a boolean into `GeneratedSequence`'s
-        // `string | number | null` fields with no oracle to say how.
-        if (typeof value === "boolean") {
-          throw new Error(`generateSequencesFromOutlineDraft: unexpected boolean value for field "${key}".`);
-        }
-        seq[key] = value === "" ? null : value;
-      }
-      return seq as unknown as GeneratedSequence;
-    });
-
-    return { ok: true, sequences: generatedSequences };
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "An unexpected error occurred. Please try again.";
-    return { ok: false, error: message };
-  }
-}
-
+// LLMW.UNIFY.PANEL.3 — `generateSequencesFromOutlineDraft` is deleted:
+// `SequencesGenerationPanel` now calls `runWorkspaceOperation` directly,
+// naming `sequences.fromOutline` itself. There is no server-side translation
+// left for this adapter to perform — `runWorkspaceOperation` already returns
+// `result.items` keyed by the model's own JSON keys (LLMW.UNIFY.LIST.1), the
+// one gap that used to block this panel; the deterministic title/summary
+// override (`sequencesFromOutlineDescriptor.postResponse`) is applied by
+// `runOperation` itself regardless of caller, so nothing else moves.
+// `createGeneratedSequences` below is untouched — it is the panel's own
+// commit binding, not a generation function.
 export async function createGeneratedSequences(formData: FormData): Promise<void> {
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const returnTo =

@@ -1,12 +1,48 @@
 "use client";
 
 import { useState } from "react";
-import {
-  generateAssetCandidatesDraft,
-  createSelectedAssets,
-} from "@/actions/llm/assetExtraction";
+import { createSelectedAssets } from "@/actions/llm/assetExtraction";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import type { GeneratedAssetCandidate } from "@/types/llm";
+
+// LLMW.UNIFY.PANEL.3 — this panel now names `assets.fromProject` directly
+// instead of importing a generation function for it
+// (`generateAssetCandidatesDraft`, deleted alongside this migration,
+// `src/actions/llm/assetExtraction.ts`). `runWorkspaceOperation` already
+// returns `result.items` keyed by the model's own JSON keys
+// (LLMW.UNIFY.LIST.1) — the one gap that used to block this panel. What
+// remains here is presentation, kept identical to what the deleted adapter
+// did: the `"" -> null` fill-back for the five `type: "string"` fields
+// (`name`, `assetType` and `sourceLevel` are `type: "enum"` fields with a
+// mandatory default and are never `""`), and shaping each item into
+// `GeneratedAssetCandidate`. The boolean guard mirrors the deleted adapter's
+// own "impossible input throws" discipline — no `output.item.fields` entry
+// is ever boolean-typed for this descriptor, so the branch is unreachable in
+// practice, refused loudly rather than silently coerced.
+function toCandidate(item: Record<string, string | number | boolean>): GeneratedAssetCandidate {
+  function strField(key: string): string | null {
+    const value = item[key];
+    if (value === undefined) return null;
+    if (typeof value === "boolean") {
+      throw new Error(`AssetsLLMExtractPanel: unexpected boolean value for field "${key}".`);
+    }
+    return value === "" ? null : String(value);
+  }
+  const name = item.name;
+  if (typeof name !== "string") {
+    throw new Error('AssetsLLMExtractPanel: expected a string "name" on every item.');
+  }
+  return {
+    name,
+    assetType: item.assetType as GeneratedAssetCandidate["assetType"],
+    description: strField("description"),
+    notes: strField("notes"),
+    sourceLevel: item.sourceLevel as GeneratedAssetCandidate["sourceLevel"],
+    sourceExcerpt: strField("sourceExcerpt"),
+    duplicateWarning: strField("duplicateWarning"),
+  };
+}
 
 const TYPE_ORDER = [
   "character",
@@ -70,21 +106,44 @@ export default function AssetsLLMExtractPanel({
 
   async function handleGenerate() {
     setState({ status: "loading" });
-    const fd = new FormData();
-    fd.set("projectId", String(projectId));
-    fd.set("includeCharacters", String(inclChars));
-    fd.set("includeEnvironments", String(inclEnvs));
-    fd.set("includeProps", String(inclProps));
-    fd.set("includeVehicles", String(inclVehicles));
-    fd.set("includeCrowds", String(inclCrowds));
-    fd.set("includeOther", String(inclOther));
-    fd.set("includeShots", String(inclShots));
-    const result = await generateAssetCandidatesDraft(fd);
-    if (result.ok) {
-      setState({ status: "success", candidates: result.assets });
-      setSelected(new Set(result.assets.map((_, i) => i)));
-    } else {
+
+    // Six form booleans -> the descriptor's own `assetTypes` multiEnum
+    // parameter, in this exact declaration order (character, environment,
+    // prop, vehicle, crowd, other) — the pre-migration adapter's own order,
+    // observable in the rendered prompt (`assets-from-project.ts`'s
+    // `typesStr`). An empty array is sent through unchanged, not omitted:
+    // the descriptor's own precondition then reproduces "Select at least one
+    // asset type." on it.
+    const assetTypes: string[] = [];
+    if (inclChars) assetTypes.push("character");
+    if (inclEnvs) assetTypes.push("environment");
+    if (inclProps) assetTypes.push("prop");
+    if (inclVehicles) assetTypes.push("vehicle");
+    if (inclCrowds) assetTypes.push("crowd");
+    if (inclOther) assetTypes.push("other");
+
+    const result = await runWorkspaceOperation({
+      descriptorId: "assets.fromProject",
+      ids: { projectId },
+      intent: { parameters: { includeShots: inclShots, assetTypes } },
+    });
+    if (!result.ok) {
       setState({ status: "error", message: result.error });
+      return;
+    }
+    if (result.kind !== "list") {
+      setState({ status: "error", message: "Expected a list-kind result." });
+      return;
+    }
+    try {
+      const candidates = result.items.map(toCandidate);
+      setState({ status: "success", candidates });
+      setSelected(new Set(candidates.map((_, i) => i)));
+    } catch (err) {
+      setState({
+        status: "error",
+        message: err instanceof Error ? err.message : "Unexpected error. Please try again.",
+      });
     }
   }
 

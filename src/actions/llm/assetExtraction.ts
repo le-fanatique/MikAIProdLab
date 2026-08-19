@@ -6,9 +6,6 @@ import { eq, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { GeneratedAssetCandidate } from "@/types/llm";
-import { runOperation } from "@/lib/llmWorkspace/runner";
-import { assetsFromProjectDescriptor } from "@/lib/llmWorkspace/descriptors/assetsFromProject";
-import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,119 +64,15 @@ function normalizeCandidate(raw: unknown): GeneratedAssetCandidate | null {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-/**
- * Thin adapter over `runOperation(assetsFromProjectDescriptor, ...)`
- * (LLMW.MIGRATE.LIST.3, B7f-m), on the same model
- * `generateSequencesFromOutlineDraft` (`src/actions/llm/sequenceGeneration.ts`,
- * post-B7g-m) already reproduces: keeps the exact `{ok:true, assets}` return
- * shape `AssetsLLMExtractPanel` depends on.
- *
- * The form sends seven booleans (`includeShots` plus six `include*` type
- * flags, `AssetsLLMExtractPanel.tsx:63-69` / `assetExtraction.ts` pre-
- * migration lines 92-101); the descriptor declares two `intent.parameters`:
- * `includeShots` (`"boolean"`) and `assetTypes` (`"multiEnum"`). Converting
- * the seven form booleans into these two parameters is this adapter's own
- * job — the panel is not touched. The six `if` below are read verbatim off
- * the pre-migration source (`assetExtraction.ts:96-101`, `git show
- * bd38db5:src/actions/llm/assetExtraction.ts`) and kept in that exact order
- * (`character, environment, prop, vehicle, crowd, other`): the prompt
- * builder joins `assetTypes` as-is (`assets-from-project.ts:52`, `typesStr`),
- * so the array's member order is observable in the rendered prompt.
- *
- * An empty `assetTypes` array is passed through unchanged, not omitted: a
- * `"multiEnum"` value of `[]` is valid per `isValidIntentParameterValue`
- * (`runner.ts`), so `normalizeIntentParameters` never substitutes the
- * descriptor's default (`["character", "environment", "prop"]`) for it. The
- * descriptor's own `preconditions[0]` (`refs: [{parameter: "assetTypes"}]`)
- * then reproduces "Select at least one asset type." on that empty array
- * exactly as the pre-migration guard did. Falling back to the default here
- * would silently defeat that guard and run an extraction the user refused —
- * proven by the mutation control in `tests/llmWorkspace/assetsFromProject.migration.test.ts`
- * (see `.agents/executor_report.md`).
- *
- * `result.items` are keyed by entity field name (`assetType`); the same
- * `mapListItemToModelKeys` bridge `generateSequencesFromOutlineDraft` uses
- * translates each item back to the model's own JSON keys, matching
- * `GeneratedAssetCandidate`'s own field names. Only the five `type: "string"`
- * fields (`name`, `description`, `notes`, `sourceExcerpt`,
- * `duplicateWarning`) need the `"" -> null` fill-back `readStringField`
- * (`runner.ts`) does not do itself. `assetType` and `sourceLevel` are the
- * two `type: "enum"` fields, each with a mandatory `default`
- * (`assetsFromProjectDescriptor.output.item.fields`), so `readEnumField`
- * always produces one of their valid members, never `""` — they need no
- * fill. `name` is never `null` — `item.validity` already filtered out any
- * item missing it.
- */
-export async function generateAssetCandidatesDraft(
-  formData: FormData
-): Promise<{ ok: true; assets: GeneratedAssetCandidate[] } | { ok: false; error: string }> {
-  try {
-    const projectId = parseInt(formData.get("projectId") as string, 10);
-
-    const bool = (key: string) => formData.get(key) === "true";
-    const includeShots = bool("includeShots");
-
-    const assetTypes: AssetType[] = [];
-    if (bool("includeCharacters")) assetTypes.push("character");
-    if (bool("includeEnvironments")) assetTypes.push("environment");
-    if (bool("includeProps")) assetTypes.push("prop");
-    if (bool("includeVehicles")) assetTypes.push("vehicle");
-    if (bool("includeCrowds")) assetTypes.push("crowd");
-    if (bool("includeOther")) assetTypes.push("other");
-
-    const result = await runOperation(
-      assetsFromProjectDescriptor,
-      { projectId },
-      { parameters: { includeShots, assetTypes } }
-    );
-    if (!result.ok) return { ok: false, error: result.error };
-    // `assetsFromProjectDescriptor.output.kind` is always `"list"` — the
-    // guard exists because `RunOperationResult` is `kind`-discriminated
-    // (LLMW.OUTPUT.LIST.1, B7a), not because this branch is reachable here.
-    if (result.kind !== "list") {
-      throw new Error("generateAssetCandidatesDraft: expected a list-kind result.");
-    }
-    if (assetsFromProjectDescriptor.output.kind !== "list") {
-      throw new Error("generateAssetCandidatesDraft: descriptor output is not list-kind.");
-    }
-
-    const fields = assetsFromProjectDescriptor.output.item.fields;
-    const stringFields = new Set(fields.filter((f) => f.type === "string").map((f) => f.field));
-    const generatedAssets: GeneratedAssetCandidate[] = result.items.map((item) => {
-      const mapped = mapListItemToModelKeys(fields, item);
-      const candidate: Record<string, string | number | null> = {};
-      for (const field of fields) {
-        const key = field.jsonKey;
-        if (!(key in mapped)) {
-          candidate[key] = null;
-          continue;
-        }
-        const value = mapped[key];
-        // `mapListItemToModelKeys` now returns `string | number | boolean`
-        // (LLMW.DESCRIPTOR.CASTING.1, B7h-b2, §1) — but
-        // `assetsFromProjectDescriptor.output.item.fields` declares no
-        // boolean-typed field, so `value` can never actually be a `boolean`
-        // here. Explicit rather than left to an invented fallback: refuse
-        // loudly, on the same "impossible input throws" discipline
-        // `anchorIdForVariable` (`runner.ts`) already uses, rather than
-        // silently coerce a boolean into `GeneratedAssetCandidate`'s
-        // `string | number | null` fields with no oracle to say how.
-        if (typeof value === "boolean") {
-          throw new Error(`generateAssetCandidatesDraft: unexpected boolean value for field "${key}".`);
-        }
-        candidate[key] = stringFields.has(field.field) && value === "" ? null : value;
-      }
-      return candidate as unknown as GeneratedAssetCandidate;
-    });
-
-    return { ok: true, assets: generatedAssets };
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unexpected error. Please try again.";
-    return { ok: false, error: message };
-  }
-}
-
+// LLMW.UNIFY.PANEL.3 — `generateAssetCandidatesDraft` is deleted:
+// `AssetsLLMExtractPanel` now calls `runWorkspaceOperation` directly, naming
+// `assets.fromProject` itself and building the two `intent.parameters`
+// (`includeShots`, `assetTypes`) from its own checkbox state — the same
+// seven-boolean-to-two-parameter conversion this adapter used to do, moved
+// to the panel because there is no server-side translation left to perform
+// (LLMW.UNIFY.LIST.1 already returns `result.items` keyed by the model's own
+// JSON keys). `createSelectedAssets` below is untouched — it is the panel's
+// own commit binding, not a generation function.
 export async function createSelectedAssets(formData: FormData): Promise<void> {
   const projectId = parseInt(formData.get("projectId") as string, 10);
   const returnTo =

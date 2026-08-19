@@ -23,11 +23,17 @@ import type { OperationDescriptor } from "@/lib/llmWorkspace/types";
 //      filtering, `maxItems` truncation, `truncateTo`, plus B7b's numeric,
 //      enum, key-fallback and sort cases (§5.2).
 //
-//   2. Complete equality against three of the four real flat-JSON parsers
-//      (`sequenceShots.ts`, `assetExtraction.ts`, `sequenceGeneration.ts`),
-//      called through their real, unmodified, public draft actions against a
-//      seeded temp DB with a mocked `callLLMJson` — compared field-for-field
-//      on every field their source struct carries.
+//   2. Complete equality against three real descriptors
+//      (`shots.fromSequence`, `assets.fromProject`, `sequences.fromOutline`),
+//      called through `runWorkspaceOperation` against a seeded temp DB with a
+//      mocked `callLLMJson` — compared field-for-field, against a
+//      hand-built synthetic descriptor sharing the same `field`/`jsonKey`
+//      declarations (so the synthetic side's raw `runOperation` output is
+//      already keyed exactly like `runWorkspaceOperation`'s own translation
+//      of the real descriptor, LLMW.UNIFY.LIST.1). Before LLMW.UNIFY.PANEL.3,
+//      this equality ran through each operation's now-deleted adapter
+//      instead; the adapters are gone, and the generic action is the only
+//      caller left to prove against.
 //
 //      `castingSuggestions.ts` is deliberately not included: its item
 //      validity gate is on non-string fields (`targetType` enum, `targetId`
@@ -50,12 +56,6 @@ let projectId: number;
 
 function mockedLLM() {
   return callLLMJson as unknown as ReturnType<typeof vi.fn>;
-}
-
-function form(fields: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [key, value] of Object.entries(fields)) data.append(key, value);
-  return data;
 }
 
 beforeAll(async () => {
@@ -474,8 +474,8 @@ describe("runner list branch — sort (B7b, §3.6)", () => {
 // numeric field. Every other divergence would be a defect.
 // ---------------------------------------------------------------------------
 
-describe("equality — sequenceShots.ts (generateShotsFromSequenceDraft) vs. the list branch, ALL fields (B7b)", () => {
-  it("same raw model response, every field of GeneratedSequenceShot", async () => {
+describe("equality — shots.fromSequence via runWorkspaceOperation vs. the list branch, ALL fields (B7b, LLMW.UNIFY.PANEL.3)", () => {
+  it("same raw model response, every field, in the model's own JSON keys", async () => {
     const sequenceId = await insertSequence(ctx, projectId, { title: "Equality sequence" });
 
     const rawShots = [
@@ -500,12 +500,14 @@ describe("equality — sequenceShots.ts (generateShotsFromSequenceDraft) vs. the
     ];
 
     mockedLLM().mockResolvedValueOnce(JSON.stringify({ shots: rawShots }));
-    const { generateShotsFromSequenceDraft } = await import("@/actions/llm/sequenceShots");
-    const actionResult = await generateShotsFromSequenceDraft(
-      form({ projectId: String(projectId), sequenceId: String(sequenceId), shotCount: "2" })
-    );
-    expect(actionResult.ok).toBe(true);
-    if (!actionResult.ok) throw new Error("unreachable");
+    const { runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction");
+    const workspaceResult = await runWorkspaceOperation({
+      descriptorId: "shots.fromSequence",
+      ids: { projectId, sequenceId },
+      intent: { parameters: { targetCount: 2 } },
+    });
+    expect(workspaceResult.ok).toBe(true);
+    if (!workspaceResult.ok || workspaceResult.kind !== "list") throw new Error("unreachable");
 
     const descriptor = syntheticListDescriptor({
       arrayKey: "shots",
@@ -532,32 +534,12 @@ describe("equality — sequenceShots.ts (generateShotsFromSequenceDraft) vs. the
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok || runnerResult.kind !== "list") throw new Error("unreachable");
 
-    const actionFields = actionResult.shots.map((s) => {
-      const out: Record<string, string | number> = {
-        title: s.title,
-        shot_code: s.shot_code ?? "",
-        description: s.description ?? "",
-        continuity_in: s.continuity_in ?? "",
-        action_pitch: s.action_pitch ?? "",
-        camera_pitch: s.camera_pitch ?? "",
-        framing: s.framing ?? "",
-        camera_movement: s.camera_movement ?? "",
-        continuity_out: s.continuity_out ?? "",
-        shot_prompt: s.shot_prompt ?? "",
-      };
-      // `duration_seconds` — the one legitimate normalization B7b's ticket
-      // (§5.1) calls for: the source's `null` (omitted or out of range)
-      // becomes an omitted key on the runner side, not a present `null`.
-      if (s.duration_seconds != null) out.duration_seconds = s.duration_seconds;
-      return out;
-    });
-
-    expect(runnerResult.items).toEqual(actionFields);
+    expect(workspaceResult.items).toEqual(runnerResult.items);
   });
 });
 
-describe("equality — assetExtraction.ts (generateAssetCandidatesDraft) vs. the list branch, ALL fields (B7b)", () => {
-  it("same raw model response, every field of GeneratedAssetCandidate — including assetType/sourceLevel enum defaults and dual-key string fallbacks", async () => {
+describe("equality — assets.fromProject via runWorkspaceOperation vs. the list branch, ALL fields (B7b, LLMW.UNIFY.PANEL.3)", () => {
+  it("same raw model response, every field, including assetType/sourceLevel enum defaults and dual-key string fallbacks", async () => {
     const rawAssets = [
       {
         name: "Harbor Master",
@@ -586,21 +568,23 @@ describe("equality — assetExtraction.ts (generateAssetCandidatesDraft) vs. the
     ];
 
     mockedLLM().mockResolvedValueOnce(JSON.stringify({ assets: rawAssets }));
-    const { generateAssetCandidatesDraft } = await import("@/actions/llm/assetExtraction");
-    // `includeOther` is requested alongside `includeCharacters` since
+    const { runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction");
+    // `"other"` is requested alongside `"character"` since
     // LLMW.ASSETS.TYPEFILTER.1 (S2): the third candidate's unrecognised
-    // "spaceship" normalizes to the `"other"` enum default, and the real
-    // action now drops a candidate whose type was not requested. This test
-    // exists to prove *field parsing* — enum defaults and dual-key
-    // fallbacks — against a synthetic descriptor that declares no
-    // postResponse, so both types are requested to keep the two sides
+    // "spaceship" normalizes to the `"other"` enum default, and the
+    // descriptor's own `postResponse` drops a candidate whose type was not
+    // requested. This test exists to prove *field parsing* — enum defaults
+    // and dual-key fallbacks — against a synthetic descriptor that declares
+    // no postResponse, so both types are requested to keep the two sides
     // comparable. S2's own filtering is proven in
     // `assetsFromProject.postResponse.test.ts`, not weakened here.
-    const actionResult = await generateAssetCandidatesDraft(
-      form({ projectId: String(projectId), includeCharacters: "true", includeOther: "true" })
-    );
-    expect(actionResult.ok).toBe(true);
-    if (!actionResult.ok) throw new Error("unreachable");
+    const workspaceResult = await runWorkspaceOperation({
+      descriptorId: "assets.fromProject",
+      ids: { projectId },
+      intent: { parameters: { includeShots: false, assetTypes: ["character", "other"] } },
+    });
+    expect(workspaceResult.ok).toBe(true);
+    if (!workspaceResult.ok || workspaceResult.kind !== "list") throw new Error("unreachable");
 
     const descriptor = syntheticListDescriptor({
       arrayKey: "assets",
@@ -638,22 +622,12 @@ describe("equality — assetExtraction.ts (generateAssetCandidatesDraft) vs. the
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok || runnerResult.kind !== "list") throw new Error("unreachable");
 
-    const actionFields = actionResult.assets.map((a) => ({
-      name: a.name,
-      assetType: a.assetType,
-      description: a.description ?? "",
-      notes: a.notes ?? "",
-      sourceLevel: a.sourceLevel,
-      sourceExcerpt: a.sourceExcerpt ?? "",
-      duplicateWarning: a.duplicateWarning ?? "",
-    }));
-
-    expect(runnerResult.items).toEqual(actionFields);
+    expect(workspaceResult.items).toEqual(runnerResult.items);
   });
 });
 
-describe("equality — sequenceGeneration.ts (generateSequencesFromOutlineDraft) vs. the list branch, ALL fields (B7b)", () => {
-  it("same raw model response, every field of GeneratedSequence — including order_index's index fallback and the post-parse sort", async () => {
+describe("equality — sequences.fromOutline via runWorkspaceOperation vs. the list branch, ALL fields (B7b, LLMW.UNIFY.PANEL.3)", () => {
+  it("same raw model response, every field, including order_index's index fallback and the post-parse sort", async () => {
     // Deliberately out of order and with one item missing order_index
     // entirely, so both the index-fallback (§3.3) and the sort (§3.6) are
     // actually exercised, not vacuously true.
@@ -681,12 +655,14 @@ describe("equality — sequenceGeneration.ts (generateSequencesFromOutlineDraft)
     ];
 
     mockedLLM().mockResolvedValueOnce(JSON.stringify({ sequences: rawSequences }));
-    const { generateSequencesFromOutlineDraft } = await import("@/actions/llm/sequenceGeneration");
-    const actionResult = await generateSequencesFromOutlineDraft(
-      form({ projectId: String(projectId), targetCount: "2" })
-    );
-    expect(actionResult.ok).toBe(true);
-    if (!actionResult.ok) throw new Error("unreachable");
+    const { runWorkspaceOperation } = await import("@/actions/llmWorkspace/runOperationAction");
+    const workspaceResult = await runWorkspaceOperation({
+      descriptorId: "sequences.fromOutline",
+      ids: { projectId },
+      intent: { parameters: { targetCount: 2 } },
+    });
+    expect(workspaceResult.ok).toBe(true);
+    if (!workspaceResult.ok || workspaceResult.kind !== "list") throw new Error("unreachable");
 
     const descriptor = syntheticListDescriptor({
       arrayKey: "sequences",
@@ -710,17 +686,7 @@ describe("equality — sequenceGeneration.ts (generateSequencesFromOutlineDraft)
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok || runnerResult.kind !== "list") throw new Error("unreachable");
 
-    const actionFields = actionResult.sequences.map((s) => ({
-      title: s.title,
-      summary: s.summary ?? "",
-      description: s.description ?? "",
-      narrative_purpose: s.narrative_purpose ?? "",
-      mood: s.mood ?? "",
-      location_hint: s.location_hint ?? "",
-      order_index: s.order_index,
-    }));
-
-    expect(runnerResult.items).toEqual(actionFields);
+    expect(workspaceResult.items).toEqual(runnerResult.items);
   });
 });
 
