@@ -1537,6 +1537,36 @@ The point of the order is that at no moment is more than one surface in flight.
 The author validated these nine surfaces in his beta; they should not all move
 at once.
 
+#### C3 measured and partly done, 2026-08-20
+
+The plan reads *"Convert the 25 prompt builders into declarative templates"*.
+**That conversion already happened** — during B3, when each operation's prompt
+moved into its descriptor's `expertise.system` and `template` blocks. What was
+left was the deletion, and C0 is what made it safe by freezing the oracle those
+builders were.
+
+Measured on the real import graph (comments excluded, which matters — several
+builders look consumed but are only *mentioned* in a descriptor's header):
+**six builders had no production consumer at all**, kept alive solely by their
+own unit tests.
+
+`story-from-pitch`, `outline-from-story`, `asset-bible-from-context`,
+`asset-description-from-context`, `assets-from-project`,
+`casting-from-sequence` — 998 lines with their tests — deleted. The behaviour
+they used to prove is proven by the descriptor equality tests C0 re-anchored,
+which is exactly what C0 was for.
+
+**The rest stay, and are not debt.** `compilePromptSegments` (nine consumers),
+`buildPromptCompilationContext` (seven, including `composeStoryboardShot`),
+`compileShotPrompt`, `defaultShotPrompt`, `composeShotPrompt`,
+`buildSequenceGenerationPackage` and the sequence prompt builders are live
+production code, not superseded builders. `promptCompilerPresets` and
+`promptCompilerHandoff` are the untangling ticket of their own, since they reach
+into `src/lib/comfy/`.
+
+So C3 is complete for what it actually named. Whatever remains under
+`src/lib/prompts/` is either in use or blocked behind that untangling.
+
 #### The unification, done 2026-08-19 — and where it stops
 
 **Thirteen of fourteen panels migrated.** `src/actions/llm/` went from nineteen
