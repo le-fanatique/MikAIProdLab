@@ -1537,6 +1537,54 @@ The point of the order is that at no moment is more than one surface in flight.
 The author validated these nine surfaces in his beta; they should not all move
 at once.
 
+#### The unification, done 2026-08-19 — and where it stops
+
+**Thirteen of fourteen panels migrated.** `src/actions/llm/` went from nineteen
+files to twelve, and every migrated panel now names its operation instead of
+importing a function for it. `runWorkspaceOperation` is the single boundary.
+
+**The acceptance criterion held throughout: not one refusal message changed.**
+Across thirteen migrations, every declared refusal — "Project not found.",
+"Add a pitch first.", "Select at least one asset type." — passes untouched,
+because they come from the descriptors that declare them. Success assertions
+changed shape, never value.
+
+That criterion also caught a defect in the unification's own brick:
+`mapListItemToModelKeys` emits only *declared* fields, so anything a
+`postResponse` form attaches — `casting.fromSequence`'s `alreadyAssigned` —
+was being dropped in silence. Fixed in `7ee0ed0`, found by the rule rather than
+by review.
+
+**One panel is deliberately left.** `BatchAssetDescriptionEnhancePanel` drives
+the only `entitySet`-anchored descriptor in the registry, and the loop over that
+set lives in its adapter — the runner has never honoured an `entitySet` anchor
+as a set. Moving that loop into the generic action would also move per-asset
+database enrichment there, which means a branch on the operation inside a file
+whose whole contract is that it has none.
+
+§11.3's own threshold decides it: *a brick is worth building when more than one
+operation waits on it.* Exactly one does. So the batch primitive is **not**
+built, and this is recorded as a measured decision rather than an oversight.
+
+**And the ninth step — collapsing the panels into one generic component — is
+not obviously worth doing any more.** It was scoped when the panels were
+believed to hard-code what their descriptors declare. After migration, what
+remains in them is 88 to 399 lines of **presentation**: layout, selection state,
+display types, per-operation shaping. The descriptor declares an output's
+*shape*, never how to display it. Collapsing would trade nine working, specific
+surfaces for one generic renderer that no test in this repository can protect.
+
+The plumbing goal — fifteen adapters becoming one action — is achieved. The
+remaining step is a different project, and it should be judged on its own terms
+rather than inherited from this plan's original wording.
+
+**A cost worth naming.** Four list panels moved their display shaping (the
+`"" -> null` fill-backs) out of node-testable adapters into client components.
+That shaping is no longer under test, and this repo has no DOM harness by the
+author's standing decision. The exposure did not grow — those panels were never
+tested — but coverage that existed incidentally is gone. It is the second
+concrete price of that decision this session.
+
 **But it rewires nine production surfaces**, which is a poor thing to do
 immediately before the author's from-scratch beta. Recommended order:
 
