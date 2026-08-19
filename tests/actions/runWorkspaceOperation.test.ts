@@ -150,6 +150,44 @@ describe("runWorkspaceOperation — it runs what the registry declares", () => {
   });
 });
 
+describe("runWorkspaceOperation — a list comes back in the model's own keys", () => {
+  // LLMW.UNIFY.LIST.1. The runner parses into entity FIELD names; every
+  // consumer needs the model's JSON keys back, because the write actions
+  // re-parse the approved payload through their own normalizers. Doing that
+  // translation here is what lets the four list panels stop importing
+  // descriptor internals.
+  it("returns shots keyed as the model wrote them, not as the runner parsed them", async () => {
+    mockedJson()
+      .mockReset()
+      .mockResolvedValue(
+        JSON.stringify({
+          shots: [
+            { shot_code: "SH010", title: "Wide establishing", duration_seconds: 4 },
+            { shot_code: "SH020", title: "Push in" },
+          ],
+        })
+      );
+
+    const result = await runWorkspaceOperation({
+      descriptorId: "shots.fromSequence",
+      ids: { projectId, sequenceId },
+      intent: { parameters: { targetShotCount: 2 } },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "list") throw new Error("expected a list result");
+
+    // The model's keys, not `shotCode` / `durationSeconds`.
+    expect(Object.keys(result.items[0])).toContain("shot_code");
+    expect(Object.keys(result.items[0])).not.toContain("shotCode");
+    expect(result.items[0].title).toBe("Wide establishing");
+
+    // A field the model omitted stays omitted — never filled with null or ""
+    // — so each write action's own absence handling still applies.
+    expect("duration_seconds" in result.items[1]).toBe(false);
+  });
+});
+
 describe("runWorkspaceOperation — it is generic by construction", () => {
   it("serves descriptors of different anchors and different output kinds through one entry point", async () => {
     mockedJson().mockReset().mockResolvedValue(JSON.stringify({ story: "s" }));

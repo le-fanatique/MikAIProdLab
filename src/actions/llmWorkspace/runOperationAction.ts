@@ -28,6 +28,7 @@
 // ---------------------------------------------------------------------------
 
 import { DESCRIPTORS } from "@/lib/llmWorkspace/descriptors";
+import { mapListItemToModelKeys } from "@/lib/llmWorkspace/benchRun";
 import {
   runOperation,
   type AnchorIds,
@@ -43,6 +44,7 @@ import {
  */
 export type RunWorkspaceOperationResult =
   | { ok: true; kind: "object"; values: Record<string, string | number> }
+  /** Items keyed by the model's own JSON keys (`shot_code`, `assetType`…), never by entity field names — see the list branch below for why. */
   | { ok: true; kind: "list"; items: Array<Record<string, string | number | boolean>> }
   | { ok: true; kind: "text"; text: string }
   | {
@@ -97,7 +99,32 @@ export async function runWorkspaceOperation(
     // reaching a panel as an unrecognised shape — the discipline B11-b1 and
     // B12b-1 both used for their own widenings.
     if (result.kind === "object") return { ok: true, kind: "object", values: result.values };
-    if (result.kind === "list") return { ok: true, kind: "list", items: result.items };
+    if (result.kind === "list") {
+      // LLMW.UNIFY.LIST.1 — **keyed by the model's own JSON keys, not by
+      // entity field names.**
+      //
+      // The runner parses into field names (`assetType`, `durationSeconds`).
+      // Every consumer needs the model's keys back: the four write actions
+      // re-parse the approved payload through their own `normalize*`, which
+      // reads `shot_code` / `duration_seconds` / `assetType` — B7b settled
+      // that when it added `selection.formDataKey`, and each deleted list
+      // adapter did this translation itself.
+      //
+      // Doing it here is what lets a panel stop importing descriptor
+      // internals. The translation needs `output.item.fields`, and a client
+      // component reaching into a descriptor is a line this codebase has
+      // never crossed — it is why the four list panels could not migrate
+      // (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3). One gap, four panels
+      // waiting: §11.3's own rule for when a brick is worth building.
+      //
+      // Only the translation moves. Truncation, null-filling and shaping into
+      // a panel's own display type are presentation and stay where they are.
+      if (descriptor.output.kind !== "list") {
+        throw new Error("runWorkspaceOperation: a list result from a non-list descriptor.");
+      }
+      const fields = descriptor.output.item.fields;
+      return { ok: true, kind: "list", items: result.items.map((item) => mapListItemToModelKeys(fields, item)) };
+    }
     if (result.kind === "text") return { ok: true, kind: "text", text: result.text };
     return { ok: true, kind: "composite", values: result.values, lists: result.lists };
   } catch (err) {
