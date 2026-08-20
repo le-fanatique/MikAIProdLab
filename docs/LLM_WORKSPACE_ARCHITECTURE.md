@@ -1537,6 +1537,45 @@ The point of the order is that at no moment is more than one surface in flight.
 The author validated these nine surfaces in his beta; they should not all move
 at once.
 
+#### Chantier 2 closed, 2026-08-20 — four things decided as "not doing"
+
+Each was measured, put to the author, and **ruled on**. They are decisions, not
+omissions, and a future ticket that meets one of them should read this rather
+than reopen it.
+
+**The 89 components that stayed flat are not debt.** C4's rule placed 31 by
+evidence — an existing `lib`-domain import, or a matching folder. The rest have
+neither, and a component that one page imports is not a domain member: it is
+that page's component. Filing it would invent a structure the code does not
+ask for, and a wrong domain is paid on every import afterwards. **A component
+staying flat is a legitimate resting state.** A domain gets created when a
+second consumer or a sibling appears — not before.
+
+**The 11 components the rule would send under `comfy/` stay flat by
+protection.** `AGENTS.md` guards that area because it is the generation
+runtime. They work; the cost of leaving them is zero and the cost of touching
+them is a broken generation path. The same holds for `promptCompilerPresets`,
+which `src/lib/comfy/workflowProfiles.ts` imports. Recorded as **flat by
+protection**, which is not the same as pending.
+
+**The batch primitive is not built.** `BatchAssetDescriptionEnhancePanel` is the
+last unmigrated panel; it drives the only `entitySet`-anchored descriptor, and
+§11.3's own rule says a brick is worth building when **more than one** operation
+waits on it. Exactly one does. The hand-written loop in its adapter works. If a
+second `entitySet` operation ever appears, the brick becomes obvious and
+worthwhile on that day.
+
+**`SidebarLLMChat.tsx` is not split.** Chat is a deliberate migration exception,
+so its 1 617 lines will not move again; splitting them buys navigability on
+code that is finished.
+
+**And the token-efficiency audit is replaced.** It was referenced as "asked for"
+but defined nowhere. What actually became worth measuring is the fine-tuning of
+B14's storyboard composition rules against real generations — opened as a ticket
+in `docs/ROADMAP.md`, deliberately **not to be started until the author has
+produced several sequences with the new composition**, since its whole value is
+in real data.
+
 #### C4/C5/C6 measured 2026-08-20 — and not started, on purpose
 
 Measured before committing to the largest remaining item. Three findings, and

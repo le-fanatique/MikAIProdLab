@@ -17,6 +17,66 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 -> Generations -> Montage -> Film final
 ```
 
+## Etat au 20 aout 2026 - le LLM Workspace et le nettoyage sont livres
+
+**Ce document date d'avant le chantier LLM Workspace.** Tout ce qui suit cette
+section decrit ce qui etait planifie ; lire d'abord ce bloc, puis le reste
+comme archive des intentions. Le detail vit dans
+`docs/PROJECT_STATE.md` et `docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3.
+
+**Chantier 1 (LLM Workspace) - complet.** B12, E1, B15, B16, B13, B14 livres.
+B20 a ferme ses trois manques de format ; **B20e**, la migration de l'analyse
+Reference Board, est reportee apres le Chantier 2 par decision de l'auteur.
+B17a livre (les references video portent un role, migration `0055`).
+
+**Chantier 2 (nettoyage) - complet.** C0 a gele l'oracle des descripteurs,
+C1/C2 sont devenus une **unification** (quinze actions serveur repliees en une,
+treize panneaux sur quatorze migres), C3 a supprime six builders sans appelant,
+C4 a range 31 composants par domaine.
+
+**Tests : 968 -> 1361.** Quatre domaines qui n'avaient aucun filet en ont un.
+
+### Ce qui reste, et pourquoi
+
+Trois arbitrages produit appartiennent a l'auteur : **B18** (contraintes
+negatives, qu'il a lui-meme classe non-MVP), **B19** (refonte camera, un
+travail de conception sur ses champs), **B20e** (un chantier a concevoir avec
+lui).
+
+Un ticket est ouvert et attend son tour : **finetuning des regles de
+composition du prompt storyboard** (voir plus bas).
+
+Le reste a ete mesure et **volontairement non fait** - les raisons sont dans
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3.
+
+## A faire plus tard - Finetuning des regles de composition du prompt storyboard
+
+**Ouvert le 2026-08-20, sur decision de l'auteur.** Remplace l'audit de cout en
+tokens, qui etait cite comme demande mais defini nulle part.
+
+B14 a rendu le prompt storyboard beaucoup plus riche : six parties (sujet,
+action, environnement, camera, eclairage, contraintes) la ou il ne portait que
+le Shot Prompt tape a la main. L'auteur l'a essaye en beta et l'a juge
+meilleur, et il est devenu le defaut le 2026-08-19.
+
+**Ce qui reste a regler est le reglage fin de ces regles**, maintenant qu'elles
+tournent sur de vraies generations :
+
+- l'ordre des parties, et si `Lighting` est bien place apres `Camera` (il y est
+  parce que le rig de sequence s'ajuste par rapport aux cameras axe master) ;
+- ce que chaque partie emet exactement - la distribution rend nom, type,
+  identite visuelle et description ; est-ce trop pour un plan a six personnages ;
+- le budget de mots du guide (60-100, plafond 150) : `inspect`
+  (`src/lib/llmWorkspace/conformation/`) le mesure deja et rapporte un constat
+  sans jamais bloquer. Est-ce que ce constat se declenche en pratique, et le
+  budget est-il le bon pour ce moteur ;
+- le cout en tokens de la nouvelle composition contre l'ancienne, par plan -
+  la seule mesure qui reponde vraiment a "est-ce que ca vaut ce que ca coute".
+
+**Ne pas ouvrir ce ticket avant que l'auteur ait produit plusieurs sequences
+avec la nouvelle composition.** Son interet est entierement dans les donnees
+reelles ; le faire a froid reviendrait a regler des seuils contre une intuition.
+
 ## Maintenant - Generation sans Project Style (MVP)
 
 `GEN.PROJECT_STYLE.APPEND.TOGGLE.1` - **clos a `05b647e`**.
