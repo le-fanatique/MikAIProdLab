@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { orderStoryboardReferences } from "@/lib/prompts/orderStoryboardReferences";
 import GenerateOutputCard from "@/components/storyboardGenerate/GenerateOutputCard";
 import CastingReferencesGrid from "@/components/storyboardGenerate/CastingReferencesGrid";
 import { db } from "@/db";
@@ -441,10 +442,13 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   // narrow independently inside the Dynamic Batch panel. Only workflows
   // without a Dynamic Batch node (assigned per-node via Image Inputs
   // instead) fall back to the full explicit selection order.
-  const orderedReferenceIds = batchDetectionOk ? batchSelectedIds : availableImages.map((img) => img.id);
-  const referenceInputs: SequenceStoryboardReferenceInput[] = orderedReferenceIds
-    .map((id) => refMetaByRefId.get(id))
-    .filter((r): r is SequenceStoryboardReferenceInput => r !== undefined);
+  const { orderedIds: orderedReferenceIds, references: referenceInputs } =
+    orderStoryboardReferences<SequenceStoryboardReferenceInput>({
+      hasDynamicBatch: batchDetectionOk,
+      batchSelectedIds,
+      availableImages,
+      metaByRefId: refMetaByRefId,
+    });
 
   // --- Sequence Generation Package (SEQGEN.1/STORYBOARD.2 builder, unmodified) ---
   const segmentRows =
