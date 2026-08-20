@@ -6,6 +6,11 @@ import {
   updateEditorialItemTrim,
   resetAllEditorialItemTrims,
 } from "@/actions/editorialTrim";
+import TimelineHeader from "@/components/editorial/TimelineHeader";
+import TimelineScale from "@/components/editorial/TimelineScale";
+import UnsavedTrimEditRow from "@/components/editorial/UnsavedTrimEditRow";
+import EditorialItemSegment from "@/components/editorial/EditorialItemSegment";
+import EditorialShotSegment from "@/components/editorial/EditorialShotSegment";
 
 // Editorial status colors
 const COLOR_APPROVED = "#6b9e72";
@@ -121,7 +126,7 @@ type TrimDragState = {
   trackWidth: number;
 };
 
-type TrimRange = { trimIn: number; trimOut: number };
+export type TrimRange = { trimIn: number; trimOut: number };
 
 function parseRaw(raw: string): number | null {
   const trimmed = raw.trim();
@@ -152,15 +157,6 @@ function statusColor(shot: EditorialTimelineShot): string {
   if (shot.isPlaceholder) return COLOR_PLACEHOLDER;
   if (shot.hasVideo) return COLOR_APPROVED;
   return COLOR_NO_VIDEO;
-}
-
-// Pick a tick step giving at most ~8 labeled graduations
-function tickStep(total: number): number {
-  const candidates = [1, 2, 5, 10, 15, 30, 60, 120, 300];
-  for (const step of candidates) {
-    if (total / step <= 8) return step;
-  }
-  return 600;
 }
 
 /** Finite video duration from metadata, with a seekable fallback. */
@@ -500,6 +496,24 @@ export default function EditorialTimeline({
     };
   }
 
+  // IND.CLIENTSPLIT.1 — named (was an inline arrow in the "Target duration
+  // resize" handle's onPointerDown) so it can be passed as a prop to
+  // EditorialShotSegment; same body, unchanged.
+  function startDurationDrag(e: React.PointerEvent<HTMLDivElement>, shot: EditorialTimelineShot) {
+    const dur = parsedDurations[shot.id];
+    if (dur === null || !trackRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      shotId: shot.id,
+      pointerStartX: e.clientX,
+      initialDur: dur,
+      initialTotalDur: laneTotal,
+      trackWidth: trackRef.current.clientWidth,
+    };
+  }
+
   return (
     <form action={updateSequenceShotDurations}>
       <input type="hidden" name="projectId" value={String(projectId)} />
@@ -507,66 +521,20 @@ export default function EditorialTimeline({
       <input type="hidden" name="returnTo" value={returnTo} />
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-3 gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs text-[#6e767d]">
-            Total{" "}
-            <span className="font-mono">
-              {(itemsMode ? itemsTotal : laneTotal).toFixed(1)}s
-            </span>{" "}
-            effective
-            {" · "}
-            {itemsMode ? (
-              <>
-                {items!.length} editorial item{items!.length !== 1 ? "s" : ""}
-                {" · "}
-                {videoReadyCount} with video
-                {" · "}
-                {missingVideoCount} placeholder/no video
-              </>
-            ) : (
-              <>
-                {timedCount} of {shots.length} shot{shots.length !== 1 ? "s" : ""} timed
-              </>
-            )}
-          </span>
-          {!itemsMode && isDurationsDirty && (
-            <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
-          )}
-        </div>
-        {itemsMode && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={resetAllTrims}
-              disabled={!hasAnyItemTrim || isSavingTrim}
-              title="Reset all trims on this timeline. Gaps are kept."
-              className="rounded border border-[#3d3423] text-[#cda24f] px-2.5 py-1 text-xs hover:border-[#cda24f] hover:bg-[#cda24f]/10 transition-colors disabled:opacity-60 disabled:border-[#2c3035] disabled:text-[#6e767d] disabled:cursor-not-allowed disabled:hover:bg-transparent"
-            >
-              ↺ Reset all trims
-            </button>
-          </div>
-        )}
-        {!itemsMode && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleDurationsReset}
-              disabled={!isDurationsDirty}
-              className="text-xs text-[#4b5158] hover:text-[#6e767d] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Reset
-            </button>
-            <button
-              type="submit"
-              disabled={!isDurationsDirty}
-              className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1 text-xs hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Apply
-            </button>
-          </div>
-        )}
-      </div>
+      <TimelineHeader
+        itemsMode={itemsMode}
+        effectiveTotal={itemsMode ? itemsTotal : laneTotal}
+        itemsLength={itemsMode ? items!.length : 0}
+        videoReadyCount={videoReadyCount}
+        missingVideoCount={missingVideoCount}
+        shotsLength={shots.length}
+        timedCount={timedCount}
+        isDurationsDirty={isDurationsDirty}
+        hasAnyItemTrim={hasAnyItemTrim}
+        isSavingTrim={isSavingTrim}
+        onResetAllTrims={resetAllTrims}
+        onDurationsReset={handleDurationsReset}
+      />
 
       {/* ── Items lane — gap-aware editorial layer (read-only phase) ── */}
       {itemsMode ? (
@@ -606,143 +574,26 @@ export default function EditorialTimeline({
                 }
               };
 
-              if (item.type === "gap") {
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={selectItem}
-                    style={{
-                      width: `${widthPct}%`,
-                      minWidth: "36px",
-                      boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
-                    }}
-                    className="relative flex flex-col justify-between px-1.5 py-1.5 border-r border-r-[#1a1d20] last:border-r-0 border-l-2 border-l-[#2c3035] border-dashed shrink-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.02)_5px,rgba(255,255,255,0.02)_10px)] text-left cursor-pointer hover:bg-white/[0.02] transition-colors"
-                    title={`Gap — ${d.toFixed(1)}s`}
-                  >
-                    <span className="text-[9px] font-mono text-[#4b5158] uppercase tracking-wider leading-none">
-                      Gap
-                    </span>
-                    <span className="text-[9px] font-mono text-[#3a4046] tabular-nums leading-none">
-                      {d.toFixed(1)}s
-                    </span>
-                  </button>
-                );
-              }
-
-              const tooltipParts = [
-                item.shotCode ? `${item.shotCode} — ${item.title ?? ""}` : item.title ?? "",
-              ];
-              if (trimmed) {
-                tooltipParts.push(
-                  `Trim: ${item.trimInSeconds!.toFixed(1)}s → ${item.trimOutSeconds!.toFixed(1)}s`,
-                  `Effective: ${d.toFixed(1)}s`
-                );
-              }
-              if (item.isPlaceholder) tooltipParts.push("Placeholder");
-              else if (!item.hasVideo) tooltipParts.push("No video");
-
               return (
-                <div
+                <EditorialItemSegment
                   key={item.id}
-                  style={{ width: `${widthPct}%`, minWidth: "48px" }}
-                  className="relative flex border-r border-r-[#1a1d20] last:border-r-0 shrink-0"
-                >
-                  <button
-                    type="button"
-                    onClick={selectItem}
-                    style={{
-                      borderLeftColor: color,
-                      backgroundColor: item.isPlaceholder
-                        ? "rgba(205, 162, 79, 0.06)"
-                        : undefined,
-                      boxShadow: isSelected ? "inset 0 0 0 1px #5b93d6" : undefined,
-                    }}
-                    className="flex-1 min-w-0 flex flex-col justify-between px-1.5 py-1.5 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden text-left cursor-pointer h-full"
-                    title={tooltipParts.join("\n")}
-                  >
-                    <span
-                      className="text-[9px] font-mono truncate leading-none"
-                      style={{ color }}
-                    >
-                      {item.shotCode ?? item.title}
-                    </span>
-                    <span className="text-[9px] text-[#4b5158] truncate leading-none">
-                      {item.title}
-                    </span>
-                    <span className="text-[9px] font-mono tabular-nums leading-none truncate">
-                      <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
-                      {itemDraft ? (
-                        <span className="text-[#5b93d6]">
-                          {" "}· Trim {itemDraft.trimIn.toFixed(1)}s → {itemDraft.trimOut.toFixed(1)}s
-                        </span>
-                      ) : (
-                        trimmed && <span className="text-[#5b93d6]"> · Trimmed</span>
-                      )}
-                    </span>
-                  </button>
-
-                  {/* Item-level trim handles — shot items with a video only */}
-                  {item.videoUrl &&
-                    (itemTrimEnabled ? (
-                      <>
-                        <div
-                          role="slider"
-                          tabIndex={0}
-                          aria-label="Trim in handle"
-                          title="Trim in"
-                          className="absolute left-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
-                          style={{ width: "10px" }}
-                          onPointerDown={(e) => startItemTrimDrag(e, item, "in")}
-                        >
-                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
-                        </div>
-                        <div
-                          role="slider"
-                          tabIndex={0}
-                          aria-label="Trim out handle"
-                          title="Trim out"
-                          className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
-                          style={{ width: "10px" }}
-                          onPointerDown={(e) => startItemTrimDrag(e, item, "out")}
-                        >
-                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
-                        </div>
-                      </>
-                    ) : (
-                      <div
-                        className="absolute right-0 top-0 h-full flex items-center justify-center select-none z-10 opacity-40"
-                        style={{ width: "10px" }}
-                        title="Video duration unavailable — trims can be set once the video loads."
-                      >
-                        <div className="w-0.5 h-5 rounded-full bg-[#4b5158]" />
-                      </div>
-                    ))}
-                </div>
+                  item={item}
+                  d={d}
+                  widthPct={widthPct}
+                  color={color}
+                  trimmed={trimmed}
+                  itemDraft={itemDraft}
+                  itemTrimEnabled={itemTrimEnabled}
+                  isSelected={isSelected}
+                  onSelect={selectItem}
+                  onStartTrimDrag={startItemTrimDrag}
+                />
               );
             })}
           </div>
 
           {/* Timeline scale for items */}
-          <div className="relative mt-1" style={{ height: "14px" }}>
-            {(() => {
-              const step = tickStep(itemsTotal);
-              const ticks: number[] = [];
-              for (let t = 0; t <= itemsTotal + 0.001; t += step) ticks.push(t);
-              return ticks.map((t) => (
-                <span
-                  key={t}
-                  className="absolute text-[9px] font-mono text-[#3a4046] -translate-x-1/2 first:translate-x-0"
-                  style={{ left: `${Math.min((t / itemsTotal) * 100, 100)}%` }}
-                >
-                  {t.toFixed(0)}s
-                </span>
-              ));
-            })()}
-            <span className="absolute right-0 text-[9px] font-mono text-[#4b5158]">
-              {itemsTotal.toFixed(1)}s
-            </span>
-          </div>
+          <TimelineScale total={itemsTotal} />
         </>
       ) : shots.length > 0 && laneTotal > 0 ? (
         <>
@@ -769,150 +620,30 @@ export default function EditorialTimeline({
               const draft = trimDrafts[shot.id];
               const isSelected = shot.id === selectedShotId;
 
-              const tooltipParts = [
-                shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title,
-              ];
-              if (trimmed) {
-                tooltipParts.push(
-                  `Trim: ${shot.trimInSeconds!.toFixed(1)}s → ${shot.trimOutSeconds!.toFixed(1)}s`,
-                  `Effective: ${d.toFixed(1)}s`
-                );
-              }
-              if (mismatch) tooltipParts.push(`Target: ${target!.toFixed(1)}s`);
-              if (shot.isPlaceholder) tooltipParts.push("Placeholder");
-              else if (!shot.hasVideo) tooltipParts.push("No video");
-
               return (
-                <div
+                <EditorialShotSegment
                   key={shot.id}
-                  style={{ width: `${widthPct}%`, minWidth: "48px" }}
-                  className="relative flex border-r border-r-[#1a1d20] last:border-r-0 shrink-0"
-                >
-                  {/* Segment body — click selects the shot (loads it in the viewer) */}
-                  <button
-                    type="button"
-                    onClick={() => onSelectShot(shot.id)}
-                    style={{
-                      borderLeftColor: color,
-                      backgroundColor: shot.isPlaceholder
-                        ? "rgba(205, 162, 79, 0.06)"
-                        : undefined,
-                      boxShadow: isSelected
-                        ? "inset 0 0 0 1px #5b93d6"
-                        : undefined,
-                    }}
-                    className="flex-1 min-w-0 flex flex-col justify-between px-1.5 py-1.5 border-l-2 hover:bg-white/[0.03] transition-colors overflow-hidden h-full text-left cursor-pointer"
-                    title={tooltipParts.join("\n")}
-                  >
-                    <span
-                      className="text-[9px] font-mono truncate leading-none"
-                      style={{ color }}
-                    >
-                      {shot.shotCode ?? shot.title}
-                    </span>
-                    <span className="text-[9px] text-[#4b5158] truncate leading-none">
-                      {shot.title}
-                    </span>
-                    <span className="text-[9px] font-mono tabular-nums leading-none truncate">
-                      <span className="text-[#4b5158]">{d.toFixed(1)}s</span>
-                      {draft ? (
-                        <span className="text-[#5b93d6]">
-                          {" "}· Trim {draft.trimIn.toFixed(1)}s → {draft.trimOut.toFixed(1)}s
-                        </span>
-                      ) : (
-                        trimmed && <span className="text-[#5b93d6]"> · Trimmed</span>
-                      )}
-                      {mismatch && (
-                        <span className="text-[#cda24f]"> · Target {target!.toFixed(1)}s</span>
-                      )}
-                    </span>
-                  </button>
-
-                  {/* Trim handles — left = trim in, right = trim out */}
-                  {isVideoShot &&
-                    (trimEnabled ? (
-                      <>
-                        <div
-                          role="slider"
-                          tabIndex={0}
-                          aria-label="Trim in handle"
-                          title="Trim in"
-                          className="absolute left-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
-                          style={{ width: "10px" }}
-                          onPointerDown={(e) => startTrimDrag(e, shot, "in")}
-                        >
-                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
-                        </div>
-                        <div
-                          role="slider"
-                          tabIndex={0}
-                          aria-label="Trim out handle"
-                          title="Trim out"
-                          className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10 group"
-                          style={{ width: "10px" }}
-                          onPointerDown={(e) => startTrimDrag(e, shot, "out")}
-                        >
-                          <div className="w-0.5 h-5 rounded-full bg-[#5b93d6]/50 group-hover:bg-[#5b93d6] group-focus:bg-[#5b93d6] transition-colors" />
-                        </div>
-                      </>
-                    ) : (
-                      <div
-                        className="absolute right-0 top-0 h-full flex items-center justify-center select-none z-10 opacity-40"
-                        style={{ width: "10px" }}
-                        title="Video duration unavailable — use the trim inputs below."
-                      >
-                        <div className="w-0.5 h-5 rounded-full bg-[#4b5158]" />
-                      </div>
-                    ))}
-
-                  {/* Target duration resize — only for segments without video */}
-                  {!isVideoShot && (
-                    <div
-                      className="absolute right-0 top-0 h-full flex items-center justify-center cursor-ew-resize select-none touch-none z-10"
-                      style={{ width: "10px" }}
-                      onPointerDown={(e) => {
-                        const dur = parsedDurations[shot.id];
-                        if (dur === null || !trackRef.current) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                        dragRef.current = {
-                          shotId: shot.id,
-                          pointerStartX: e.clientX,
-                          initialDur: dur,
-                          initialTotalDur: laneTotal,
-                          trackWidth: trackRef.current.clientWidth,
-                        };
-                      }}
-                    >
-                      <div className="w-0.5 h-4 rounded-full bg-white/25" />
-                    </div>
-                  )}
-                </div>
+                  shot={shot}
+                  d={d}
+                  widthPct={widthPct}
+                  color={color}
+                  trimmed={trimmed}
+                  target={target}
+                  mismatch={mismatch}
+                  isVideoShot={isVideoShot}
+                  trimEnabled={trimEnabled}
+                  draft={draft}
+                  isSelected={isSelected}
+                  onSelect={() => onSelectShot(shot.id)}
+                  onStartTrimDrag={startTrimDrag}
+                  onStartDurationDrag={startDurationDrag}
+                />
               );
             })}
           </div>
 
           {/* Timeline scale — labeled graduations */}
-          <div className="relative mt-1" style={{ height: "14px" }}>
-            {(() => {
-              const step = tickStep(laneTotal);
-              const ticks: number[] = [];
-              for (let t = 0; t <= laneTotal + 0.001; t += step) ticks.push(t);
-              return ticks.map((t) => (
-                <span
-                  key={t}
-                  className="absolute text-[9px] font-mono text-[#3a4046] -translate-x-1/2 first:translate-x-0"
-                  style={{ left: `${Math.min((t / laneTotal) * 100, 100)}%` }}
-                >
-                  {t.toFixed(0)}s
-                </span>
-              ));
-            })()}
-            <span className="absolute right-0 text-[9px] font-mono text-[#4b5158]">
-              {laneTotal.toFixed(1)}s
-            </span>
-          </div>
+          <TimelineScale total={laneTotal} />
         </>
       ) : (
         <p className="text-xs text-[#4b5158]">
@@ -927,34 +658,15 @@ export default function EditorialTimeline({
           .map((item) => {
             const draft = trimDrafts[item.id]!;
             return (
-              <div
+              <UnsavedTrimEditRow
                 key={`item-trim-${item.id}`}
-                className="mt-2 flex items-center gap-2 flex-wrap"
-              >
-                <span className="text-[10px] font-mono text-[#6e767d] w-16 truncate shrink-0">
-                  {item.shotCode ?? item.title ?? "—"}
-                </span>
-                <span className="text-[10px] font-mono text-[#5b93d6]">
-                  Trim {draft.trimIn.toFixed(1)}s → {draft.trimOut.toFixed(1)}s
-                </span>
-                <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
-                <button
-                  type="button"
-                  onClick={() => saveItemTrim(item)}
-                  disabled={isSavingTrim}
-                  className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-2 py-0.5 text-[10px] hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isSavingTrim ? "Saving..." : "Save Trim"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => resetTrim(item.id)}
-                  disabled={isSavingTrim}
-                  className="text-[10px] text-[#4b5158] hover:text-[#6e767d] disabled:opacity-40 transition-colors"
-                >
-                  Reset
-                </button>
-              </div>
+                label={item.shotCode ?? item.title ?? "—"}
+                trimIn={draft.trimIn}
+                trimOut={draft.trimOut}
+                isSavingTrim={isSavingTrim}
+                onSave={() => saveItemTrim(item)}
+                onReset={() => resetTrim(item.id)}
+              />
             );
           })}
 
@@ -986,34 +698,15 @@ export default function EditorialTimeline({
         .map((shot) => {
           const draft = trimDrafts[shot.id]!;
           return (
-            <div
+            <UnsavedTrimEditRow
               key={`trim-${shot.id}`}
-              className="mt-2 flex items-center gap-2 flex-wrap"
-            >
-              <span className="text-[10px] font-mono text-[#6e767d] w-16 truncate shrink-0">
-                {shot.shotCode ?? shot.title}
-              </span>
-              <span className="text-[10px] font-mono text-[#5b93d6]">
-                Trim {draft.trimIn.toFixed(1)}s → {draft.trimOut.toFixed(1)}s
-              </span>
-              <span className="text-[9px] font-mono text-[#cda24f]">unsaved</span>
-              <button
-                type="button"
-                onClick={() => saveTrim(shot)}
-                disabled={isSavingTrim}
-                className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-2 py-0.5 text-[10px] hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSavingTrim ? "Saving..." : "Save Trim"}
-              </button>
-              <button
-                type="button"
-                onClick={() => resetTrim(shot.id)}
-                disabled={isSavingTrim}
-                className="text-[10px] text-[#4b5158] hover:text-[#6e767d] disabled:opacity-40 transition-colors"
-              >
-                Reset
-              </button>
-            </div>
+              label={shot.shotCode ?? shot.title}
+              trimIn={draft.trimIn}
+              trimOut={draft.trimOut}
+              isSavingTrim={isSavingTrim}
+              onSave={() => saveTrim(shot)}
+              onReset={() => resetTrim(shot.id)}
+            />
           );
         })}
 
