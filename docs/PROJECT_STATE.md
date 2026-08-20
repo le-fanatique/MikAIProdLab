@@ -43,6 +43,54 @@ touched, and each was verified by breaking that code and watching tests fail.
 - **the token-efficiency audit** — referenced as "asked for" but never defined
   anywhere, so its scope needs stating before it can be done.
 
+## Three bugs from real use, 2026-08-20 — and the pattern two of them shared
+
+All three came from the author using the product, not from auditing code. Worth
+recording because the second and third were the same defect wearing different
+clothes.
+
+**1. Multi-image generation silently used two images** (`4c34ead`).
+`ImageBatchMulti` reads only its first `inputcount` slots, and the expander
+wired `image_1..image_N` without ever writing that widget — so it kept its
+serialized default of 2. Every job queued with three or more references had the
+extras present in the JSON and ignored by ComfyUI. **Nothing errored.** Found by
+comparing two exported workflows side by side.
+
+**2. The sequence cast reached no Shot** (`cd0601c`).
+`sequence_assets` and `shot_assets` are independent tables with no propagation
+either way; the Storyboard reads what the *Shots* carry, which is correct.
+Running Casting Suggestions is the bridge, and it works. The page carried a note
+saying assets "are not automatically added to individual shots" — describing
+what does not happen without naming the remedy or which assets were affected.
+
+**3. A validated split plan cut nothing** (`41e9b5f`).
+Validating maps segments to Shots; *pushing* cuts the clips and sets each Shot's
+thumbnail. The page showed a green "Validated" badge over segments all reading
+"Mapped", with the remaining step a button further down that nothing pointed at.
+
+### The pattern, and its sweep
+
+Two and three are one defect: **the mechanism was right, and the interface
+claimed a completion it had not reached.** Both are now fixed by making the
+incomplete state say so — an amber badge and a named next action, not a change
+of mechanics.
+
+The schema has exactly **three** status enums with intermediate states, and all
+three were examined:
+
+- `sequence_video_split_runs` — `validated` is set by an action that does *not*
+  do the work, and the enum has no `pushed` state. This was bug 3. The page now
+  derives the pushed state by counting candidates, which is **stronger than a
+  status column would be**: a column can be set and then contradicted by
+  deleted candidates, while the count is always true. No migration needed.
+- `sequence_video_split_segments` — `pending | mapped | skipped`, per segment,
+  and consistent with the run above.
+- `sequence_storyboard_extractions` — `confirmed` is set **by the action that
+  writes the reference images**. Sound by construction; no equivalent gap.
+
+So the pattern was real, occurred twice, both are fixed, and the sweep is
+complete rather than sampled.
+
 ## Repository Heads
 
 ## LLM Workspace Phase A — COMPLETE (2026-08-13)
