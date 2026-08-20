@@ -544,6 +544,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     videoUrl: refImageUrl(row.videoPath),
     sourceFilename: row.sourceFilename,
     label: row.label,
+    videoRole: row.videoRole,
     notes: row.notes,
     durationSeconds: row.durationSeconds,
     width: row.width,

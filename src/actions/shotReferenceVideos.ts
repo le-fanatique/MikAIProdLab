@@ -16,6 +16,7 @@
 
 import { db } from "@/db";
 import { shots, sequences, shotReferenceVideos } from "@/db/schema";
+import { isReferenceImageRoleAvailableFor } from "@/lib/referenceImageRoles";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import path from "node:path";
@@ -49,6 +50,7 @@ export async function createShotReferenceVideo(shotId: number, sequenceId: numbe
 
   const label = ((formData.get("label") as string | null)?.trim() || null);
   const notes = ((formData.get("notes") as string | null)?.trim() || null);
+  const videoRole = normalizeVideoRole(formData.get("videoRole") as string | null);
   const videoFile = formData.get("videoFile");
 
   const published = await publishUploadedVideoBuffer(videoFile, (uuid, ext) => shotReferenceVideoPathFor(shotId, uuid, ext));
@@ -84,6 +86,7 @@ export async function createShotReferenceVideo(shotId: number, sequenceId: numbe
           videoPath: published.relative,
           sourceFilename,
           label,
+          videoRole,
           notes,
           durationSeconds: published.metadata.durationSeconds,
           width: published.metadata.width,
@@ -165,4 +168,17 @@ export async function deleteShotReferenceVideo(id: number, shotId: number, seque
   }
 
   redirect(`${shotDetailPath(projectId, sequenceId, shotId)}?refVideoDeleted=1`);
+}/**
+ * B17a — the same shape `assetReferenceImages`/`shotReferenceImages` already
+ * use for their own role: the catalogue is the single source of truth for
+ * which values are accepted, in the `shotVideo` context this ticket opened.
+ * A value the catalogue does not offer there is dropped to `null` rather than
+ * stored, so a tampered form can never write a role the UI never showed.
+ */
+function normalizeVideoRole(value: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return isReferenceImageRoleAvailableFor(trimmed, "shotVideo") ? trimmed : null;
 }
+
+

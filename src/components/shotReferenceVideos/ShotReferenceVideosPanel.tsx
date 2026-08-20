@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
+import { getReferenceImageRoleGroups, getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 import EmptyState from "@/components/EmptyState";
 import FormStatusSubmitButton from "@/components/FormStatusSubmitButton";
 import LockedActionForm from "@/components/LockedActionForm";
@@ -23,6 +24,7 @@ export type ShotReferenceVideoRow = {
   videoUrl: string;
   sourceFilename: string | null;
   label: string | null;
+  videoRole: string | null;
   notes: string | null;
   durationSeconds: number | null;
   width: number | null;
@@ -65,6 +67,8 @@ export default function ShotReferenceVideosPanel({
   deleteAction: (id: number, shotId: number, sequenceId: number, projectId: number) => Promise<void>;
   addToShotVideosAction: (formData: FormData) => Promise<void>;
 }) {
+  // B17a — the roles the guide keys its video modes on, from the one catalogue.
+  const roleGroups = getReferenceImageRoleGroups("shotVideo");
   const [checkedTargetDurationById, setCheckedTargetDurationById] = useState<Record<number, boolean>>({});
 
   return (
@@ -75,6 +79,7 @@ export default function ShotReferenceVideosPanel({
         <div className="flex flex-col divide-y divide-[#1a1d20]">
           {entries.map((row) => {
             const displayName = row.label ?? row.sourceFilename ?? "Video reference";
+            const roleLabel = getReferenceImageRoleLabel(row.videoRole);
             const dimensions = formatDimensions(row.width, row.height);
             const wantsTargetDuration = checkedTargetDurationById[row.id] ?? false;
             return (
@@ -82,6 +87,9 @@ export default function ShotReferenceVideosPanel({
                 <video src={row.videoUrl} controls className="w-full max-w-md rounded border border-[#2c3035] bg-black" />
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs text-[#e7e9ec]">{displayName}</p>
+                  {roleLabel && (
+                    <span className="rounded border border-[#2c3035] px-1.5 py-0.5 text-[10px] text-[#a4abb2]">{roleLabel}</span>
+                  )}
                   {row.durationSeconds !== null && <span className="text-[10px] text-[#6e767d]">{row.durationSeconds.toFixed(3)}s</span>}
                   {dimensions && <span className="text-[10px] text-[#6e767d]">{dimensions}</span>}
                 </div>
@@ -149,6 +157,25 @@ export default function ShotReferenceVideosPanel({
         <label className="text-[10px] uppercase tracking-wider text-[#6e767d]">
           Label (optional)
           <input type="text" name="label" className="mt-1 block w-full rounded border border-[#2c3035] bg-[#141618] px-2 py-1.5 text-xs text-[#e7e9ec]" />
+        </label>
+        <label className="text-[10px] uppercase tracking-wider text-[#6e767d]">
+          Role (optional)
+          <select
+            name="videoRole"
+            defaultValue=""
+            className="mt-1 block w-full rounded border border-[#2c3035] bg-[#141618] px-2 py-1.5 text-xs text-[#e7e9ec]"
+          >
+            <option value="">No role</option>
+            {roleGroups.map((group) => (
+              <optgroup key={group.category} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </label>
         <label className="text-[10px] uppercase tracking-wider text-[#6e767d]">
           Notes (optional)
