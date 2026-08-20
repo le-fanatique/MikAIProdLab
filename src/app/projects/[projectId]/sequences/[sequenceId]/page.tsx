@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { db } from "@/db";
-import { projects, sequences, shots, assets, sequenceAssets, shotReferenceImages, generationJobs } from "@/db/schema";
+import { projects, sequences, shots, assets, sequenceAssets, shotAssets, shotReferenceImages, generationJobs } from "@/db/schema";
 import { eq, and, notInArray, inArray, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -236,10 +236,27 @@ export default async function SequencePage({ params, searchParams }: Props) {
 
   const assignAction = assignAssetToSequence.bind(null, sid, pid);
 
+  // Which of the sequence cast actually appear in a Shot. The two casts are
+  // independent tables with no propagation either way, so an asset can sit
+  // here and reach nothing — the Storyboard lists what the SHOTS carry. The
+  // panel marks those, because the gap is otherwise invisible until a
+  // generation comes back without them.
+  const shotCastAssetIds = new Set(
+    shotList.length > 0
+      ? (
+          await db
+            .selectDistinct({ assetId: shotAssets.assetId })
+            .from(shotAssets)
+            .where(inArray(shotAssets.shotId, shotList.map((s) => s.id)))
+        ).map((r) => r.assetId)
+      : []
+  );
+
   const assignedItems = assignedRows.map((row) => ({
     assignmentId: row.assignmentId,
     assetName: row.assetName,
     assetType: row.assetType,
+    inAnyShot: shotCastAssetIds.has(row.assetId),
     removeAction: removeAssetFromSequence.bind(null, row.assignmentId, sid, pid),
   }));
 
@@ -874,7 +891,10 @@ npx -y pnpm@11.7.0 dev`}
           assignAction={assignAction}
         />
         <p className="text-xs text-[#4b5158] mt-3">
-          Assets listed here describe the sequence-level cast. They are not automatically added to individual shots.
+          This is the sequence-level cast — a pool, not what gets generated. Nothing here reaches a Shot on its
+          own: the Storyboard, the prompts and every generation read what the <strong>Shots</strong> carry. Use{" "}
+          <strong>Casting Suggestions</strong> below to place these assets into Shots; anything still marked{" "}
+          <span className="text-[#cda24f]">in no shot</span> is inert.
         </p>
       </Card>
 

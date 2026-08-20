@@ -5,6 +5,16 @@ type AssignedItem = {
   assignmentId: number;
   assetName: string;
   assetType: string;
+  /**
+   * Whether this asset appears in at least one Shot of the sequence.
+   *
+   * The sequence cast and the shot casts are two independent tables, and
+   * nothing propagates between them: assigning here does not reach a Shot, and
+   * the Storyboard lists what the SHOTS carry. An asset cast here and used
+   * nowhere is therefore inert — visible in this panel, absent from every
+   * downstream surface — which is invisible until it is said.
+   */
+  inAnyShot: boolean;
   removeAction: () => Promise<void>;
 };
 
@@ -45,7 +55,16 @@ export default function SequenceAssetsPanel({
           {assignedItems.map((item) => (
             <div key={item.assignmentId} className="flex items-center gap-3 py-1">
               <AssetTypeBadge type={item.assetType} />
-              <span className="text-sm text-[#a4abb2] flex-1">{item.assetName}</span>
+              <span className="text-sm text-[#a4abb2]">{item.assetName}</span>
+              {!item.inAnyShot && (
+                <span
+                  className="text-[10px] uppercase tracking-wider text-[#cda24f]"
+                  title="Cast on the sequence but present in no Shot. Run Casting Suggestions to place it."
+                >
+                  in no shot
+                </span>
+              )}
+              <span className="flex-1" />
               <form action={item.removeAction}>
                 <button
                   type="submit"
