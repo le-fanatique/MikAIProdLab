@@ -1,6 +1,47 @@
 # MikAI Project State
 
-Last updated: 2026-08-13
+Last updated: 2026-08-20
+
+## Chantier 1 and Chantier 2 — COMPLETE (2026-08-20)
+
+**Everything the sections below describe as upcoming has shipped.** This
+document was last accurate on 2026-08-18; read this section first, and treat
+the queue descriptions further down as the record of what was *planned*, not of
+what remains.
+
+**Chantier 1 — the LLM Workspace, finished.**
+
+| Ticket | Commits | What landed |
+| --- | --- | --- |
+| B16 | `c30b6a7`, `ef470fb`, `0231327` | the descriptor format can declare an **image input** (N ordered images, per-image keys, bytes re-validated at call time); lighting described from an image; the director's note adjusting an existing lighting |
+| B13 | `739ad6f`, `f1ce136` | the **conformation stage**: stored reference roles become the engine's named modes, and the guide's output discipline reports findings that never gate |
+| B14 | `0a4f27a`, `ae467e6` | the **storyboard prompt stops eating from one jar** — it composes from the pantry that was already resolved and discarded |
+| B20 | `ae174d4`, `77d020d`, `9ba1bb5`, `ad38206` | all three of §5.9's format gaps closed, plus a mutation-proven net under the three properties the migration must not break. **B20e — the migration itself — is deferred past Chantier 2 by the author**, because its blockers turned out to be orchestration, not format |
+| B17a | `2a0220d`, `19f63b3` | shot reference videos carry a **role**, migration `0055` applied by the author |
+
+**Chantier 2 — the cleanup, finished except where it needs the author.**
+C0 froze the descriptor oracle (`51ed7f9`) so the builders could die; C1/C2
+became a **unification** — fifteen per-operation server actions collapsed into
+one, thirteen of fourteen panels migrated; C3 deleted six builders nothing
+called; C4 filed 31 components by domain and **deliberately left 100 flat**.
+
+**Four nets exist where there were none**: theme, video split, storyboard
+extraction, editorial. Each was written *before* the code it guards was
+touched, and each was verified by breaking that code and watching tests fail.
+
+**Tests: 968 → 1361.**
+
+### What is left, and who owns it
+
+- **B18** (negative constraints) — the author called it a real gap and
+  explicitly not MVP;
+- **B19** (camera redesign) — a design job on his own fields;
+- **B20e** (the Reference Board migration) — a chantier to design with him;
+- **B17b** (the audio family) — deliberately not built: §5.6 says the video
+  table had never been exercised, and it only just gained its roles;
+- **the 89 flat components** — their domains are a product judgement;
+- **the token-efficiency audit** — referenced as "asked for" but never defined
+  anywhere, so its scope needs stating before it can be done.
 
 ## Repository Heads
 
