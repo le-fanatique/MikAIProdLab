@@ -580,6 +580,27 @@ export function expandDynamicBatchWorkflow(params: {
     batchNode.inputs[inputName] = [lastClonedId, 0];
   }
 
+  // --- 11b. Tell the batch node how many inputs it now has ---
+  //
+  // `ImageBatchMulti` and its kin expose a fixed number of `image_N` slots,
+  // governed by an `inputcount` widget: in the ComfyUI editor you set the
+  // number, press "Update inputs", and only then can you connect that many.
+  // The node reads **only the first `inputcount` slots** at run time.
+  //
+  // Steps 8-11 above wire `image_1..image_N`, but nothing ever wrote
+  // `inputcount`, so it kept its serialized value — 2 by default. Every job
+  // sent with three or more references therefore had its extra images wired
+  // into the JSON and silently ignored by ComfyUI. Nothing failed; the
+  // generation simply never saw them.
+  //
+  // Written **only when the node already declares it as a number.** The batch
+  // node is detected by its title alone (`detectDynamicBatchInput`), so a
+  // different dynamic-batch node without this widget must not have one
+  // invented for it — it keeps behaving exactly as before.
+  if (batchNode.inputs && typeof batchNode.inputs["inputcount"] === "number") {
+    batchNode.inputs["inputcount"] = selectedImages.length;
+  }
+
   // --- 12. Remove the original template chain, now orphaned by step 6 ---
   const removal = removeOrphanedTemplateChainNodes(expanded, templateChainNodeIds);
   if (!removal.ok) return { ok: false, error: removal.error };
