@@ -7,9 +7,6 @@ import {
   projects,
   sequences,
   shots,
-  shotAssets,
-  assets,
-  assetReferenceImages,
   promptSegments,
   shotReferenceImages,
   comfyWorkflows,
@@ -28,9 +25,7 @@ import WorkflowImageSelectionForm from "@/components/WorkflowImageSelectionForm"
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
-import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
-import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
-import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
+import { resolveSequenceCastReferences } from "@/lib/prompts/resolveSequenceCastReferences";
 import {
   buildGenerationPayload,
   detectDynamicBatchUiInfo,
@@ -40,7 +35,7 @@ import { pruneDynamicBatchIds } from "@/lib/comfy/pruneDynamicBatchSelection";
 import DynamicBatchImageList from "@/components/DynamicBatchImageList";
 import type { BatchImageGroup, BatchExpansionPreview } from "@/components/DynamicBatchImageList";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
-import StoryboardAssetsPanel, { type StoryboardCastAsset } from "@/components/StoryboardAssetsPanel";
+import StoryboardAssetsPanel from "@/components/StoryboardAssetsPanel";
 import { runSequenceGenerationFromForm } from "@/actions/sequenceGeneration";
 import { saveSequenceStoryboardDraftFromJob } from "@/actions/sequenceStoryboard";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
@@ -54,7 +49,6 @@ import {
   buildSequenceStoryboardPrompt,
   type SequenceStoryboardReferenceInput,
 } from "@/lib/prompts/buildSequenceStoryboardPrompt";
-import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
@@ -227,152 +221,22 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     .orderBy(asc(shots.orderIndex));
   const shotIds = shotList.map((s) => s.id);
 
-  // --- Cast Assets across every Shot of the Sequence (unique) ---
-  const castRows =
-    shotIds.length > 0
-      ? await db
-          .select({
-            shotId: shotAssets.shotId,
-            assetId: assets.id,
-            assetName: assets.name,
-            assetType: assets.type,
-            description: assets.description,
-            notes: assets.notes,
-            visualIdentity: assets.visualIdentity,
-            usageRules: assets.usageRules,
-            forbiddenVariations: assets.forbiddenVariations,
-          })
-          .from(shotAssets)
-          .innerJoin(assets, eq(shotAssets.assetId, assets.id))
-          .where(inArray(shotAssets.shotId, shotIds))
-          .orderBy(asc(assets.name))
-      : [];
-  const castByShot = new Map<number, typeof castRows>();
-  const assetMetaById = new Map<number, (typeof castRows)[number]>();
-  for (const row of castRows) {
-    const list = castByShot.get(row.shotId) ?? [];
-    list.push(row);
-    castByShot.set(row.shotId, list);
-    if (!assetMetaById.has(row.assetId)) assetMetaById.set(row.assetId, row);
-  }
-  const uniqueAssetIds = Array.from(assetMetaById.keys());
-
-  const assetRefRows =
-    uniqueAssetIds.length > 0
-      ? await db
-          .select({
-            id: assetReferenceImages.id,
-            assetId: assetReferenceImages.assetId,
-            imagePath: assetReferenceImages.imagePath,
-            label: assetReferenceImages.label,
-            imageRole: assetReferenceImages.imageRole,
-            variantState: assetReferenceImages.variantState,
-            usageNotes: assetReferenceImages.usageNotes,
-            approvedForGeneration: assetReferenceImages.approvedForGeneration,
-          })
-          .from(assetReferenceImages)
-          .where(inArray(assetReferenceImages.assetId, uniqueAssetIds))
-          .orderBy(asc(assetReferenceImages.orderIndex), asc(assetReferenceImages.id))
-      : [];
-  const assetRefsByAsset = new Map<number, typeof assetRefRows>();
-  for (const row of assetRefRows) {
-    const list = assetRefsByAsset.get(row.assetId) ?? [];
-    list.push(row);
-    assetRefsByAsset.set(row.assetId, list);
-  }
-
-  // --- Only Asset casting references feed generation in this MVP ---
-  const allAvailableImages: RuntimeImageOption[] = [];
-  const refMetaByRefId = new Map<string, SequenceStoryboardReferenceInput>();
-  for (const assetId of uniqueAssetIds) {
-    const meta = assetMetaById.get(assetId)!;
-    for (const img of assetRefsByAsset.get(assetId) ?? []) {
-      const refId = `asset-${assetId}-${img.id}`;
-      allAvailableImages.push({
-        id: refId,
-        source: "asset",
-        imagePath: img.imagePath,
-        label: img.label?.trim() || img.imageRole?.trim() || "Image",
-        role: img.imageRole,
-        assetName: meta.assetName,
-        assetType: meta.assetType,
-        variantState: img.variantState,
-        approved: img.approvedForGeneration,
-      });
-      refMetaByRefId.set(refId, {
-        refId,
-        assetId,
-        assetName: meta.assetName,
-        assetType: meta.assetType,
-        role: img.imageRole,
-        roleLabel: getReferenceImageRoleLabel(img.imageRole),
-        label: img.label,
-        variantState: img.variantState,
-        approvedForGeneration: img.approvedForGeneration,
-      });
-    }
-  }
-
-  // Lot D (SEQGEN.STORYBOARD.CASTING.FIX1) — the same shape StoryboardAssetsPanel
-  // already renders on the Storyboard workspace, recomputed here from the
-  // data already fetched above (no second query, no second selection
-  // contract): every Asset cast anywhere in this Sequence, including
-  // references not currently selected.
-  const shotIdsByAsset = new Map<number, Set<number>>();
-  for (const row of castRows) {
-    const shotSet = shotIdsByAsset.get(row.assetId) ?? new Set<number>();
-    shotSet.add(row.shotId);
-    shotIdsByAsset.set(row.assetId, shotSet);
-  }
-  const castingEditorAssets: StoryboardCastAsset[] = uniqueAssetIds.map((assetId) => {
-    const meta = assetMetaById.get(assetId)!;
-    const refs = assetRefsByAsset.get(assetId) ?? [];
-    return {
-      assetId,
-      assetName: meta.assetName,
-      assetType: meta.assetType,
-      shotCount: shotIdsByAsset.get(assetId)?.size ?? 0,
-      references: refs.map((r) => ({
-        id: r.id,
-        refId: `asset-${assetId}-${r.id}`,
-        imageUrl: refImageUrl(r.imagePath),
-        label: r.label,
-        roleLabel: getReferenceImageRoleLabel(r.imageRole),
-        variantState: r.variantState,
-        approvedForGeneration: r.approvedForGeneration,
-      })),
-    };
+  const {
+    castByShot,
+    assetRefsByAsset,
+    refMetaByRefId,
+    castingEditorAssets,
+    storyboardCompositionParam,
+    useGuideComposition,
+    storyboardRefsParam,
+    hasExplicitSelection,
+    availableImages,
+    parsed,
+  } = await resolveSequenceCastReferences({
+    shotIds,
+    currentSearchParams,
+    workflowJson: workflow.workflowJson,
   });
-
-  // LLMW.STORYBOARD.COMPOSE.2 (B14b) — read server-side from the same
-  // `searchParams` every other control on this page already reads, never a
-  // client-built object (B16b's discipline).
-  //
-  // LLMW.STORYBOARD.DEFAULT.1 — **the guide composition is the default**, and
-  // only the literal `"legacy"` opts out. B14b shipped the reverse so the
-  // author could compare before committing; he ran his beta on 2026-08-19,
-  // exercised it and found it better, so the default flipped. The legacy path
-  // is untouched and still reachable.
-  const storyboardCompositionParam = currentSearchParams["storyboardComposition"] ?? "guide";
-  const useGuideComposition = storyboardCompositionParam !== "legacy";
-
-  const storyboardRefsParam = currentSearchParams["storyboardRefs"] ?? "";
-  const storyboardSelectedRefIds = storyboardRefsParam
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  // SEQGEN.STORYBOARD.3 (retake) — "selectionnees explicitement par
-  // l'utilisateur" is a hard requirement here, unlike the Shot-level
-  // default-preserve convention: an EMPTY selection must mean "nothing
-  // available", not "everything available". filterAvailableImagesBySelection
-  // itself is never modified (its own default-preserve contract is correct
-  // for its other callers) — only this caller's own fallback changes.
-  const hasExplicitSelection = storyboardSelectedRefIds.length > 0;
-  const availableImages = hasExplicitSelection
-    ? filterAvailableImagesBySelection(allAvailableImages, storyboardSelectedRefIds)
-    : [];
-
-  const parsed = parseComfyWorkflow(workflow.workflowJson);
 
   // --- Dynamic Batch UI info — same canonical helpers as the Shot/Asset
   // pages, computed early (before the @ImageN mapping) because the actual
