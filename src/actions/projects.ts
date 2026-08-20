@@ -1,7 +1,39 @@
 "use server";
 
 import { db } from "@/db";
-import { projects, sequences, shots, shotReferenceVideos, projectStyleReferenceImages, lookTests, lookTestResults, generationJobs } from "@/db/schema";
+import {
+  projects,
+  sequences,
+  shots,
+  shotReferenceVideos,
+  projectStyleReferenceImages,
+  lookTests,
+  lookTestResults,
+  lookTestReferences,
+  generationJobs,
+  assets,
+  shotVideos,
+  shotVideoCandidates,
+  shotReferenceImages,
+  assetReferenceImages,
+  shotStoryboardThumbnails,
+  storyboardImages,
+  sequenceStoryboardImages,
+  sequenceStoryboardExtractions,
+  sequenceStoryboardExtractionRegions,
+  sequenceVideoDrafts,
+  sequenceVideoSplitRuns,
+  sequenceVideoSplitSegments,
+  sequenceResults,
+  sequenceStyleOverrides,
+  projectStyleResearchSources,
+  projectStyleResearchCandidateRuleSources,
+  projectStyleResearchClaimSources,
+  projectStyleResearchSynthesisSources,
+  projectStyleReferenceAnalysisRunReferences,
+  projectStyleReferenceAnalysisObservations,
+  projectStyleReferenceAnalysisCandidateRuleReferences,
+} from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { rename, unlink } from "node:fs/promises";
@@ -10,6 +42,36 @@ import { isConfinedReferenceImagePath } from "@/lib/projectStyle/uploadReference
 import { isWithinLookDevelopmentRoot } from "@/lib/lookDevelopment/paths";
 import { isConfinedNavigationBackgroundPathForOwner } from "@/lib/navigationBackground/legacyNavigationBackground";
 import { assertConfinedOrThrow } from "@/lib/shotReferenceVideos/fileCleanup";
+import { isConfinedUploadedReferenceImagePath } from "@/lib/uploadImage";
+import { SHOT_VIDEOS_ROOT_RELATIVE } from "@/lib/shotVideoLibrary/paths";
+import { SHOT_VIDEO_CANDIDATES_ROOT_RELATIVE } from "@/lib/sequenceVideoPush/cutSegmentClip";
+import { THUMBNAIL_ROOT_RELATIVE as SEQUENCE_VIDEO_SPLIT_THUMBNAIL_ROOT_RELATIVE } from "@/lib/sequenceVideoSplit/detectVideoSplits";
+import { resolveExistingAbsolutePath as resolveSequenceResultAbsolutePath } from "@/lib/editorial/renderBasicSequenceResult";
+
+// ---------------------------------------------------------------------------
+// PROJ.DELETE.1 — a generic string+absolute confinement check shared by every
+// NEW file family below (shot videos/candidates, reference images, generated
+// storyboard/split/result media). Mirrors `isConfinedReferenceImagePath`'s
+// (src/lib/projectStyle/uploadReferenceImage.ts) own string-then-absolute
+// double check, parameterized by root instead of each family writing its own
+// copy. `rootRelative` may be a per-row scoped root (e.g.
+// `outputs/jobs/<jobId>`), not only a flat family root.
+// ---------------------------------------------------------------------------
+function isConfinedUnderRoot(relativePath: string, rootRelative: string): boolean {
+  if (typeof relativePath !== "string" || relativePath.length === 0 || relativePath.length > 1024) return false;
+  if (relativePath.includes("..") || relativePath.includes("\\") || relativePath.includes("\0")) return false;
+  if (path.isAbsolute(relativePath)) return false;
+  if (!relativePath.startsWith(`${rootRelative}/`)) return false;
+  const publicRoot = path.join(process.cwd(), "public");
+  const absolutePath = path.join(publicRoot, relativePath);
+  const safeBase = path.join(publicRoot, rootRelative);
+  return absolutePath.startsWith(safeBase + path.sep);
+}
+
+const STORYBOARD_IMAGES_ROOT_RELATIVE = "uploads/storyboard-images";
+const SEQUENCE_STORYBOARD_IMAGES_ROOT_RELATIVE = "uploads/sequence-storyboard-images";
+const SEQUENCE_VIDEO_DRAFTS_ROOT_RELATIVE = "uploads/sequence-video-drafts";
+const SEQUENCE_RESULTS_ROOT_RELATIVE = "uploads/sequence-results";
 
 export async function createProject(formData: FormData) {
   const name = formData.get("name") as string;
@@ -88,15 +150,28 @@ export async function updateProject(id: number, formData: FormData) {
  *      under its durable, greppable `.trash-*` path and reported with its
  *      exact location rather than silently logged.
  *
- * Asset/Shot reference-image file cleanup on Project delete is a
- * pre-existing gap this ticket does not extend to — out of scope per the
- * ticket's explicit "adapter uniquement ce chemin si necessaire".
- *
  * STYLE.1.G.CORE.1 — Look Development results (`look_test_results`,
  * file-backed under `uploads/look-development/`) now go through this exact
  * same confine -> quarantine -> delete -> unlink discipline, sharing one
  * combined `filesToQuarantine` list with Project Style references rather
  * than a second independent implementation of the same lifecycle.
+ *
+ * PROJ.DELETE.1 — closes the "Asset/Shot reference-image file cleanup" gap
+ * noted above (now handled, see the family list further down) and, more
+ * importantly, fixes the reason this function had never actually SUCCEEDED
+ * for any of the six real Projects in the database: eleven-plus `NO ACTION`
+ * foreign keys inside this same subtree, several of them on columns whose
+ * `schema.ts` declaration claims `cascade`/`set null` but whose real DB
+ * definition (confirmed via `PRAGMA foreign_key_list`, never guessed) is
+ * `NO ACTION` — SQLite does not honor an `onDelete` clause added through
+ * `ALTER TABLE ADD COLUMN`, the same characteristic `generation_jobs.
+ * lookTestId` already documented above. Every extra table this function now
+ * reads/deletes/quarantines is either (a) a table this exact discipline
+ * simply did not reach yet, or (b) an explicit, dependency-ordered delete
+ * inside the SAME transaction that breaks a `NO ACTION` edge before the
+ * final `tx.delete(projects)` cascade reaches it. No schema change, no
+ * migration, no `PRAGMA` toggling — see `.agents/executor_report.md` for
+ * the full dependency graph this was derived from.
  */
 export async function deleteProject(id: number) {
   const styleReferences = await db
@@ -204,7 +279,165 @@ export async function deleteProject(id: number) {
   // mean a Sequence created after collection began.
   const initialSequenceBackgroundPathById = new Map(sequenceBackgrounds.map((s) => [s.id, s.imagePath] as const));
 
-  type QuarantineEntry = { source: "style-reference" | "look-result" | "navigation-background" | "shot-reference-video"; id: number; imagePath: string };
+  // ---------------------------------------------------------------------------
+  // PROJ.DELETE.1 — the rest of the project subtree's file-backed tables (see
+  // ticket's "Les tables à fichiers du sous-arbre"). Every column below was
+  // checked against the code that WRITES it, not its name, before being
+  // treated as owned:
+  //
+  //   - `shots.approvedVideoPath` is NEVER independently owned — it is always
+  //     a copy of either `shot_videos.videoPath` (src/lib/shotVideoLibrary/
+  //     approve.ts) or `shot_video_candidates.clipPath`
+  //     (src/actions/sequenceVideoPush.ts:433). Deleting via the two owning
+  //     tables below already removes that same physical file exactly once;
+  //     `approvedVideoPath` itself is excluded from this list so the SAME
+  //     file is never queued for quarantine twice under two different
+  //     source labels.
+  //   - `sequence_video_split_runs.sourceVideoPathSnapshot` is a read-only
+  //     PROVENANCE copy of `sequence_video_drafts.videoPath` at run-creation
+  //     time (src/actions/sequenceVideoSplitDetection.ts:101/269 — literally
+  //     `sourceVideoPathSnapshot: draft.videoPath`), never a file this row
+  //     owns. Excluded.
+  //   - `sequence_storyboard_extractions.sourceImagePath` is the same kind of
+  //     PROVENANCE snapshot of `sequence_storyboard_images.imagePath`
+  //     (src/actions/storyboardExtractionStart.ts:166 — `sourceImagePath:
+  //     source.imagePath`; the schema's own comment confirms: "kept even if
+  //     the source draft row above is later deleted"). Excluded.
+  //   - `shot_reference_images.imagePath` can ALSO be a shared alias of a
+  //     `storyboard_images.imagePath` / `sequence_storyboard_extraction_
+  //     regions.cropImagePath` file for an extracted panel — all three are
+  //     written to `c.destRelative`, the exact same path, in
+  //     storyboardExtractionConfirm.ts. Rows under `uploads/storyboard-images/`
+  //     are confinement-checked here but NOT separately queued — the
+  //     `storyboard-image` family below already owns that path, so it is
+  //     unlinked exactly once (a second attempt would be a harmless
+  //     ENOENT-tolerated no-op regardless, but this avoids a confusing
+  //     duplicate bookkeeping entry).
+  // ---------------------------------------------------------------------------
+
+  const projectSequenceIds = sequenceBackgrounds.map((s) => s.id);
+  const projectAssetRows = await db.select({ id: assets.id }).from(assets).where(eq(assets.projectId, id));
+  const projectAssetIds = projectAssetRows.map((a) => a.id);
+  const initialLookTestRows = await db.select({ id: lookTests.id }).from(lookTests).where(eq(lookTests.projectId, id));
+  const initialLookTestIds = initialLookTestRows.map((t) => t.id);
+  // Note: the id lists for `project_style_reference_images` and
+  // `project_style_research_sources` used by the relational NO ACTION
+  // fixes below are deliberately NOT collected here — they are re-derived
+  // fresh from `tx` at the point of use (see the transaction body), never
+  // trusted from a pre-transaction snapshot.
+
+  const shotVideoRows =
+    projectShotIds.length > 0 ? await db.select({ id: shotVideos.id, videoPath: shotVideos.videoPath }).from(shotVideos).where(inArray(shotVideos.shotId, projectShotIds)) : [];
+  const shotVideoCandidateRows =
+    projectShotIds.length > 0
+      ? await db.select({ id: shotVideoCandidates.id, clipPath: shotVideoCandidates.clipPath }).from(shotVideoCandidates).where(inArray(shotVideoCandidates.shotId, projectShotIds))
+      : [];
+  const shotReferenceImageRows =
+    projectShotIds.length > 0
+      ? await db.select({ id: shotReferenceImages.id, imagePath: shotReferenceImages.imagePath }).from(shotReferenceImages).where(inArray(shotReferenceImages.shotId, projectShotIds))
+      : [];
+  const shotReferenceImageOwnRows = shotReferenceImageRows.filter((r) => !r.imagePath.startsWith(`${STORYBOARD_IMAGES_ROOT_RELATIVE}/`));
+  const shotReferenceImageSharedStoryboardRows = shotReferenceImageRows.filter((r) => r.imagePath.startsWith(`${STORYBOARD_IMAGES_ROOT_RELATIVE}/`));
+  const assetReferenceImageRows =
+    projectAssetIds.length > 0
+      ? await db.select({ id: assetReferenceImages.id, imagePath: assetReferenceImages.imagePath }).from(assetReferenceImages).where(inArray(assetReferenceImages.assetId, projectAssetIds))
+      : [];
+  const storyboardImageRows =
+    projectShotIds.length > 0
+      ? await db.select({ id: storyboardImages.id, imagePath: storyboardImages.imagePath }).from(storyboardImages).where(inArray(storyboardImages.shotId, projectShotIds))
+      : [];
+  const projectExtractionRows =
+    projectSequenceIds.length > 0
+      ? await db.select({ id: sequenceStoryboardExtractions.id }).from(sequenceStoryboardExtractions).where(inArray(sequenceStoryboardExtractions.sequenceId, projectSequenceIds))
+      : [];
+  const projectExtractionIds = projectExtractionRows.map((e) => e.id);
+  const extractionRegionRows =
+    projectExtractionIds.length > 0
+      ? await db
+          .select({ id: sequenceStoryboardExtractionRegions.id, cropImagePath: sequenceStoryboardExtractionRegions.cropImagePath })
+          .from(sequenceStoryboardExtractionRegions)
+          .where(inArray(sequenceStoryboardExtractionRegions.extractionId, projectExtractionIds))
+      : [];
+  const extractionRegionRowsWithCrop = extractionRegionRows.filter((r): r is { id: number; cropImagePath: string } => !!r.cropImagePath);
+  const sequenceStoryboardImageRows =
+    projectSequenceIds.length > 0
+      ? await db.select({ id: sequenceStoryboardImages.id, imagePath: sequenceStoryboardImages.imagePath }).from(sequenceStoryboardImages).where(inArray(sequenceStoryboardImages.sequenceId, projectSequenceIds))
+      : [];
+  const sequenceVideoDraftRows =
+    projectSequenceIds.length > 0
+      ? await db.select({ id: sequenceVideoDrafts.id, videoPath: sequenceVideoDrafts.videoPath }).from(sequenceVideoDrafts).where(inArray(sequenceVideoDrafts.sequenceId, projectSequenceIds))
+      : [];
+  const projectSplitRunRows =
+    projectSequenceIds.length > 0
+      ? await db.select({ id: sequenceVideoSplitRuns.id }).from(sequenceVideoSplitRuns).where(inArray(sequenceVideoSplitRuns.sequenceId, projectSequenceIds))
+      : [];
+  const projectSplitRunIds = projectSplitRunRows.map((r) => r.id);
+  const splitSegmentRows =
+    projectSplitRunIds.length > 0
+      ? await db
+          .select({ id: sequenceVideoSplitSegments.id, thumbnailPath: sequenceVideoSplitSegments.thumbnailPath })
+          .from(sequenceVideoSplitSegments)
+          .where(inArray(sequenceVideoSplitSegments.splitRunId, projectSplitRunIds))
+      : [];
+  const splitSegmentRowsWithThumbnail = splitSegmentRows.filter((r): r is { id: number; thumbnailPath: string } => !!r.thumbnailPath);
+  const sequenceResultRows = await db.select({ id: sequenceResults.id, videoPath: sequenceResults.videoPath }).from(sequenceResults).where(eq(sequenceResults.projectId, id));
+  const sequenceResultRowsWithVideo = sequenceResultRows.filter((r): r is { id: number; videoPath: string } => !!r.videoPath);
+
+  const jobsByShot =
+    projectShotIds.length > 0 ? await db.select({ id: generationJobs.id, outputPath: generationJobs.outputPath }).from(generationJobs).where(inArray(generationJobs.shotId, projectShotIds)) : [];
+  const jobsByAsset =
+    projectAssetIds.length > 0
+      ? await db.select({ id: generationJobs.id, outputPath: generationJobs.outputPath }).from(generationJobs).where(inArray(generationJobs.assetId, projectAssetIds))
+      : [];
+  const jobsBySequence =
+    projectSequenceIds.length > 0
+      ? await db.select({ id: generationJobs.id, outputPath: generationJobs.outputPath }).from(generationJobs).where(inArray(generationJobs.sequenceId, projectSequenceIds))
+      : [];
+  const jobsByLookTest =
+    initialLookTestIds.length > 0
+      ? await db.select({ id: generationJobs.id, outputPath: generationJobs.outputPath }).from(generationJobs).where(inArray(generationJobs.lookTestId, initialLookTestIds))
+      : [];
+  // "Exactly one target" is an application-level invariant (assertSingleGenerationTarget,
+  // src/actions/generation.ts) — the four sets above never overlap.
+  const projectGenerationJobRows = [...jobsByShot, ...jobsByAsset, ...jobsBySequence, ...jobsByLookTest];
+  const projectGenerationJobRowsWithOutput = projectGenerationJobRows.filter((r): r is { id: number; outputPath: string } => !!r.outputPath);
+
+  function assertConfinedFile(label: string, rowId: number, value: string, isConfined: (p: string) => boolean): void {
+    if (!isConfined(value)) {
+      throw new Error(`deleteProject(${id}): refusing to delete — ${label} ${rowId} has an unconfined stored path ("${value}"). Fix this row manually before retrying.`);
+    }
+  }
+
+  for (const r of shotVideoRows) assertConfinedFile("Shot Video", r.id, r.videoPath, (p) => isConfinedUnderRoot(p, SHOT_VIDEOS_ROOT_RELATIVE));
+  for (const r of shotVideoCandidateRows) assertConfinedFile("Shot Video Candidate", r.id, r.clipPath, (p) => isConfinedUnderRoot(p, SHOT_VIDEO_CANDIDATES_ROOT_RELATIVE));
+  for (const r of shotReferenceImageOwnRows) assertConfinedFile("Shot Reference Image", r.id, r.imagePath, isConfinedUploadedReferenceImagePath);
+  for (const r of shotReferenceImageSharedStoryboardRows) assertConfinedFile("Shot Reference Image", r.id, r.imagePath, (p) => isConfinedUnderRoot(p, STORYBOARD_IMAGES_ROOT_RELATIVE));
+  for (const r of assetReferenceImageRows) assertConfinedFile("Asset Reference Image", r.id, r.imagePath, isConfinedUploadedReferenceImagePath);
+  for (const r of storyboardImageRows) assertConfinedFile("Storyboard Image", r.id, r.imagePath, (p) => isConfinedUnderRoot(p, STORYBOARD_IMAGES_ROOT_RELATIVE));
+  for (const r of extractionRegionRowsWithCrop) assertConfinedFile("Storyboard Extraction Region", r.id, r.cropImagePath, (p) => isConfinedUnderRoot(p, STORYBOARD_IMAGES_ROOT_RELATIVE));
+  for (const r of sequenceStoryboardImageRows) assertConfinedFile("Sequence Storyboard Image", r.id, r.imagePath, (p) => isConfinedUnderRoot(p, SEQUENCE_STORYBOARD_IMAGES_ROOT_RELATIVE));
+  for (const r of sequenceVideoDraftRows) assertConfinedFile("Sequence Video Draft", r.id, r.videoPath, (p) => isConfinedUnderRoot(p, SEQUENCE_VIDEO_DRAFTS_ROOT_RELATIVE));
+  for (const r of splitSegmentRowsWithThumbnail) assertConfinedFile("Split Segment thumbnail", r.id, r.thumbnailPath, (p) => isConfinedUnderRoot(p, SEQUENCE_VIDEO_SPLIT_THUMBNAIL_ROOT_RELATIVE));
+  for (const r of sequenceResultRowsWithVideo) assertConfinedFile("Sequence Result video", r.id, r.videoPath, (p) => isConfinedUnderRoot(p, SEQUENCE_RESULTS_ROOT_RELATIVE));
+  for (const r of projectGenerationJobRowsWithOutput) assertConfinedFile("Generation Job output", r.id, r.outputPath, (p) => isConfinedUnderRoot(p, `outputs/jobs/${r.id}`));
+
+  type QuarantineSource =
+    | "style-reference"
+    | "look-result"
+    | "navigation-background"
+    | "shot-reference-video"
+    | "shot-video"
+    | "shot-video-candidate"
+    | "shot-reference-image"
+    | "asset-reference-image"
+    | "storyboard-image"
+    | "sequence-storyboard-image"
+    | "sequence-video-draft"
+    | "sequence-video-split-thumbnail"
+    | "sequence-result-video"
+    | "generation-job-output";
+
+  type QuarantineEntry = { source: QuarantineSource; id: number; imagePath: string; resolveAbsolute?: () => Promise<string | null> };
   const filesToQuarantine: QuarantineEntry[] = [
     ...styleReferences.map((ref): QuarantineEntry => ({ source: "style-reference", id: ref.id, imagePath: ref.imagePath })),
     ...lookResults.map((r): QuarantineEntry => ({ source: "look-result", id: r.id, imagePath: r.filePath })),
@@ -215,16 +448,42 @@ export async function deleteProject(id: number) {
       .filter((seq) => seq.imagePath)
       .map((seq): QuarantineEntry => ({ source: "navigation-background", id: seq.id, imagePath: seq.imagePath! })),
     ...referenceVideos.map((ref): QuarantineEntry => ({ source: "shot-reference-video", id: ref.id, imagePath: ref.videoPath })),
+    ...shotVideoRows.map((r): QuarantineEntry => ({ source: "shot-video", id: r.id, imagePath: r.videoPath })),
+    ...shotVideoCandidateRows.map((r): QuarantineEntry => ({ source: "shot-video-candidate", id: r.id, imagePath: r.clipPath })),
+    ...shotReferenceImageOwnRows.map((r): QuarantineEntry => ({ source: "shot-reference-image", id: r.id, imagePath: r.imagePath })),
+    ...assetReferenceImageRows.map((r): QuarantineEntry => ({ source: "asset-reference-image", id: r.id, imagePath: r.imagePath })),
+    ...storyboardImageRows.map((r): QuarantineEntry => ({ source: "storyboard-image", id: r.id, imagePath: r.imagePath })),
+    ...sequenceStoryboardImageRows.map((r): QuarantineEntry => ({ source: "sequence-storyboard-image", id: r.id, imagePath: r.imagePath })),
+    ...sequenceVideoDraftRows.map((r): QuarantineEntry => ({ source: "sequence-video-draft", id: r.id, imagePath: r.videoPath })),
+    ...splitSegmentRowsWithThumbnail.map((r): QuarantineEntry => ({ source: "sequence-video-split-thumbnail", id: r.id, imagePath: r.thumbnailPath })),
+    ...projectGenerationJobRowsWithOutput.map((r): QuarantineEntry => ({ source: "generation-job-output", id: r.id, imagePath: r.outputPath })),
+    // PROJ.DELETE.1 piège #2 — a physical file never gets queued twice: the
+    // shared shot_reference_images rows under uploads/storyboard-images/ are
+    // confinement-checked above but deliberately NOT added here (the
+    // "storyboard-image" entries above already own that exact path).
+    //
+    // Dual-root family (public/uploads vs storage/uploads — see
+    // resolveSequenceResultAbsolutePath's own header comment): resolved at
+    // quarantine time, not here.
+    ...sequenceResultRowsWithVideo.map(
+      (r): QuarantineEntry => ({
+        source: "sequence-result-video",
+        id: r.id,
+        imagePath: r.videoPath,
+        resolveAbsolute: () => resolveSequenceResultAbsolutePath(r.videoPath),
+      })
+    ),
   ];
 
-  const quarantined: { source: "style-reference" | "look-result" | "navigation-background" | "shot-reference-video"; id: number; originalAbsolute: string; quarantineAbsolute: string }[] = [];
+  const quarantined: { source: QuarantineSource; id: number; imagePath: string; originalAbsolute: string; quarantineAbsolute: string }[] = [];
 
   for (const ref of filesToQuarantine) {
-    const originalAbsolute = path.join(publicRoot, ref.imagePath);
+    const originalAbsolute = ref.resolveAbsolute ? await ref.resolveAbsolute() : path.join(publicRoot, ref.imagePath);
+    if (originalAbsolute === null) continue; // already gone under every candidate root — nothing to quarantine or restore
     const quarantineAbsolute = `${originalAbsolute}.trash-${Date.now()}-${ref.source}-${ref.id}`;
     try {
       await rename(originalAbsolute, quarantineAbsolute);
-      quarantined.push({ source: ref.source, id: ref.id, originalAbsolute, quarantineAbsolute });
+      quarantined.push({ source: ref.source, id: ref.id, imagePath: ref.imagePath, originalAbsolute, quarantineAbsolute });
     } catch (e) {
       if ((e as NodeJS.ErrnoException)?.code === "ENOENT") continue; // already gone — nothing to quarantine or restore
 
@@ -375,6 +634,126 @@ export async function deleteProject(id: number) {
         }
       }
 
+      // ---------------------------------------------------------------------
+      // PROJ.DELETE.1 — explicit, dependency-ordered deletes for every `NO
+      // ACTION` foreign key the real DB carries in this subtree (see
+      // `.agents/executor_report.md` for the full graph, captured via
+      // `PRAGMA foreign_key_list` — never guessed from `schema.ts`, which
+      // several of these columns misrepresent: SQLite does not honor an
+      // `onDelete` clause added through `ALTER TABLE ADD COLUMN`). Every row
+      // touched below is re-derived fresh from `tx` (never trusted from a
+      // pre-transaction snapshot) and belongs to THIS project's own subtree
+      // only — nothing here can affect another project's rows. Each step is
+      // a pure relational delete/null (no filesystem I/O — the files
+      // themselves were already quarantined above); after this block, every
+      // `NO ACTION` edge back into the subtree is broken, so the final
+      // `tx.delete(projects)` cascade below can run all the way through.
+      // ---------------------------------------------------------------------
+      // Reuses `currentProjectShotIds`, already re-derived fresh above for
+      // the Video Reference anti-race recheck — never a second, possibly
+      // divergent query for the same set.
+      const currentProjectSequenceIds = tx.select({ id: sequences.id }).from(sequences).where(eq(sequences.projectId, id)).all().map((r) => r.id);
+      const currentProjectReferenceImageIds = tx
+        .select({ id: projectStyleReferenceImages.id })
+        .from(projectStyleReferenceImages)
+        .where(eq(projectStyleReferenceImages.projectId, id))
+        .all()
+        .map((r) => r.id);
+      const currentProjectResearchSourceIds = tx
+        .select({ id: projectStyleResearchSources.id })
+        .from(projectStyleResearchSources)
+        .where(eq(projectStyleResearchSources.projectId, id))
+        .all()
+        .map((r) => r.id);
+
+      // shot_reference_images.sourceShotVideoCandidateId -> shot_video_candidates
+      // (NO ACTION, nullable) — same fix as deleteShotVideoCandidate's own
+      // REVISE round 2 (src/actions/sequenceVideoPush.ts), applied to every
+      // candidate this Project owns at once.
+      if (currentProjectShotIds.length > 0) {
+        tx.update(shotReferenceImages)
+          .set({ sourceShotVideoCandidateId: null, updatedAt: new Date().toISOString() })
+          .where(inArray(shotReferenceImages.shotId, currentProjectShotIds))
+          .run();
+      }
+
+      // shot_storyboard_thumbnails.referenceImageId -> shot_reference_images
+      // (NO ACTION) — the selector row is always cleared before its
+      // Reference Image, exactly like deleteShotReferenceImage's own
+      // discipline (src/actions/shotReferenceImages.ts).
+      if (currentProjectShotIds.length > 0) {
+        tx.delete(shotStoryboardThumbnails).where(inArray(shotStoryboardThumbnails.shotId, currentProjectShotIds)).run();
+      }
+
+      // shot_videos.shotId -> shots (NO ACTION) — never cascades on its own;
+      // must be deleted before its Shot.
+      if (currentProjectShotIds.length > 0) {
+        tx.delete(shotVideos).where(inArray(shotVideos.shotId, currentProjectShotIds)).run();
+      }
+
+      // shot_video_candidates.shotId / splitRunId / splitSegmentId (all NO
+      // ACTION) — deleted before its Shot AND before the Split Run/Segment it
+      // was cut from (both below).
+      if (currentProjectShotIds.length > 0) {
+        tx.delete(shotVideoCandidates).where(inArray(shotVideoCandidates.shotId, currentProjectShotIds)).run();
+      }
+
+      // sequence_video_split_runs.sequenceVideoDraftId -> sequence_video_drafts
+      // (NO ACTION, notNull) — deleted before its source draft. Cascades its
+      // own sequence_video_split_segments rows (real onDelete: cascade).
+      if (currentProjectSequenceIds.length > 0) {
+        tx.delete(sequenceVideoSplitRuns).where(inArray(sequenceVideoSplitRuns.sequenceId, currentProjectSequenceIds)).run();
+      }
+
+      // generation_jobs.sequenceId -> sequences (NO ACTION) — the
+      // look_test_id sibling below already gets this same explicit
+      // treatment; sequence-target jobs need it too (shot/asset-target jobs
+      // are real `onDelete: cascade` and need no explicit handling).
+      if (currentProjectSequenceIds.length > 0) {
+        tx.delete(generationJobs).where(inArray(generationJobs.sequenceId, currentProjectSequenceIds)).run();
+      }
+
+      // storyboard_images.extractionRegionId -> sequence_storyboard_extraction_regions
+      // (NO ACTION in the real DB despite schema.ts's "set null" — see that
+      // column's own comment) — nulled before its Region's Extraction cascades
+      // away with the Sequence. The draft row itself is untouched here (its
+      // file/row were already collected/deleted through the storyboard-image
+      // family above).
+      if (currentProjectShotIds.length > 0) {
+        tx.update(storyboardImages)
+          .set({ extractionRegionId: null, updatedAt: new Date().toISOString() })
+          .where(inArray(storyboardImages.shotId, currentProjectShotIds))
+          .run();
+      }
+
+      // sequence_style_overrides.sourceProjectStyleVersionId -> project_style_versions
+      // (NO ACTION, notNull) — deleted before Style versions cascade away
+      // with the Project.
+      if (currentProjectSequenceIds.length > 0) {
+        tx.delete(sequenceStyleOverrides).where(inArray(sequenceStyleOverrides.sequenceId, currentProjectSequenceIds)).run();
+      }
+
+      // Every join/observation row whose NO ACTION FK points at
+      // project_style_reference_images — deleted before the Reference Board
+      // cascades away with the Project (mirrors the already-accepted
+      // last-resort-backstop framing in projectStyleAnalysis.ts's own header
+      // comment).
+      if (currentProjectReferenceImageIds.length > 0) {
+        tx.delete(lookTestReferences).where(inArray(lookTestReferences.referenceImageId, currentProjectReferenceImageIds)).run();
+        tx.delete(projectStyleReferenceAnalysisRunReferences).where(inArray(projectStyleReferenceAnalysisRunReferences.referenceId, currentProjectReferenceImageIds)).run();
+        tx.delete(projectStyleReferenceAnalysisObservations).where(inArray(projectStyleReferenceAnalysisObservations.referenceId, currentProjectReferenceImageIds)).run();
+        tx.delete(projectStyleReferenceAnalysisCandidateRuleReferences).where(inArray(projectStyleReferenceAnalysisCandidateRuleReferences.referenceId, currentProjectReferenceImageIds)).run();
+      }
+
+      // Every join row whose NO ACTION FK points at
+      // project_style_research_sources — deleted before Sources cascade away
+      // with the Project.
+      if (currentProjectResearchSourceIds.length > 0) {
+        tx.delete(projectStyleResearchCandidateRuleSources).where(inArray(projectStyleResearchCandidateRuleSources.sourceId, currentProjectResearchSourceIds)).run();
+        tx.delete(projectStyleResearchClaimSources).where(inArray(projectStyleResearchClaimSources.sourceId, currentProjectResearchSourceIds)).run();
+        tx.delete(projectStyleResearchSynthesisSources).where(inArray(projectStyleResearchSynthesisSources.sourceId, currentProjectResearchSourceIds)).run();
+      }
+
       const projectLookTestIds = tx
         .select({ id: lookTests.id })
         .from(lookTests)
@@ -428,6 +807,54 @@ export async function deleteProject(id: number) {
     throw new Error(`${base} — nothing was changed (all ${restoreResults.length} file(s) restored).`);
   }
 
+  // PROJ.DELETE.1 piège #2 — several of the NEW families above have no DB
+  // uniqueness on their path column (unlike `shot_reference_videos.videoPath`
+  // or `shot_videos.videoPath`, both DB-unique, or the Style/Look families,
+  // both namespaced one-per-project): a `shot_reference_images` row can
+  // legitimately share its exact file with a `storyboard_images` draft (an
+  // extracted panel — storyboardExtractionConfirm.ts writes the SAME
+  // `destRelative` into both), and nothing stops two rows in DIFFERENT
+  // Projects from independently pointing at the same physical path either.
+  // The DB transaction above has ALREADY committed — every row THIS Project
+  // owned is gone — so a match found now can only be a genuine survivor
+  // (a live row this deletion must never have touched). Checked per family
+  // against the exact table(s) that can hold that family's path; the four
+  // pre-existing sources are structurally exempt (DB-unique or
+  // one-per-project namespaced — no survivor is possible for them, matching
+  // their unchanged pre-PROJ.DELETE.1 behavior).
+  async function isPathStillReferenced(source: QuarantineSource, imagePath: string): Promise<boolean> {
+    switch (source) {
+      case "shot-reference-image":
+      case "asset-reference-image":
+        return (
+          (await db.select({ id: shotReferenceImages.id }).from(shotReferenceImages).where(eq(shotReferenceImages.imagePath, imagePath))).length > 0 ||
+          (await db.select({ id: assetReferenceImages.id }).from(assetReferenceImages).where(eq(assetReferenceImages.imagePath, imagePath))).length > 0
+        );
+      case "storyboard-image":
+        return (
+          (await db.select({ id: storyboardImages.id }).from(storyboardImages).where(eq(storyboardImages.imagePath, imagePath))).length > 0 ||
+          (await db.select({ id: shotReferenceImages.id }).from(shotReferenceImages).where(eq(shotReferenceImages.imagePath, imagePath))).length > 0 ||
+          (await db.select({ id: sequenceStoryboardExtractionRegions.id }).from(sequenceStoryboardExtractionRegions).where(eq(sequenceStoryboardExtractionRegions.cropImagePath, imagePath))).length > 0
+        );
+      case "shot-video":
+        return (await db.select({ id: shotVideos.id }).from(shotVideos).where(eq(shotVideos.videoPath, imagePath))).length > 0;
+      case "shot-video-candidate":
+        return (await db.select({ id: shotVideoCandidates.id }).from(shotVideoCandidates).where(eq(shotVideoCandidates.clipPath, imagePath))).length > 0;
+      case "sequence-storyboard-image":
+        return (await db.select({ id: sequenceStoryboardImages.id }).from(sequenceStoryboardImages).where(eq(sequenceStoryboardImages.imagePath, imagePath))).length > 0;
+      case "sequence-video-draft":
+        return (await db.select({ id: sequenceVideoDrafts.id }).from(sequenceVideoDrafts).where(eq(sequenceVideoDrafts.videoPath, imagePath))).length > 0;
+      case "sequence-video-split-thumbnail":
+        return (await db.select({ id: sequenceVideoSplitSegments.id }).from(sequenceVideoSplitSegments).where(eq(sequenceVideoSplitSegments.thumbnailPath, imagePath))).length > 0;
+      case "sequence-result-video":
+        return (await db.select({ id: sequenceResults.id }).from(sequenceResults).where(eq(sequenceResults.videoPath, imagePath))).length > 0;
+      case "generation-job-output":
+        return (await db.select({ id: generationJobs.id }).from(generationJobs).where(eq(generationJobs.outputPath, imagePath))).length > 0;
+      default:
+        return false;
+    }
+  }
+
   // The DB transaction is now committed and durable: the Project and its
   // Look/Style rows are gone. Every quarantined file is now a plain,
   // unreferenced leftover — permanently removing it is pure cleanup, not
@@ -436,7 +863,21 @@ export async function deleteProject(id: number) {
   // honestly with the EXACT recoverable path — never a claim that some
   // separate durable record (a ledger) captured it, and never silence.
   const finalCleanupFailures: { source: QuarantineEntry["source"]; originalAbsolute: string; quarantineAbsolute: string; error: string }[] = [];
+  const survivorRestoreFailures: { source: QuarantineEntry["source"]; originalAbsolute: string; quarantineAbsolute: string; error: string }[] = [];
   for (const q of quarantined) {
+    if (await isPathStillReferenced(q.source, q.imagePath)) {
+      // A live row outside this Project still needs this exact file — the
+      // opposite of a leaked file: restore it to its ORIGINAL path instead
+      // of unlinking it. A failed restore here is worse than the ordinary
+      // "leftover at quarantine path" case (the live row now shows a broken
+      // reference), so it is reported separately and explicitly below.
+      try {
+        await rename(q.quarantineAbsolute, q.originalAbsolute);
+      } catch (e) {
+        survivorRestoreFailures.push({ source: q.source, originalAbsolute: q.originalAbsolute, quarantineAbsolute: q.quarantineAbsolute, error: e instanceof Error ? e.message : String(e) });
+      }
+      continue;
+    }
     let lastError: string | null = null;
     let removed = false;
     for (let attempt = 1; attempt <= 3 && !removed; attempt++) {
@@ -456,6 +897,15 @@ export async function deleteProject(id: number) {
     if (!removed) {
       finalCleanupFailures.push({ source: q.source, originalAbsolute: q.originalAbsolute, quarantineAbsolute: q.quarantineAbsolute, error: lastError ?? "unknown error" });
     }
+  }
+
+  if (survivorRestoreFailures.length > 0) {
+    console.error(`deleteProject(${id}): Project and DB rows deleted successfully; ${survivorRestoreFailures.length} file(s) still needed by a surviving row could not be restored to their original path`, survivorRestoreFailures);
+    throw new Error(
+      `deleteProject(${id}): the Project and its database rows were deleted successfully. ${survivorRestoreFailures.length} file(s) still needed by another, surviving row could not be restored to their expected location and remain under a quarantine path — fix this manually before that surviving row is used: ${survivorRestoreFailures
+        .map((f) => `"${f.quarantineAbsolute}" (expected at "${f.originalAbsolute}")`)
+        .join("; ")}.`
+    );
   }
 
   if (finalCleanupFailures.length > 0) {

@@ -18,6 +18,59 @@ export async function insertProject(
   return row.id;
 }
 
+// ---------------------------------------------------------------------------
+// PROJ.DELETE.1 — comfy_workflows / generation_jobs / shot_videos /
+// shot_reference_images builders, same "insert only NOT NULL columns plus
+// whatever the caller wants to observe" convention as every builder above.
+// ---------------------------------------------------------------------------
+
+export async function insertComfyWorkflow(
+  { db, schema }: TempDb,
+  values: Partial<typeof schema.comfyWorkflows.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.comfyWorkflows)
+    .values({ name: "Workflow", kind: "video", workflowJson: "{}", ...values })
+    .returning({ id: schema.comfyWorkflows.id });
+  return row.id;
+}
+
+export async function insertGenerationJob(
+  { db, schema }: TempDb,
+  workflowId: number,
+  values: Partial<typeof schema.generationJobs.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.generationJobs)
+    .values({ workflowId, status: "done", ...values })
+    .returning({ id: schema.generationJobs.id });
+  return row.id;
+}
+
+export async function insertShotVideo(
+  { db, schema }: TempDb,
+  shotId: number,
+  values: Partial<typeof schema.shotVideos.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.shotVideos)
+    .values({ shotId, source: "generation", videoPath: "uploads/shot-videos/fixture.mp4", ...values })
+    .returning({ id: schema.shotVideos.id });
+  return row.id;
+}
+
+export async function insertShotReferenceImage(
+  { db, schema }: TempDb,
+  shotId: number,
+  values: Partial<typeof schema.shotReferenceImages.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.shotReferenceImages)
+    .values({ shotId, imagePath: "uploads/reference-images/fixture.jpg", ...values })
+    .returning({ id: schema.shotReferenceImages.id });
+  return row.id;
+}
+
 export async function insertAsset(
   { db, schema }: TempDb,
   projectId: number,
