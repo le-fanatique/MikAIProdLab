@@ -1,4 +1,6 @@
 import Link from "next/link";
+import GenerateOutputCard from "@/components/storyboardGenerate/GenerateOutputCard";
+import CastingReferencesGrid from "@/components/storyboardGenerate/CastingReferencesGrid";
 import { db } from "@/db";
 import {
   projects,
@@ -805,36 +807,12 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
         <SectionLabel label="Inputs" />
 
         <Card title="Casting References (@ImageN)">
-          {promptResult.imageMappings.length === 0 ? (
-            <p className="text-xs text-[#b89a5a]">{castingReferencesEmptyMessage}</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {promptResult.imageMappings.map((m) => {
-                const img = availableImages.find((i) => i.id === m.refId);
-                return (
-                  <div key={m.refId} className="flex flex-col gap-1 rounded border border-[#232629] p-1.5">
-                    {img && (
-                      <div className="relative aspect-square w-full bg-[#0d0e10] overflow-hidden rounded">
-                        <ThumbnailHoverPreview src={refImageUrl(img.imagePath)} alt={m.assetName} focusable>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={refImageUrl(img.imagePath)} alt={m.assetName} className="w-full h-full object-cover" />
-                        </ThumbnailHoverPreview>
-                      </div>
-                    )}
-                    <span className="text-[10px] font-mono text-[#5b93d6]">{m.imageLabel}</span>
-                    <span className="text-xs text-[#a4abb2] truncate">{m.assetName}</span>
-                    <span className="text-[10px] text-[#4b5158] truncate">
-                      {m.assetType}
-                      {m.roleLabel ? ` · ${m.roleLabel}` : ""}
-                    </span>
-                    {!m.approvedForGeneration && (
-                      <span className="text-[9px] uppercase tracking-wider text-[#cda24f]">Not approved</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <CastingReferencesGrid
+            imageMappings={promptResult.imageMappings}
+            availableImages={availableImages}
+            emptyMessage={castingReferencesEmptyMessage}
+            refImageUrl={refImageUrl}
+          />
           {/* Lot D — inline casting editor replaces the "Edit Selection in
               Storyboard Assets" link: every Asset cast in this Sequence,
               including references not currently selected, editable without
@@ -1094,36 +1072,16 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
         {activeJobId !== null && (
           <>
             <SectionLabel label="Output" />
-            <Card>
-              <div className="flex flex-col gap-4">
-                <GenerationJobStatusPanel jobId={activeJobId} />
-
-                {draftError && <p className="text-xs text-[#cf7b6b]">{draftError}</p>}
-                {draftSaved ? (
-                  <div className="flex flex-col gap-1">
-                    <p className="text-xs text-[#6b9e72]">Saved as Sequence Storyboard draft.</p>
-                    <Link
-                      href={storyboardWorkspaceReturnTo}
-                      className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-                    >
-                      ← Back to Storyboard Workspace
-                    </Link>
-                  </div>
-                ) : canSaveDraft ? (
-                  <form action={saveSequenceStoryboardDraftFromJob}>
-                    <input type="hidden" name="sequenceId" value={String(sid)} />
-                    <input type="hidden" name="jobId" value={String(activeJobId)} />
-                    <input type="hidden" name="returnTo" value={outputReturnTo} />
-                    <button
-                      type="submit"
-                      className="rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
-                    >
-                      Save as Sequence Storyboard Draft
-                    </button>
-                  </form>
-                ) : null}
-              </div>
-            </Card>
+            <GenerateOutputCard
+            activeJobId={activeJobId}
+            draftError={draftError}
+            draftSaved={draftSaved}
+            canSaveDraft={canSaveDraft}
+            storyboardWorkspaceReturnTo={storyboardWorkspaceReturnTo}
+            outputReturnTo={outputReturnTo}
+            sequenceId={sid}
+              saveAction={saveSequenceStoryboardDraftFromJob}
+            />
           </>
         )}
       </div>
