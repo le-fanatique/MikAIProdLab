@@ -1,0 +1,1 @@
+ALTER TABLE `shot_reference_videos` ADD `video_role` text;

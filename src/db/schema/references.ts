@@ -80,6 +80,14 @@ export const shotReferenceVideos = sqliteTable(
     videoPath: text("video_path").notNull(),
     sourceFilename: text("source_filename"),
     label: text("label"),
+    // B17a — the role column the image tables have and this one lacked.
+    // `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.6: the guide keys its video
+    // modes on roles (camera replication, motion imitation, rhythm matching),
+    // and those three already exist in `src/lib/referenceImageRoles.ts` —
+    // they were offered on images only. Nullable and with no DB CHECK, exactly
+    // like `asset_reference_images.image_role`, so an existing row stays valid
+    // and the vocabulary can widen without a migration.
+    videoRole: text("video_role"),
     notes: text("notes"),
     /** Probed from the actual uploaded/copied media at publish time — never guessed. */
     durationSeconds: real("duration_seconds"),

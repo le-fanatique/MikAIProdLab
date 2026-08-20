@@ -24,7 +24,19 @@ export type ReferenceImageRoleCategory =
   | "asset_specific"
   | "legacy_other";
 
-export type ReferenceImageContext = "shot" | "asset";
+/**
+ * B17a — widened with `"shotVideo"`. The guide keys its **video** modes on
+ * roles the same way it keys its image modes (camera replication, motion
+ * imitation, rhythm matching), and `camera` / `motion` / `rhythm` already
+ * exist in the catalogue below — they were simply offered on images only
+ * (`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.6).
+ *
+ * The catalogue is therefore not extended with new roles: the three that the
+ * guide's video modes need are marked available in this new context, and
+ * nothing else changes. A role stored on an existing row stays readable
+ * regardless of this list, exactly as before.
+ */
+export type ReferenceImageContext = "shot" | "asset" | "shotVideo";
 
 export type ReferenceImageRoleDefinition = {
   /** Canonical, stored value — exactly what's written to imageRole. Never mutated. */
@@ -65,9 +77,9 @@ export const REFERENCE_IMAGE_ROLES: readonly ReferenceImageRoleDefinition[] = [
   // Style / Direction
   { value: "style", label: "Style", category: "style_direction", availableFor: ["shot", "asset"] },
   { value: "lighting", label: "Lighting", category: "style_direction", availableFor: ["shot", "asset"] },
-  { value: "camera", label: "Camera", category: "style_direction", availableFor: ["shot", "asset"] },
-  { value: "motion", label: "Motion", category: "style_direction", availableFor: ["shot", "asset"] },
-  { value: "rhythm", label: "Rhythm", category: "style_direction", availableFor: ["shot", "asset"] },
+  { value: "camera", label: "Camera", category: "style_direction", availableFor: ["shot", "asset", "shotVideo"] },
+  { value: "motion", label: "Motion", category: "style_direction", availableFor: ["shot", "asset", "shotVideo"] },
+  { value: "rhythm", label: "Rhythm", category: "style_direction", availableFor: ["shot", "asset", "shotVideo"] },
 
   // Asset-specific
   { value: "identity", label: "Identity", category: "asset_specific", availableFor: ["asset"] },
