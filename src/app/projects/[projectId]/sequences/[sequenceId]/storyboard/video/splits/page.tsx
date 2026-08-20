@@ -363,6 +363,7 @@ async function SplitWorkspaceBody({
   const badge = runStatusBadge(run.status);
   const rawCount = rawCandidateCount(run.rawCandidatesJson);
 
+
   if (run.status === "failed" || run.status === "detecting") {
     return (
       <Card className="mb-4">
@@ -390,6 +391,23 @@ async function SplitWorkspaceBody({
     .from(sequenceVideoSplitSegments)
     .where(eq(sequenceVideoSplitSegments.splitRunId, run.id))
     .orderBy(asc(sequenceVideoSplitSegments.orderIndex));
+  // A validated plan is NOT a finished one. Validating maps segments to Shots;
+  // PUSHING is what cuts the clips, creates the video candidates and sets each
+  // Shot's Storyboard thumbnail. Reported as a bug because the page said
+  // otherwise — a green "Validated" badge above segments all reading "Mapped",
+  // with the remaining step a button further down that nothing pointed at.
+  const activeSegmentsForPush = segments.filter((seg) => seg.status !== "skipped");
+  const pushedCandidateCount =
+    run.status === "validated" && activeSegmentsForPush.length > 0
+      ? (
+          await db
+            .select({ id: shotVideoCandidates.id })
+            .from(shotVideoCandidates)
+            .where(inArray(shotVideoCandidates.splitSegmentId, activeSegmentsForPush.map((seg) => seg.id)))
+        ).length
+      : 0;
+  const awaitingPush =
+    run.status === "validated" && activeSegmentsForPush.length > 0 && pushedCandidateCount < activeSegmentsForPush.length;
 
   const isEditable = run.status === "ready";
   const isValidated = run.status === "validated";
@@ -403,7 +421,13 @@ async function SplitWorkspaceBody({
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-sm text-[#e7e9ec]">Current run #{run.id}</span>
-            <span className={`text-[9px] uppercase tracking-wider border rounded px-1.5 py-px ${badge.className}`}>{badge.label}</span>
+            <span
+              className={`text-[9px] uppercase tracking-wider border rounded px-1.5 py-px ${
+                awaitingPush ? "text-[#c9a24b] border-[#3d3320]" : badge.className
+              }`}
+            >
+              {awaitingPush ? "Validated — not pushed" : badge.label}
+            </span>
           </div>
           <p className="text-[10px] text-[#a4abb2]">
             Threshold {run.sceneThreshold} · Min duration requested {run.minSegmentDurationSeconds}s
@@ -425,6 +449,14 @@ async function SplitWorkspaceBody({
         <p className="mb-4 text-xs text-[#c9a24b] border border-[#3d3320] rounded px-3 py-2 bg-[#1a1712]">
           This Sequence&apos;s Shot list or order has changed since this run was detected. Validation will be blocked until you run
           detection again.
+        </p>
+      )}
+
+      {awaitingPush && (
+        <p className="mb-4 text-xs text-[#c9a24b] border border-[#3d3320] rounded px-3 py-2 bg-[#1a1712]">
+          <strong>This plan is validated but nothing has been cut yet.</strong> Validating only mapped each segment to
+          its Shot. Use <strong>Push Clips to Shots</strong> below to produce the clips, attach them to their Shots and
+          set each Shot&apos;s Storyboard thumbnail from its own first frame.
         </p>
       )}
 
