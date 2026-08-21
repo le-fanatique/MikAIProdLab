@@ -1,6 +1,6 @@
 # MikAI User Feedback Log
 
-Last updated: 2026-08-07
+Last updated: 2026-08-21
 
 ## Purpose
 
@@ -4923,6 +4923,90 @@ cross-cutting UI/display view.
   candidates it returns, and how image/video references are selected. The
   observation alone does not authorize schema, migration, provider, or
   generation-runtime changes.
+
+### FB-20260821-001 - Retirer une plage frame-exacte d'un Sequence Video Draft
+
+- Status: `OPEN`
+- Date observed: 2026-08-21
+- Area: Sequence / Sequence Video Draft / Split Workspace
+- Context: Reconciling `docs/ROADMAP.md` against the code on 2026-08-21, after
+  Chantier 1 (LLM Workspace), Chantier 2 (cleanup) and the start of the camera
+  redesign. The roadmap still carried `SEQGEN.VIDEO.CUT.CORE.1` and
+  `SEQGEN.VIDEO.CUT.UI.1` as "the immediate next recommended product chantier",
+  a priority written on 2026-08-02 — before both chantiers.
+- Original observation:
+
+  > SEQGEN.VIDEO.CUT.CORE.1 on le push dans la boite à idee "User_Feedback" et
+  > on le sort de roadmap
+
+- Expected outcome: from a Sequence Video Draft, remove a frame-exact range,
+  concatenate the kept parts and publish a **new durable version** with
+  parent/cut provenance, without ever overwriting the source. The original
+  split was into a core ticket (frame-exact contract, FFmpeg, provenance) and a
+  UI ticket (In/Out player in frames, preview of the removed span, explicit
+  publication).
+- Impact: the need is not denied — it is removed from the roadmap because its
+  **priority** was stale, not its substance. Nothing was ever implemented: there
+  is no cut action in `src/actions/`, and `src/lib/sequenceVideoSplit/` only
+  performs detection. It returns here so it can be re-prioritised on real use
+  rather than inherited from a pre-chantier ordering.
+- Related ticket: None. Former roadmap entries `SEQGEN.VIDEO.CUT.CORE.1` and
+  `SEQGEN.VIDEO.CUT.UI.1`, preserved in `docs/archive/ROADMAP_2026-08-02.md`.
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-08-21: Removed from `docs/ROADMAP.md` by the author's decision, in the
+  same pass that archived the 2026-08-02 consolidated roadmap. The archive keeps
+  the two tickets' original wording and their place in the old ordering.
+- 2026-08-21: The durable-version-with-provenance shape is not an invention of
+  this entry — it is how `SEQGEN.VIDEO.1` already stores Sequence Video Drafts,
+  and how `SEQGEN.PUSH.1` already creates Shot video candidates without
+  automatic replacement. Whoever prepares this ticket should read those two
+  before designing a new contract.
+
+### FB-20260821-002 - Prouver un vrai aller-retour MikAI / OpenReel
+
+- Status: `OPEN`
+- Date observed: 2026-08-21
+- Area: Editorial / OpenReel sidecar / Sequence Result
+- Context: Same roadmap reconciliation pass as `FB-20260821-001`.
+  `OPENREEL.ROUNDTRIP.1` had sat at position 3 of an ordering written on
+  2026-08-02, before Chantier 1 and Chantier 2.
+- Original observation:
+
+  > OPENREEL.ROUNDTRIP.1 — vrai aller-retour MikAI ↔ OpenReel >>>> a deplacer
+  > dans la boite à idée User_feedback
+
+- Expected outcome: an end-to-end demonstration that a Sequence leaves MikAI,
+  is edited in the OpenReel sidecar, and returns without loss or partial
+  mutation — covering the anti-stale snapshot, the timings, and the explicit
+  refusal of a patch that would apply only in part.
+- Impact: unlike `FB-20260821-001`, the bricks here **already exist and are in
+  use**: Export Editorial JSON, Validate Patch, Apply Patch start-only, Publish
+  Sequence Result, Insert Shot at Playhead, Push production duration, stale
+  HTTP 409 and Reload from MikAI. What was missing is the **proof of the whole
+  loop**, not a feature. That makes it a validation campaign, which is worth
+  scheduling against real use rather than carrying as a product ticket.
+- Related ticket: None. Former roadmap entry `OPENREEL.ROUNDTRIP.1`, preserved
+  in `docs/archive/ROADMAP_2026-08-02.md`.
+- Resolution: None
+- Resolved or validated on: None
+
+#### Follow-up notes
+
+- 2026-08-21: Removed from `docs/ROADMAP.md` by the author's decision, in the
+  same pass that archived the 2026-08-02 consolidated roadmap.
+- 2026-08-21: Two known limits recorded in `docs/PROJECT_STATE.md` bound what
+  such a proof can claim today, and should be read before scoping it: OpenReel
+  V1 timing patches are **start-only** — duration changes are not pushed as
+  general timeline edits — and some legacy patches without snapshots can still
+  be accepted with warnings, for backward compatibility.
+- 2026-08-21: A precedent exists for how this kind of proof is run here.
+  `OPENREEL.SIDECAR.PROMOTION.1` was validated with two isolated browser smoke
+  sessions on their own ports, against a mock export server and disposable
+  fixture media, never against the live `5173`.
 
 ## Entry Template
 
