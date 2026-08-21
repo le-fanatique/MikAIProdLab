@@ -43,6 +43,46 @@ touched, and each was verified by breaking that code and watching tests fail.
 - **the token-efficiency audit** — referenced as "asked for" but never defined
   anywhere, so its scope needs stating before it can be done.
 
+## B19 — the camera redesign, 2026-08-21
+
+Opened because the author asked what "MS" meant in one of his own shots, and
+nothing in the app could answer.
+
+**What was wrong.** The vocabulary was copied by hand into three places that
+disagreed — Generate Shots offered seven framings, Insert Shot nine, the form's
+placeholder five, with `tracking` against `track` and `dolly` against
+`dolly in`. The rule banning combinations existed only in Insert Shot and had
+never been propagated. Nothing anywhere defined a single value. And the model
+had been told to put "camera angle, lens, position" into one free-text field,
+so three axes lived as prose in `camera_pitch` on 88 shots.
+
+| | commit | what landed |
+| --- | --- | --- |
+| B19a | `5a89ef2` | the vocabulary, declared once — five axes, every value with a definition. A **palette, not an enum**: an unrecognized value is flagged and kept, never substituted |
+| B19b | `17986f9` | `framing` → `shot_size`, plus `camera_position`, `movement_speed`, `camera_subject`. Six `OTS` rows moved to placement — deterministic, because the instruction had literally listed `OTS` as a framing value |
+| B19c | `65261e2` | the form shows the values **and what they mean**, via `<datalist>` so an out-of-palette value stays typable |
+| B19d | `8bc467b`, `ec711f6` | both instructions render from the declaration; nothing is hand-copied. Values are written the way the trade writes them — `MS`, but `Low Angle` |
+| B19e | `2ba4ac8` | the camera line follows the Seedance 2.5 template, and the conformation counts **movements** instead of filled fields |
+| B19f | — | the conversion pass. Written, not built: the executor hit its weekly limit |
+
+**Three reversals, all sourced.** Size intervals are allowed — the 2.5 guide
+speaks of a starting and an ending shot size, and the ban came from 2.0. The
+"one primary camera instruction" rule was counting fields, so it warned on
+correct usage. And `camera_pitch` is kept rather than dropped: it is the only
+angle 88 shots have, and the composition falls back to it while
+`camera_position` is empty — precedence, never accumulation.
+
+**Sources.** The BytePlus conference slide the author supplied (shot size,
+camera angle, framing/placement, camera movement), the official `sd25-pe`
+skill, and the Seedance 2.0 guide. Neither guide defines a closed vocabulary;
+2.5 goes further and forbids a bare term detached from its subject, which is
+why `camera_subject` exists at all.
+
+**Two silent losses caught by mutation, not by review.** `updateShot` would
+have wiped `camera_pitch` on the first edit once the form stopped submitting
+it, and 358 tests still passed. And Insert Shot would have asked for the three
+new axes while `normalizeProposedShot` dropped them.
+
 ## Three bugs from real use, 2026-08-20 — and the pattern two of them shared
 
 All three came from the author using the product, not from auditing code. Worth
