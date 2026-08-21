@@ -261,6 +261,13 @@ What genuinely cannot be shared:
 - **`docs/` shares badly.** Two lanes writing `PROJECT_STATE.md` or
   `ROADMAP.md` produce a silent conflict, since neither re-reads the whole file
   before writing. Whoever wants it says so in the lane board first.
+- **`drizzle/meta/_journal.json` is shared, and it sequences the migrations.**
+  Two lanes that each generate a migration both append to this one file, so it
+  ends up announcing both while each lane only owns one `.sql`. Committing it
+  with a single migration leaves the repository incoherent — a journal entry
+  whose file is missing. **The second lane to commit takes the journal**, and
+  the first waits. Found the hard way on 2026-08-21, with `0058` and `0059`
+  pending together.
 
 ## 10. Escalation To The User
 
