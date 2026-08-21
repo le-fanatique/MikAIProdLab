@@ -97,7 +97,7 @@ CONTINUITY RULES:
 
 CAMERA FIELDS:
 - shot_size is exactly one value from this set: EWS, WS, FS, MWS, MS, MCU, CU, ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
-- camera_position is exactly one value from this set: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role).
+- camera_position is exactly one value from this set: tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View.
 - camera_movement is exactly one value from this set: Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One movement only — never two combined (e.g. "pan + tilt").
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
@@ -115,7 +115,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
       "shot_size": "string or null — EWS, WS, FS, MWS, MS, MCU, CU, ECU, or a start-to-end interval such as "MS to WS"",
-      "camera_position": "string or null — Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role)",
+      "camera_position": "string or null — tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View",
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
@@ -194,7 +194,7 @@ CONTINUITY RULES:
 
 CAMERA FIELDS:
 - shot_size is exactly one value from this set: EWS, WS, FS, MWS, MS, MCU, CU, ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
-- camera_position is exactly one value from this set: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role).
+- camera_position is exactly one value from this set: tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View.
 - camera_movement is exactly one value from this set: Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One movement only — never two combined (e.g. "pan + tilt").
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
@@ -212,7 +212,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
       "shot_size": "string or null — EWS, WS, FS, MWS, MS, MCU, CU, ECU, or a start-to-end interval such as "MS to WS"",
-      "camera_position": "string or null — Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role)",
+      "camera_position": "string or null — tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View",
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
@@ -286,7 +286,7 @@ CONTINUITY RULES:
 
 CAMERA FIELDS:
 - shot_size is exactly one value from this set: EWS, WS, FS, MWS, MS, MCU, CU, ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
-- camera_position is exactly one value from this set: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role).
+- camera_position is exactly one value from this set: tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View.
 - camera_movement is exactly one value from this set: Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One movement only — never two combined (e.g. "pan + tilt").
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
@@ -304,7 +304,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
       "shot_size": "string or null — EWS, WS, FS, MWS, MS, MCU, CU, ECU, or a start-to-end interval such as "MS to WS"",
-      "camera_position": "string or null — Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role)",
+      "camera_position": "string or null — tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View",
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
@@ -370,7 +370,7 @@ CONTINUITY RULES:
 
 CAMERA FIELDS:
 - shot_size is exactly one value from this set: EWS, WS, FS, MWS, MS, MCU, CU, ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
-- camera_position is exactly one value from this set: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role).
+- camera_position is exactly one value from this set: tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View.
 - camera_movement is exactly one value from this set: Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One movement only — never two combined (e.g. "pan + tilt").
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
@@ -388,7 +388,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
       "shot_size": "string or null — EWS, WS, FS, MWS, MS, MCU, CU, ECU, or a start-to-end interval such as "MS to WS"",
-      "camera_position": "string or null — Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted (tilt); Ground Level, Low, Chest Level, Eye Level, Overhead (height); POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View (role)",
+      "camera_position": "string or null — tilt: Eye Level, High Angle, Low Angle, Bird's-Eye / Overhead, Worm's-Eye, Dutch / Canted; height: Ground Level, Low, Chest Level, Eye Level, Overhead; role: POV, Over-the-Shoulder (OTS), Two-Shot, Single, Reverse Shot, Establishing Shot, Profile, Front View, Rear View",
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",

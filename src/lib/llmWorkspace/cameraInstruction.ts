@@ -65,8 +65,13 @@ function renderAxisValueList(axisId: CameraVocabularyAxisId): string {
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(writtenCameraVocabularyValue(axis, value));
   }
+  // The group label leads its list rather than trailing it. Trailing put the
+  // label immediately after the last value — "… Dutch / Canted (tilt)" — and a
+  // model copied the whole thing into the field as one value, twice, on the
+  // author's own shots. A label in front cannot be mistaken for part of a
+  // value.
   return [...byGroup.entries()]
-    .map(([group, codes]) => `${codes.join(", ")} (${POSITION_GROUP_LABELS[group] ?? group})`)
+    .map(([group, codes]) => `${POSITION_GROUP_LABELS[group] ?? group}: ${codes.join(", ")}`)
     .join("; ");
 }
 
