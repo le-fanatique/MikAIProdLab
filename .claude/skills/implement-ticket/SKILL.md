@@ -5,6 +5,15 @@ description: Implement the active MikAI ticket from .agents/current_task.md with
 
 # Implement Ticket
 
+**Written for the dormant Codex protocol.**
+
+It names `.agents/current_task.md`, `.agents/claude_report.md` and
+`.agents/codex_verdict.json`. Under the **Opus** protocol in force those are
+`.agents/supervised_task.md`, `.agents/executor_report.md` and
+`.agents/supervisor_verdict.json`, and the commit gate is an explicit user go.
+For how work is actually done here, load the **`mikai-method`** skill.
+
+
 1. Read `CLAUDE.md`, `AGENTS.md`, and `.agents/current_task.md`.
 2. Read the latest report and verdict status only far enough to detect whether
    `current_task.md` still names a ticket already committed and pushed. If it

@@ -5,6 +5,15 @@ description: Audit whether a MikAI ticket is fully approved, committed, pushed, 
 
 # Close Ticket
 
+**Written for the dormant Codex protocol.**
+
+It names `.agents/current_task.md`, `.agents/claude_report.md` and
+`.agents/codex_verdict.json`. Under the **Opus** protocol in force those are
+`.agents/supervised_task.md`, `.agents/executor_report.md` and
+`.agents/supervisor_verdict.json`, and the commit gate is an explicit user go.
+For how work is actually done here, load the **`mikai-method`** skill.
+
+
 This skill verifies readiness. It does not execute `/clear`.
 
 1. Read `CLAUDE.md`, `AGENTS.md`, `.agents/current_task.md`,

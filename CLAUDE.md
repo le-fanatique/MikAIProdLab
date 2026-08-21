@@ -35,6 +35,12 @@ generate, show the user the SQL, and wait for him to run `db:migrate`.
 
 ## Start Here
 
+0. **Invoke the `mikai-method` skill.** It is the working method — net before
+   code, mutation as proof, migration safety, verification against real data,
+   when to stop instead of guessing. Load it at the start of any ticket,
+   review, migration, refactor or bug fix, and before spawning
+   `mikai-executor`. This section says who does what; the skill says how.
+   Its body is not resident, so loading it costs nothing until it is needed.
 1. Read `.agents/supervised_task.md`.
 2. Read only the permanent documents required by `AGENTS.md`.
 3. Follow ticket-specific links from the ticket; do not scan all `docs/`.
@@ -52,6 +58,7 @@ is the active contract; durable product knowledge lives in `docs/`.
 Use this restart prompt:
 
 ```text
+Invoke the mikai-method skill.
 Supervise the active ticket in .agents/supervised_task.md.
 Active protocol: Opus — see the Active Supervision Protocol section of CLAUDE.md.
 Spawn mikai-executor to implement it; do not implement it yourself.
