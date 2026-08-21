@@ -276,7 +276,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       durationSeconds: shot.durationSeconds,
       description: shot.description,
       actionPitch: shot.actionPitch,
-      cameraPitch: shot.cameraPitch,
+      cameraPitch: shot.cameraSubject,
       framing: shot.shotSize,
       cameraMovement: shot.cameraMovement,
     },
@@ -303,7 +303,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     }),
   });
 
-  const actionCamera = [shot.actionPitch, shot.cameraPitch]
+  const actionCamera = [shot.actionPitch, shot.cameraSubject]
     .filter((v): v is string => Boolean(v?.trim()))
     .map((v) => v.trim())
     .join("\n");

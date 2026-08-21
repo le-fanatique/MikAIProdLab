@@ -249,7 +249,8 @@ export type GeneratedAssetBibleDraft = {
 export type GeneratedShotRetakeDraft = {
   description: string;
   actionPitch: string;
-  cameraPitch: string;
+  /** B19h — was `cameraPitch`, removed with its column. `cameraSubject` is the prose camera field now. */
+  cameraSubject: string;
 };
 
 /** Draft output for "Retake Asset Description (Directed)" (LLMW.UC3.SURFACE.1) — `output.require: "all"`, so unlike `GeneratedShotRetakeDraft` the single field is never blank. */

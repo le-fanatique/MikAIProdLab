@@ -30,7 +30,6 @@ function contextWith(overrides: Partial<Parameters<typeof buildPromptCompilation
     shot: {
       title: "Rooftop standoff",
       actionPitch: "Mara steps out of cover.",
-      cameraPitch: "slow push in",
       shotPrompt: "Mara stands on the rooftop, city behind her.",
       durationSeconds: 5,
     },
@@ -59,7 +58,7 @@ function inputWith(
 ): StoryboardShotCompositionInput {
   return {
     context: contextWith(),
-    continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "static", movementSpeed: null, cameraSubject: null, cameraLens: null},
+    continuity: { shotSize: "WS", cameraPosition: "Low Angle", cameraMovement: "static", movementSpeed: null, cameraSubject: null, cameraLens: null },
     projectStyle: "Grainy anamorphic, muted palette.",
     lighting: "Cold blue screen glow.",
     ...overrides,
@@ -86,7 +85,7 @@ describe("composeStoryboardShot", () => {
 
     expect(text).toContain("Mara");
     expect(text).toContain("Cropped hair, scarred jaw.");
-    expect(text).toContain("slow push in");
+    expect(text).toContain("Low Angle");
     expect(text).toContain("Rooftop, dusk");
     expect(text).toContain("Tense");
     expect(text).toContain("Grainy anamorphic, muted palette.");
@@ -268,36 +267,4 @@ describe("composeStoryboardShot", () => {
     );
   });
 
-  it("falls back to the legacy cameraPitch only while cameraPosition is empty, never alongside it", () => {
-    const withAxis = composeStoryboardShot(
-      inputWith({
-        continuity: {
-          shotSize: "WS",
-          cameraPosition: "Low Angle",
-          cameraMovement: null,
-          movementSpeed: null,
-          cameraSubject: null, cameraLens: null
-        },
-      })
-    ).parts.find((p) => p.id === "camera");
-
-    const withoutAxis = composeStoryboardShot(
-      inputWith({
-        continuity: {
-          shotSize: "WS",
-          cameraPosition: null,
-          cameraMovement: null,
-          movementSpeed: null,
-          cameraSubject: null, cameraLens: null
-        },
-      })
-    ).parts.find((p) => p.id === "camera");
-
-    // The fixture's shot carries `cameraPitch: "slow push in"`. It stands in
-    // when the axis is empty — 88 shots hold their only angle there until
-    // B19f converts them — and disappears the moment the axis is filled, so
-    // the angle is never stated twice in two vocabularies.
-    expect(withAxis?.text).toBe("WS — Low Angle");
-    expect(withoutAxis?.text).toBe("WS — slow push in");
-  });
 });

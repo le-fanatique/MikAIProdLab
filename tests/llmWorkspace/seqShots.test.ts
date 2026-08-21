@@ -70,7 +70,7 @@ describe("renderSeqShotsOtherShotsLines — current-shot exclusion", () => {
     shotCode: null,
     description: null,
     actionPitch: null,
-    cameraPitch: null,
+    cameraSubject: null,
     framing: null,
     cameraMovement: null,
     durationSeconds: null,

@@ -183,13 +183,13 @@ describe("buildShotRetakeCommitArgs — shot.retakeDirected → updateShotNarrat
       shotId: 1,
       sequenceId: 2,
       projectId: 3,
-      existing: { description: "Existing description", actionPitch: "Existing action", cameraPitch: "Existing camera" },
-      applied: { description: "", actionPitch: "A new action pitch", cameraPitch: "" },
+      existing: { description: "Existing description", actionPitch: "Existing action", cameraSubject: "Existing camera" },
+      applied: { description: "", actionPitch: "A new action pitch", cameraSubject: "" },
     });
 
     expect(data.description).toBe("Existing description");
     expect(data.actionPitch).toBe("A new action pitch");
-    expect(data.cameraPitch).toBe("Existing camera");
+    expect(data.cameraSubject).toBe("Existing camera");
   });
 
   it("treats a whitespace-only applied field as unproposed too", () => {
@@ -197,13 +197,13 @@ describe("buildShotRetakeCommitArgs — shot.retakeDirected → updateShotNarrat
       shotId: 1,
       sequenceId: 2,
       projectId: 3,
-      existing: { description: "Existing", actionPitch: null, cameraPitch: null },
-      applied: { description: "   ", actionPitch: "", cameraPitch: "" },
+      existing: { description: "Existing", actionPitch: null, cameraSubject: null },
+      applied: { description: "   ", actionPitch: "", cameraSubject: "" },
     });
 
     expect(data.description).toBe("Existing");
     expect(data.actionPitch).toBeNull();
-    expect(data.cameraPitch).toBeNull();
+    expect(data.cameraSubject).toBeNull();
   });
 
   it("applies a proposed field, trimmed", () => {
@@ -211,8 +211,8 @@ describe("buildShotRetakeCommitArgs — shot.retakeDirected → updateShotNarrat
       shotId: 1,
       sequenceId: 2,
       projectId: 3,
-      existing: { description: "Old", actionPitch: "Old", cameraPitch: "Old" },
-      applied: { description: "  New description  ", actionPitch: "Old", cameraPitch: "Old" },
+      existing: { description: "Old", actionPitch: "Old", cameraSubject: "Old" },
+      applied: { description: "  New description  ", actionPitch: "Old", cameraSubject: "Old" },
     });
 
     expect(data.description).toBe("New description");
@@ -223,11 +223,11 @@ describe("buildShotRetakeCommitArgs — shot.retakeDirected → updateShotNarrat
       shotId: 1,
       sequenceId: 2,
       projectId: 3,
-      existing: { description: null, actionPitch: null, cameraPitch: null },
-      applied: { description: "", actionPitch: "", cameraPitch: "" },
+      existing: { description: null, actionPitch: null, cameraSubject: null },
+      applied: { description: "", actionPitch: "", cameraSubject: "" },
     });
 
-    expect(data).toEqual({ description: null, actionPitch: null, cameraPitch: null });
+    expect(data).toEqual({ description: null, actionPitch: null, cameraSubject: null });
   });
 
   it("passes shotId/sequenceId/projectId through positionally, unchanged", () => {
@@ -235,8 +235,8 @@ describe("buildShotRetakeCommitArgs — shot.retakeDirected → updateShotNarrat
       shotId: 42,
       sequenceId: 7,
       projectId: 3,
-      existing: { description: null, actionPitch: null, cameraPitch: null },
-      applied: { description: "d", actionPitch: "a", cameraPitch: "c" },
+      existing: { description: null, actionPitch: null, cameraSubject: null },
+      applied: { description: "d", actionPitch: "a", cameraSubject: "c" },
     });
 
     expect(shotId).toBe(42);

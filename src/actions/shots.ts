@@ -21,12 +21,6 @@ export async function createShot(
   const durationRaw = formData.get("duration_seconds") as string;
   const durationSeconds = durationRaw ? parseFloat(durationRaw) : null;
   const actionPitch = (formData.get("action_pitch") as string) || null;
-  // B19c — Camera Pitch is now a legacy, read-only field on the Shot form
-  // (src/components/CameraVocabularyField.tsx's siblings on both shot
-  // pages): it has no more `<input name="camera_pitch">` to submit, so a
-  // new shot never has one to insert. The four camera vocabulary axes below
-  // replace it going forward.
-  const cameraPitch = null;
   const continuityNotes = (formData.get("continuity_notes") as string) || null;
   const framing = (formData.get("framing") as string) || null;
   const cameraMovement = (formData.get("camera_movement") as string) || null;
@@ -59,7 +53,7 @@ export async function createShot(
     resolvedShotCode = generateNextCode(shotTemplate, existingCodes.map((r) => r.shotCode));
   }
 
-  const shotPrompt = resolveShotPromptWithDefault({ description, actionPitch, cameraPitch });
+  const shotPrompt = resolveShotPromptWithDefault({ description, actionPitch, cameraPitch: null });
 
   await db.insert(shots).values({
     sequenceId,
@@ -68,7 +62,6 @@ export async function createShot(
     description,
     durationSeconds,
     actionPitch,
-    cameraPitch,
     continuityNotes,
     shotSize: framing,
     cameraMovement,
@@ -121,23 +114,15 @@ export async function updateShot(
 
   if (!title?.trim()) return;
 
-  // B19c — Camera Pitch is now legacy and read-only on the Edit Shot form:
-  // it no longer submits `camera_pitch`, so this action must not overwrite
-  // it with the absence of a field it never sent. `cameraPitch` is read here
-  // (never from formData) purely to keep `resolveShotPromptWithDefault`'s
-  // existing behavior for shots whose `shotPrompt` is still blank; it is
-  // deliberately left out of the `.set()` below so the column itself is
-  // never touched by this action anymore — the only way to honor both "no
-  // longer submitted" and "you don't delete camera_pitch nor its content".
   const [existing] = await db
-    .select({ shotPrompt: shots.shotPrompt, cameraPitch: shots.cameraPitch })
+    .select({ shotPrompt: shots.shotPrompt, cameraSubject: shots.cameraSubject })
     .from(shots)
     .where(eq(shots.id, id));
   const resolvedShotPrompt = resolveShotPromptWithDefault({
     shotPrompt: existing?.shotPrompt,
     description,
     actionPitch,
-    cameraPitch: existing?.cameraPitch,
+    cameraPitch: existing?.cameraSubject,
   });
 
   await db
@@ -172,7 +157,7 @@ export async function updateShot(
  * pattern exactly. updateShot (above) requires a non-empty title and
  * overwrites shotCode/duration/continuity/camera together, and always
  * redirects to Sequence Detail — unsuitable for an inline save that must
- * stay on Shot Detail and touch only description/actionPitch/cameraPitch.
+ * stay on Shot Detail and touch only description/actionPitch/cameraSubject.
  */
 export async function updateShotNarrativeContext(
   shotId: number,
@@ -181,7 +166,8 @@ export async function updateShotNarrativeContext(
   data: {
     description: string | null;
     actionPitch: string | null;
-    cameraPitch: string | null;
+    /** B19h — was `cameraPitch`, which no longer exists. `cameraSubject` is the prose camera field now. */
+    cameraSubject: string | null;
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {

@@ -480,7 +480,7 @@ describe("equality — shots.fromSequence via runWorkspaceOperation vs. the list
 
     // B19d: the real descriptor's camera fields are `shot_size` /
     // `camera_position` / `camera_movement` / `movement_speed` /
-    // `camera_subject` — `camera_pitch`/`framing` are gone. The synthetic
+    // `camera_subject` — `camera_subject`/`framing` are gone. The synthetic
     // descriptor's own `item.fields` below is kept an exact mirror of
     // `shotsFromSequenceDescriptor.output.item.fields`
     // (`descriptors/shotsFromSequence.ts`), which is this test's whole

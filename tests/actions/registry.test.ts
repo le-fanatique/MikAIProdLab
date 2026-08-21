@@ -252,7 +252,7 @@ describe("action registry — declared columns match the columns actually writte
     await shotsActions.updateShotNarrativeContext(shotId, sequenceId, projectId, {
       description: "d",
       actionPitch: "a",
-      cameraPitch: "c",
+      cameraSubject: "c",
     });
 
     const after = await readShot(ctx, shotId);
@@ -396,8 +396,8 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
         duration_seconds: 5,
         continuity_in: "ci1",
         action_pitch: "ap1",
-        camera_pitch: "cp1",
-        framing: "wide",
+        camera_subject: "cp1",
+        shot_size: "wide",
         camera_movement: "pan",
         continuity_out: "co1",
         shot_prompt: "sp1",
@@ -438,7 +438,7 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].description).toBe("d1");
     expect(created[0].durationSeconds).toBe(5);
     expect(created[0].actionPitch).toBe("ap1");
-    expect(created[0].cameraPitch).toBe("cp1");
+    expect(created[0].cameraSubject).toBe("cp1");
     expect(created[0].shotSize).toBe("wide");
     expect(created[0].cameraMovement).toBe("pan");
     expect(created[0].continuityIn).toBe("ci1");
@@ -954,7 +954,7 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
             shotCode: "MODEL_PROPOSED_CODE",
             description: "d",
             actionPitch: "ap",
-            cameraPitch: "cp",
+            cameraSubject: "cp",
           }),
         })
       )
@@ -972,11 +972,11 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
     expect(created.trimOutSeconds).toBeNull();
 
     // Declared columns match ACTION_REGISTRY.createShotAtPosition.columns.written.
-    // `cameraPitch` dropped (B19d): the descriptor no longer offers it to
+    // `cameraSubject` dropped (B19d): the descriptor no longer offers it to
     // the model, so this declaration — what a model-driven Approve
     // populates — no longer lists it. The action itself is unchanged (see
     // the two tests right below, which still prove it writes a raw
-    // `cameraPitch` key whole/truncated when a caller supplies one
+    // `cameraSubject` key whole/truncated when a caller supplies one
     // directly).
     expect([...ACTION_REGISTRY.createShotAtPosition.columns.written].sort()).toEqual(
       [
@@ -997,48 +997,48 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
     );
   });
 
-  // LLMW.UC1.TUNE.2 (S7b), défaut 2 — `normalizeProposedShot`'s cameraPitch
+  // LLMW.UC1.TUNE.2 (S7b), défaut 2 — `normalizeProposedShot`'s cameraSubject
   // bound, raised from 200 to 500 alongside the descriptor's own
   // `truncateTo: 500` (`shotInsertDirected.test.ts`'s own matching pair of
   // tests, on the descriptor side). Both sides accepting the same 400
   // characters whole, and cutting the same 600 at exactly 500, is the
   // equality this ticket requires — a divergence on either side would show
   // up here or there.
-  it("a 400-character cameraPitch is stored whole, not truncated (equal to the descriptor's own bound)", async () => {
+  it("a 250-character cameraSubject is stored whole, not truncated (equal to the descriptor's own bound)", async () => {
     const sequenceId = await insertSequence(ctx, projectId);
-    const value = "x".repeat(400);
+    const value = "x".repeat(250);
 
     await captureRedirect(() =>
       shotInsertionActions.createShotAtPosition(
         form({
           projectId: String(projectId),
           sequenceId: String(sequenceId),
-          shotJson: JSON.stringify({ title: "Long camera pitch", cameraPitch: value }),
+          shotJson: JSON.stringify({ title: "Long camera subject", cameraSubject: value }),
         })
       )
     );
 
     const rows = await orderedShots(sequenceId);
-    expect(rows[0].cameraPitch).toBe(value);
+    expect(rows[0].cameraSubject).toBe(value);
   });
 
-  it("a cameraPitch longer than 500 characters is cut at exactly 500, matching the descriptor's own bound", async () => {
+  it("a cameraSubject longer than 300 characters is cut at exactly 300, matching the descriptor's own bound", async () => {
     const sequenceId = await insertSequence(ctx, projectId);
-    const value = "y".repeat(600);
+    const value = "y".repeat(400);
 
     await captureRedirect(() =>
       shotInsertionActions.createShotAtPosition(
         form({
           projectId: String(projectId),
           sequenceId: String(sequenceId),
-          shotJson: JSON.stringify({ title: "Overlong camera pitch", cameraPitch: value }),
+          shotJson: JSON.stringify({ title: "Overlong camera subject", cameraSubject: value }),
         })
       )
     );
 
     const rows = await orderedShots(sequenceId);
-    expect(rows[0].cameraPitch).toBe(value.slice(0, 500));
-    expect(rows[0].cameraPitch?.length).toBe(500);
+    expect(rows[0].cameraSubject).toBe(value.slice(0, 300));
+    expect(rows[0].cameraSubject?.length).toBe(300);
   });
 
   it("refuses a non-integer projectId/sequenceId and writes nothing, shifts nothing", async () => {
@@ -1178,7 +1178,7 @@ describe("UC1 end to end — buildShotJsonPayload feeds createShotAtPosition (LL
       // The textarea round trip: a number the user re-typed as text.
       durationSeconds: "4",
       actionPitch: "Hero walks in, pauses, walks out.",
-      cameraPitch: "Low angle, static.",
+      cameraSubject: "Low angle, static.",
       continuityNotes: "Picks up the previous shot's exit direction.",
       shotSize: "WS",
       cameraMovement: "static",

@@ -353,7 +353,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       durationSeconds: shot.durationSeconds,
       description: shot.description,
       actionPitch: shot.actionPitch,
-      cameraPitch: shot.cameraPitch,
+      // B19h — the local contract keeps its name; its source is now the surviving prose column.
+      cameraPitch: shot.cameraSubject,
       framing: shot.shotSize,
       cameraMovement: shot.cameraMovement,
     },
@@ -387,7 +388,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const defaultPromptProposal = buildDefaultShotPromptProposal({
     description: shot.description,
     actionPitch: shot.actionPitch,
-    cameraPitch: shot.cameraPitch,
+    cameraPitch: shot.cameraSubject,
   });
 
   const composerIngredients: string[] = [];
@@ -410,9 +411,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       `Action: ${shot.actionPitch.slice(0, 60)}${shot.actionPitch.length > 60 ? "…" : ""}`
     );
   }
-  if (shot.cameraPitch) {
+  if (shot.cameraSubject) {
     composerIngredients.push(
-      `Camera: ${shot.cameraPitch.slice(0, 60)}${shot.cameraPitch.length > 60 ? "…" : ""}`
+      `Camera: ${shot.cameraSubject.slice(0, 60)}${shot.cameraSubject.length > 60 ? "…" : ""}`
     );
   }
   if (shot.shotSize) {
@@ -424,7 +425,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
   const hasNarrativeContext = Boolean(
     sequence.summary || sequence.narrativePurpose || sequence.mood || sequence.locationHint ||
-    shot.description || shot.actionPitch || shot.cameraPitch
+    shot.description || shot.actionPitch || shot.cameraSubject
   );
   const hasContinuity = Boolean(shot.continuityIn || shot.continuityOut || shot.continuityNotes);
   const hasCamera = Boolean(shot.shotSize || shot.cameraMovement);
@@ -731,7 +732,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                   </div>
                 )}
               </div>
-              {(shot.description || shot.actionPitch || shot.cameraPitch) && (
+              {(shot.description || shot.actionPitch || shot.cameraSubject) && (
                 <>
                   <div className="border-t border-[#1a1d20]" />
                   <ShotNarrativeContextEditor
@@ -740,7 +741,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
                     projectId={pid}
                     description={shot.description}
                     actionPitch={shot.actionPitch}
-                    cameraPitch={shot.cameraPitch}
+                    cameraSubject={shot.cameraSubject}
                   />
                 </>
               )}
@@ -851,7 +852,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
         </Card>
 
         {/* LLMW.UC2.RETAKE.1 (B9b) — directed retake of the narrative
-            fields (description/actionPitch/cameraPitch), next to the
+            fields (description/actionPitch/cameraSubject), next to the
             existing Shot Prompt LLM Assist above; that assistant stays
             untouched. */}
         <Card title="Directed Retake">
@@ -864,7 +865,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             shotId={shid}
             description={shot.description}
             actionPitch={shot.actionPitch}
-            cameraPitch={shot.cameraPitch}
+            cameraSubject={shot.cameraSubject}
           />
         </Card>
 

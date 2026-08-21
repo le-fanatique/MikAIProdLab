@@ -82,8 +82,8 @@ describe("assetDescription.generate descriptor — strict prompt equality", () =
         { title: "Sequence 1", summary: null, mood: null, locationHint: null, narrativePurpose: null },
       ],
       shots: [
-        { shotCode: "S1", title: "Arrival", description: "Description text".repeat(10), actionPitch: "Runs".repeat(10), cameraPitch: "Tracking".repeat(10) },
-        { shotCode: null, title: "Reveal", description: null, actionPitch: null, cameraPitch: null },
+        { shotCode: "S1", title: "Arrival", description: "Description text".repeat(10), actionPitch: "Runs".repeat(10), cameraSubject: "Tracking".repeat(10) },
+        { shotCode: null, title: "Reveal", description: null, actionPitch: null, cameraSubject: null },
       ],
       refs: [
         { label: "Front view", imageRole: "reference", sourceFilename: "front.png" },

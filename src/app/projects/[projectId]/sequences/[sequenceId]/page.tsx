@@ -774,7 +774,7 @@ npx -y pnpm@11.7.0 dev`}
                         <span className="line-clamp-2 text-xs">{shot.actionPitch ?? "—"}</span>
                       </td>
                       <td className="px-4 py-3 text-[#6e767d] hidden lg:table-cell max-w-xs">
-                        <span className="line-clamp-2 text-xs">{shot.cameraPitch ?? "—"}</span>
+                        <span className="line-clamp-2 text-xs">{shot.cameraSubject ?? "—"}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-[#6e767d] font-mono text-xs">
                         {shot.durationSeconds != null ? `${shot.durationSeconds}s` : "—"}

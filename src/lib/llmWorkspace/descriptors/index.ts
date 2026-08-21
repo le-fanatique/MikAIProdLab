@@ -22,7 +22,6 @@ import { shotInsertDirectedDescriptor } from "./shotInsertDirected";
 import { shotsFromSequenceDescriptor } from "./shotsFromSequence";
 import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 import { assetsFromProjectDescriptor } from "./assetsFromProject";
-import { cameraConvertDescriptor } from "./cameraConvert";
 import { castingFromSequenceDescriptor } from "./castingFromSequence";
 import { narrativePromptComposeDescriptor } from "./narrativePrompt";
 import { lightingFromImageDescriptor } from "./lightingFromImage";
@@ -44,7 +43,6 @@ export const DESCRIPTORS = {
   "shots.fromSequence": shotsFromSequenceDescriptor,
   "sequences.fromOutline": sequencesFromOutlineDescriptor,
   "assets.fromProject": assetsFromProjectDescriptor,
-  "camera.convertLegacy": cameraConvertDescriptor,
   "casting.fromSequence": castingFromSequenceDescriptor,
   "narrativePrompt.compose": narrativePromptComposeDescriptor,
   "lighting.fromImage": lightingFromImageDescriptor,
@@ -67,7 +65,6 @@ export {
   shotsFromSequenceDescriptor,
   sequencesFromOutlineDescriptor,
   assetsFromProjectDescriptor,
-  cameraConvertDescriptor,
   castingFromSequenceDescriptor,
   narrativePromptComposeDescriptor,
   lightingFromImageDescriptor,

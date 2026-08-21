@@ -28,7 +28,6 @@ import {
   updateShotLighting,
 } from "@/actions/shots";
 import { updateSequencePrompt, updateSequenceLighting } from "@/actions/sequences";
-import { applyCameraConversions } from "@/actions/llm/cameraConversion";
 import { applyGeneratedStory } from "@/actions/llm/story";
 import { applyGeneratedOutline } from "@/actions/llm/outlineGeneration";
 // LLMW.ACTION.INSERT.1 (B7c-w) — the three insert-operation actions. Same
@@ -70,5 +69,4 @@ export const ACTION_BINDINGS = {
   updateShotLighting,
   updateSequenceLighting,
   updateAssetLightingInline,
-  applyCameraConversions,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

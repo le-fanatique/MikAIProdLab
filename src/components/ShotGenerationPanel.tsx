@@ -262,7 +262,7 @@ export default async function ShotGenerationPanel({
             durationSeconds: shot.durationSeconds,
             description: shot.description,
             actionPitch: shot.actionPitch,
-            cameraPitch: shot.cameraPitch,
+            cameraPitch: shot.cameraSubject,
             framing: shot.shotSize,
             cameraMovement: shot.cameraMovement,
           },
@@ -290,7 +290,7 @@ export default async function ShotGenerationPanel({
         })
       : null;
 
-  const actionCamera = [shot.actionPitch, shot.cameraPitch]
+  const actionCamera = [shot.actionPitch, shot.cameraSubject]
     .filter((v): v is string => Boolean(v?.trim()))
     .map((v) => v.trim())
     .join("\n");

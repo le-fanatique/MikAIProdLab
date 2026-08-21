@@ -195,13 +195,10 @@ export function composeStoryboardShot(
     [nonEmpty(continuity.movementSpeed), nonEmpty(continuity.cameraMovement)],
     " "
   );
-  // Precedence, not accumulation: the Shot's own axis wins, and the legacy
-  // free-text field stands in only while that axis is empty. The instruction
-  // that filled 88 shots asked for "camera angle, lens, position" in
-  // `cameraPitch`, so it is their only angle until B19f converts them — and
-  // this fallback disables itself, shot by shot, as the axis fills. Adding
-  // both would state the angle twice, in two vocabularies.
-  const position = nonEmpty(continuity.cameraPosition) ?? nonEmpty(shot.cameraPitch);
+  // B19h — no fallback any more. It read the legacy free-text camera field
+  // while `cameraPosition` was empty, and existed only for the conversion
+  // period: that column is gone, and all ten sequences are converted.
+  const position = nonEmpty(continuity.cameraPosition);
   const cameraPhrases = [
     nonEmpty(continuity.shotSize),
     position,

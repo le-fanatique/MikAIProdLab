@@ -258,8 +258,8 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
   // `duration_seconds` already had. Existing rules stay put — checked by
   // every assertion above still passing unchanged.
   //
-  // "that belongs to camera_pitch for the camera" -> "that belongs to the
-  // camera fields above" (B19d): `camera_pitch` no longer exists as an
+  // "that belongs to camera_subject for the camera" -> "that belongs to the
+  // camera fields above" (B19d): `camera_subject` no longer exists as an
   // output field, so the rule now points at the five camera fields as a
   // group rather than naming a field that is gone.
   it("the system message rules action_pitch as visible action, not the directive's own intention (LLMW.UC1.TUNE.3, wording updated by B19d)", async () => {
@@ -324,8 +324,8 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
 });
 
 // ---------------------------------------------------------------------------
-// LLMW.UC1.TUNE.2 (S7b), défaut 2 — originally `cameraPitch`'s bound, raised
-// from 200 to 500. B19d removes `cameraPitch` from this descriptor entirely
+// LLMW.UC1.TUNE.2 (S7b), défaut 2 — originally `cameraSubject`'s bound, raised
+// from 200 to 500. B19d removes `cameraSubject` from this descriptor entirely
 // (B19c had already made the column read-only; no model writes it any
 // more), so the field this describe block proved a bound for is gone. The
 // equivalent proof now belongs to `cameraSubject` (B19d): the one camera
@@ -337,7 +337,7 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
 // ticket and does not read `cameraSubject` at all — see
 // `.agents/executor_report.md` for that gap.
 // ---------------------------------------------------------------------------
-describe("shot.insertDirected — camera field bounds (B19d, was cameraPitch bound LLMW.UC1.TUNE.2)", () => {
+describe("shot.insertDirected — camera field bounds (B19d, was cameraSubject bound LLMW.UC1.TUNE.2)", () => {
   it("the descriptor declares cameraSubject's truncateTo as 300, and every palette camera field's as 50", () => {
     const output = shotInsertDirectedDescriptor.output;
     if (output.kind !== "object") throw new Error("unreachable");
@@ -353,10 +353,6 @@ describe("shot.insertDirected — camera field bounds (B19d, was cameraPitch bou
     expect(byField("movementSpeed").truncateTo).toBe(50);
   });
 
-  it("cameraPitch is no longer a declared output field", () => {
-    if (shotInsertDirectedDescriptor.output.kind !== "object") throw new Error("unreachable");
-    expect(shotInsertDirectedDescriptor.output.fields.find((f) => f.field === "cameraPitch")).toBeUndefined();
-  });
 
   it("a 250-character camera_subject survives the runner whole, no truncation", async () => {
     const value = "x".repeat(250);
@@ -377,18 +373,9 @@ describe("shot.insertDirected — camera field bounds (B19d, was cameraPitch bou
     expect((result.values.cameraSubject as string).length).toBe(300);
   });
 
-  // A raw `camera_pitch` key from the model is now simply ignored — no
+  // A raw `camera_subject` key from the model is now simply ignored — no
   // declared field reads it, so it is dropped like any other undeclared
   // key, not an error.
-  it("a raw camera_pitch key from the model is silently ignored, not surfaced anywhere on the result", async () => {
-    mockedLLM().mockResolvedValueOnce(
-      JSON.stringify({ title: "Shot", camera_pitch: "Low angle, static." })
-    );
-    const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
-    expect(result.ok).toBe(true);
-    if (!result.ok || result.kind !== "object") throw new Error("unreachable");
-    expect("cameraPitch" in result.values).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -396,7 +383,7 @@ describe("shot.insertDirected — camera field bounds (B19d, was cameraPitch bou
 // the reason S7c created: a rule asking for "who does what, in what order"
 // produces a beat-by-beat action where one sentence of intent used to sit,
 // and the first real run under that rule came back cut mid-word at 300. Same
-// shape as the `cameraPitch` block above, including the equality against
+// shape as the `cameraSubject` block above, including the equality against
 // `normalizeProposedShot`'s own bound — the two truncate the same field on
 // two sides of one Approve, and a gap between them means one silently cuts
 // what the other would have kept.
@@ -541,7 +528,7 @@ describe("shot.insertDirected — chain refusal", () => {
 });
 
 describe("shot.insertDirected — output parsing", () => {
-  // B19d — the shape changed, and the count with it. `camera_pitch` is gone:
+  // B19d — the shape changed, and the count with it. `camera_subject` is gone:
   // the model no longer authors it (the form made it read-only in B19c, and
   // B19f will convert what 88 shots still hold). In its place the three axes
   // that never existed — position, speed, and the subject the move targets,

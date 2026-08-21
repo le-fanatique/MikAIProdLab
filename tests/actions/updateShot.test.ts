@@ -41,7 +41,7 @@ function fullShotForm(shot: Awaited<ReturnType<typeof readShot>>, overrides: Rec
     description: shot.description ?? "",
     duration_seconds: shot.durationSeconds != null ? String(shot.durationSeconds) : "",
     action_pitch: shot.actionPitch ?? "",
-    camera_pitch: shot.cameraPitch ?? "",
+    camera_subject: shot.cameraSubject ?? "",
     continuity_notes: shot.continuityNotes ?? "",
     framing: shot.shotSize ?? "",
     camera_movement: shot.cameraMovement ?? "",
@@ -92,7 +92,7 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
       lighting: "At the start the character is in shadow, at the end lit by the screens",
       description: "Untouched description",
       // `updateShot` recomputes `shotPrompt` from description/actionPitch/
-      // cameraPitch whenever the existing `shotPrompt` is blank
+      // cameraSubject whenever the existing `shotPrompt` is blank
       // (resolveShotPromptWithDefault) — pre-existing behaviour, unrelated
       // to this ticket. Set to the value that recomputation would produce so
       // this test's changedColumns assertion is about `lighting` alone, not
@@ -132,36 +132,36 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
 });
 
 // ---------------------------------------------------------------------------
-// B19c — camera_pitch is now a read-only legacy field: the Edit Shot form no
-// longer has an `<input name="camera_pitch">` to submit at all (unlike
+// B19c — camera_subject is now a read-only legacy field: the Edit Shot form no
+// longer has an `<input name="camera_subject">` to submit at all (unlike
 // `lighting` above, this is not "submitted blank", the field is simply
 // absent from the FormData a real browser POST produces). `updateShot`'s
-// `.set()` deliberately omits `cameraPitch` so the column survives every
+// `.set()` deliberately omits `cameraSubject` so the column survives every
 // save — this guards that omission: it is the only trace of angle/position
-// on 88 pre-B19b shots, and a `cameraPitch: null` (or any other value) added
+// on 88 pre-B19b shots, and a `cameraSubject: null` (or any other value) added
 // back to that `.set()` would silently wipe it with no test failure to catch
 // it, since every other test in this file goes through `fullShotForm`, which
 // happens to always resend the field's own current value and would hide
 // exactly this regression.
 // ---------------------------------------------------------------------------
 
-describe("updateShot — camera_pitch survives a save that no longer submits it (B19c)", () => {
-  it("does not clear camera_pitch when the submitted FormData has no camera_pitch field at all", async () => {
+describe("updateShot — camera_subject survives a save that no longer submits it (B19c)", () => {
+  it("does not clear camera_subject when the submitted FormData has no camera_subject field at all", async () => {
     const shotId = await insertShot(ctx, sequenceId, {
       title: "Shot D",
-      cameraPitch: "35mm, low angle, slight tilt",
+      cameraSubject: "35mm, low angle, slight tilt",
       // Non-blank so `updateShot`'s own resolveShotPromptWithDefault keeps
-      // it as-is rather than recomputing a proposal from cameraPitch — an
+      // it as-is rather than recomputing a proposal from cameraSubject — an
       // unrelated pre-existing behaviour this test must not become about.
       shotPrompt: "Shot D unedited prompt",
     });
     const before = await readShot(ctx, shotId);
-    expect(before.cameraPitch).toBe("35mm, low angle, slight tilt");
+    expect(before.cameraSubject).toBe("35mm, low angle, slight tilt");
 
     // The exact shape of a real Edit Shot form submit today: every field
-    // below except camera_pitch, since that input no longer exists on the
+    // below except camera_subject, since that input no longer exists on the
     // page. Built by hand rather than through fullShotForm/`form()` with an
-    // override, precisely so nothing appends a `camera_pitch` key (even an
+    // override, precisely so nothing appends a `camera_subject` key (even an
     // empty one) to this FormData.
     const submitted = new FormData();
     submitted.append("shot_code", before.shotCode ?? "");
@@ -182,7 +182,7 @@ describe("updateShot — camera_pitch survives a save that no longer submits it 
     await captureShotRedirect(() => updateShot(shotId, sequenceId, projectId, submitted));
 
     const after = await readShot(ctx, shotId);
-    expect(after.cameraPitch).toBe("35mm, low angle, slight tilt");
+    expect(after.cameraSubject).toBe("35mm, low angle, slight tilt");
     expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual([]);
   });
 });

@@ -65,7 +65,7 @@ beforeAll(async () => {
     shotCode: "SH01",
     description: "The hero steps into frame.",
     actionPitch: "Walks forward, looks up.",
-    cameraPitch: "Slow push-in.",
+    cameraSubject: "Slow push-in.",
     shotSize: "Medium shot",
     cameraMovement: "Dolly",
     durationSeconds: 4,

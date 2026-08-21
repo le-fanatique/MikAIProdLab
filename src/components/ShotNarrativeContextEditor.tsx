@@ -22,12 +22,12 @@ type Props = {
   projectId: number;
   description: string | null;
   actionPitch: string | null;
-  cameraPitch: string | null;
+  cameraSubject: string | null;
 };
 
 /**
  * Inline editor for Shot Detail's Narrative Context text fields
- * (UX.POLISH.2) — description/actionPitch/cameraPitch only, not the
+ * (UX.POLISH.2) — description/actionPitch/cameraSubject only, not the
  * parent sequence's own context (read-only here, editable from Sequence
  * Detail instead) and not continuity/camera fields (separate Cards, out
  * of this ticket's scope).
@@ -38,7 +38,7 @@ export default function ShotNarrativeContextEditor({
   projectId,
   description: initialDescription,
   actionPitch: initialActionPitch,
-  cameraPitch: initialCameraPitch,
+  cameraSubject: initialCameraPitch,
 }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -47,7 +47,7 @@ export default function ShotNarrativeContextEditor({
 
   const [description, setDescription] = useState(initialDescription ?? "");
   const [actionPitch, setActionPitch] = useState(initialActionPitch ?? "");
-  const [cameraPitch, setCameraPitch] = useState(initialCameraPitch ?? "");
+  const [cameraSubject, setCameraPitch] = useState(initialCameraPitch ?? "");
 
   async function handleSave() {
     setSaving(true);
@@ -55,7 +55,7 @@ export default function ShotNarrativeContextEditor({
     const result = await updateShotNarrativeContext(shotId, sequenceId, projectId, {
       description: description.trim() || null,
       actionPitch: actionPitch.trim() || null,
-      cameraPitch: cameraPitch.trim() || null,
+      cameraSubject: cameraSubject.trim() || null,
     });
     if (result.ok) {
       setSaving(false);
@@ -133,14 +133,14 @@ export default function ShotNarrativeContextEditor({
           Camera Pitch
         </span>
         <textarea
-          value={cameraPitch}
+          value={cameraSubject}
           onChange={(e) => setCameraPitch(e.target.value)}
           rows={2}
           disabled={saving}
           className="rounded border border-[#2c3035] bg-[#0e1013] text-sm text-[#e7e9ec] placeholder-[#3a4046] px-2.5 py-1.5 resize-y focus:outline-none focus:border-[#3a4046] disabled:opacity-60"
         />
         <TextFieldTranslationButton
-          getSourceText={() => cameraPitch}
+          getSourceText={() => cameraSubject}
           disabled={saving}
         />
       </div>

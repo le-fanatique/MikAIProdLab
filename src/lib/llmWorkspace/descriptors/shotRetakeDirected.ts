@@ -15,8 +15,14 @@
 //
 // §0bis (the user's 2026-08-15 arbitrage): the write side is
 // `updateShotNarrativeContext` (`src/actions/shots.ts:132`) — description,
-// actionPitch, cameraPitch only. `shotSize`/`cameraMovement` are read nowhere
-// here and never written. `updateShot` is not used.
+// actionPitch, and the prose camera field. `updateShot` is not used.
+//
+// B19h moved that third field from `cameraPitch` to `cameraSubject`. The
+// capability is unchanged — the director still says "make the camera do X" and
+// the operation rewrites one prose camera field — but `cameraPitch` is being
+// removed, and `cameraSubject` *is* the prose camera field now. The JSON key
+// changes with it, which is safe here and was not in B19b: the instruction
+// that produces the key is rewritten in the same edit.
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
@@ -49,16 +55,16 @@ export const shotRetakeDirectedDescriptor: OperationDescriptor = {
         { text: SHOT_RETAKE_SYSTEM_INTRO },
         {
           text: `Rules:
-- Fill in every field the director's direction below actually concerns. If the direction asks for a new action and a new camera approach, both action_pitch and camera_pitch must carry new values — do not stop at one when the direction names several.
+- Fill in every field the director's direction below actually concerns. If the direction asks for a new action and a new camera approach, both action_pitch and camera_subject must carry new values — do not stop at one when the direction names several.
 - Leave a field empty only when the direction says nothing about it. An empty string means "unchanged", not "skip this one" — it is not a shortcut for a field the direction does address.
 - Do not repeat the current value in a field you are leaving unchanged; return an empty string for it instead.
 - Stay grounded in the Shot's own context and the director's direction below — do not invent new characters, locations, or story facts.
-- camera_pitch is prose describing the intended camera approach (angle, movement, framing intent) — not the technical Framing/Camera Movement fields, which this operation never touches.
+- camera_subject is prose naming who or what the camera follows, and where the move starts and ends. It does not restate the Shot Size, Camera Position, Camera Movement or Movement Speed fields, which hold those on their own and which this operation never touches.
 - Write in English.`,
         },
         {
           text: `Always respond with a valid JSON object matching exactly this schema:
-{ "description": "<updated shot description, or empty string if the direction does not concern this field>", "action_pitch": "<updated action pitch, or empty string if the direction does not concern this field>", "camera_pitch": "<updated camera pitch, or empty string if the direction does not concern this field>" }
+{ "description": "<updated shot description, or empty string if the direction does not concern this field>", "action_pitch": "<updated action pitch, or empty string if the direction does not concern this field>", "camera_subject": "<updated camera subject: who the camera follows, from where to where — or empty string if the direction does not concern this field>" }
 No markdown. No explanation. Only the JSON object.`,
         },
       ],
@@ -111,7 +117,7 @@ No markdown. No explanation. Only the JSON object.`,
     fields: [
       { type: "string", field: "description", jsonKey: "description" },
       { type: "string", field: "actionPitch", jsonKey: "action_pitch" },
-      { type: "string", field: "cameraPitch", jsonKey: "camera_pitch" },
+      { type: "string", field: "cameraSubject", jsonKey: "camera_subject" },
     ],
     // §4.3 of the ticket: the model may legitimately leave a field empty —
     // the retake only has to touch what the director actually complained

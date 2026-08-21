@@ -1,0 +1,1 @@
+ALTER TABLE `shots` DROP COLUMN `camera_pitch`;

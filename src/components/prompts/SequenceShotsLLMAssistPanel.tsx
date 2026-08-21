@@ -40,9 +40,12 @@ function toShot(item: Record<string, string | number | boolean>): GeneratedSeque
     duration_seconds: durationRaw ?? null,
     continuity_in: strField("continuity_in"),
     action_pitch: strField("action_pitch"),
-    camera_pitch: strField("camera_pitch"),
-    framing: strField("framing"),
+    shot_size: strField("shot_size"),
+    camera_position: strField("camera_position"),
     camera_movement: strField("camera_movement"),
+    movement_speed: strField("movement_speed"),
+    camera_subject: strField("camera_subject"),
+    camera_lens: strField("camera_lens"),
     continuity_out: strField("continuity_out"),
     shot_prompt: strField("shot_prompt"),
   };
@@ -212,16 +215,16 @@ export default function SequenceShotsLLMAssistPanel({
                         <span className="text-[#6e767d]">{shot.action_pitch}</span>
                       </span>
                     )}
-                    {shot.camera_pitch && (
+                    {shot.camera_subject && (
                       <span>
                         <span className="text-[#4b5158]">Camera </span>
-                        <span className="text-[#6e767d]">{shot.camera_pitch}</span>
+                        <span className="text-[#6e767d]">{shot.camera_subject}</span>
                       </span>
                     )}
-                    {shot.framing && (
+                    {shot.shot_size && (
                       <span>
                         <span className="text-[#4b5158]">Framing </span>
-                        <span className="text-[#6e767d]">{shot.framing}</span>
+                        <span className="text-[#6e767d]">{shot.shot_size}</span>
                       </span>
                     )}
                     {shot.camera_movement && (

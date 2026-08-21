@@ -102,23 +102,6 @@ export default async function EditShotPage({ params }: Props) {
           rows={3}
           defaultValue={shot.actionPitch}
         />
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
-            Camera Pitch <span className="normal-case tracking-normal text-[#6e767d]">(legacy, read-only)</span>
-          </label>
-          <p className="text-[11px] text-[#6e767d]">
-            The former free-text camera field, kept until the conversion pass — the only trace
-            of angle this shot had before Shot Size, Camera Position, Camera Movement and
-            Movement Speed below. No longer editable here.
-          </p>
-          <input
-            type="text"
-            value={shot.cameraPitch ?? "—"}
-            disabled
-            readOnly
-            className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#6e767d] opacity-60"
-          />
-        </div>
         <FormField
           label="Continuity Notes"
           name="continuity_notes"

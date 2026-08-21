@@ -58,7 +58,6 @@ type ProposedShot = {
   description: string | null;
   durationSeconds: number | null;
   actionPitch: string | null;
-  cameraPitch: string | null;
   continuityNotes: string | null;
   shotSize: string | null;
   cameraPosition: string | null;
@@ -94,10 +93,6 @@ function normalizeProposedShot(raw: unknown): ProposedShot | null {
     // 300 -> 500 (S7d), in step with the descriptor's own `truncateTo` — the
     // two must stay equal, or one side truncates what the other accepts.
     actionPitch: str(r.actionPitch, 500),
-    // LLMW.UC1.TUNE.2 (S7b), défaut 2 — raised from 200 to 500, in step with
-    // `descriptors/shotInsertDirected.ts`'s own `truncateTo: 500`: the two
-    // bounds must stay equal, or one side truncates what the other accepts.
-    cameraPitch: str(r.cameraPitch, 500),
     continuityNotes: str(r.continuityNotes, 500),
     shotSize: str(r.shotSize, 50),
     cameraPosition: str(r.cameraPosition, 50),
@@ -183,7 +178,6 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
   const shotPrompt = resolveShotPromptWithDefault({
     description: proposed!.description,
     actionPitch: proposed!.actionPitch,
-    cameraPitch: proposed!.cameraPitch,
   });
 
   const targetIndex = afterShotOrderIndex === null ? 0 : afterShotOrderIndex + 1;
@@ -225,7 +219,6 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
         description: proposed!.description,
         durationSeconds: proposed!.durationSeconds,
         actionPitch: proposed!.actionPitch,
-        cameraPitch: proposed!.cameraPitch,
         continuityNotes: proposed!.continuityNotes,
         shotSize: proposed!.shotSize,
         cameraPosition: proposed!.cameraPosition,

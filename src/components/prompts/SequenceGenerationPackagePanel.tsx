@@ -18,7 +18,7 @@ type ShotRow = {
   title: string;
   description: string | null;
   actionPitch: string | null;
-  cameraPitch: string | null;
+  cameraSubject: string | null;
   shotSize: string | null;
   cameraMovement: string | null;
   continuityIn: string | null;
@@ -226,7 +226,7 @@ export default async function SequenceGenerationPackagePanel({
           title: s.title,
           description: s.description,
           actionPitch: s.actionPitch,
-          cameraPitch: s.cameraPitch,
+          cameraPitch: s.cameraSubject,
           durationSeconds: s.durationSeconds,
           shotPrompt: s.shotPrompt,
           compiledPromptSegments: hasPromptSegments ? compiledSegments.text : "",

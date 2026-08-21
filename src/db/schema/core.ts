@@ -65,7 +65,6 @@ export const shots = sqliteTable("shots", {
   description: text("description"),
   durationSeconds: real("duration_seconds"),
   actionPitch: text("action_pitch"),
-  cameraPitch: text("camera_pitch"),
   continuityNotes: text("continuity_notes"),
   shotSize: text("shot_size"),
   cameraMovement: text("camera_movement"),

@@ -88,7 +88,7 @@ beforeAll(async () => {
       shotCode: `S${i}`,
       description: `Shot description ${i}`,
       actionPitch: `Action ${i}`,
-      cameraPitch: `Camera ${i}`,
+      cameraSubject: `Camera ${i}`,
       orderIndex: i,
     });
     await ctx.db.insert(ctx.schema.shotAssets).values({ shotId, assetId });
@@ -101,7 +101,7 @@ beforeAll(async () => {
       shotCode: `S${i}`,
       description: `Shot description ${i}`,
       actionPitch: `Action ${i}`,
-      cameraPitch: `Camera ${i}`,
+      cameraSubject: `Camera ${i}`,
       orderIndex: i,
     });
     await ctx.db.insert(ctx.schema.shotAssets).values({ shotId, assetId });

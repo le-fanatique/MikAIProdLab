@@ -30,7 +30,7 @@ vi.mock("@/lib/llm", () => ({ callLLMJson: (...args: [unknown, unknown]) => call
 // A camera_subject longer than its declared bound (300, B19d — the one
 // palette-less field, its bound is wider than the palette axes') — the
 // runner's `truncateTo: 300` must cut it to exactly 300 characters, at the
-// same offset. `camera_pitch` is gone from the descriptor (B19c made it
+// same offset. `camera_subject` is gone from the descriptor (B19c made it
 // read-only, no model writes it any more); `framing` is now `shot_size`,
 // still bounded at 50.
 const longCameraSubject = "P".repeat(350);

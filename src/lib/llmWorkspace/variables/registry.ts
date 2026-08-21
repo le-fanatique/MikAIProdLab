@@ -330,7 +330,8 @@ export type ShotCoreData = {
   shotCode: string | null;
   description: string | null;
   actionPitch: string | null;
-  cameraPitch: string | null;
+  /** B19h — replaces `cameraPitch`, removed with its column. The prose camera field. */
+  cameraSubject: string | null;
   framing: string | null;
   cameraMovement: string | null;
   durationSeconds: number | null;
@@ -347,7 +348,7 @@ export async function resolveShotCore(shotId: number): Promise<ShotCoreData> {
     shotCode: shot.shotCode,
     description: shot.description,
     actionPitch: shot.actionPitch,
-    cameraPitch: shot.cameraPitch,
+    cameraSubject: shot.cameraSubject,
     framing: shot.shotSize,
     cameraMovement: shot.cameraMovement,
     durationSeconds: shot.durationSeconds,
@@ -728,86 +729,6 @@ export async function resolveSeqShotTargets(sequenceId: number): Promise<SeqShot
     .orderBy(asc(shots.orderIndex));
 }
 
-
-// ---------------------------------------------------------------------------
-// SEQ.SHOT_CAMERA — anchors: sequence. B19f. Every Shot of the sequence with
-// its camera fields, addressable by `id`.
-//
-// Kept apart from `SEQ.SHOT_TARGETS`, which carries narrative continuity and
-// no camera at all — one variable, one question. `cameraPitch` is projected
-// because it is the whole point: the instruction that filled these shots asked
-// for "camera angle, lens, position" in that single free-text field, so it
-// holds the only angle and placement 88 shots have.
-// ---------------------------------------------------------------------------
-
-export type SeqShotCameraEntry = {
-  id: number;
-  shotCode: string | null;
-  title: string;
-  cameraPitch: string | null;
-  shotSize: string | null;
-  cameraPosition: string | null;
-  cameraMovement: string | null;
-  movementSpeed: string | null;
-  cameraSubject: string | null;
-  cameraLens: string | null;
-};
-
-export async function resolveSeqShotCamera(sequenceId: number): Promise<SeqShotCameraEntry[]> {
-  const { db } = await import("@/db");
-  return db
-    .select({
-      id: shots.id,
-      shotCode: shots.shotCode,
-      title: shots.title,
-      cameraPitch: shots.cameraPitch,
-      shotSize: shots.shotSize,
-      cameraPosition: shots.cameraPosition,
-      cameraMovement: shots.cameraMovement,
-      movementSpeed: shots.movementSpeed,
-      cameraSubject: shots.cameraSubject,
-      cameraLens: shots.cameraLens,
-    })
-    .from(shots)
-    .where(eq(shots.sequenceId, sequenceId))
-    .orderBy(asc(shots.orderIndex));
-}
-
-/** Template: names the project and the sequence being converted. */
-export function renderCameraConvertHeader(
-  project: ProjectIdentityData,
-  seqIdentity: SeqIdentityData
-): string {
-  return [
-    `Project: ${project.name}`,
-    `SEQUENCE [ID: ${seqIdentity.id}]: ${seqIdentity.title}`,
-    "",
-    "Shots to convert:",
-  ].join("\n");
-}
-
-/** Template: one line per Shot, showing what it currently holds — the model converts from this, and the user reads the same thing back in the ProposalPanel. */
-export function renderCameraConvertShotLines(shots: SeqShotCameraEntry[]): string {
-  if (shots.length === 0) return "(this sequence has no shots)";
-  return shots
-    .map((s) => {
-      const label = s.shotCode ? `${s.shotCode} "${s.title}"` : `"${s.title}"`;
-      const held = [
-        s.shotSize ? `shot_size: ${s.shotSize}` : null,
-        s.cameraMovement ? `camera_movement: ${s.cameraMovement}` : null,
-        s.cameraPosition ? `camera_position: ${s.cameraPosition}` : null,
-      ]
-        .filter((v): v is string => v !== null)
-        .join(", ");
-      const legacy = (s.cameraPitch ?? "").trim();
-      return [
-        `- id ${s.id} — ${label}`,
-        held ? `  already set: ${held}` : "  already set: (nothing)",
-        legacy ? `  legacy camera text: ${legacy}` : "  legacy camera text: (none)",
-      ].join("\n");
-    })
-    .join("\n");
-}
 
 // ---------------------------------------------------------------------------
 // PROJECT.ASSET_LIBRARY — anchors: project. LLMW.VAR.CASTING.1 (B7h-b1). The
@@ -1475,7 +1396,7 @@ export type AssetShotAppearanceEntry = {
   title: string;
   description: string | null;
   actionPitch: string | null;
-  cameraPitch: string | null;
+  cameraSubject: string | null;
 };
 
 export async function resolveAssetShotAppearances(assetId: number): Promise<AssetShotAppearanceEntry[]> {
@@ -1486,7 +1407,7 @@ export async function resolveAssetShotAppearances(assetId: number): Promise<Asse
       title: shots.title,
       description: shots.description,
       actionPitch: shots.actionPitch,
-      cameraPitch: shots.cameraPitch,
+      cameraSubject: shots.cameraSubject,
     })
     .from(shotAssets)
     .innerJoin(shots, eq(shotAssets.shotId, shots.id))
@@ -1582,7 +1503,7 @@ export function renderAssetShotAppearancesLines(entries: AssetShotAppearanceEntr
     const parts: string[] = [`- ${label}`];
     if (s.description) parts.push(s.description.slice(0, 100));
     if (s.actionPitch) parts.push(`action: ${s.actionPitch.slice(0, 80)}`);
-    if (s.cameraPitch) parts.push(`camera: ${s.cameraPitch.slice(0, 80)}`);
+    if (s.cameraSubject) parts.push(`camera: ${s.cameraSubject.slice(0, 80)}`);
     lines.push(parts.join(" | "));
   }
   return lines.join("\n");
@@ -2000,7 +1921,7 @@ export function renderShotPromptGenerateContextLines(
   if (shot.durationSeconds != null) lines.push(`Duration: ${shot.durationSeconds}s`);
   if (shot.description?.trim()) lines.push(`Description: ${shot.description}`);
   if (shot.actionPitch?.trim()) lines.push(`Action: ${shot.actionPitch}`);
-  if (shot.cameraPitch?.trim()) lines.push(`Camera intent: ${shot.cameraPitch}`);
+  if (shot.cameraSubject?.trim()) lines.push(`Camera intent: ${shot.cameraSubject}`);
   if (shot.framing?.trim()) lines.push(`Framing: ${shot.framing}`);
   if (shot.cameraMovement?.trim()) lines.push(`Camera movement: ${shot.cameraMovement}`);
   const castSummary = cast.map((r) => {
@@ -2097,7 +2018,7 @@ export function renderShotCoreRetakeLines(shot: ShotCoreData): string {
   const lines: string[] = [`Shot being retaken: ${label}`];
   lines.push(shot.description?.trim() ? `Current description: ${shot.description.trim()}` : `Current description: (none)`);
   lines.push(shot.actionPitch?.trim() ? `Current action pitch: ${shot.actionPitch.trim()}` : `Current action pitch: (none)`);
-  lines.push(shot.cameraPitch?.trim() ? `Current camera pitch: ${shot.cameraPitch.trim()}` : `Current camera pitch: (none)`);
+  lines.push(shot.cameraSubject?.trim() ? `Current camera subject: ${shot.cameraSubject.trim()}` : `Current camera subject: (none)`);
   return lines.join("\n");
 }
 
@@ -2682,7 +2603,7 @@ export function renderNarrativePromptContextLines(
   if (shot.durationSeconds != null) lines.push(`Duration: ${shot.durationSeconds}s`);
   if (shot.description?.trim()) lines.push(`Description: ${shot.description}`);
   if (shot.actionPitch?.trim()) lines.push(`Action: ${shot.actionPitch}`);
-  if (shot.cameraPitch?.trim()) lines.push(`Camera intent: ${shot.cameraPitch}`);
+  if (shot.cameraSubject?.trim()) lines.push(`Camera intent: ${shot.cameraSubject}`);
   if (shot.framing?.trim()) lines.push(`Framing: ${shot.framing}`);
   if (shot.cameraMovement?.trim()) lines.push(`Camera movement: ${shot.cameraMovement}`);
   if (currentPrompt.shotPrompt?.trim()) lines.push(`Current shot prompt: ${currentPrompt.shotPrompt}`);
@@ -2748,9 +2669,6 @@ export const VARIABLE_RENDER_FORMS = {
   "SEQ.SHOT_TARGETS": {
     "castingFromSequence.shotsLines": renderCastingFromSequenceShotsLines,
   },
-  "SEQ.SHOT_CAMERA": {
-    "cameraConvert.shotLines": renderCameraConvertShotLines,
-  },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
     "assetDescription.finalRuleLine": renderProjectStyleDescriptionOnlyFinalRule,
@@ -2813,7 +2731,6 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "castingFromSequence.sequenceContextLines": renderCastingFromSequenceSequenceContextLines,
   "castingFromSequence.existingCastingsBlock": renderCastingFromSequenceExistingCastingsBlock,
   "narrativePrompt.contextLines": renderNarrativePromptContextLines,
-  "cameraConvert.header": renderCameraConvertHeader,
 } as const;
 
 /**
@@ -2942,7 +2859,6 @@ export const VARIABLE_REGISTRY = {
   "PROJECT.SHOTS": resolveProjectShots,
   "PROJECT.ASSETS": resolveProjectAssets,
   "SEQ.SHOT_TARGETS": resolveSeqShotTargets,
-  "SEQ.SHOT_CAMERA": resolveSeqShotCamera,
   "PROJECT.ASSET_LIBRARY": resolveProjectAssetLibrary,
   "SEQ.EXISTING_CASTINGS": resolveSeqExistingCastings,
   "SEQ.IDENTITY": resolveSeqIdentity,

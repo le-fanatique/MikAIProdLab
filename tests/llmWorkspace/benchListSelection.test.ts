@@ -24,13 +24,13 @@ import { buildListSelectionPayload } from "@/lib/llmWorkspace/benchRun";
 // regenerated from the nomenclature template, never the model's proposed
 // value (`ACTION_REGISTRY.createGeneratedShots`'s own note).
 //
-// B19d — `shotSize`/`cameraPitch` dropped from the round trip below, and
+// B19d — `shotSize`/`cameraSubject` dropped from the round trip below, and
 // asserted null instead. `shots.fromSequence`'s own `output.item.fields`
 // now maps `shotSize` to the jsonKey `shot_size` (was `framing`) and no
-// longer declares `cameraPitch` at all — but `sequenceShots.ts`'s
+// longer declares `cameraSubject` at all — but `sequenceShots.ts`'s
 // `normalizeShot` (untouched, out of this ticket's scope: only the
 // descriptor and `ACTION_REGISTRY`'s own declaration change) still only
-// reads a raw `framing`/`camera_pitch` key. The payload this test's own
+// reads a raw `framing`/`camera_subject` key. The payload this test's own
 // `buildListSelectionPayload` step builds carries `shot_size` /
 // `camera_position` / `movement_speed` / `camera_subject` instead — keys
 // `normalizeShot` does not recognize — so those two columns land `null` on
@@ -164,7 +164,7 @@ describe("buildListSelectionPayload — the payload round trip proof (LLMW.PROPO
     const selectedItems = [result.items[0], result.items[2]];
     // `shotCode` deliberately excluded — regenerated from the nomenclature
     // template, never the model's own `shot_code` (see file header).
-    // `shotSize`/`cameraPitch` deliberately excluded too (B19d, see file
+    // `shotSize`/`cameraSubject` deliberately excluded too (B19d, see file
     // header): `normalizeShot` no longer recognizes the jsonKeys this
     // payload now carries for them, so they do not round-trip — asserted
     // null explicitly right below instead of silently dropped from this
@@ -188,18 +188,19 @@ describe("buildListSelectionPayload — the payload round trip proof (LLMW.PROPO
       }
     }
 
-    // B19d gap, made explicit: the runner items carry real `shotSize` /
-    // `cameraPosition` / `movementSpeed` / `cameraSubject` values, but only
-    // `cameraMovement` survives onto the created row — `normalizeShot`
-    // (`sequenceShots.ts`) has no path for the other three's new jsonKeys,
-    // and no path at all for `cameraPitch` any more (the descriptor stopped
-    // asking the model for it).
+    // This block recorded a gap until B19h closed it: `normalizeShot`
+    // (`sequenceShots.ts`) had no path for the new axes' JSON keys, and still
+    // read `framing` for the shot size after the instruction had been
+    // rewritten to ask for `shot_size` — so Generate Shots stored no shot size
+    // at all, and none of the other axes. Every one of them now survives onto
+    // the created row, which is what these assertions exist to keep true.
     expect(selectedItems[0].shotSize).toBe("WS");
     expect(selectedItems[1].shotSize).toBe("MS");
-    expect(created[0].shotSize).toBeNull();
-    expect(created[1].shotSize).toBeNull();
-    expect(created[0].cameraPitch).toBeNull();
-    expect(created[1].cameraPitch).toBeNull();
+    expect(created[0].shotSize).toBe("WS");
+    expect(created[1].shotSize).toBe("MS");
+    expect(created[0].cameraSubject).toBe("Camera pans with the courier as they land.");
+    expect(created[0].cameraPosition).toBe("low_angle");
+    expect(created[0].movementSpeed).toBe("gentle");
 
     // Distinct from the model's proposed values — proves shotCode really is
     // regenerated, not silently passed through by an accidental key match.

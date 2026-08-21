@@ -325,7 +325,6 @@ export async function buildSequenceVideoGenerationContext(
           title: s.title,
           description: s.description,
           actionPitch: s.actionPitch,
-          cameraPitch: s.cameraPitch,
           durationSeconds: s.durationSeconds,
           shotPrompt: s.shotPrompt,
           compiledPromptSegments: hasPromptSegments ? compiledSegments.text : "",

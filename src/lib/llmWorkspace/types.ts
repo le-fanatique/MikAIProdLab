@@ -160,13 +160,6 @@ export type VariableId =
   // serves a different phrase of the prompt. See `variables/registry.ts` for
   // the resolver.
   | "SEQ.IDENTITY"
-  // B19f — the camera fields of every Shot in the sequence, addressable.
-  // Distinct from `SEQ.SHOT_TARGETS`, which carries narrative context and no
-  // camera at all: one variable answers one question. It exists so the
-  // conversion pass can read what 88 shots hold in `cameraPitch` — the only
-  // angle and placement they have, because the instruction that produced them
-  // asked for "camera angle, lens, position" in that one field.
-  | "SEQ.SHOT_CAMERA"
   // LLMW.JAR.1 (B12a) — the narrative prompt jar itself, read back as an
   // ingredient (§5.2: "a jar is an ingredient like any other"). Mirrors
   // `SHOT.CURRENT_PROMPT` exactly, over the sibling column. Declared ahead of
@@ -294,10 +287,6 @@ export type ActionId =
   // ahead of that consumer, the same discipline every earlier action
   // declared before its own descriptor.
   | "updateShotLighting"
-  // B19f — applies the camera conversions the author selected. Writes only the
-  // axes a proposal actually fills, and never touches `cameraPitch`, which is
-  // the source being converted.
-  | "applyCameraConversions"
   | "updateSequenceLighting"
   | "updateAssetLightingInline";
 

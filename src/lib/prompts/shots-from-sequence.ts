@@ -24,9 +24,17 @@ export type GeneratedSequenceShot = {
   duration_seconds?: number | null;
   continuity_in?: string | null;
   action_pitch?: string | null;
-  camera_pitch?: string | null;
-  framing?: string | null;
+  // B19h — the model's own JSON keys. `camera_pitch` is gone with its column.
+  // `framing` became `shot_size` in B19d, when the instruction was rewritten
+  // to ask for it under that name — but this type and `normalizeShot` were
+  // left reading `framing`, so Generate Shots silently stored no shot size at
+  // all. Found by a round-trip test that had recorded the gap as expected.
+  shot_size?: string | null;
+  camera_position?: string | null;
   camera_movement?: string | null;
+  movement_speed?: string | null;
+  camera_subject?: string | null;
+  camera_lens?: string | null;
   continuity_out?: string | null;
   shot_prompt?: string | null;
 };

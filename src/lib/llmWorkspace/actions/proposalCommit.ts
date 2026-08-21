@@ -300,18 +300,18 @@ export function buildShotRetakeCommitArgs(input: {
   shotId: number;
   sequenceId: number;
   projectId: number;
-  existing: { description: string | null; actionPitch: string | null; cameraPitch: string | null };
-  applied: { description: string; actionPitch: string; cameraPitch: string };
+  existing: { description: string | null; actionPitch: string | null; cameraSubject: string | null };
+  applied: { description: string; actionPitch: string; cameraSubject: string };
 }): Parameters<typeof ACTION_BINDINGS.updateShotNarrativeContext> {
   const existingByColumn: Record<string, string | null> = {
     description: input.existing.description,
     actionPitch: input.existing.actionPitch,
-    cameraPitch: input.existing.cameraPitch,
+    cameraSubject: input.existing.cameraSubject,
   };
   const appliedByColumn: Record<string, string> = {
     description: input.applied.description,
     actionPitch: input.applied.actionPitch,
-    cameraPitch: input.applied.cameraPitch,
+    cameraSubject: input.applied.cameraSubject,
   };
 
   const merged: Record<string, string | null> = {};
@@ -327,7 +327,7 @@ export function buildShotRetakeCommitArgs(input: {
     {
       description: merged.description ?? null,
       actionPitch: merged.actionPitch ?? null,
-      cameraPitch: merged.cameraPitch ?? null,
+      cameraSubject: merged.cameraSubject ?? null,
     },
   ];
 }

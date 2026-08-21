@@ -13,7 +13,7 @@ type Props = {
   shotId: number;
   description: string | null;
   actionPitch: string | null;
-  cameraPitch: string | null;
+  cameraSubject: string | null;
 };
 
 /**
@@ -33,7 +33,7 @@ export default function ShotRetakeDirectedPanel({
   shotId,
   description,
   actionPitch,
-  cameraPitch,
+  cameraSubject,
 }: Props) {
   const [freeText, setFreeText] = useState("");
   const [justUpdated, setJustUpdated] = useState(false);
@@ -63,11 +63,11 @@ export default function ShotRetakeDirectedPanel({
       });
       if (!result.ok) return { ok: false, error: result.error };
       if (result.kind !== "object") return { ok: false, error: "Expected an object-kind result." };
-      const { description, actionPitch, cameraPitch } = result.values;
-      if (typeof description !== "string" || typeof actionPitch !== "string" || typeof cameraPitch !== "string") {
+      const { description, actionPitch, cameraSubject } = result.values;
+      if (typeof description !== "string" || typeof actionPitch !== "string" || typeof cameraSubject !== "string") {
         return { ok: false, error: "Unexpected non-text value in a string field." };
       }
-      return { ok: true, draft: { description, actionPitch, cameraPitch } };
+      return { ok: true, draft: { description, actionPitch, cameraSubject } };
     },
   };
 
@@ -82,7 +82,7 @@ export default function ShotRetakeDirectedPanel({
             shotId,
             sequenceId,
             projectId,
-            existing: { description, actionPitch, cameraPitch },
+            existing: { description, actionPitch, cameraSubject },
             applied: current,
           });
           return ACTION_BINDINGS.updateShotNarrativeContext(...args);
@@ -179,18 +179,18 @@ export default function ShotRetakeDirectedPanel({
                 <label htmlFor="retakeCameraPitch" className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
                   Camera Pitch
                 </label>
-                {!draft.cameraPitch.trim() && (
+                {!draft.cameraSubject.trim() && (
                   <span className="text-[10px] normal-case tracking-normal text-[#6e767d]">Unchanged — keeps current value</span>
                 )}
               </div>
               <textarea
                 id="retakeCameraPitch"
-                value={draft.cameraPitch}
+                value={draft.cameraSubject}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setDraft((prev) => ({ ...prev, cameraPitch: value }));
+                  setDraft((prev) => ({ ...prev, cameraSubject: value }));
                 }}
-                placeholder={cameraPitch ?? ""}
+                placeholder={cameraSubject ?? ""}
                 rows={2}
                 className={textareaClass}
               />

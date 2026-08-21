@@ -402,7 +402,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
           title: s.title,
           description: s.description,
           actionPitch: s.actionPitch,
-          cameraPitch: s.cameraPitch,
+          cameraPitch: s.cameraSubject,
           durationSeconds: s.durationSeconds,
           shotPrompt: s.shotPrompt,
           compiledPromptSegments: hasPromptSegments ? compiledSegments.text : "",

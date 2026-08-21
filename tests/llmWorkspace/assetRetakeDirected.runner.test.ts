@@ -9,7 +9,7 @@ import { assetRetakeDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/as
 // review): the six cases captured during the first manche lived in a
 // temporary file, deleted after capture, leaving the descriptor's one
 // load-bearing property — the Shot appearances render form projects
-// Description and Action Pitch, and never `cameraPitch` — with no
+// Description and Action Pitch, and never `cameraSubject` — with no
 // regression protection. Case 5 is new in this manche, proving the
 // correction to defect 1: with an empty note, the `system` no longer
 // carries the unconditional "Respond to the director's direction below"
@@ -55,7 +55,7 @@ beforeAll(async () => {
     orderIndex: 0,
     description: "The courier lands hard on the rooftop gravel.",
     actionPitch: "Rolls to a stop, scans the skyline.",
-    cameraPitch: "Low-angle push-in, handheld.",
+    cameraSubject: "Low-angle push-in, handheld.",
   });
   await ctx.db.insert(ctx.schema.shotAssets).values({ shotId, assetId });
 });
@@ -78,7 +78,7 @@ describe("asset.retakeDirected — assembly (no oracle, §3 of the ticket)", () 
     expect(result.prompt.user).toContain("SH01");
   });
 
-  it("2. Shot appearances carry Description and Action Pitch, never cameraPitch", async () => {
+  it("2. Shot appearances carry Description and Action Pitch, never cameraSubject", async () => {
     const result = await resolveOperationPrompt(assetRetakeDirectedDescriptor, { projectId, assetId }, {});
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
@@ -86,7 +86,7 @@ describe("asset.retakeDirected — assembly (no oracle, §3 of the ticket)", () 
     expect(result.prompt.user).toContain("The courier lands hard on the rooftop gravel.");
     expect(result.prompt.user).toContain("action: Rolls to a stop, scans the skyline.");
     // The property §4 UC3 exists to prove: the projected Shot fields never
-    // include cameraPitch, unlike `assetContext.shotAppearancesLines`.
+    // include cameraSubject, unlike `assetContext.shotAppearancesLines`.
     expect(result.prompt.user).not.toContain("Low-angle push-in, handheld.");
     expect(result.prompt.user).not.toMatch(/camera/i);
   });

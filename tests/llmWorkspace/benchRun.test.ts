@@ -111,7 +111,7 @@ describe("buildShotJsonPayload — LLMW.UC1.BENCH.1 (B11-b3)", () => {
   if (output.kind !== "object") throw new Error("unreachable");
   const fields = output.fields;
 
-  // `cameraPitch` dropped, `cameraPosition`/`movementSpeed`/`cameraSubject`
+  // `cameraSubject` dropped, `cameraPosition`/`movementSpeed`/`cameraSubject`
   // added (B19d) — matching `shotInsertDirectedDescriptor.output.fields`'s
   // own new shape.
   const fullDraft: Record<string, string | number> = {

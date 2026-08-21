@@ -287,7 +287,7 @@ export async function commitBenchProposal(input: {
           sequenceId: shots.sequenceId,
           description: shots.description,
           actionPitch: shots.actionPitch,
-          cameraPitch: shots.cameraPitch,
+          cameraSubject: shots.cameraSubject,
         })
         .from(shots)
         .where(eq(shots.id, shotId));
@@ -303,12 +303,12 @@ export async function commitBenchProposal(input: {
         existing: {
           description: existing.description,
           actionPitch: existing.actionPitch,
-          cameraPitch: existing.cameraPitch,
+          cameraSubject: existing.cameraSubject,
         },
         applied: {
           description: requireStringValue(input.values, "description"),
           actionPitch: requireStringValue(input.values, "actionPitch"),
-          cameraPitch: requireStringValue(input.values, "cameraPitch"),
+          cameraSubject: requireStringValue(input.values, "cameraSubject"),
         },
       });
       return ACTION_BINDINGS.updateShotNarrativeContext(...args);

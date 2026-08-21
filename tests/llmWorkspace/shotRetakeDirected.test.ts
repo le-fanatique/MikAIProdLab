@@ -16,7 +16,7 @@ import { shotRetakeDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/sho
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/llm", () => ({
-  callLLMJson: vi.fn(async () => JSON.stringify({ description: "", action_pitch: "New action.", camera_pitch: "" })),
+  callLLMJson: vi.fn(async () => JSON.stringify({ description: "", action_pitch: "New action.", camera_subject: "" })),
 }));
 
 let ctx: TempDb;
@@ -65,7 +65,7 @@ beforeAll(async () => {
     orderIndex: 0,
     description: "The hero steps into frame, cold and distant.",
     actionPitch: "Walks forward, looks up.",
-    cameraPitch: "Slow push-in.",
+    cameraSubject: "Slow push-in.",
   });
   await insertShot(ctx, sequenceId, {
     title: "Sibling shot",
@@ -176,7 +176,7 @@ describe("shot.retakeDirected — assembly (no oracle, §3 of the ticket)", () =
     expect(result.prompt.system).toContain("shot-direction supervisor");
     expect(result.prompt.system).toContain('"description"');
     expect(result.prompt.system).toContain('"action_pitch"');
-    expect(result.prompt.system).toContain('"camera_pitch"');
+    expect(result.prompt.system).toContain('"camera_subject"');
   });
 });
 
@@ -205,37 +205,37 @@ describe("shot.retakeDirected — output parsing", () => {
     const mocked = callLLMJson as unknown as ReturnType<typeof vi.fn>;
 
     mocked.mockResolvedValueOnce(
-      JSON.stringify({ description: "", action_pitch: "New action.", camera_pitch: "" })
+      JSON.stringify({ description: "", action_pitch: "New action.", camera_subject: "" })
     );
     const valid = await runOperation(shotRetakeDirectedDescriptor, { projectId, sequenceId, shotId }, {});
     expect(valid).toEqual({
       ok: true,
       kind: "object",
-      values: { description: "", actionPitch: "New action.", cameraPitch: "" },
+      values: { description: "", actionPitch: "New action.", cameraSubject: "" },
     });
 
     mocked.mockResolvedValueOnce("not json {{{");
     const unparsable = await runOperation(shotRetakeDirectedDescriptor, { projectId, sequenceId, shotId }, {});
     expect(unparsable).toEqual({ ok: false, error: "The model returned an unexpected format. Try again." });
 
-    mocked.mockResolvedValueOnce(JSON.stringify({ description: "", action_pitch: "", camera_pitch: "" }));
+    mocked.mockResolvedValueOnce(JSON.stringify({ description: "", action_pitch: "", camera_subject: "" }));
     const empty = await runOperation(shotRetakeDirectedDescriptor, { projectId, sequenceId, shotId }, {});
     expect(empty).toEqual({ ok: false, error: "The model returned no changes. Try again with more direction." });
   });
 });
 
 describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of the ticket, the test that matters most)", () => {
-  it("a retake that only proposes actionPitch leaves description and cameraPitch unchanged in the database", async () => {
+  it("a retake that only proposes actionPitch leaves description and cameraSubject unchanged in the database", async () => {
     const retakeShotId = await insertShot(ctx, sequenceId, {
       title: "Retake target",
       description: "Original description.",
       actionPitch: "Original action.",
-      cameraPitch: "Original camera.",
+      cameraSubject: "Original camera.",
     });
 
     const mocked = callLLMJson as unknown as ReturnType<typeof vi.fn>;
     mocked.mockResolvedValueOnce(
-      JSON.stringify({ description: "", action_pitch: "A brand new action.", camera_pitch: "" })
+      JSON.stringify({ description: "", action_pitch: "A brand new action.", camera_subject: "" })
     );
 
     const draft = await runWorkspaceOperation({
@@ -247,10 +247,10 @@ describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of
     expect(draft).toEqual({
       ok: true,
       kind: "object",
-      values: { description: "", actionPitch: "A brand new action.", cameraPitch: "" },
+      values: { description: "", actionPitch: "A brand new action.", cameraSubject: "" },
     });
     if (!draft.ok || draft.kind !== "object") throw new Error("unreachable");
-    const { description: draftDescription, actionPitch: draftActionPitch, cameraPitch: draftCameraPitch } = draft.values;
+    const { description: draftDescription, actionPitch: draftActionPitch, cameraSubject: draftCameraPitch } = draft.values;
     if (
       typeof draftDescription !== "string" ||
       typeof draftActionPitch !== "string" ||
@@ -264,8 +264,8 @@ describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of
       shotId: retakeShotId,
       sequenceId,
       projectId,
-      existing: { description: before.description, actionPitch: before.actionPitch, cameraPitch: before.cameraPitch },
-      applied: { description: draftDescription, actionPitch: draftActionPitch, cameraPitch: draftCameraPitch },
+      existing: { description: before.description, actionPitch: before.actionPitch, cameraSubject: before.cameraSubject },
+      applied: { description: draftDescription, actionPitch: draftActionPitch, cameraSubject: draftCameraPitch },
     });
     const commitResult = await updateShotNarrativeContext(...args);
     expect(commitResult).toEqual({ ok: true });
@@ -273,7 +273,7 @@ describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of
     const after = await readShot(ctx, retakeShotId);
     expect(after.description).toBe("Original description.");
     expect(after.actionPitch).toBe("A brand new action.");
-    expect(after.cameraPitch).toBe("Original camera.");
+    expect(after.cameraSubject).toBe("Original camera.");
   });
 
   it("a shotId belonging to another sequence is refused by updateShotNarrativeContext and writes nothing", async () => {
@@ -281,7 +281,7 @@ describe("shot.retakeDirected — end-to-end commit preservation (§4.3 / §5 of
     const result = await updateShotNarrativeContext(shotId, otherSequenceId, otherProjectId, {
       description: "Should not be written.",
       actionPitch: null,
-      cameraPitch: null,
+      cameraSubject: null,
     });
     expect(result).toEqual({ ok: false, error: "Shot not found." });
     const after = await readShot(ctx, shotId);

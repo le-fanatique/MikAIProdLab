@@ -144,10 +144,10 @@ describe("formatSequenceGenerationPackageText", () => {
     it("replaces each Shot's body with composeStoryboardShot's composition, carrying the ingredients §5.7 found missing", () => {
       const shotWithEverything: SequenceGenerationPackageShotInput = {
         ...shotOne,
-        continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "slow push in", movementSpeed: null, cameraSubject: null, cameraLens: null},
+        continuity: { shotSize: "WS", cameraPosition: "low angle", cameraMovement: "slow push in", movementSpeed: null, cameraSubject: null, cameraLens: null },
         promptContext: {
           ...shotOne.promptContext,
-          shot: { ...shotOne.promptContext.shot, cameraPitch: "low angle", actionPitch: "Mara steps out of cover." },
+          shot: { ...shotOne.promptContext.shot, actionPitch: "Mara steps out of cover." },
           assetBibles: [{ assetId: 1, assetName: "Mara", visualIdentity: "Cropped hair, scarred jaw." }],
           sequenceContext: { locationHint: "Rooftop, dusk", mood: "Tense" },
           sources: { ...shotOne.promptContext.sources, assetBibles: true, sequenceContext: true },
