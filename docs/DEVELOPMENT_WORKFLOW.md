@@ -137,9 +137,11 @@ The ticket is safe to clear only after:
 5. the next `.agents/current_task.md` is ready, or Codex confirms that the
    queue is empty.
 
-Claude may run the `close-ticket` skill to audit this gate. The skill cannot
-execute `/clear` on its own; after a successful audit it tells the user to run
-the command.
+The `close-ticket` skill that audited this gate was **archived on 2026-08-21**
+to `docs/archive/codex-protocol-skills/`, with the two others written for the
+same dormant protocol. Under the Opus protocol the method lives in the
+`mikai-method` skill, which `CLAUDE.md` loads as step 0. No skill can run
+`/clear`: it is always the user who runs it.
 
 After `/clear`, use:
 
