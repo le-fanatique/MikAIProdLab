@@ -407,6 +407,20 @@
       "when": 1787278251126,
       "tag": "0057_neat_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1787314895198,
+      "tag": "0058_superb_barracuda",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1787330482238,
+      "tag": "0059_yielding_zodiak",
+      "breakpoints": true
     }
   ]
 }
