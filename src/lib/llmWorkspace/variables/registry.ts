@@ -43,6 +43,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { VariableId } from "../types";
 import { parseOutlineSections } from "@/lib/prompts/outlineSections";
 import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
+import { renderCameraFieldSchemaLine } from "../cameraInstruction";
 // Type-only: `runner.ts` imports value bindings from this module (the five
 // render-form tables, `VARIABLE_REGISTRY`, `POST_RESPONSE_FORMS`), so a
 // runtime import in the other direction would cycle. `import type` is erased
@@ -2342,7 +2343,7 @@ Each shot is a single uninterrupted camera take.
 Respect the narrative arc of the sequence. Do not invent characters or locations not mentioned in the story or sequence context.`;
 }
 
-/** System, common tail — `JSON_SCHEMA(count)` (`shots-from-sequence.ts:36-56`), identical on both paths, needs only `targetCount`. Own leading `"\n"` (§4.1 correction 4's device) to reopen the blank line the block-separator alone cannot produce. */
+/** System, common tail — the JSON schema, identical on both paths, needs only `targetCount`. Own leading `"\n"` (§4.1 correction 4's device) to reopen the blank line the block-separator alone cannot produce. The five camera lines (`shot_size`/`camera_position`/`camera_movement`/`movement_speed`/`camera_subject`) are rendered by `cameraInstruction.ts` (B19d) — not typed here — the same module `shotInsertDirected.ts` calls, so the two instructions never disagree on a value again. `camera_pitch` is gone: B19c made it read-only, no model writes it any more. */
 export function renderShotsFromSequenceJsonSchemaBlock(targetCount: number | undefined): string {
   const count = targetCount ?? 6;
   return `
@@ -2356,9 +2357,11 @@ Always respond with a valid JSON object matching exactly this schema:
       "duration_seconds": number or null — estimated duration 3-8s typical,
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
-      "camera_pitch": "string or null — camera angle, lens, position",
-      "framing": "string or null — CU / MCU / MS / WS / ECU / OTS / POV",
-      "camera_movement": "string or null — static / pan / tilt / tracking / dolly / handheld",
+      ${renderCameraFieldSchemaLine("shot_size")},
+      ${renderCameraFieldSchemaLine("camera_position")},
+      ${renderCameraFieldSchemaLine("camera_movement")},
+      ${renderCameraFieldSchemaLine("movement_speed")},
+      ${renderCameraFieldSchemaLine("camera_subject")},
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }

@@ -972,6 +972,12 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
     expect(created.trimOutSeconds).toBeNull();
 
     // Declared columns match ACTION_REGISTRY.createShotAtPosition.columns.written.
+    // `cameraPitch` dropped (B19d): the descriptor no longer offers it to
+    // the model, so this declaration — what a model-driven Approve
+    // populates — no longer lists it. The action itself is unchanged (see
+    // the two tests right below, which still prove it writes a raw
+    // `cameraPitch` key whole/truncated when a caller supplies one
+    // directly).
     expect([...ACTION_REGISTRY.createShotAtPosition.columns.written].sort()).toEqual(
       [
         "sequenceId",
@@ -980,7 +986,6 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
         "description",
         "durationSeconds",
         "actionPitch",
-        "cameraPitch",
         "continuityNotes",
         "shotSize",
         "cameraMovement",

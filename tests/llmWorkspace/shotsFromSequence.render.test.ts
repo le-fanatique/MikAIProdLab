@@ -118,6 +118,15 @@ CONTINUITY RULES:
 - Last shot continuity_out describes the final state reached by the end of the sequence.
 - Before writing each shot, silently track: character positions, alive/dead/injured/transformed state, objects held/lost/destroyed, location, emotional state, and consequences of previous action. Do not output this reasoning. Only output the JSON.
 
+CAMERA FIELDS:
+- shot_size is exactly one value from this set: EWS / WS / FS / MWS / MS / MCU / CU / ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
+- camera_position is exactly one value from this set: eye_level / high_angle / low_angle / birds_eye_overhead / worms_eye / dutch_canted (tilt); ground_level / low / chest_level / eye_level / overhead (height); pov / ots / two_shot / single / reverse_shot / establishing_shot / profile / front_view / rear_view (role).
+- camera_movement is exactly one value from this set: static / dolly / dolly_in / dolly_out / tracking / truck_left / truck_right / pan / tilt / pedestal_up / pedestal_down / roll / zoom / arc / crane / handheld / rack_focus. One movement only — never two combined (e.g. "pan + tilt").
+- movement_speed is exactly one value from this set: slow / smooth / stable / gradual / gentle / rapid.
+- None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
+- camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
+- A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.
+
 Always respond with a valid JSON object matching exactly this schema:
 {
   "shots": [
@@ -128,9 +137,11 @@ Always respond with a valid JSON object matching exactly this schema:
       "duration_seconds": number or null — estimated duration 3-8s typical,
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
-      "camera_pitch": "string or null — camera angle, lens, position",
-      "framing": "string or null — CU / MCU / MS / WS / ECU / OTS / POV",
-      "camera_movement": "string or null — static / pan / tilt / tracking / dolly / handheld",
+      "shot_size": "string or null — EWS / WS / FS / MWS / MS / MCU / CU / ECU, or a start-to-end interval such as "MS to WS"",
+      "camera_position": "string or null — eye_level / high_angle / low_angle / birds_eye_overhead / worms_eye / dutch_canted (tilt); ground_level / low / chest_level / eye_level / overhead (height); pov / ots / two_shot / single / reverse_shot / establishing_shot / profile / front_view / rear_view (role)",
+      "camera_movement": "string or null — static / dolly / dolly_in / dolly_out / tracking / truck_left / truck_right / pan / tilt / pedestal_up / pedestal_down / roll / zoom / arc / crane / handheld / rack_focus. One value only.",
+      "movement_speed": "string or null — slow / smooth / stable / gradual / gentle / rapid",
+      "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -206,6 +217,15 @@ CONTINUITY RULES:
 - Last shot continuity_out describes the final state reached by the end of the sequence.
 - Before writing each shot, silently track: character positions, alive/dead/injured/transformed state, objects held/lost/destroyed, location, emotional state, and consequences of previous action. Do not output this reasoning. Only output the JSON.
 
+CAMERA FIELDS:
+- shot_size is exactly one value from this set: EWS / WS / FS / MWS / MS / MCU / CU / ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
+- camera_position is exactly one value from this set: eye_level / high_angle / low_angle / birds_eye_overhead / worms_eye / dutch_canted (tilt); ground_level / low / chest_level / eye_level / overhead (height); pov / ots / two_shot / single / reverse_shot / establishing_shot / profile / front_view / rear_view (role).
+- camera_movement is exactly one value from this set: static / dolly / dolly_in / dolly_out / tracking / truck_left / truck_right / pan / tilt / pedestal_up / pedestal_down / roll / zoom / arc / crane / handheld / rack_focus. One movement only — never two combined (e.g. "pan + tilt").
+- movement_speed is exactly one value from this set: slow / smooth / stable / gradual / gentle / rapid.
+- None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
+- camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
+- A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.
+
 Always respond with a valid JSON object matching exactly this schema:
 {
   "shots": [
@@ -216,9 +236,11 @@ Always respond with a valid JSON object matching exactly this schema:
       "duration_seconds": number or null — estimated duration 3-8s typical,
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
-      "camera_pitch": "string or null — camera angle, lens, position",
-      "framing": "string or null — CU / MCU / MS / WS / ECU / OTS / POV",
-      "camera_movement": "string or null — static / pan / tilt / tracking / dolly / handheld",
+      "shot_size": "string or null — EWS / WS / FS / MWS / MS / MCU / CU / ECU, or a start-to-end interval such as "MS to WS"",
+      "camera_position": "string or null — eye_level / high_angle / low_angle / birds_eye_overhead / worms_eye / dutch_canted (tilt); ground_level / low / chest_level / eye_level / overhead (height); pov / ots / two_shot / single / reverse_shot / establishing_shot / profile / front_view / rear_view (role)",
+      "camera_movement": "string or null — static / dolly / dolly_in / dolly_out / tracking / truck_left / truck_right / pan / tilt / pedestal_up / pedestal_down / roll / zoom / arc / crane / handheld / rack_focus. One value only.",
+      "movement_speed": "string or null — slow / smooth / stable / gradual / gentle / rapid",
+      "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -286,6 +308,15 @@ CONTINUITY RULES:
 - Last shot continuity_out describes the final state reached by the end of the sequence.
 - Before writing each shot, silently track: character positions, alive/dead/injured/transformed state, objects held/lost/destroyed, location, emotional state, and consequences of previous action. Do not output this reasoning. Only output the JSON.
 
+CAMERA FIELDS:
+- shot_size is exactly one value from this set: EWS / WS / FS / MWS / MS / MCU / CU / ECU. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
+- camera_position is exactly one value from this set: eye_level / high_angle / low_angle / birds_eye_overhead / worms_eye / dutch_canted (tilt); ground_level / low / chest_level / eye_level / overhead (height); pov / ots / two_shot / single / reverse_shot / establishing_shot / profile / front_view / rear_view (role).
+- camera_movement is exactly one value from this set: static / dolly / dolly_in / dolly_out / tracking / truck_left / truck_right / pan / tilt / pedestal_up / pedestal_down / roll / zoom / arc / crane / handheld / rack_focus. One movement only — never two combined (e.g. "pan + tilt").
+- movement_speed is exactly one value from this set: slow / smooth / stable / gradual / gentle / rapid.
+- None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
+- camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
+- A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.
+
 Always respond with a valid JSON object matching exactly this schema:
 {
   "shots": [
@@ -296,9 +327,11 @@ Always respond with a valid JSON object matching exactly this schema:
       "duration_seconds": number or null — estimated duration 3-8s typical,
       "continuity_in": "string — state at the start of this shot, inherited from the previous shot's continuity_out",
       "action_pitch": "string or null — what happens on screen",
-      "camera_pitch": "string or null — camera angle, lens, position",
-      "framing": "string or null — CU / MCU / MS / WS / ECU / OTS / POV",
-      "camera_movement": "string or null — static / pan / tilt / tracking / dolly / handheld",
+      "shot_size": "string or null — EWS / WS / FS / MWS / MS / MCU / CU / ECU, or a start-to-end interval such as "MS to WS"",
+      "camera_position": "string or null — eye_level / high_angle / low_angle / birds_eye_overhead / worms_eye / dutch_canted (tilt); ground_level / low / chest_level / eye_level / overhead (height); pov / ots / two_shot / single / reverse_shot / establishing_shot / profile / front_view / rear_view (role)",
+      "camera_movement": "string or null — static / dolly / dolly_in / dolly_out / tracking / truck_left / truck_right / pan / tilt / pedestal_up / pedestal_down / roll / zoom / arc / crane / handheld / rack_focus. One value only.",
+      "movement_speed": "string or null — slow / smooth / stable / gradual / gentle / rapid",
+      "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }

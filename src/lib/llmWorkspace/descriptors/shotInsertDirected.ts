@@ -112,10 +112,26 @@
 // editorial commentary on the cut instead of material continuity. Two rules
 // added to the same bullet list, same format as the others: what the field
 // is for, then the door closed on the observed drift.
+//
+// B19d — the camera fields now read the shared vocabulary
+// (`cameraVocabulary.ts`, `cameraInstruction.ts`) instead of the hand-typed
+// closed set TUNE.1 introduced above, which disagreed with `shots.fromSequence`'s
+// own copy (`tracking` vs `track`, `dolly` vs `dolly in`). Twelve output
+// fields now, not the ten decision 4 counted: `framing`/`camera_movement`/
+// `camera_pitch` become `shot_size`/`camera_position`/`camera_movement`/
+// `movement_speed`/`camera_subject` — `camera_pitch` is gone (B19c made it
+// read-only; the column and its content on existing shots are untouched,
+// only this model-facing output stops offering it), and `shot_size` may now
+// be a start-to-end interval ("MS to WS") — a reversal of TUNE.1's own ban,
+// sourced to the Seedance 2.5 guide's "starting"/"ending shot size". Bounds:
+// 50 on every palette axis (`shotSize`/`cameraPosition`/`cameraMovement`/
+// `movementSpeed`, matching `shots.fromSequence`'s own), 300 on
+// `cameraSubject`, prose by design with no palette to bound it against.
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
 import { SHOT_INSERT_SYSTEM_INTRO } from "../variables/registry";
+import { renderCameraInstructionRulesBlock } from "../cameraInstruction";
 
 export const shotInsertDirectedDescriptor: OperationDescriptor = {
   id: "shot.insertDirected",
@@ -148,10 +164,17 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
         // (`variables/registry.ts`) for why this is not folded into the
         // static rules text above/below it.
         { freeText: true, render: "shotInsert.directiveRuleLine" },
+        // The camera rules block (B19d) — shared verbatim with
+        // `shots.fromSequence` via `cameraInstruction.ts`. Replaces the old
+        // hand-typed framing/camera_movement rule, which disagreed with
+        // Generate Shots's own copy (`tracking` vs `track`, `dolly` vs
+        // `dolly in`) and forbade the start-to-end interval the Seedance 2.5
+        // guide's own "starting"/"ending shot size" allows — see that
+        // module's own header for the sourcing.
+        { text: renderCameraInstructionRulesBlock() },
         {
-          text: `- framing is exactly one value from this set: ECU, CU, MCU, MS, MLS, WS, EWS, OTS, POV. camera_movement is exactly one value from this set: static, pan, tilt, dolly in, dolly out, track, crane, handheld, zoom. Never an interval ("MS to WS") and never a combination ("pan + tilt") — one value, chosen once, in each field. If the shot changes frame or camera behavior partway through, describe that change in camera_pitch, not in framing or camera_movement. camera_pitch is prose describing the camera intent behind them.
-- duration_seconds is a plain number of seconds, sized to the action you describe, never a range and never text.
-- action_pitch describes what happens on screen, in terms an animation team can act — who does what, in what order. Never the intention behind the shot and never the effect you want it to have on the audience: that belongs to camera_pitch for the camera, and to nowhere else for anything not about the camera. If the director's note gives you an intention, your job is to translate it into a visible action, not to copy it in.
+          text: `- duration_seconds is a plain number of seconds, sized to the action you describe, never a range and never text.
+- action_pitch describes what happens on screen, in terms an animation team can act — who does what, in what order. Never the intention behind the shot and never the effect you want it to have on the audience: that belongs to the camera fields above, and to nowhere else for anything not about the camera. If the director's note gives you an intention, your job is to translate it into a visible action, not to copy it in.
 - continuity_notes lists the material elements the next shot must find again — props, lighting, costume, VFX, the position of objects. Never the tone, never this shot's role in the sequence, never a summary of what it connects: continuity_in and continuity_out already describe the connection.
 - Stay inside the story that already exists. Do not invent characters, locations or plot facts that the sequence and its shots do not already establish.
 - Leave a field empty only when the sequence genuinely gives you nothing to write in it. An empty string means "nothing to say", never "skipped".
@@ -159,7 +182,7 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
         },
         {
           text: `Always respond with a valid JSON object matching exactly this schema:
-{ "title": "<shot title>", "description": "<shot description>", "duration_seconds": <number>, "action_pitch": "<action pitch>", "camera_pitch": "<camera pitch>", "continuity_notes": "<continuity notes>", "framing": "<framing>", "camera_movement": "<camera movement>", "continuity_in": "<continuity in>", "continuity_out": "<continuity out>" }
+{ "title": "<shot title>", "description": "<shot description>", "duration_seconds": <number>, "action_pitch": "<action pitch>", "continuity_notes": "<continuity notes>", "shot_size": "<shot size>", "camera_position": "<camera position>", "camera_movement": "<camera movement>", "movement_speed": "<movement speed>", "camera_subject": "<camera subject>", "continuity_in": "<continuity in>", "continuity_out": "<continuity out>" }
 No markdown. No explanation. Only the JSON object.`,
         },
       ],
@@ -216,10 +239,21 @@ No markdown. No explanation. Only the JSON object.`,
       // this number and `normalizeProposedShot`'s own must stay equal, or one
       // side truncates what the other accepts.
       { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 500 },
-      { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 500 },
       { type: "string", field: "continuityNotes", jsonKey: "continuity_notes", truncateTo: 500 },
-      { type: "string", field: "shotSize", jsonKey: "framing", truncateTo: 50 },
+      // The five camera fields (B19d) — `cameraPitch` is gone: B19c made it
+      // read-only, no model writes it any more; the column and its existing
+      // content on 88 shots are untouched, only this model-facing output
+      // stops offering it. `shotSize`'s `jsonKey` moves from `framing` to
+      // `shot_size`. Bounds: 50 on every palette axis (matching
+      // `shots.fromSequence`'s own, and this ticket's own truncation
+      // finding — a value that long is prose, not a palette code), 300 on
+      // `cameraSubject`, which is prose by design and has no palette to
+      // bound it against.
+      { type: "string", field: "shotSize", jsonKey: "shot_size", truncateTo: 50 },
+      { type: "string", field: "cameraPosition", jsonKey: "camera_position", truncateTo: 50 },
       { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
+      { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
+      { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
       { type: "string", field: "continuityIn", jsonKey: "continuity_in", truncateTo: 500 },
       { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },
     ],

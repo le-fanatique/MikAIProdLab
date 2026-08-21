@@ -215,14 +215,28 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
 
   // LLMW.UC1.TUNE.1 (S7), défaut 1 et 2 — the two rule tunings, checked in
   // the rendered system message itself, not just recited from the ticket.
-  it("the system message enumerates framing and camera_movement as closed sets and forbids intervals/combinations (défaut 1)", async () => {
+  //
+  // B19d superseded défaut 1's own hand-typed closed set: the five camera
+  // fields (`shot_size`/`camera_position`/`camera_movement`/
+  // `movement_speed`/`camera_subject`) now render from `cameraVocabulary.ts`
+  // via `cameraInstruction.ts`, shared verbatim with `shots.fromSequence`
+  // (`cameraInstruction.test.ts` proves the render functions directly). The
+  // combination ban survives on `camera_movement`; the interval ban is
+  // reversed for `shot_size` specifically — a deliberate change, sourced to
+  // the Seedance 2.5 guide's own "starting"/"ending shot size"
+  // (`.agents/executor_report.md`).
+  it("the system message enumerates shot_size/camera_position/camera_movement/movement_speed as closed sets, forbids a camera_movement combination, and now allows a shot_size interval (défaut 1, superseded by B19d)", async () => {
     const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
-    expect(result.prompt.system).toContain("ECU, CU, MCU, MS, MLS, WS, EWS, OTS, POV");
-    expect(result.prompt.system).toContain("static, pan, tilt, dolly in, dolly out, track, crane, handheld, zoom");
-    expect(result.prompt.system).toMatch(/never an interval/i);
-    expect(result.prompt.system).toMatch(/never a combination/i);
+    expect(result.prompt.system).toContain("EWS / WS / FS / MWS / MS / MCU / CU / ECU");
+    expect(result.prompt.system).toContain("static / dolly / dolly_in / dolly_out / tracking");
+    expect(result.prompt.system).toMatch(/one movement only/i);
+    expect(result.prompt.system).toMatch(/never two combined/i);
+    // The reversal: a shot_size interval is now named and allowed, not
+    // forbidden.
+    expect(result.prompt.system).toContain('"MS to WS"');
+    expect(result.prompt.system).not.toMatch(/never an interval/i);
   });
 
   it("the system message scopes continuity_out to this shot's own ending, not the next shot's progress (défaut 2)", async () => {
@@ -238,12 +252,17 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
   // their own rule, filling the gap `framing`/`camera_movement`/
   // `duration_seconds` already had. Existing rules stay put — checked by
   // every assertion above still passing unchanged.
-  it("the system message rules action_pitch as visible action, not the directive's own intention (LLMW.UC1.TUNE.3)", async () => {
+  //
+  // "that belongs to camera_pitch for the camera" -> "that belongs to the
+  // camera fields above" (B19d): `camera_pitch` no longer exists as an
+  // output field, so the rule now points at the five camera fields as a
+  // group rather than naming a field that is gone.
+  it("the system message rules action_pitch as visible action, not the directive's own intention (LLMW.UC1.TUNE.3, wording updated by B19d)", async () => {
     const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     const matches = result.prompt.system.match(
-      /action_pitch describes what happens on screen, in terms an animation team can act — who does what, in what order\. Never the intention behind the shot and never the effect you want it to have on the audience: that belongs to camera_pitch for the camera, and to nowhere else for anything not about the camera\. If the director's note gives you an intention, your job is to translate it into a visible action, not to copy it in\./g
+      /action_pitch describes what happens on screen, in terms an animation team can act — who does what, in what order\. Never the intention behind the shot and never the effect you want it to have on the audience: that belongs to the camera fields above, and to nowhere else for anything not about the camera\. If the director's note gives you an intention, your job is to translate it into a visible action, not to copy it in\./g
     );
     expect(matches?.length).toBe(1);
   });
@@ -300,38 +319,70 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
 });
 
 // ---------------------------------------------------------------------------
-// LLMW.UC1.TUNE.2 (S7b), défaut 2 — `cameraPitch`'s bound, raised from 200 to
-// 500 in the descriptor (`truncateTo: 500`), proven at the runner level: a
-// value under the bound survives whole, one over it is cut at exactly 500 —
-// the descriptor-side half of the "both sides stay equal" guarantee. The
-// write-action half (`normalizeProposedShot`) is proven the same way in
-// `tests/actions/registry.test.ts`.
+// LLMW.UC1.TUNE.2 (S7b), défaut 2 — originally `cameraPitch`'s bound, raised
+// from 200 to 500. B19d removes `cameraPitch` from this descriptor entirely
+// (B19c had already made the column read-only; no model writes it any
+// more), so the field this describe block proved a bound for is gone. The
+// equivalent proof now belongs to `cameraSubject` (B19d): the one camera
+// field that is prose, not a palette code, and the ticket's own truncation
+// finding (a 50-character bound cut a real response mid-sentence) is why it
+// gets a wider bound — 300, not 50 — while the four palette fields
+// (`shotSize`/`cameraPosition`/`cameraMovement`/`movementSpeed`) stay at 50.
+// The write-action half (`normalizeProposedShot`) is untouched by this
+// ticket and does not read `cameraSubject` at all — see
+// `.agents/executor_report.md` for that gap.
 // ---------------------------------------------------------------------------
-describe("shot.insertDirected — cameraPitch bound (LLMW.UC1.TUNE.2, défaut 2)", () => {
-  it("the descriptor declares cameraPitch's truncateTo as 500, not 200", () => {
+describe("shot.insertDirected — camera field bounds (B19d, was cameraPitch bound LLMW.UC1.TUNE.2)", () => {
+  it("the descriptor declares cameraSubject's truncateTo as 300, and every palette camera field's as 50", () => {
+    const output = shotInsertDirectedDescriptor.output;
+    if (output.kind !== "object") throw new Error("unreachable");
+    const byField = (name: string) => {
+      const field = output.fields.find((f) => f.field === name);
+      if (field?.type !== "string") throw new Error(`${name} is expected to be a string field`);
+      return field;
+    };
+    expect(byField("cameraSubject").truncateTo).toBe(300);
+    expect(byField("shotSize").truncateTo).toBe(50);
+    expect(byField("cameraPosition").truncateTo).toBe(50);
+    expect(byField("cameraMovement").truncateTo).toBe(50);
+    expect(byField("movementSpeed").truncateTo).toBe(50);
+  });
+
+  it("cameraPitch is no longer a declared output field", () => {
     if (shotInsertDirectedDescriptor.output.kind !== "object") throw new Error("unreachable");
-    const field = shotInsertDirectedDescriptor.output.fields.find((f) => f.field === "cameraPitch");
-    if (field?.type !== "string") throw new Error("cameraPitch is expected to be a string field");
-    expect(field.truncateTo).toBe(500);
+    expect(shotInsertDirectedDescriptor.output.fields.find((f) => f.field === "cameraPitch")).toBeUndefined();
   });
 
-  it("a 400-character camera_pitch survives the runner whole, no truncation", async () => {
-    const value = "x".repeat(400);
-    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", camera_pitch: value }));
+  it("a 250-character camera_subject survives the runner whole, no truncation", async () => {
+    const value = "x".repeat(250);
+    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", camera_subject: value }));
     const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
     expect(result.ok).toBe(true);
     if (!result.ok || result.kind !== "object") throw new Error("unreachable");
-    expect(result.values.cameraPitch).toBe(value);
+    expect(result.values.cameraSubject).toBe(value);
   });
 
-  it("a camera_pitch longer than 500 characters is cut at exactly 500", async () => {
-    const value = "y".repeat(600);
-    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", camera_pitch: value }));
+  it("a camera_subject longer than 300 characters is cut at exactly 300", async () => {
+    const value = "y".repeat(400);
+    mockedLLM().mockResolvedValueOnce(JSON.stringify({ title: "Shot", camera_subject: value }));
     const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
     expect(result.ok).toBe(true);
     if (!result.ok || result.kind !== "object") throw new Error("unreachable");
-    expect(result.values.cameraPitch).toBe(value.slice(0, 500));
-    expect((result.values.cameraPitch as string).length).toBe(500);
+    expect(result.values.cameraSubject).toBe(value.slice(0, 300));
+    expect((result.values.cameraSubject as string).length).toBe(300);
+  });
+
+  // A raw `camera_pitch` key from the model is now simply ignored — no
+  // declared field reads it, so it is dropped like any other undeclared
+  // key, not an error.
+  it("a raw camera_pitch key from the model is silently ignored, not surfaced anywhere on the result", async () => {
+    mockedLLM().mockResolvedValueOnce(
+      JSON.stringify({ title: "Shot", camera_pitch: "Low angle, static." })
+    );
+    const result = await runOperation(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.kind !== "object") throw new Error("unreachable");
+    expect("cameraPitch" in result.values).toBe(false);
   });
 });
 
@@ -485,17 +536,25 @@ describe("shot.insertDirected — chain refusal", () => {
 });
 
 describe("shot.insertDirected — output parsing", () => {
-  it("a complete model response produces all ten fields, durationSeconds as a number", async () => {
+  // B19d — the shape changed, and the count with it. `camera_pitch` is gone:
+  // the model no longer authors it (the form made it read-only in B19c, and
+  // B19f will convert what 88 shots still hold). In its place the three axes
+  // that never existed — position, speed, and the subject the move targets,
+  // which the Seedance 2.5 formula requires and no field could express.
+  // Eleven fields now, and the JSON key is `shot_size`, not `framing`.
+  it("a complete model response produces all eleven fields, durationSeconds as a number", async () => {
     mockedLLM().mockResolvedValueOnce(
       JSON.stringify({
         title: "Hero enters and exits frame",
         description: "A low-angle shot as the hero crosses the frame.",
         duration_seconds: 4,
         action_pitch: "The hero runs in from screen left and exits right.",
-        camera_pitch: "Ground-level static camera, hero crosses the whole frame.",
         continuity_notes: "Hero is still being chased by Vex.",
-        framing: "WS",
-        camera_movement: "static",
+        shot_size: "WS",
+        camera_position: "Low Angle",
+        camera_movement: "Pan",
+        movement_speed: "slow",
+        camera_subject: "follows the hero from screen left to screen right, ending on the far ledge",
         continuity_in: "Vex is one rooftop behind the hero.",
         continuity_out: "The hero has crossed the rooftop, Vex not yet visible.",
       })
@@ -509,10 +568,13 @@ describe("shot.insertDirected — output parsing", () => {
         description: "A low-angle shot as the hero crosses the frame.",
         durationSeconds: 4,
         actionPitch: "The hero runs in from screen left and exits right.",
-        cameraPitch: "Ground-level static camera, hero crosses the whole frame.",
         continuityNotes: "Hero is still being chased by Vex.",
         shotSize: "WS",
-        cameraMovement: "static",
+        cameraPosition: "Low Angle",
+        cameraMovement: "Pan",
+        movementSpeed: "slow",
+        cameraSubject:
+          "follows the hero from screen left to screen right, ending on the far ledge",
         continuityIn: "Vex is one rooftop behind the hero.",
         continuityOut: "The hero has crossed the rooftop, Vex not yet visible.",
       },

@@ -23,6 +23,21 @@ import { buildListSelectionPayload } from "@/lib/llmWorkspace/benchRun";
 // the field-by-field equality below on purpose — it is deliberately
 // regenerated from the nomenclature template, never the model's proposed
 // value (`ACTION_REGISTRY.createGeneratedShots`'s own note).
+//
+// B19d — `shotSize`/`cameraPitch` dropped from the round trip below, and
+// asserted null instead. `shots.fromSequence`'s own `output.item.fields`
+// now maps `shotSize` to the jsonKey `shot_size` (was `framing`) and no
+// longer declares `cameraPitch` at all — but `sequenceShots.ts`'s
+// `normalizeShot` (untouched, out of this ticket's scope: only the
+// descriptor and `ACTION_REGISTRY`'s own declaration change) still only
+// reads a raw `framing`/`camera_pitch` key. The payload this test's own
+// `buildListSelectionPayload` step builds carries `shot_size` /
+// `camera_position` / `movement_speed` / `camera_subject` instead — keys
+// `normalizeShot` does not recognize — so those two columns land `null` on
+// the created row even though the runner item carried real values. This is
+// a genuine gap this ticket leaves unrepaired (`.agents/executor_report.md`
+// has the full account); `cameraMovement` alone still round-trips, its
+// jsonKey unchanged.
 // ---------------------------------------------------------------------------
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -38,22 +53,24 @@ const rawModelResponse = JSON.stringify({
       duration_seconds: 8,
       continuity_in: "Courier mid-air, package secured.",
       action_pitch: "A tense landing.",
-      camera_pitch: "Low angle, dynamic.",
-      framing: "wide",
+      shot_size: "WS",
+      camera_position: "low_angle",
       camera_movement: "pan",
+      movement_speed: "gentle",
+      camera_subject: "Camera pans with the courier as they land.",
       continuity_out: "Courier crouched on rooftop, package intact.",
       shot_prompt: "Wide low angle shot of a courier landing on a rain-soaked rooftop.",
     },
     // index 1 — NOT selected. `duration_seconds` out of bounds (omitted by
     // the runner's own "omit" fallback) and an empty string field
-    // (`camera_pitch`) — the ticket's own required shape for the mocked
+    // (`camera_subject`) — the ticket's own required shape for the mocked
     // response, proven through the runner's own list parsing, deliberately
     // left out of the selection so it never has to round-trip through the
     // write action's null-conversion for an empty string.
     {
       title: "Alley Turn",
       duration_seconds: 999,
-      camera_pitch: "",
+      camera_subject: "",
     },
     // index 2 — selected. Same "clean" shape as index 0.
     {
@@ -63,9 +80,11 @@ const rawModelResponse = JSON.stringify({
       duration_seconds: 12,
       continuity_in: "Courier crouched on rooftop, package intact.",
       action_pitch: "A daring leap across the gap.",
-      camera_pitch: "Steady tracking shot.",
-      framing: "medium",
+      shot_size: "MS",
+      camera_position: "eye_level",
       camera_movement: "tracking",
+      movement_speed: "smooth",
+      camera_subject: "Camera tracks the courier across the gap.",
       continuity_out: "Courier airborne, mid-leap.",
       shot_prompt: "Medium tracking shot of a courier leaping between rooftops.",
     },
@@ -145,14 +164,17 @@ describe("buildListSelectionPayload — the payload round trip proof (LLMW.PROPO
     const selectedItems = [result.items[0], result.items[2]];
     // `shotCode` deliberately excluded — regenerated from the nomenclature
     // template, never the model's own `shot_code` (see file header).
+    // `shotSize`/`cameraPitch` deliberately excluded too (B19d, see file
+    // header): `normalizeShot` no longer recognizes the jsonKeys this
+    // payload now carries for them, so they do not round-trip — asserted
+    // null explicitly right below instead of silently dropped from this
+    // list.
     const roundTripFields = [
       "title",
       "description",
       "durationSeconds",
       "continuityIn",
       "actionPitch",
-      "cameraPitch",
-      "shotSize",
       "cameraMovement",
       "continuityOut",
       "shotPrompt",
@@ -165,6 +187,19 @@ describe("buildListSelectionPayload — the payload round trip proof (LLMW.PROPO
         expect(createdRow[field]).toBe(runnerItem[field]);
       }
     }
+
+    // B19d gap, made explicit: the runner items carry real `shotSize` /
+    // `cameraPosition` / `movementSpeed` / `cameraSubject` values, but only
+    // `cameraMovement` survives onto the created row — `normalizeShot`
+    // (`sequenceShots.ts`) has no path for the other three's new jsonKeys,
+    // and no path at all for `cameraPitch` any more (the descriptor stopped
+    // asking the model for it).
+    expect(selectedItems[0].shotSize).toBe("WS");
+    expect(selectedItems[1].shotSize).toBe("MS");
+    expect(created[0].shotSize).toBeNull();
+    expect(created[1].shotSize).toBeNull();
+    expect(created[0].cameraPitch).toBeNull();
+    expect(created[1].cameraPitch).toBeNull();
 
     // Distinct from the model's proposed values — proves shotCode really is
     // regenerated, not silently passed through by an accidental key match.

@@ -111,15 +111,20 @@ describe("buildShotJsonPayload — LLMW.UC1.BENCH.1 (B11-b3)", () => {
   if (output.kind !== "object") throw new Error("unreachable");
   const fields = output.fields;
 
+  // `cameraPitch` dropped, `cameraPosition`/`movementSpeed`/`cameraSubject`
+  // added (B19d) — matching `shotInsertDirectedDescriptor.output.fields`'s
+  // own new shape.
   const fullDraft: Record<string, string | number> = {
     title: "Hero enters frame",
     description: "A low shot of the hero stepping into view.",
     durationSeconds: 4,
     actionPitch: "Hero walks in, pauses, walks out.",
-    cameraPitch: "Low angle, static.",
     continuityNotes: "Picks up from the previous shot's exit direction.",
     shotSize: "WS",
+    cameraPosition: "low_angle",
     cameraMovement: "static",
+    movementSpeed: "slow",
+    cameraSubject: "Static wide shot holds on the hero as they enter and exit frame.",
     continuityIn: "Hero was off-frame, entering left.",
     continuityOut: "Hero exits right, into the next shot.",
   };
@@ -130,15 +135,17 @@ describe("buildShotJsonPayload — LLMW.UC1.BENCH.1 (B11-b3)", () => {
     expect(typeof parsed.durationSeconds).toBe("number");
   });
 
-  it("emits the nine text fields unchanged, under their entity names", () => {
+  it("emits the eleven text fields unchanged, under their entity names", () => {
     const parsed = JSON.parse(buildShotJsonPayload(fields, fullDraft));
     expect(parsed.title).toBe(fullDraft.title);
     expect(parsed.description).toBe(fullDraft.description);
     expect(parsed.actionPitch).toBe(fullDraft.actionPitch);
-    expect(parsed.cameraPitch).toBe(fullDraft.cameraPitch);
     expect(parsed.continuityNotes).toBe(fullDraft.continuityNotes);
     expect(parsed.shotSize).toBe(fullDraft.shotSize);
+    expect(parsed.cameraPosition).toBe(fullDraft.cameraPosition);
     expect(parsed.cameraMovement).toBe(fullDraft.cameraMovement);
+    expect(parsed.movementSpeed).toBe(fullDraft.movementSpeed);
+    expect(parsed.cameraSubject).toBe(fullDraft.cameraSubject);
     expect(parsed.continuityIn).toBe(fullDraft.continuityIn);
     expect(parsed.continuityOut).toBe(fullDraft.continuityOut);
   });

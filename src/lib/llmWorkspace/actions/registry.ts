@@ -372,6 +372,26 @@ export const ACTION_REGISTRY = {
     response: "redirectOnly",
     ownership: { checked: true, transactional: false },
     columns: {
+      // `cameraPitch` removed (B19d) — see the module header, decision 4,
+      // and `.agents/executor_report.md`. `sequenceShots.ts`'s own
+      // `normalizeShot`/`createGeneratedShots` are untouched by this ticket
+      // (only `shots.fromSequence`'s `output.fields` and this declaration
+      // change): the action still reads a raw `camera_pitch` key when a
+      // caller supplies one and still writes `shots.cameraPitch` from it —
+      // this list documents what a model-driven Approve populates, which no
+      // longer includes it now that the descriptor stops asking the model
+      // for it. `cameraPosition`/`movementSpeed`/`cameraSubject` are
+      // deliberately NOT added here: `createGeneratedShots`'s insert
+      // (`sequenceShots.ts`) has no code path writing those three columns at
+      // all — `GeneratedSequenceShot`/`normalizeShot`/`toShot()`
+      // (`SequenceShotsLLMAssistPanel.tsx`) predate the five-field camera
+      // vocabulary and are out of this ticket's scope (its own
+      // `GeneratedSequenceShot` is declared "vivant", not to be moved or
+      // widened here) — see `.agents/executor_report.md` for the gap this
+      // leaves: the model can now propose `shot_size`/`camera_position`/
+      // `movement_speed`/`camera_subject`, but nothing on this write path
+      // reads any of the four back into a created shot's columns
+      // (`camera_movement` alone still round-trips, its key unchanged).
       written: [
         "sequenceId",
         "shotCode",
@@ -379,7 +399,6 @@ export const ACTION_REGISTRY = {
         "description",
         "durationSeconds",
         "actionPitch",
-        "cameraPitch",
         "shotSize",
         "cameraMovement",
         "continuityIn",
@@ -508,6 +527,22 @@ export const ACTION_REGISTRY = {
     response: "redirectOnly",
     ownership: { checked: true, transactional: true },
     columns: {
+      // `cameraPitch` removed (B19d) — see the module header, decision 4,
+      // and `.agents/executor_report.md`. `shotInsertion.ts`'s own
+      // `ProposedShot`/`normalizeProposedShot`/`createShotAtPosition` are
+      // untouched by this ticket (only `shot.insertDirected`'s
+      // `output.fields` and this declaration change): the action still
+      // reads a raw `cameraPitch` key when a caller supplies one and still
+      // writes `shots.cameraPitch` from it — this list documents what a
+      // model-driven Approve populates, which no longer includes it now
+      // that the descriptor stops asking the model for it.
+      // `cameraPosition`/`movementSpeed`/`cameraSubject` are deliberately
+      // NOT added here: `createShotAtPosition`'s `ProposedShot` has no field
+      // for any of the three, so a bench draft carrying them has that data
+      // silently dropped on Approve — flagged, not fixed, in
+      // `.agents/executor_report.md`; `shot_size`'s own value (including a
+      // "MS to WS" interval) still writes through unchanged, `shotSize`
+      // being a plain string column with no format check on either side.
       written: [
         "sequenceId",
         "shotCode",
@@ -515,7 +550,6 @@ export const ACTION_REGISTRY = {
         "description",
         "durationSeconds",
         "actionPitch",
-        "cameraPitch",
         "continuityNotes",
         "shotSize",
         "cameraMovement",

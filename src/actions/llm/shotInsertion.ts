@@ -61,7 +61,10 @@ type ProposedShot = {
   cameraPitch: string | null;
   continuityNotes: string | null;
   shotSize: string | null;
+  cameraPosition: string | null;
   cameraMovement: string | null;
+  movementSpeed: string | null;
+  cameraSubject: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
 };
@@ -96,7 +99,14 @@ function normalizeProposedShot(raw: unknown): ProposedShot | null {
     cameraPitch: str(r.cameraPitch, 500),
     continuityNotes: str(r.continuityNotes, 500),
     shotSize: str(r.shotSize, 50),
+    cameraPosition: str(r.cameraPosition, 50),
     cameraMovement: str(r.cameraMovement, 50),
+    movementSpeed: str(r.movementSpeed, 50),
+    // B19d — prose, not a palette value: the Seedance 2.5 formula wants the
+    // subject the move targets plus where it starts and ends, so its bound
+    // matches the descriptor's own `truncateTo: 300`. Equal on both sides,
+    // like every pair above, or one truncates what the other accepts.
+    cameraSubject: str(r.cameraSubject, 300),
     continuityIn: str(r.continuityIn, 500),
     continuityOut: str(r.continuityOut, 500),
   };
@@ -216,7 +226,10 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
         cameraPitch: proposed!.cameraPitch,
         continuityNotes: proposed!.continuityNotes,
         shotSize: proposed!.shotSize,
+        cameraPosition: proposed!.cameraPosition,
         cameraMovement: proposed!.cameraMovement,
+        movementSpeed: proposed!.movementSpeed,
+        cameraSubject: proposed!.cameraSubject,
         continuityIn: proposed!.continuityIn,
         continuityOut: proposed!.continuityOut,
         shotPrompt,

@@ -27,17 +27,20 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 const callLLMJson = vi.fn<(prompt: unknown, config: unknown) => Promise<string>>();
 vi.mock("@/lib/llm", () => ({ callLLMJson: (...args: [unknown, unknown]) => callLLMJson(...args) }));
 
-// A camera_pitch longer than its declared bound (200) — both the old `str()`
-// (`maxLen = 200`) and the runner's `truncateTo: 200` must cut it to exactly
-// 200 characters, at the same offset.
-const longCameraPitch = "P".repeat(250);
+// A camera_subject longer than its declared bound (300, B19d — the one
+// palette-less field, its bound is wider than the palette axes') — the
+// runner's `truncateTo: 300` must cut it to exactly 300 characters, at the
+// same offset. `camera_pitch` is gone from the descriptor (B19c made it
+// read-only, no model writes it any more); `framing` is now `shot_size`,
+// still bounded at 50.
+const longCameraSubject = "P".repeat(350);
 
 const rawModelResponse = JSON.stringify({
   shots: [
     // Item 0 — exercises: an absent string field (`shot_code`), an empty
     // string field after trim (`description: ""`), an out-of-bounds
     // `duration_seconds` (999 > 120), and a string field longer than its
-    // bound (`camera_pitch`, truncated to 200).
+    // bound (`camera_subject`, truncated to 300).
     {
       title: "Rooftop Confrontation",
       // shot_code: absent entirely.
@@ -45,9 +48,11 @@ const rawModelResponse = JSON.stringify({
       duration_seconds: 999,
       continuity_in: "Courier arrives, tense standoff.",
       action_pitch: "A dramatic pause before the confrontation.",
-      camera_pitch: longCameraPitch,
-      framing: "wide",
+      shot_size: "wide",
+      camera_position: "eye_level",
       camera_movement: "static",
+      movement_speed: "stable",
+      camera_subject: longCameraSubject,
       continuity_out: "Courier and rival face off, weapons drawn.",
       shot_prompt: "Wide static shot of two figures facing off on a rooftop at dusk.",
     },
@@ -81,9 +86,11 @@ const expectedShots = [
     // the key entirely.
     continuity_in: "Courier arrives, tense standoff.",
     action_pitch: "A dramatic pause before the confrontation.",
-    camera_pitch: longCameraPitch.slice(0, 200), // truncateTo: 200
-    framing: "wide",
+    shot_size: "wide",
+    camera_position: "eye_level",
     camera_movement: "static",
+    movement_speed: "stable",
+    camera_subject: longCameraSubject.slice(0, 300), // truncateTo: 300
     continuity_out: "Courier and rival face off, weapons drawn.",
     shot_prompt: "Wide static shot of two figures facing off on a rooftop at dusk.",
   },
@@ -94,9 +101,11 @@ const expectedShots = [
     duration_seconds: 45, // 0 < 45 <= 120 -> kept as-is
     continuity_in: "",
     action_pitch: "",
-    camera_pitch: "",
-    framing: "",
+    shot_size: "",
+    camera_position: "",
     camera_movement: "",
+    movement_speed: "",
+    camera_subject: "",
     continuity_out: "",
     shot_prompt: "",
   },

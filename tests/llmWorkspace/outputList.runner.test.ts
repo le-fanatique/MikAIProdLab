@@ -478,6 +478,13 @@ describe("equality — shots.fromSequence via runWorkspaceOperation vs. the list
   it("same raw model response, every field, in the model's own JSON keys", async () => {
     const sequenceId = await insertSequence(ctx, projectId, { title: "Equality sequence" });
 
+    // B19d: the real descriptor's camera fields are `shot_size` /
+    // `camera_position` / `camera_movement` / `movement_speed` /
+    // `camera_subject` — `camera_pitch`/`framing` are gone. The synthetic
+    // descriptor's own `item.fields` below is kept an exact mirror of
+    // `shotsFromSequenceDescriptor.output.item.fields`
+    // (`descriptors/shotsFromSequence.ts`), which is this test's whole
+    // point — a mismatch here would silently stop proving anything.
     const rawShots = [
       {
         title: "Establishing shot",
@@ -486,9 +493,11 @@ describe("equality — shots.fromSequence via runWorkspaceOperation vs. the list
         duration_seconds: 4,
         continuity_in: "Calm morning.",
         action_pitch: "Boats depart.",
-        camera_pitch: "Slow push in.",
-        framing: "Wide",
-        camera_movement: "Dolly",
+        shot_size: "WS",
+        camera_position: "low_angle",
+        camera_movement: "dolly_in",
+        movement_speed: "slow",
+        camera_subject: "Slow push in on the departing boats.",
         continuity_out: "Sun rises.",
         shot_prompt: "cinematic wide shot of a harbor at dawn",
       },
@@ -519,9 +528,11 @@ describe("equality — shots.fromSequence via runWorkspaceOperation vs. the list
           { type: "number", field: "duration_seconds", jsonKey: "duration_seconds", exclusiveMin: 0, max: 120, fallback: "omit" },
           { type: "string", field: "continuity_in", jsonKey: "continuity_in" },
           { type: "string", field: "action_pitch", jsonKey: "action_pitch" },
-          { type: "string", field: "camera_pitch", jsonKey: "camera_pitch" },
-          { type: "string", field: "framing", jsonKey: "framing" },
+          { type: "string", field: "shot_size", jsonKey: "shot_size" },
+          { type: "string", field: "camera_position", jsonKey: "camera_position" },
           { type: "string", field: "camera_movement", jsonKey: "camera_movement" },
+          { type: "string", field: "movement_speed", jsonKey: "movement_speed" },
+          { type: "string", field: "camera_subject", jsonKey: "camera_subject" },
           { type: "string", field: "continuity_out", jsonKey: "continuity_out" },
           { type: "string", field: "shot_prompt", jsonKey: "shot_prompt" },
         ],

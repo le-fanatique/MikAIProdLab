@@ -38,6 +38,7 @@
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
+import { renderCameraInstructionRulesBlock } from "../cameraInstruction";
 
 export const shotsFromSequenceDescriptor: OperationDescriptor = {
   id: "shots.fromSequence",
@@ -85,8 +86,16 @@ CONTINUITY RULES:
 - Last shot continuity_out describes the final state reached by the end of the sequence.
 - Before writing each shot, silently track: character positions, alive/dead/injured/transformed state, objects held/lost/destroyed, location, emotional state, and consequences of previous action. Do not output this reasoning. Only output the JSON.`,
         },
-        // `JSON_SCHEMA(count)` (`shots-from-sequence.ts:36-56`) — identical
-        // in both paths, needs only `targetCount`, own leading `"\n"`.
+        // The camera rules block (B19d) — shared verbatim with
+        // `shot.insertDirected` via `cameraInstruction.ts`. Before this
+        // ticket, Generate Shots had no rule at all for these fields beyond
+        // the JSON schema's own "string or null — values" description; the
+        // interval/combination rule lived only in Insert Shot. Own leading
+        // `"\n"` to reopen the blank line, same device as the two blocks
+        // around it.
+        { text: `\n${renderCameraInstructionRulesBlock()}` },
+        // `JSON_SCHEMA(count)` — identical in both paths, needs only
+        // `targetCount`, own leading `"\n"`.
         { parameter: "targetCount", render: "shotsFromSequence.jsonSchemaBlock" },
       ],
       separator: "\n",
@@ -166,9 +175,22 @@ CONTINUITY RULES:
         { type: "number", field: "durationSeconds", jsonKey: "duration_seconds", exclusiveMin: 0, max: 120, fallback: "omit" },
         { type: "string", field: "continuityIn", jsonKey: "continuity_in", truncateTo: 500 },
         { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 300 },
-        { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 200 },
-        { type: "string", field: "shotSize", jsonKey: "framing", truncateTo: 50 },
+        // The five camera fields (B19d) — `camera_pitch` is gone: B19c made
+        // it read-only, no model writes it any more; the column and its
+        // existing content are untouched, only this model-facing output
+        // stops offering it. `shotSize`'s `jsonKey` moves from `framing` to
+        // `shot_size` — the field it always mapped to keeps its name, only
+        // the model-facing key changes to match `camera_position` /
+        // `movement_speed` / `camera_subject`. Bounds: 50 on every palette
+        // axis (the truncation this ticket's own audit found — a value that
+        // long is prose, not a palette code, and prose there is now a bug,
+        // not a length problem), 300 on `cameraSubject` — it is prose by
+        // design, the one axis with no palette to bound it against.
+        { type: "string", field: "shotSize", jsonKey: "shot_size", truncateTo: 50 },
+        { type: "string", field: "cameraPosition", jsonKey: "camera_position", truncateTo: 50 },
         { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
+        { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
+        { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
         { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },
         { type: "string", field: "shotPrompt", jsonKey: "shot_prompt", truncateTo: 1000 },
       ],
