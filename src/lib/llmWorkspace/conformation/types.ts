@@ -116,9 +116,11 @@ export type ConformationInspectionRequest = ConformationRequest & {
   lighting: string | null;
   /**
    * The total file count, images included. A number, not a per-family list:
-   * video carries no role column yet and audio has no entity at all (§5.6),
-   * so this ticket declares no shape for either. When they arrive, the caller
-   * passes a larger number and this module does not change.
+   * audio has no entity at all (§5.6), and video — which **does** carry a
+   * role column since B17a, contrary to what this comment claimed until
+   * 2026-08-21 — is simply not composed into a prompt yet. So this module
+   * declares no shape for either. When they arrive, the caller passes a
+   * larger number and this module does not change.
    */
   fileTagCount: number;
 };

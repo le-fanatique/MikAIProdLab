@@ -271,8 +271,11 @@ export function composeStoryboardShot(
     // one case the author called "no lighting direction yet". Advisory, never
     // a gate.
     lighting: nonEmpty(input.lighting),
-    // Images only for now: video carries no role column and audio has no
-    // entity at all (§5.6), so there is no second family to count yet.
+    // Images only. **Not because video has no roles** — B17a gave
+    // `shot_reference_videos` its `video_role` column (migration 0055), so
+    // that sentence, which stood here until 2026-08-21, is false. Video is
+    // absent because nothing composes video references into this prompt yet,
+    // and audio has no entity at all (§5.6).
     fileTagCount: conformationReferences.length,
   });
 

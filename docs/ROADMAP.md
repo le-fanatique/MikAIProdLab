@@ -27,15 +27,22 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Refonte du vocabulaire caméra (B19).** Cinq tickets livrés — `5a89ef2`,
-`17986f9`, `65261e2`, `8bc467b`, `ec711f6`, `2ba4ac8` : le vocabulaire est
-déclaré une fois, la migration a ouvert les quatre axes, les formulaires et les
-deux instructions LLM le lisent au lieu de le recopier, et la composition suit
-le template Seedance 2.5. Le détail, ses trois revirements sourcés et les deux
-pertes silencieuses attrapées par mutation sont dans `docs/PROJECT_STATE.md`.
+**Refonte du vocabulaire caméra (B19) — sept tickets livrés.** `5a89ef2`,
+`17986f9`, `65261e2`, `8bc467b`, `ec711f6`, `2ba4ac8`, `b5a8ce2`, `c54ee95`,
+`2b79abc`. Le vocabulaire est déclaré une fois, six axes existent, les
+formulaires et les deux instructions LLM le lisent au lieu de le recopier, la
+composition suit le template Seedance 2.5, et la conversion a tourné sur **les
+dix séquences** : 63 plans portent une position de caméra et 55 un sujet suivi,
+deux axes qui n'existaient pas le matin même.
 
-**Reste `B19f` — la passe de conversion.** Écrite, pas exécutée : l'exécutant a
-atteint sa limite hebdomadaire. C'est le seul reste de B19.
+Deux choses trouvées par la passe réelle, qu'aucun test n'a vues : un libellé de
+groupe recopié dans un champ (`"Dutch / Canted (tilt)"`, corrigé), et 22 plans
+dont la focale n'avait aucun axe où aller — d'où `camera_lens`, sans lequel la
+suppression du champ hérité les aurait détruites.
+
+**Reste `B19h`** — retirer `camera_pitch`. Ticket écrit, pas exécuté :
+l'exécutant a atteint sa limite hebdomadaire, retour le 23. Le feu vert est
+mesuré : zéro plan ne perdrait quoi que ce soit.
 
 ---
 
