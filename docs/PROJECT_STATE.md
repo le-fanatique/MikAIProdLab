@@ -63,10 +63,25 @@ so three axes lived as prose in `camera_pitch` on 88 shots.
 | B19c | `65261e2` | the form shows the values **and what they mean**, via `<datalist>` so an out-of-palette value stays typable |
 | B19d | `8bc467b`, `ec711f6` | both instructions render from the declaration; nothing is hand-copied. Values are written the way the trade writes them — `MS`, but `Low Angle` |
 | B19e | `2ba4ac8` | the camera line follows the Seedance 2.5 template, and the conformation counts **movements** instead of filled fields |
+| B19g | `2b79abc` | a **lens axis**, opened because the conversion proved one was needed: 22 shots stated a focal length the other five axes could not hold |
+| B19h | ticket written | removing `camera_pitch`, the last trace of the old model |
 | B19f | `b5a8ce2` | the conversion pass — a list operation over the sequence, bench-only, every proposal shown beside the text it came from |
 
 **B19 is complete.** B19d, B19e and B19f were finished in the main thread:
 the executor hit its weekly limit mid-file on B19d.
+
+**Converted in bulk, 2026-08-21, on the author's instruction.** All ten
+sequences, 82 shots. Afterwards, on 91 shots: 63 carry a `camera_position` and
+55 a `camera_subject`, both of which did not exist that morning. And **zero**
+shots hold a `camera_pitch` whose content is not represented in at least one
+axis — which is what makes removing it safe rather than hopeful.
+
+Two things the bulk run found that no test did. A model copied a group label
+into a field — `"Dutch / Canted (tilt)"` — because the instruction trailed each
+label after its list; the label now leads, and the two rows are fixed. And 22
+shots stated a focal length that none of the five axes could hold, which is why
+`camera_lens` exists at all: deleting the legacy field without it would have
+destroyed those focal lengths.
 
 **Validated on real shots, 2026-08-21.** The author ran the conversion on
 `The Awakening and The Trap` — six shots, every one carrying a compound
