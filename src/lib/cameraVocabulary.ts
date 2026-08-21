@@ -98,8 +98,13 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   {
     id: "cameraPosition",
     label: "Camera Position",
+    // The user-facing wording stays plain on purpose: a storyboard artist
+    // needs to know what the axis is, not which guide named it. The reason
+    // this is "position" rather than the narrower "angle" — the term the
+    // Seedance 2.5 skill itself uses, wide enough to hold height as well as
+    // tilt — belongs here, in the code, not on screen.
     definition:
-      "Where the camera is relative to the subject — its tilt, its physical height, and its narrative placement. \"Camera position\", not \"angle\": the term the skill uses, kept here rather than the narrower word.",
+      "Where the camera is: how it tilts, how high it sits, and where it stands in relation to the subject.",
     values: [
       // inclination — how the lens is tilted
       { code: "eye_level", group: "inclination", label: "Eye Level", definition: "The lens points neither up nor down, level with the subject's eyes." },
@@ -129,7 +134,7 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   {
     id: "cameraMovement",
     label: "Camera Movement",
-    definition: "How the camera itself moves during the shot. One value per shot — never a combination.",
+    definition: "How the camera moves during the shot. One move only — never two combined.",
     values: [
       { code: "static", label: "Static / Locked-off", definition: "The camera does not move for the duration of the shot." },
       { code: "dolly", label: "Dolly", definition: "The camera moves physically toward or away from the subject, direction unspecified." },
@@ -153,7 +158,10 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   {
     id: "movementSpeed",
     label: "Movement Speed",
-    definition: "The pace and quality of the camera movement — a separate axis from which direction it moves. The Seedance 2.0 guide names this vocabulary of rhythm explicitly.",
+    // Kept a separate axis from the movement itself, on the author's call:
+    // 22 of his shots already carried a speed inside `camera_movement`, and
+    // the Seedance 2.0 guide names this rhythm vocabulary explicitly.
+    definition: "How fast, and how smoothly, the camera moves.",
     values: [
       { code: "slow", label: "Slow", definition: "The movement unfolds at a slow pace." },
       { code: "smooth", label: "Smooth", definition: "The movement is even, without jerks or steps." },
@@ -166,8 +174,13 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   {
     id: "cameraSubject",
     label: "Camera Subject",
+    // No palette: this is the one axis that has to be written, not chosen.
+    // The Seedance 2.5 skill's formula is "movement + subject + start +
+    // direction + arrival", under the rule "do not use only a term detached
+    // from its subject" — which is why a bare "tracking" is not enough and
+    // this field exists at all.
     definition:
-      "What the movement targets, its starting point and its arrival — the skill's own formula is \"movement + subject + start + direction + arrival\", with the rule \"do not use only a term detached from its subject\". Free prose: this axis is declared so consumers know it exists, with no palette of its own.",
+      "Who or what the camera follows, and where the move starts and ends.",
     values: [],
   },
 ];
