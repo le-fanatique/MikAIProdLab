@@ -27,21 +27,11 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Refonte du vocabulaire caméra (B19) — sept tickets livrés.** `5a89ef2`,
-`17986f9`, `65261e2`, `8bc467b`, `ec711f6`, `2ba4ac8`, `b5a8ce2`, `c54ee95`,
-`2b79abc`. Le vocabulaire est déclaré une fois, six axes existent, les
-formulaires et les deux instructions LLM le lisent au lieu de le recopier, la
-composition suit le template Seedance 2.5, et la conversion a tourné sur **les
-dix séquences** : 63 plans portent une position de caméra et 55 un sujet suivi,
-deux axes qui n'existaient pas le matin même.
+**Rien.** Le dernier chantier ouvert, la refonte du vocabulaire caméra, est clos
+— voir la section 6.
 
-Deux choses trouvées par la passe réelle, qu'aucun test n'a vues : un libellé de
-groupe recopié dans un champ (`"Dutch / Canted (tilt)"`, corrigé), et 22 plans
-dont la focale n'avait aucun axe où aller — d'où `camera_lens`, sans lequel la
-suppression du champ hérité les aurait détruites.
-
-**B19 est complet** (`4370260`). `camera_pitch` est retiré ; il ne reste qu'à
-appliquer la migration `0060`, un simple `DROP COLUMN`.
+Tout ce qui reste demande une décision de l'auteur (section 2) ou attend ses
+données réelles. Aucun ticket n'est prêt à être exécuté.
 
 ---
 
@@ -217,6 +207,19 @@ avec leur raison.
 ---
 
 ## 6. Clos — où le retrouver
+
+**B19 — refonte du vocabulaire caméra. Clos le 2026-08-22**, huit tickets :
+`5a89ef2`, `17986f9`, `65261e2`, `8bc467b`, `ec711f6`, `2ba4ac8`, `b5a8ce2`,
+`c54ee95`, `2b79abc`, `4370260`, `d6c6b91`. Migrations `0056`, `0057`, `0059`
+et `0060` appliquées par l'auteur.
+
+Le vocabulaire est déclaré une fois, six axes remplacent trois champs mal
+découpés, les formulaires montrent ce que chaque valeur veut dire, les deux
+instructions LLM lisent la déclaration au lieu de la recopier, et les dix
+séquences sont converties. `camera_pitch` est supprimée. Le détail, les trois
+revirements sourcés et les sept pertes silencieuses attrapées sont dans
+`docs/PROJECT_STATE.md`.
+
 
 Le registre complet de ce qui a été livré, ticket par ticket et commit par
 commit, est dans `docs/archive/ROADMAP_2026-08-02.md` : l'epic `STYLE.1` (A à G,
