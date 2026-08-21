@@ -44,6 +44,7 @@ export const DESCRIPTORS = {
   "shots.fromSequence": shotsFromSequenceDescriptor,
   "sequences.fromOutline": sequencesFromOutlineDescriptor,
   "assets.fromProject": assetsFromProjectDescriptor,
+  "camera.convertLegacy": cameraConvertDescriptor,
   "casting.fromSequence": castingFromSequenceDescriptor,
   "narrativePrompt.compose": narrativePromptComposeDescriptor,
   "lighting.fromImage": lightingFromImageDescriptor,

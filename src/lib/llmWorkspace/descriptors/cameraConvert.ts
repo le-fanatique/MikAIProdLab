@@ -99,10 +99,21 @@ No markdown. No explanation. Only the JSON object.`,
         { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
         { type: "string", field: "note", jsonKey: "note", truncateTo: 300 },
       ],
-      // A conversion with no shot to attach to is not a conversion. Every
-      // other field is legitimately empty — that is the whole discipline of
-      // this operation.
-      validity: { fields: ["shotId"], require: "all" },
+      // The format only lets a validity rule reference *string* fields, so it
+      // cannot require `shot_id`, which is a number. That is handled on the
+      // other side instead: `fallback: "omit"` drops an unusable `shotId`, and
+      // the write action refuses any proposal without one, checked against the
+      // sequence rather than by bare id.
+      //
+      // What a string rule *can* say here is the rule worth having: a
+      // conversion that fills no axis at all is not a conversion. `require:
+      // "any"` rather than `"all"` because an axis the source does not mention
+      // must stay empty — requiring all five would force exactly the guessing
+      // this operation exists to prevent.
+      validity: {
+        fields: ["shotSize", "cameraPosition", "cameraMovement", "movementSpeed", "cameraSubject"],
+        require: "any",
+      },
     },
     maxItems: 200,
     selection: { formDataKey: "selectedJson" },
