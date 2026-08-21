@@ -436,9 +436,13 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
       {/* ── References ────────────────────────────────────── */}
       <SectionLabel label="References" />
-      {attachedReference === "1" && (
+      {attachedReference !== undefined && /^\d+$/.test(attachedReference) && (
         <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
-          <p className="text-sm text-[#6b9e72]">Reference image attached.</p>
+          <p className="text-sm text-[#6b9e72]">
+            {attachedReference === "1"
+              ? "Reference image attached."
+              : `${attachedReference} reference images attached.`}
+          </p>
         </div>
       )}
       <Card title="Reference Images">
@@ -572,7 +576,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
               textOverrideByNodeId={textOverrideByNodeId}
               generationError={generationError}
               activeJobId={activeJobId}
-              attachedReference={attachedReference === "1"}
+              attachedReference={attachedReference}
               attachError={attachError ?? null}
             />
           ) : (

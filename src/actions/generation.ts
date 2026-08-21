@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { generationJobs, projects, comfyWorkflows, assets, shotReferenceImages, assetReferenceImages } from "@/db/schema";
 import { eq, asc, sql } from "drizzle-orm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
+import { parseRequestedIndexes, resolveSelectedOutputPaths } from "@/lib/comfy/selectedOutputs";
 import { getRuntimeImageLabel, type RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
@@ -758,75 +759,61 @@ export async function attachOutputAsShotReference(
   if (!job) errRedirect("Output not found.");
   if (job.shotId !== shotId) errRedirect("Output does not belong to this shot.");
   if (job.status !== "done") errRedirect("Output is not ready.");
-  if (!job.outputPath) errRedirect("Output path is missing.");
-  if (!job.outputPath.startsWith("outputs/jobs/")) {
-    errRedirect("Output path is not in the expected location.");
-  }
+  // GEN.MULTIOUT.1 — identical contract to the Asset action above.
+  const requestedIndexes = parseRequestedIndexes(formData.getAll("outputIndex"));
+  if (requestedIndexes === null) errRedirect("Invalid output selection.");
 
-  // Check extension
-  const ext = path.extname(job.outputPath).toLowerCase();
-  if (!ATTACHABLE_IMAGE_EXTS.has(ext)) {
-    errRedirect("Only image outputs can be attached as references.");
-  }
+  const resolved = await resolveSelectedOutputPaths({
+    jobId,
+    fallbackPath: job.outputPath,
+    requestedIndexes,
+    allowedExts: ATTACHABLE_IMAGE_EXTS,
+  });
+  if (!resolved.ok) errRedirect(resolved.error);
 
-  // Resolve and validate source path
   const publicRoot = path.join(process.cwd(), "public");
-  const allowedOutputsRoot = path.join(publicRoot, "outputs", "jobs");
-  const sourceAbsolute = path.resolve(publicRoot, job.outputPath);
-
-  if (
-    !sourceAbsolute.startsWith(allowedOutputsRoot + path.sep) &&
-    sourceAbsolute !== allowedOutputsRoot
-  ) {
-    errRedirect("Output path is not in the expected location.");
-  }
-
-  // Verify source file exists
-  try {
-    await fs.access(sourceAbsolute);
-  } catch {
-    errRedirect("Output file not found on disk.");
-  }
-
-  // Prepare destination
-  const uuid = randomUUID();
-  const destFilename = `${uuid}${ext}`;
   const destSubfolder = `shot-${shotId}`;
-  const destRelative = `uploads/reference-images/${destSubfolder}/${destFilename}`;
   const destDir = path.join(publicRoot, "uploads", "reference-images", destSubfolder);
-  const destAbsolute = path.join(destDir, destFilename);
+  const copied: string[] = [];
 
-  // Copy file
   try {
     await fs.mkdir(destDir, { recursive: true });
-    await fs.copyFile(sourceAbsolute, destAbsolute);
-  } catch {
-    errRedirect("Failed to copy output file. Please try again.");
-  }
 
-  // Insert shot_reference_images row
-  try {
     const [{ maxOrder }] = await db
       .select({ maxOrder: sql<number>`coalesce(max(${shotReferenceImages.orderIndex}), -1)` })
       .from(shotReferenceImages)
       .where(eq(shotReferenceImages.shotId, shotId));
 
-    await db.insert(shotReferenceImages).values({
-      shotId,
-      orderIndex: maxOrder + 1,
-      imagePath: destRelative,
-      sourceFilename: null,
-      label: "Generated Output",
-      imageRole: "keyframe",
-    });
+    let nextOrder = maxOrder + 1;
+
+    for (const relativeSource of resolved.paths) {
+      const ext = path.extname(relativeSource).toLowerCase();
+      const destFilename = `${randomUUID()}${ext}`;
+      const destRelative = `uploads/reference-images/${destSubfolder}/${destFilename}`;
+      const destAbsolute = path.join(destDir, destFilename);
+
+      await fs.copyFile(path.resolve(publicRoot, relativeSource), destAbsolute);
+      copied.push(destAbsolute);
+
+      await db.insert(shotReferenceImages).values({
+        shotId,
+        orderIndex: nextOrder,
+        imagePath: destRelative,
+        sourceFilename: null,
+        label: "Generated Output",
+        imageRole: "keyframe",
+      });
+      nextOrder += 1;
+    }
   } catch {
-    // Best-effort cleanup of copied file
-    try { await fs.unlink(destAbsolute); } catch { /* silent */ }
-    errRedirect("Failed to save reference image. Please try again.");
+    for (const file of copied) {
+      try { await fs.unlink(file); } catch { /* silent */ }
+    }
+    errRedirect("Failed to attach the selected outputs. Please try again.");
   }
 
   const sep = returnTo.includes("?") ? "&" : "?";
-  redirect(`${returnTo}${sep}attachedReference=1`);
+  redirect(`${returnTo}${sep}attachedReference=${resolved.paths.length}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -872,73 +859,66 @@ export async function attachOutputAsAssetReference(
   if (!job) errRedirect("Output not found.");
   if (job.assetId !== assetId) errRedirect("Output does not belong to this asset.");
   if (job.status !== "done") errRedirect("Output is not ready.");
-  if (!job.outputPath) errRedirect("Output path is missing.");
-  if (!job.outputPath.startsWith("outputs/jobs/")) {
-    errRedirect("Output path is not in the expected location.");
-  }
+  // GEN.MULTIOUT.1 — the user may have ticked several of the job's outputs.
+  // An empty selection means "the primary output", which is what a form
+  // without checkboxes posts and what every caller did before this ticket.
+  const requestedIndexes = parseRequestedIndexes(formData.getAll("outputIndex"));
+  if (requestedIndexes === null) errRedirect("Invalid output selection.");
 
-  // Check extension — images only, no video/gif
-  const ext = path.extname(job.outputPath).toLowerCase();
-  if (!ASSET_ATTACHABLE_IMAGE_EXTS.has(ext)) {
-    errRedirect("Only image outputs (.png, .jpg, .jpeg, .webp) can be attached as references.");
-  }
+  const resolved = await resolveSelectedOutputPaths({
+    jobId,
+    fallbackPath: job.outputPath,
+    requestedIndexes,
+    allowedExts: ASSET_ATTACHABLE_IMAGE_EXTS,
+  });
+  if (!resolved.ok) errRedirect(resolved.error);
 
-  // Resolve and validate source path
   const publicRoot = path.join(process.cwd(), "public");
-  const allowedOutputsRoot = path.join(publicRoot, "outputs", "jobs");
-  const sourceAbsolute = path.resolve(publicRoot, job.outputPath);
-
-  if (
-    !sourceAbsolute.startsWith(allowedOutputsRoot + path.sep) &&
-    sourceAbsolute !== allowedOutputsRoot
-  ) {
-    errRedirect("Output path is not in the expected location.");
-  }
-
-  // Verify source file exists
-  try {
-    await fs.access(sourceAbsolute);
-  } catch {
-    errRedirect("Output file not found on disk.");
-  }
-
-  // Prepare destination
-  const uuid = randomUUID();
-  const destFilename = `${uuid}${ext}`;
   const destSubfolder = `asset-${assetId}`;
-  const destRelative = `uploads/reference-images/${destSubfolder}/${destFilename}`;
   const destDir = path.join(publicRoot, "uploads", "reference-images", destSubfolder);
-  const destAbsolute = path.join(destDir, destFilename);
 
-  // Copy file (source is preserved)
+  // Copied files, so a later failure can undo this call's own work and leave
+  // nothing half-attached behind.
+  const copied: string[] = [];
+
   try {
     await fs.mkdir(destDir, { recursive: true });
-    await fs.copyFile(sourceAbsolute, destAbsolute);
-  } catch {
-    errRedirect("Failed to copy output file. Please try again.");
-  }
 
-  // Insert asset_reference_images row
-  try {
     const [{ maxOrder }] = await db
       .select({ maxOrder: sql<number>`coalesce(max(${assetReferenceImages.orderIndex}), -1)` })
       .from(assetReferenceImages)
       .where(eq(assetReferenceImages.assetId, assetId));
 
-    await db.insert(assetReferenceImages).values({
-      assetId,
-      orderIndex: maxOrder + 1,
-      imagePath: destRelative,
-      sourceFilename: null,
-      label: "Generated Output",
-      imageRole: "keyframe",
-    });
+    let nextOrder = maxOrder + 1;
+
+    // In index order, so several attached panels keep the batch's own order
+    // in the reference list rather than the order they were clicked in.
+    for (const relativeSource of resolved.paths) {
+      const ext = path.extname(relativeSource).toLowerCase();
+      const destFilename = `${randomUUID()}${ext}`;
+      const destRelative = `uploads/reference-images/${destSubfolder}/${destFilename}`;
+      const destAbsolute = path.join(destDir, destFilename);
+
+      await fs.copyFile(path.resolve(publicRoot, relativeSource), destAbsolute);
+      copied.push(destAbsolute);
+
+      await db.insert(assetReferenceImages).values({
+        assetId,
+        orderIndex: nextOrder,
+        imagePath: destRelative,
+        sourceFilename: null,
+        label: "Generated Output",
+        imageRole: "keyframe",
+      });
+      nextOrder += 1;
+    }
   } catch {
-    // Best-effort cleanup of copied file
-    try { await fs.unlink(destAbsolute); } catch { /* silent */ }
-    errRedirect("Failed to save reference image. Please try again.");
+    for (const file of copied) {
+      try { await fs.unlink(file); } catch { /* silent */ }
+    }
+    errRedirect("Failed to attach the selected outputs. Please try again.");
   }
 
   const sep = returnTo.includes("?") ? "&" : "?";
-  redirect(`${returnTo}${sep}attachedReference=1`);
+  redirect(`${returnTo}${sep}attachedReference=${resolved.paths.length}`);
 }

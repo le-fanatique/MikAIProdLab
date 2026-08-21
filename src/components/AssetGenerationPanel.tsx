@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/db";
-import { assets, comfyWorkflows, assetReferenceImages, generationJobs } from "@/db/schema";
+import { assets, comfyWorkflows, assetReferenceImages, generationJobs, generationJobOutputs } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
 import WorkflowRuntimeMappingPanel from "@/components/WorkflowRuntimeMappingPanel";
@@ -22,6 +22,8 @@ import {
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
+import JobOutputSelectionToggle from "@/components/JobOutputSelectionToggle";
+import { generatedOutputUrl } from "@/lib/getOutputUrl";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
 import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
@@ -46,7 +48,9 @@ type Props = {
   textOverrideByNodeId: Record<string, string>;
   generationError: string | undefined;
   activeJobId: number | null;
-  attachedReference?: boolean;
+  /** GEN.MULTIOUT.1 — the count attached, as a string; several outputs can be
+   *  attached in one submit. Absent when nothing was just attached. */
+  attachedReference?: string;
   attachError?: string | null;
 };
 
@@ -283,6 +287,10 @@ export default async function AssetGenerationPanel({
 
   const ATTACH_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
   let canAttach = false;
+  // GEN.MULTIOUT.1 — every file this job produced, in ComfyUI's own order.
+  // Empty for jobs published before the table existed; the single-output
+  // fallback below is what they keep using.
+  let jobOutputs: Array<{ index: number; path: string }> = [];
 
   if (activeJobId !== null) {
     const [fetchedJob] = await db
@@ -300,6 +308,20 @@ export default async function AssetGenerationPanel({
         fetchedJob.status === "done" &&
         fetchedJob.outputPath !== null &&
         ATTACH_EXTS.has(`.${ext}`);
+
+      if (fetchedJob.status === "done") {
+        const rows = await db
+          .select({
+            outputIndex: generationJobOutputs.outputIndex,
+            path: generationJobOutputs.path,
+          })
+          .from(generationJobOutputs)
+          .where(eq(generationJobOutputs.jobId, activeJobId))
+          .orderBy(generationJobOutputs.outputIndex);
+        jobOutputs = rows
+          .filter((r) => ATTACH_EXTS.has(`.${r.path.split(".").pop()?.toLowerCase() ?? ""}`))
+          .map((r) => ({ index: r.outputIndex, path: r.path }));
+      }
     }
   }
 
@@ -548,13 +570,59 @@ export default async function AssetGenerationPanel({
               <p className="text-xs text-[#cf7b6b]">{attachError}</p>
             )}
             {attachedReference ? (
-              <p className="text-xs text-[#6b9e72]">Reference image attached.</p>
+              <p className="text-xs text-[#6b9e72]">
+                {attachedReference === "1"
+                  ? "Reference image attached."
+                  : `${attachedReference} reference images attached.`}
+              </p>
             ) : canAttach ? (
-              <form action={attachOutputAsAssetReference}>
+              /* GEN.MULTIOUT.1 — a prompt can return several files (a grid split
+                 into panels, for one). Every one of them is offered, in ComfyUI's
+                 own order, all ticked by default. A job recorded before this
+                 ticket has no rows and keeps the single-output form. */
+              <form action={attachOutputAsAssetReference} id="asset-attach-outputs-form">
                 <input type="hidden" name="projectId" value={String(pid)} />
                 <input type="hidden" name="assetId" value={String(aid)} />
                 <input type="hidden" name="jobId" value={String(activeJobId)} />
                 <input type="hidden" name="returnTo" value={approveReturnTo} />
+
+                {jobOutputs.length > 1 && (
+                  <div className="flex flex-col gap-2 mb-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+                        {jobOutputs.length} outputs
+                      </p>
+                      <JobOutputSelectionToggle formId="asset-attach-outputs-form" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {jobOutputs.map((output) => (
+                        <label
+                          key={output.index}
+                          className="group relative flex cursor-pointer flex-col gap-1 rounded border border-[#2c3035] bg-[#0d0e10] p-1.5 hover:border-[#3a4046] transition-colors"
+                        >
+                          <img
+                            src={generatedOutputUrl(output.path) ?? `/${output.path}`}
+                            alt={`Output ${output.index + 1}`}
+                            className="w-full aspect-square rounded object-cover"
+                          />
+                          <span className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              name="outputIndex"
+                              value={String(output.index)}
+                              defaultChecked
+                              className="accent-[#6b9e72]"
+                            />
+                            <span className="text-[10px] text-[#a4abb2]">
+                              {output.index + 1}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   className="rounded border border-[#6b9e72]/40 text-[#6b9e72] px-3 py-1.5 text-sm hover:border-[#6b9e72]/70 hover:text-[#8fbf96] transition-colors"
