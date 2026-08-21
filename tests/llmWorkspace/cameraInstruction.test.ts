@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CAMERA_VOCABULARY, getCameraVocabularyAxis } from "@/lib/cameraVocabulary";
+import { CAMERA_VOCABULARY, getCameraVocabularyAxis,
+  writtenCameraVocabularyValue,
+} from "@/lib/cameraVocabulary";
 import {
   renderCameraFieldSchemaLine,
   renderCameraInstructionRulesBlock,
@@ -32,8 +34,9 @@ describe("renderCameraFieldSchemaLine", () => {
 
   it("shot_size lists every shotSize code and names the start-to-end interval", () => {
     const line = renderCameraFieldSchemaLine("shot_size");
-    for (const value of getCameraVocabularyAxis("shotSize").values) {
-      expect(line).toContain(value.code);
+    const axis = getCameraVocabularyAxis("shotSize");
+    for (const value of axis.values) {
+      expect(line).toContain(writtenCameraVocabularyValue(axis, value));
     }
     expect(line).toContain("MS to WS");
   });
@@ -42,25 +45,27 @@ describe("renderCameraFieldSchemaLine", () => {
     const line = renderCameraFieldSchemaLine("camera_position");
     const axis = getCameraVocabularyAxis("cameraPosition");
     for (const value of axis.values) {
-      expect(line).toContain(value.code);
+      expect(line).toContain(writtenCameraVocabularyValue(axis, value));
     }
     const eyeLevelOccurrences = axis.values.filter((v) => v.code === "eye_level").length;
     expect(eyeLevelOccurrences).toBe(2);
-    expect(line.split("eye_level").length - 1).toBe(2);
+    expect(line.split("Eye Level").length - 1).toBe(2);
   });
 
   it("camera_movement lists every cameraMovement code and states one value only", () => {
     const line = renderCameraFieldSchemaLine("camera_movement");
-    for (const value of getCameraVocabularyAxis("cameraMovement").values) {
-      expect(line).toContain(value.code);
+    const axis = getCameraVocabularyAxis("cameraMovement");
+    for (const value of axis.values) {
+      expect(line).toContain(writtenCameraVocabularyValue(axis, value));
     }
     expect(line).toMatch(/one value only/i);
   });
 
   it("movement_speed lists every movementSpeed code", () => {
     const line = renderCameraFieldSchemaLine("movement_speed");
-    for (const value of getCameraVocabularyAxis("movementSpeed").values) {
-      expect(line).toContain(value.code);
+    const axis = getCameraVocabularyAxis("movementSpeed");
+    for (const value of axis.values) {
+      expect(line).toContain(writtenCameraVocabularyValue(axis, value));
     }
   });
 
@@ -85,7 +90,7 @@ describe("renderCameraInstructionRulesBlock", () => {
     for (const axis of CAMERA_VOCABULARY) {
       if (axis.id === "cameraSubject") continue; // no palette
       for (const value of axis.values) {
-        expect(block).toContain(value.code);
+        expect(block).toContain(writtenCameraVocabularyValue(axis, value));
       }
     }
   });

@@ -20,6 +20,7 @@ import {
   CameraVocabularyAxisId,
   getCameraVocabularyAxis,
   recognizeCameraVocabularyValue,
+  writtenCameraVocabularyValue,
 } from "@/lib/cameraVocabulary";
 
 type Props = {
@@ -74,8 +75,8 @@ export default function CameraVocabularyField({ axisId, name, defaultValue }: Pr
       {hasPalette && (
         <datalist id={listId}>
           {axis.values.map((v) => (
-            <option key={`${v.code}-${v.group ?? ""}`} value={v.code}>
-              {v.code} — {v.label}
+            <option key={`${v.code}-${v.group ?? ""}`} value={writtenCameraVocabularyValue(axis, v)}>
+              {axis.writtenForm === "code" ? `${v.code} — ${v.label}` : v.label}
               {v.group ? ` — ${v.group}` : ""}
             </option>
           ))}

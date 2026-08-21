@@ -229,8 +229,13 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
     const result = await resolveOperationPrompt(shotInsertDirectedDescriptor, { projectId, sequenceId }, {});
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
-    expect(result.prompt.system).toContain("EWS / WS / FS / MWS / MS / MCU / CU / ECU");
-    expect(result.prompt.system).toContain("static / dolly / dolly_in / dolly_out / tracking");
+    // Written form, not codes: a shot size is its sigle to anyone in the
+    // trade, a movement is its words. Comma-separated, because several
+    // labels carry a slash of their own ("Static / Locked-off").
+    expect(result.prompt.system).toContain("EWS, WS, FS, MWS, MS, MCU, CU, ECU");
+    expect(result.prompt.system).toContain("Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking");
+    expect(result.prompt.system).toContain("Eye Level, High Angle, Low Angle");
+    expect(result.prompt.system).toContain("Slow, Smooth, Stable, Gradual, Gentle, Rapid");
     expect(result.prompt.system).toMatch(/one movement only/i);
     expect(result.prompt.system).toMatch(/never two combined/i);
     // The reversal: a shot_size interval is now named and allowed, not

@@ -73,6 +73,19 @@ export type CameraVocabularyAxisDefinition = {
   definition: string;
   /** Suggested values — a palette, not a closed enumeration. Empty for `cameraSubject`, which is free prose and has none. */
   values: readonly CameraVocabularyValueDefinition[];
+  /**
+   * Which form of a value is actually written — into the field by a human, and
+   * into the JSON by a model. Declared per axis rather than guessed, because
+   * the trade is not consistent and neither should we be: a shot size *is* its
+   * sigle to anyone who works in film ("MS", "ECU"), while a position or a
+   * movement is its words ("Low Angle", "Dolly In"). `low_angle` in a field a
+   * storyboard artist fills is developer vocabulary, and this repository has no
+   * reason to impose it.
+   *
+   * Both forms normalize to the same canonical code, so this changes what is
+   * read and typed, never what anything means.
+   */
+  writtenForm: "code" | "label";
 };
 
 // ---------------------------------------------------------------------------
@@ -82,6 +95,7 @@ export type CameraVocabularyAxisDefinition = {
 export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   {
     id: "shotSize",
+    writtenForm: "code",
     label: "Shot Size",
     definition: "How much of the subject fills the frame.",
     values: [
@@ -97,6 +111,7 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   },
   {
     id: "cameraPosition",
+    writtenForm: "label",
     label: "Camera Position",
     // The user-facing wording stays plain on purpose: a storyboard artist
     // needs to know what the axis is, not which guide named it. The reason
@@ -133,6 +148,7 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   },
   {
     id: "cameraMovement",
+    writtenForm: "label",
     label: "Camera Movement",
     definition: "How the camera moves during the shot. One move only — never two combined.",
     values: [
@@ -157,6 +173,7 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   },
   {
     id: "movementSpeed",
+    writtenForm: "label",
     label: "Movement Speed",
     // Kept a separate axis from the movement itself, on the author's call:
     // 22 of his shots already carried a speed inside `camera_movement`, and
@@ -173,6 +190,7 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
   },
   {
     id: "cameraSubject",
+    writtenForm: "label",
     label: "Camera Subject",
     // No palette: this is the one axis that has to be written, not chosen.
     // The Seedance 2.5 skill's formula is "movement + subject + start +
@@ -253,6 +271,18 @@ const ALIASES_BY_AXIS: ReadonlyMap<CameraVocabularyAxisId, ReadonlyMap<string, s
  * palette — that is not an error, see `recognizeCameraVocabularyValue`.
  * Never guesses, never substitutes a default.
  */
+/**
+ * The form of a value that is actually written — see `writtenForm` on the axis.
+ * Use this everywhere a value is offered to a human or asked of a model, so the
+ * two never disagree about notation.
+ */
+export function writtenCameraVocabularyValue(
+  axis: CameraVocabularyAxisDefinition,
+  value: CameraVocabularyValueDefinition
+): string {
+  return axis.writtenForm === "code" ? value.code : value.label;
+}
+
 export function normalizeCameraVocabularyValue(
   axisId: CameraVocabularyAxisId,
   raw: string | null | undefined

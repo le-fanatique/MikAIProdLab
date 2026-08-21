@@ -23,6 +23,7 @@
 
 import {
   getCameraVocabularyAxis,
+  writtenCameraVocabularyValue,
   type CameraVocabularyAxisId,
 } from "@/lib/cameraVocabulary";
 
@@ -56,16 +57,16 @@ function renderAxisValueList(axisId: CameraVocabularyAxisId): string {
   const axis = getCameraVocabularyAxis(axisId);
   const hasGroups = axis.values.some((v) => v.group);
   if (!hasGroups) {
-    return axis.values.map((v) => v.code).join(" / ");
+    return axis.values.map((v) => writtenCameraVocabularyValue(axis, v)).join(", ");
   }
   const byGroup = new Map<string, string[]>();
   for (const value of axis.values) {
     const key = value.group ?? "";
     if (!byGroup.has(key)) byGroup.set(key, []);
-    byGroup.get(key)!.push(value.code);
+    byGroup.get(key)!.push(writtenCameraVocabularyValue(axis, value));
   }
   return [...byGroup.entries()]
-    .map(([group, codes]) => `${codes.join(" / ")} (${POSITION_GROUP_LABELS[group] ?? group})`)
+    .map(([group, codes]) => `${codes.join(", ")} (${POSITION_GROUP_LABELS[group] ?? group})`)
     .join("; ");
 }
 
@@ -75,6 +76,11 @@ function renderAxisValueList(axisId: CameraVocabularyAxisId): string {
  * for `framing`/`camera_movement`/`camera_pitch`, now generated from the
  * vocabulary instead of typed by hand. No trailing comma: the caller joins.
  */
+// B19d follow-up — values are listed comma-separated, not slash-separated.
+// Several labels contain a slash of their own ("Static / Locked-off",
+// "Bird's-Eye / Overhead", "Dutch / Canted"), so a slash separator turned one
+// value into two and the list became ambiguous the moment it stopped printing
+// bare codes.
 export function renderCameraFieldSchemaLine(fieldId: CameraInstructionFieldId): string {
   switch (fieldId) {
     case "shot_size":
