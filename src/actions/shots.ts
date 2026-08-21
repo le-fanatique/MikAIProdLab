@@ -21,10 +21,20 @@ export async function createShot(
   const durationRaw = formData.get("duration_seconds") as string;
   const durationSeconds = durationRaw ? parseFloat(durationRaw) : null;
   const actionPitch = (formData.get("action_pitch") as string) || null;
-  const cameraPitch = (formData.get("camera_pitch") as string) || null;
+  // B19c — Camera Pitch is now a legacy, read-only field on the Shot form
+  // (src/components/CameraVocabularyField.tsx's siblings on both shot
+  // pages): it has no more `<input name="camera_pitch">` to submit, so a
+  // new shot never has one to insert. The four camera vocabulary axes below
+  // replace it going forward.
+  const cameraPitch = null;
   const continuityNotes = (formData.get("continuity_notes") as string) || null;
   const framing = (formData.get("framing") as string) || null;
   const cameraMovement = (formData.get("camera_movement") as string) || null;
+  // B19c — the three remaining camera vocabulary axes, following the exact
+  // same name/normalization convention `framing` (shotSize) already uses.
+  const cameraPosition = (formData.get("camera_position") as string) || null;
+  const movementSpeed = (formData.get("movement_speed") as string) || null;
+  const cameraSubject = (formData.get("camera_subject") as string) || null;
   const continuityIn = (formData.get("continuity_in") as string) || null;
   const continuityOut = (formData.get("continuity_out") as string) || null;
 
@@ -61,6 +71,9 @@ export async function createShot(
     continuityNotes,
     shotSize: framing,
     cameraMovement,
+    cameraPosition,
+    movementSpeed,
+    cameraSubject,
     continuityIn,
     continuityOut,
     shotPrompt,
@@ -82,10 +95,14 @@ export async function updateShot(
   const durationRaw = formData.get("duration_seconds") as string;
   const durationSeconds = durationRaw ? parseFloat(durationRaw) : null;
   const actionPitch = (formData.get("action_pitch") as string) || null;
-  const cameraPitch = (formData.get("camera_pitch") as string) || null;
   const continuityNotes = (formData.get("continuity_notes") as string) || null;
   const framing = (formData.get("framing") as string) || null;
   const cameraMovement = (formData.get("camera_movement") as string) || null;
+  // B19c — the three remaining camera vocabulary axes, following the exact
+  // same name/normalization convention `framing` (shotSize) already uses.
+  const cameraPosition = (formData.get("camera_position") as string) || null;
+  const movementSpeed = (formData.get("movement_speed") as string) || null;
+  const cameraSubject = (formData.get("camera_subject") as string) || null;
   const continuityIn = (formData.get("continuity_in") as string) || null;
   const continuityOut = (formData.get("continuity_out") as string) || null;
   // LLMW.LIGHTING.SURFACE.1 (B15b) — joins this existing multi-column
@@ -101,12 +118,23 @@ export async function updateShot(
 
   if (!title?.trim()) return;
 
-  const [existing] = await db.select({ shotPrompt: shots.shotPrompt }).from(shots).where(eq(shots.id, id));
+  // B19c — Camera Pitch is now legacy and read-only on the Edit Shot form:
+  // it no longer submits `camera_pitch`, so this action must not overwrite
+  // it with the absence of a field it never sent. `cameraPitch` is read here
+  // (never from formData) purely to keep `resolveShotPromptWithDefault`'s
+  // existing behavior for shots whose `shotPrompt` is still blank; it is
+  // deliberately left out of the `.set()` below so the column itself is
+  // never touched by this action anymore — the only way to honor both "no
+  // longer submitted" and "you don't delete camera_pitch nor its content".
+  const [existing] = await db
+    .select({ shotPrompt: shots.shotPrompt, cameraPitch: shots.cameraPitch })
+    .from(shots)
+    .where(eq(shots.id, id));
   const resolvedShotPrompt = resolveShotPromptWithDefault({
     shotPrompt: existing?.shotPrompt,
     description,
     actionPitch,
-    cameraPitch,
+    cameraPitch: existing?.cameraPitch,
   });
 
   await db
@@ -117,10 +145,12 @@ export async function updateShot(
       description,
       durationSeconds,
       actionPitch,
-      cameraPitch,
       continuityNotes,
       shotSize: framing,
       cameraMovement,
+      cameraPosition,
+      movementSpeed,
+      cameraSubject,
       continuityIn,
       continuityOut,
       lighting,

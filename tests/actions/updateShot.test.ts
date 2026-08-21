@@ -130,3 +130,91 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
     expect((await readShot(ctx, shotId)).lighting).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// B19c — camera_pitch is now a read-only legacy field: the Edit Shot form no
+// longer has an `<input name="camera_pitch">` to submit at all (unlike
+// `lighting` above, this is not "submitted blank", the field is simply
+// absent from the FormData a real browser POST produces). `updateShot`'s
+// `.set()` deliberately omits `cameraPitch` so the column survives every
+// save — this guards that omission: it is the only trace of angle/position
+// on 88 pre-B19b shots, and a `cameraPitch: null` (or any other value) added
+// back to that `.set()` would silently wipe it with no test failure to catch
+// it, since every other test in this file goes through `fullShotForm`, which
+// happens to always resend the field's own current value and would hide
+// exactly this regression.
+// ---------------------------------------------------------------------------
+
+describe("updateShot — camera_pitch survives a save that no longer submits it (B19c)", () => {
+  it("does not clear camera_pitch when the submitted FormData has no camera_pitch field at all", async () => {
+    const shotId = await insertShot(ctx, sequenceId, {
+      title: "Shot D",
+      cameraPitch: "35mm, low angle, slight tilt",
+      // Non-blank so `updateShot`'s own resolveShotPromptWithDefault keeps
+      // it as-is rather than recomputing a proposal from cameraPitch — an
+      // unrelated pre-existing behaviour this test must not become about.
+      shotPrompt: "Shot D unedited prompt",
+    });
+    const before = await readShot(ctx, shotId);
+    expect(before.cameraPitch).toBe("35mm, low angle, slight tilt");
+
+    // The exact shape of a real Edit Shot form submit today: every field
+    // below except camera_pitch, since that input no longer exists on the
+    // page. Built by hand rather than through fullShotForm/`form()` with an
+    // override, precisely so nothing appends a `camera_pitch` key (even an
+    // empty one) to this FormData.
+    const submitted = new FormData();
+    submitted.append("shot_code", before.shotCode ?? "");
+    submitted.append("title", before.title);
+    submitted.append("description", before.description ?? "");
+    submitted.append("duration_seconds", before.durationSeconds != null ? String(before.durationSeconds) : "");
+    submitted.append("action_pitch", before.actionPitch ?? "");
+    submitted.append("continuity_notes", before.continuityNotes ?? "");
+    submitted.append("framing", before.shotSize ?? "");
+    submitted.append("camera_movement", before.cameraMovement ?? "");
+    submitted.append("camera_position", before.cameraPosition ?? "");
+    submitted.append("movement_speed", before.movementSpeed ?? "");
+    submitted.append("camera_subject", before.cameraSubject ?? "");
+    submitted.append("continuity_in", before.continuityIn ?? "");
+    submitted.append("continuity_out", before.continuityOut ?? "");
+    submitted.append("lighting", before.lighting ?? "");
+
+    await captureShotRedirect(() => updateShot(shotId, sequenceId, projectId, submitted));
+
+    const after = await readShot(ctx, shotId);
+    expect(after.cameraPitch).toBe("35mm, low angle, slight tilt");
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B19c — the three camera vocabulary axes opened by B19b (camera_position,
+// movement_speed, camera_subject) must actually reach the database: this was
+// so far only proven by `tsc`, never by a test that writes a FormData and
+// reads the row back.
+// ---------------------------------------------------------------------------
+
+describe("updateShot — the three new camera vocabulary axes are written (B19c)", () => {
+  it("saves camera_position, movement_speed and camera_subject", async () => {
+    const shotId = await insertShot(ctx, sequenceId, { title: "Shot E" });
+    const before = await readShot(ctx, shotId);
+
+    await captureShotRedirect(() =>
+      updateShot(
+        shotId,
+        sequenceId,
+        projectId,
+        fullShotForm(before, {
+          camera_position: "Low Angle",
+          movement_speed: "Slow",
+          camera_subject: "Follows the protagonist from the door to the window",
+        })
+      )
+    );
+
+    const after = await readShot(ctx, shotId);
+    expect(after.cameraPosition).toBe("Low Angle");
+    expect(after.movementSpeed).toBe("Slow");
+    expect(after.cameraSubject).toBe("Follows the protagonist from the door to the window");
+  });
+});

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import FormField from "@/components/FormField";
+import CameraVocabularyField from "@/components/CameraVocabularyField";
 import { createShot } from "@/actions/shots";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
@@ -72,13 +73,22 @@ export default async function NewShotPage({ params }: Props) {
           rows={3}
           placeholder="What happens in this shot"
         />
-        <FormField
-          label="Camera Pitch"
-          name="camera_pitch"
-          type="textarea"
-          rows={3}
-          placeholder="Camera angle, movement, lens..."
-        />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
+            Camera Pitch <span className="normal-case tracking-normal text-[#6e767d]">(legacy, read-only)</span>
+          </label>
+          <p className="text-[11px] text-[#6e767d]">
+            The former free-text camera field, kept until the conversion pass. Retired for new
+            shots — use Shot Size, Camera Position, Camera Movement and Movement Speed below.
+          </p>
+          <input
+            type="text"
+            value="—"
+            disabled
+            readOnly
+            className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#6e767d] opacity-60"
+          />
+        </div>
         <FormField
           label="Continuity Notes"
           name="continuity_notes"
@@ -90,16 +100,11 @@ export default async function NewShotPage({ params }: Props) {
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 pt-2">
           Production Details
         </p>
-        <FormField
-          label="Framing"
-          name="framing"
-          placeholder='e.g. "CU", "MS", "WS", "ECU", "OTS"'
-        />
-        <FormField
-          label="Camera Movement"
-          name="camera_movement"
-          placeholder='e.g. "static", "pan left", "tracking"'
-        />
+        <CameraVocabularyField axisId="shotSize" name="framing" />
+        <CameraVocabularyField axisId="cameraPosition" name="camera_position" />
+        <CameraVocabularyField axisId="cameraMovement" name="camera_movement" />
+        <CameraVocabularyField axisId="movementSpeed" name="movement_speed" />
+        <CameraVocabularyField axisId="cameraSubject" name="camera_subject" />
         <FormField
           label="Continuity In"
           name="continuity_in"

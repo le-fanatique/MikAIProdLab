@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import FormField from "@/components/FormField";
+import CameraVocabularyField from "@/components/CameraVocabularyField";
 import { updateShot, fillShotLightingFromSequence } from "@/actions/shots";
 import { computeShotLightingFill } from "@/lib/llmWorkspace/shotLightingFill";
 
@@ -101,13 +102,23 @@ export default async function EditShotPage({ params }: Props) {
           rows={3}
           defaultValue={shot.actionPitch}
         />
-        <FormField
-          label="Camera Pitch"
-          name="camera_pitch"
-          type="textarea"
-          rows={3}
-          defaultValue={shot.cameraPitch}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium uppercase tracking-wider text-[#a4abb2]">
+            Camera Pitch <span className="normal-case tracking-normal text-[#6e767d]">(legacy, read-only)</span>
+          </label>
+          <p className="text-[11px] text-[#6e767d]">
+            The former free-text camera field, kept until the conversion pass — the only trace
+            of angle this shot had before Shot Size, Camera Position, Camera Movement and
+            Movement Speed below. No longer editable here.
+          </p>
+          <input
+            type="text"
+            value={shot.cameraPitch ?? "—"}
+            disabled
+            readOnly
+            className="w-full rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#6e767d] opacity-60"
+          />
+        </div>
         <FormField
           label="Continuity Notes"
           name="continuity_notes"
@@ -119,17 +130,26 @@ export default async function EditShotPage({ params }: Props) {
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-600 pt-2">
           Production Details
         </p>
-        <FormField
-          label="Framing"
-          name="framing"
-          defaultValue={shot.shotSize}
-          placeholder='e.g. "CU", "MS", "WS", "ECU", "OTS"'
+        <CameraVocabularyField axisId="shotSize" name="framing" defaultValue={shot.shotSize} />
+        <CameraVocabularyField
+          axisId="cameraPosition"
+          name="camera_position"
+          defaultValue={shot.cameraPosition}
         />
-        <FormField
-          label="Camera Movement"
+        <CameraVocabularyField
+          axisId="cameraMovement"
           name="camera_movement"
           defaultValue={shot.cameraMovement}
-          placeholder='e.g. "static", "pan left", "tracking"'
+        />
+        <CameraVocabularyField
+          axisId="movementSpeed"
+          name="movement_speed"
+          defaultValue={shot.movementSpeed}
+        />
+        <CameraVocabularyField
+          axisId="cameraSubject"
+          name="camera_subject"
+          defaultValue={shot.cameraSubject}
         />
         <FormField
           label="Continuity In"
