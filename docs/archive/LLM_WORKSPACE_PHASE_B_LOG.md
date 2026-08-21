@@ -1,0 +1,1755 @@
+# LLM Workspace Phase B — the delivery log
+
+**Archived 2026-08-21. Not in any reading contract.**
+
+This is the ticket-by-ticket narrative of Phase B, moved out of
+`docs/PROJECT_STATE.md` where it had grown to 1 734 lines — about 35 000
+tokens, for a phase that is finished. Its own parent document already warned
+that everything below its opening section described what was *planned*, not
+what remains.
+
+Nothing was deleted: this is the same text, at a path no agent is asked to
+read. Open it deliberately, to recover why a particular decision was taken;
+never as background. The current state lives in `docs/PROJECT_STATE.md`, the
+durable decisions in `docs/ARCHITECTURE_DECISIONS.md`, and the architecture in
+`docs/LLM_WORKSPACE_ARCHITECTURE.md`.
+
+Each section below is one ticket, and most record a lesson rather than a
+changelog — what was predicted wrongly, what a check failed to catch, what a
+first use corrected. That is why it is kept rather than dropped.
+
+---
+
+## LLM Workspace Phase B — B0 to B9b COMPLETE (2026-08-16)
+
+Delivered, committed, pushed, and validated manually by the user on the real
+application after each production switch.
+
+| Item | Commit | Result |
+| --- | --- | --- |
+| B0 — write coverage | `9ffd15f` | 38 tests, first **database-backed** test capability: a disposable migrated SQLite per test file |
+| B0b — the two writes B0 missed | `e2f21ff` | `applyGeneratedStory`, `applyGeneratedOutline`; unblocked `src/actions/llm/` under vitest with a `server-only` stub |
+| B1a — the frozen contract | `ceb24dd` | descriptor format, closed variable registry, `userAdjustable` settled per variable |
+| B1b — the eight descriptors | `3da4134`, `7cff4ab` | thirteen variables; the three Asset operations share one declared context |
+| B1c — descriptors carry their prompt | `907604c` | strict `toBe` equality against every builder; caught three drifted system prompts |
+| B2 — the runner | `5415c66`, `fbc632f` | one §2.1 pipeline, 8 operations, **the runner names no operation** |
+| B3 — the switch | `5f11464`, `0b40a74` | the 8 actions became thin adapters; ~1150 lines of replaced code deleted |
+| B4a — the declaration | `33a289f` | seven declared entries, `ActionId` closed into a union, each entry's `columns.written` verified against a real full-row diff |
+| B4b — the resolution | `89768f7` | `actions/bindings.ts`: `ActionId` resolves to the real Server Action; the 7 Approve-side callers switched |
+| B5 — the proposal component | (this ticket) | `ProposalPanel` + `proposalCommit.ts`; 6 panels collapsed onto one Approve/Redo/Cancel engine, net −408 lines |
+
+The suite went from 100 tests to 263. No A2 snapshot moved in any of these
+tickets, and no exported signature or user-visible message changed.
+
+**What B4b decided by refusing to decide.** A uniform commit call —
+`commitOperation(descriptorId, ids, values)` — was deliberately not built. The
+seven actions' conventions are not reducible to a descriptor's output values:
+`replace|append` mode, `returnTo`, the two fields `updateAssetDetailsInline`
+replaces without generating, the batch's item list. A uniform shape would have
+meant inventing an options bag with no consumer to constrain it. **That call
+shape is B5's to define**, from what the proposal component actually needs.
+
+The refusal is also what kept the switch free of visible change. `updateShotPrompt`
+and `updateSequencePrompt` are consumed as `<form action={...}>`; the binding
+holds the Server Action reference itself, so form identity, no-JS submission and
+the server-side redirect are structurally unchanged. A client-side wrapper would
+have destroyed all three. Consequently the entire non-regression claim reduces to
+reference identity (`toBe` against each module's own export) — no behavioural
+re-proof of the seven actions was needed, they already have their own files under
+`tests/actions/`.
+
+Known limit, carried into B5: no test in this repository exercises the compiled
+browser path of those two forms. `npm run build` proves they bundle, not that they
+submit. The user validated all seven Approve paths manually on 2026-08-13.
+
+**What the phase produced beyond the code.** Seven gaps in the descriptor
+format were found and closed *before* anything was wired to production, each
+because the executor stopped and reported instead of working around it:
+`intent` composability, the closed mode with preconditions, per-variable
+adjustability, the JSON key mapping and per-operation parse contracts, the
+per-operation refusal messages, multi-field preconditions, and silent
+truncation. A format that had been guessed would have failed at the switch.
+
+**Deliberate retention, not debt.** The prompt builders under
+`src/lib/prompts/` no longer have a production caller. They are kept as the
+frozen oracle: the A2 snapshots pin them, and the descriptor proofs assert
+byte-for-byte equality against them. Retiring them needs a ticket that first
+re-anchors those snapshots on the runner's own output.
+
+**Known environment instability.** `vitest` intermittently fails *every* file
+at once with `Vitest failed to find the runner`, reported as "53 failed" or
+"no tests". It has hit files untouched for weeks, so no repository code is
+implicated; one captured occurrence showed a lowercase drive letter in the run
+header. It always fails loudly and has never produced a false green. **Read the
+log before rerunning** — a real failure names a file and an assertion. Prefer
+redirecting vitest output to a file over piping it.
+
+**What B4 inherited, and declared rather than fixed.** Four behaviours measured
+in B0 and frozen by tests, not fixed — each now appears in its B4a registry
+entry as the contract, arbitrated by the user on 2026-08-13: the batch asset-description write is not atomic and applies partially;
+it answers `ok: true` having applied nothing when every item is refused;
+`updateAssetDetailsInline` is a full replacement that nulls omitted fields; and
+ownership check and mutation are not transactional on any of the five. Plus
+`applyGeneratedStory` and `applyGeneratedOutline`, which never check that the
+Project exists. Each must appear in its registry entry, or the registry will
+describe an action it has mis-modelled.
+
+**Phase B is not authorised by this**, but nothing in §10 blocks it either.
+Migration order is settled, `userAdjustable` is deferred to the
+descriptor-format work, Auto Casting is off the critical path, and the
+Settings-naming question dissolved: `FB-20260715-013` is an unpromoted
+`USER_FEEDBACK` observation, and the workspace's bench and variable library
+likely supersede it. Phase B now needs a prepared ticket, not another
+decision.
+
+### `LLMW.BATCH.OUTCOME.1` — the batch stops lying about its outcome (2026-08-14)
+
+The batch Asset-description panel painted every `ok: true` answer green, so a
+batch that saved nothing displayed `Batch replaced: 0 assets updated. 5 failed.`
+as a success. Registry behaviours 1 and 2 (not atomic; `ok: true` with
+`applied: []` when every item is refused) are the arbitrated contract and were
+**not** changed — `src/actions/assets.ts` and `registry.ts` are absent from the
+diff. Only what the interface says about that answer changed.
+
+Three outcomes, three tones, arbitrated by the user: all applied stays green,
+partial is amber (`N of M updated`), nothing applied is red and says no changes
+were saved. Failures are listed by Asset name with the action's own reason,
+resolved from the `assets` prop already in hand.
+
+`resolveBatchApplyOutcome` is a pure function outside the client component
+(`.claude/rules/frontend.md`), and that is what makes the ticket provable: the
+"nothing applied" case is unreachable from the interface — the panel only lists
+the current project's Assets, so every one would have to be refused. It is
+covered by unit tests instead of by a claim. Suite 274 → 279. The nominal
+Replace/Append paths were verified in a real browser on the disposable
+`ZZ-TEST-PLAYWRIGHT` Project (named `ZZ-B5-PLAYWRIGHT-TEST` at the time); partial and nothing-applied are recorded as
+not tested there, deliberately, rather than forced.
+
+Known unreachable edge, left alone on purpose: `resolveBatchApplyOutcome([], [])`
+would render `No changes were saved. 0 assets failed.` The action refuses an
+empty batch upstream, so adding a branch with no caller would be debt.
+
+### B5 — the proposal component, object mode (2026-08-14)
+
+`LLMW.PROPOSAL.COMPONENT.1`. One `ProposalPanel` (Approve / Redo / Cancel)
+now backs the **seven mono-entity operations** (`anchor.kind === "entity"`);
+`assetDescription.batch` (`entitySet`) is untouched and still calls
+`ACTION_BINDINGS` directly. Six panel files collapsed onto it: 8 files
+modified, 3 added (`ProposalPanel.tsx`, `actions/proposalCommit.ts`,
+`tests/actions/proposalCommit.test.ts`), +469 / −877. Suite 263 → 274.
+
+**The two things B4b deliberately left open are now closed.**
+
+*The commit call shape.* There is no single uniform signature, and the ticket
+proved why rather than assuming it: `updateAssetDetailsInline` and
+`updateAssetDescriptionFieldInline` take an object,
+`applyGeneratedStory`/`applyGeneratedOutline` are positional, and the two
+prompt actions take `FormData`. `proposalCommit.ts` holds one adapter per
+entry, each typed `Parameters<typeof ACTION_BINDINGS[K]>`, so a signature
+drift fails `tsc` instead of a production Approve click. It covers the seven
+mono-entity entries **and only those** — the batch item list is not in the
+payload, because the `entitySet` entry has its own migration. B4b's refusal
+was right: the shape could only be written once a consumer constrained it.
+
+*Post-Approve.* Arbitrated by the user on 2026-08-14, and **derived from the
+`response` field `registry.ts` already declares** — no second field was added.
+`redirectOnly` renders `<form action={binding}>` with adapter-built hidden
+fields, so the server `redirect()`, form identity and no-JS submission stay
+structurally intact (exactly what B4b protected). `returnValue` calls the
+binding then `router.refresh()`. The four inconsistent behaviours that existed
+before — server redirect, `window.location.href`, `router.refresh()`, and
+*nothing at all* — collapse to two, chosen by declaration rather than by
+accident. Asset Bible's `?bibleUpdated=1` round trip is gone, replaced by a
+local confirmation; the searchParam plumbing was removed in the same diff.
+
+**The defect the automated battery could not see.** `tsc`, the full suite and
+`npm run build` were green on all three passes. The user found by hand what
+none of them could: after Approve, the asset Description/Notes fields kept
+their stale value until F5. Cause — `AssetInlineDetailsForm` seeded state with
+`useState(initial ?? "")`, a mount-time-only seed, and `router.refresh()`
+re-renders with fresh props but never updates state React already owns. The
+old code hid this: Asset Bible did a full `window.location.href` reload.
+Fixed by the repository's own existing pattern (`OutlineEditorForm.tsx:21-23`,
+`StoryFoundationEditor.tsx:34-36`) — a per-prop resync `useEffect` — applied to
+**all five** fields, since Asset Bible writes the other three through the same
+display component and was silently exposed to the identical defect.
+
+Accepted trade-off, identical to Outline and Story Foundation: an unsaved edit
+in one of those five fields is overwritten by the server value on the next
+refresh. The five new `useEffect`s trip `react-hooks/set-state-in-effect`;
+verified to be pre-existing repository drift, since the two unmodified
+reference files fail the same rule. Reproducing the established pattern was
+preferred to inventing a second one for the same problem.
+
+**The lesson worth carrying, not the bug.** B5 is the first Phase B ticket
+whose result lives in the browser, and Phase B has no tooling for that. The
+supervisor named the gap as a residual risk and closed the verdict on green
+checks; it was an outright blind spot — Playwright was available the whole time
+and simply was not used. **From now on, any ticket visible in the product gets
+a Playwright pass — delegated to a Sonnet subagent to contain the token cost —
+before a verdict.** Note that the seven Approve paths write to the live
+database, so the pass writes only into the **standing test Project**, never into
+real data.
+
+**The standing test Project.** `ZZ-TEST-PLAYWRIGHT` (id 999005) is kept on
+purpose and reused by every browser pass, decided by the user on 2026-08-14:
+re-creating a Project, an Asset, a Sequence and a Shot at the start of each pass
+was burning a large share of the subagent's tokens for no added proof. Find it
+by name, do not create a second one. It currently holds three Assets, one
+Sequence and one Shot.
+
+Two consequences a pass must account for rather than be surprised by: it
+accumulates state between passes — its Assets already have descriptions and
+notes, so precondition-gated affordances (`Select Missing Descriptions`, the
+Enhance/Rewrite modes that need an existing value) will not be in their
+first-run state — and anything it needs beyond that, it adds there rather than
+elsewhere.
+
+B5 itself was validated that way before commit, on a disposable
+`ZZ-TEST-PLAYWRIGHT` Project (named `ZZ-B5-PLAYWRIGHT-TEST` at the time): all nine cases passed — the five in-place
+refresh paths update without a reload, the two `redirectOnly` paths do navigate
+(`?shotPromptSaved=1` / `?sequencePromptSaved=1`), Asset Bible's Apply leaves
+Description and Notes intact rather than nulling them, a double click on
+Generate starts one generation, and Discard writes nothing. The only console
+errors come from a local antivirus script and the hydration warning it causes,
+on every page, unrelated to this code.
+
+**Deliberate scope line.** `ProposalPanel` owns the proposal phase and the
+generic trigger chrome (trigger row, loading, error, not-configured message);
+the trigger *definitions* stay in the six wrapper components, which remain
+genuinely heterogeneous. Two adapters (`buildApplyGeneratedStoryArgs`,
+`...OutlineArgs`) are identity passthroughs; kept for a uniform typed surface,
+not to be multiplied.
+
+Known limit, unchanged from B4b: `tests/actions/proposalCommit.test.ts` proves
+the hidden-field keys against a hardcoded list, not against `shots.ts` itself,
+so a simultaneous rename on both sides would still pass.
+
+### B6a — templates become storable, and the list appears (2026-08-14)
+
+`LLMW.STORAGE.1`, the **first of three** tickets B6 was split into by the user:
+B6a storage + list, B6b the read-only three-pane bench (resolved context and
+effective prompt, no LLM call), B6c Run + right pane + variable library.
+
+**The scope decision that shapes everything after it.** Arbitrated by the user
+on 2026-08-14: **code stays the source of truth.** The eight descriptors remain
+TypeScript and keep serving production untouched; `runner.ts` was not modified
+and still reads no database. `llm_templates` holds only what the workshop
+creates or imports. The list shows both origins — the eight code descriptors
+read-only, the rows editable. What this protects is concrete: the seven Approve
+paths the user validated by hand on 2026-08-13, and the byte-for-byte descriptor
+proofs against the frozen prompt builders, both survive the ticket untouched.
+
+**Schema and migration authorisation** (§4.2 requires it in the ticket itself)
+was granted for exactly one table and one generated migration —
+`drizzle/0050_mighty_lockheed.sql`, `llm_templates`, `project_id` nullable with
+`ON DELETE set null`. `llm_knowledge_documents` was **deliberately deferred**:
+all eight descriptors declare `knowledge: []`, so the table would have had no
+reader. `anchor_kind` is the one authorised denormalisation, so the list and
+B6b's entity picker can filter without deserialising every row.
+
+**The validator is the ticket's real proof.** `templateStorage.ts` is pure and
+checks membership in the closed registries — variable ids, action ids, entity
+kinds, and **every render form a block references**, read from
+`variables/registry.ts`'s four tables rather than copied. This matters because
+`runner.ts:307-341` *throws* on an unknown render form: without the validator,
+an imported template naming a nonexistent one would only detonate at Run, in
+B6c. It reads the registries instead of duplicating them, so it cannot drift.
+
+**What the supervisor's own review caught, and the automated battery did not.**
+`tsc`, 301 tests and `npm run build` were all green on the first submission, and
+`projectId` was nevertheless unreachable from the product: both creation paths
+wrote `null` outright, and `updateLlmTemplateMetadata` — the only write that set
+it — had no caller outside tests. A dead column, a scope badge permanently
+reading `Global`, an unused join, and a production export with no caller. The
+cause was a hole in the ticket, which specified the write without the control
+that triggers it. Fixed with a plain `<form action={...}>` per row (a project
+`<select>` plus "Global", hidden `name`/`description` so changing scope does not
+wipe the row), plus runtime validation of `projectId` before the write — a
+non-integer or a nonexistent project now redirects with a message instead of
+letting `foreign_keys = ON` (`src/db/index.ts:22`) throw a 500.
+
+**Two browser passes, both on the standing test Project.** The first covered the
+Settings entry point, the eight built-ins, duplicate, scope round trip to
+`ZZ-TEST-PLAYWRIGHT` and back, export (200, `attachment`, indented JSON), a 404
+on an absent id, and delete. The second covered the one production path the
+first left unproven — **import** — as a genuine round trip: the fixture was the
+file the product had itself exported, and a second fixture, the same JSON plus a
+block naming a nonexistent render form, was **refused** at import with "This
+file is not a valid LLM template." That is the validator proven end to end
+rather than claimed. Suite 279 → 303. The table was left empty both times.
+
+**Note for later passes.** The `/settings` card lives under the **Language
+Model** tab, not the default Appearance tab.
+
+### B6b — the bench, in read-only form (2026-08-14)
+
+`LLMW.BENCH.READ.1`, the second of B6's three tickets: the §5.1 three-pane
+bench with **no LLM call**, the §5.3 entity picker, and no right pane.
+`FB-20260716-035` is answered — the effective prompt stops being a black box.
+`/settings/llm-workflows/[templateId]` resolves both origins: an integer
+segment addresses an `llm_templates` row, anything else a `DESCRIPTORS` key.
+
+**The pipeline was already there.** `resolveOperationPrompt` — runner steps 1
+to 5, no model call — has existed since B2. The bench needed two things it did
+not give, and `runner.ts` was changed in exactly three authorised ways and no
+more: a `requireLlmConfig` option (default `true`, production untouched), a new
+`resolveOperationPreview` export returning the per-variable resolved data
+alongside the prompt, and `requiredIdKeys` exported as `requiredAnchorIdKeys`
+so the picker reads the one anchor→required-levels table instead of copying it.
+`resolveOperationPrompt` and `runOperation` keep signature and behaviour, and
+the proof is a test, not a claim: with no LLM configured the former still
+refuses with `messages.notConfigured` while the preview succeeds.
+
+**Read-only by construction.** No Run button, no `ProposalPanel`, no variable
+library, no write path, no schema change, no migration, no new dependency.
+`llm_knowledge_documents` stays deferred. `intent.freeText` was deliberately
+not built: none of the eight descriptors declares it, so a control for it would
+have been untestable dead code — B6c's, if ever.
+
+**What the automated battery could not see, again.** `tsc`, 333 tests and
+`npm run build` were green on a first delivery carrying two selector-state
+defects, both found by reading the diff: the shot list was queried from the
+unvalidated `sequenceId`, so after a project switch the Shot `<select>` still
+listed the previous project's shots while Sequence had gone back to empty (the
+*resolution* was correctly blocked — `normalizeBenchSelection` had already
+dropped both — so the screen showed a state that did not exist rather than
+wrong data); and the Mode `<select>` reset to `defaultMode` on every Apply made
+while the selection was still incomplete, wiping the user's choice exactly while
+they worked down the cascade. Both fixed, both then verified in a browser.
+
+**Every decision is a pure tested function**, none of it inside the Server
+Component: `parseTemplateRef`, `normalizeBenchSelection`, the search-param
+parsers and `buildVariablePreviewRows` in `bench.ts`, plus `estimateTokens`.
+Suite 303 → 333.
+
+**Token cost is an estimate and says so.** `Math.ceil(chars / 4)`, rendered
+everywhere as `~N tokens (est.)` beside the exact character count. No tokenizer
+is a dependency of this repository and this ticket authorised none.
+
+**Sixteen enumerated browser paths, sixteen PASS**, on the standing test
+Project. All four anchors plus the `entitySet` case, all eight built-ins, and
+the stored-row path end to end (duplicate → `Stored` badge → resolve → delete,
+table left empty). The proofs worth keeping: the intent parameter genuinely
+reaches the prompt (blank gives `"Choose a natural number of sections based on
+the story structure (typically 4 to 8)."`, 6 gives `"Write exactly 6
+sections."`); a precondition refusal renders instead of crashing (`"A Shot
+Prompt is required for this assist mode."`); and both an unknown textual id and
+an absent numeric one answer 404, never a 500. Two built-ins were missing from
+the first pass and were covered by a second — what a scenario does not
+enumerate does not get tested, which is now the third ticket in a row where
+that held true.
+
+**Known limit.** The page itself has no automated test: this repository has no
+precedent for testing a Server Component. Its proof is the browser pass, not a
+test file. Also deliberate: `parseTemplateRef("12abc")` resolves stored row 12,
+reproducing the export route's own `parseInt` convention rather than fixing it
+on one side only — tested as such.
+
+B6c remains: the Run button, the right pane on `ProposalPanel`, and the
+variable library (§5.2).
+
+### B6b follow-up — the cascade fills itself (2026-08-14)
+
+`LLMW.BENCH.CASCADE.1`, from the user's first hands-on trial of the bench
+(`FB-20260814-001`). B6b's entity picker was a server-rendered
+`<form method="get">` with an explicit `Apply`, so choosing a Project left the
+Sequence list empty until the form was submitted — the data was never missing,
+but nothing said a submit was needed, and `Apply` reads as "run the preview".
+The five `<select>`s now submit on change through one shared
+`AutoSubmitSelect` client component that renders and submits and holds no
+business logic; `intent.parameters` inputs keep their manual `Apply`, which
+also remains the no-JavaScript path.
+
+`Mode` was included beyond the literal request, on the argument that leaving
+one select manual is worse than either behaviour applied throughout. Rejected
+on the way: loading every Project's Sequences and Shots up front to filter in
+the browser.
+
+No test was added — the component renders and submits, there is nothing pure to
+cover, and a decorative test would have proven nothing. Thirteen browser paths,
+twelve PASS: the cascade fills with zero `Apply` clicks at every anchor level,
+and **both of B6b's review fixes still hold** under a regime that exercises
+them far more often (no shot of the previous Project survives a Project switch;
+a chosen mode survives an incomplete round trip). The thirteenth, the
+no-JavaScript fallback, is reasoned rather than proven: the tooling offers no
+safe way to disable JavaScript, and the pass refused to reach for an
+arbitrary-code-execution tool to force it.
+
+### B6c1 — the bench executes and applies (2026-08-14)
+
+`LLMW.BENCH.RUN.1`. B6c was split in two by the user before implementation:
+**B6c1** is the Run button, the right pane on `ProposalPanel`, and an Approve
+that really writes; **B6c2** is the variable library (§5.2), still to do. The
+argument for splitting: only one of the two writes to the database, and it
+deserved its own diff review and its own browser pass rather than sharing them
+with a read-only surface.
+
+**The question B6a and B6b both left open is now closed.** Neither ticket could
+show that a stored template actually executes — B6a wrote `llm_templates`, B6b
+read it for the workshop, and no path ran it. The mechanism needed no
+invention: `loadBenchDescriptor` resolves the descriptor from both origins (a
+`DESCRIPTORS` key, or an `llm_templates` row through
+`validateLlmTemplateJson`), `runBenchOperation` calls `runOperation` on **that
+same variable**, and `commitBenchProposal` writes through the descriptor's own
+`commit`. Proven in the real database: a row duplicated from `story.generate`
+was executed and applied on the standing test Project.
+
+**What is still deferred, and must not be read as done**: §6 Product
+Integration. No product screen invokes a stored template by identifier; the
+eight production operations remain wired to their TypeScript descriptors. The
+proof runs through the workshop, not through production.
+
+**No second adapter layer, and the check that decided it.** The fear was that a
+generic bench Approve would duplicate `proposalCommit.ts`. It does not, because
+`updateShotPrompt`'s `returnTo` is entirely caller-supplied
+(`src/actions/shots.ts:588-590`): the bench passes its own URL, so both
+`redirectOnly` paths reuse B5's hidden-field builders unchanged and come back
+to the bench with the selection intact — the server `redirect()`, form identity
+and no-JS submission that B4b protected all stay structurally untouched.
+`buildAssetBibleCommitArgs` already took the `existing*` values it needs. The
+dispatch is on `ActionId`, exhaustive, so an eighth id would fail `tsc`.
+
+**The write guard, and why it exists.** Approve is a request distinct from the
+Run that resolved the preview, and two of the seven commit actions
+(`applyGeneratedStory`, `applyGeneratedOutline`) verify nothing themselves
+(registry behaviour 5). `runner.ts` therefore received its fourth authorised
+change since B2, and only that: `loadAndVerifyChain` exported as
+`verifyAnchorChain`, body untouched. One ownership-chain table, not a copy.
+
+**`preservedAssetDetailColumns` is the ticket's quiet load-bearing piece.**
+`updateAssetDetailsInline` replaces all five columns on every call and turns a
+blank one into `null` (registry behaviour 3), while `assetBible.generate`
+declares only three. The columns to carry through are derived from
+`ACTION_REGISTRY`, not hard-coded, and the proof is asserted twice: in
+`tests/actions/benchCommit.test.ts`, and in the browser, where the Asset's
+`description` (925 chars) and `notes` (1113) were re-read intact after Approve.
+Without it, two columns would have been erased in silence.
+
+**Deliberate scope lines, stated rather than hidden.** The bench's Approve is
+`replace` only — `append` is native on one action and pre-computed by the caller
+on two others, production-panel ergonomics the workshop does not need. The
+`entitySet` batch descriptor offers Run but refuses Approve, with the reason
+visible **before** the Run so no model call is paid to learn it. No LLM
+pre-check: an absent configuration surfaces through the Run error with the
+descriptor's own `notConfigured` message, exactly as Shot/Sequence Prompt do in
+production.
+
+**What diff review caught that the green checks did not.** `tsc`, the full
+suite and `npm run build` were green on the first delivery, which nonetheless
+carried two dead fields, a stale "click Apply" instruction (false since
+`ca46847` made the cascade auto-submit), a `returnTo` that re-injected the
+current query so the URL grew by one confirmation parameter per Approve, and a
+batch refusal only visible after a paid model call. All four fixed; the
+exclusion list for `returnTo` was read off `shots.ts` and `sequences.ts` rather
+than guessed, and lives in a tested pure function. This is the fourth ticket in
+a row where the automated battery was green on something a diff read found.
+
+Suite 333 → 346. Two browser passes on `ZZ-TEST-PLAYWRIGHT`: sixteen of
+seventeen enumerated paths, then five of five on the corrections — including
+two successive Approves returning byte-identical URLs, which is what proves the
+accumulation gone. Writes were verified in the database afterwards to have
+stayed inside project 999005, with `llm_templates` left empty.
+
+**The one path not proven, kept as such.** Checking that no shot of the previous
+Project survives a Project switch could not be exercised: the permission
+classifier blocked navigation to a real production Project, and the pass refused
+to force it. It is a B6b non-regression control, and the code concerned is
+verified untouched by diff review — covered by reading, not by the browser.
+
+### B7a — the list output contract, and the wall it found (2026-08-15)
+
+`LLMW.OUTPUT.LIST.1`, first ticket of the order the user settled on 2026-08-15
+(§11.3): list mode and its migrations before text mode, B6c2, the editor and
+Phase C.
+
+**Why the contract had to come before the component.** "List mode in the
+proposal component" could not be the first ticket: `RunOperationResult` was
+`{ ok: true; values: Record<string, string> }` — a flat string map that cannot
+hold a list — and `parseOutput` turned any array into `{}`. The component would
+have had nothing to consume. `output` is now a union discriminated on `kind`,
+`RunOperationResult` likewise, and `parseOutput` dispatches to a list branch.
+The eight existing descriptors gained `kind: "object"` and nothing else; no
+visible message changed and no A2 snapshot moved.
+
+**The ticket's real product is a finding, not code.** It was written to make the
+executor stop and report format gaps rather than flatten them — the mechanism
+that produced Phase B's seven format corrections. It produced six, two of which
+decide what happens next.
+
+*`castingSuggestions` is not describable, and not for a format reason.* Its item
+validity rests on an enum and two integers, which no string-field rule can
+express. More decisively, `generateCastingSuggestionsDraft` performs, **after**
+parsing, a validation and enrichment against the live database: it filters
+model-hallucinated ids by looking them up in the project's real shots and
+assets, computes `alreadyAssigned`, and rewrites names from the existing rows.
+No field declaration can express a database lookup. This is not a hole in the
+output format — it is a resolution step that does not belong in a description
+of output at all.
+
+*Five declarative gaps, all needed for a behaviour-preserving migration:*
+numeric item fields (`duration_seconds`, `order_index`) that
+`Record<string, string>` cannot carry; a same-field fallback across two JSON
+keys (`assetType ?? asset_type`); enum fields with a silent default; a default
+that depends on the item's index in the array; and a sort of the whole list
+after parsing. Without them a migration would change observable behaviour,
+which B3 was forbidden to do.
+
+**What the four parsers agree on**, and what the format therefore adopts: an
+invalid item is filtered, not fatal; an empty result after filtering refuses the
+whole response; an over-long string field is always silently truncated and never
+refused — so the list branch has `truncateTo` and no `maxLength` counterpart,
+unlike the object branch; and each operation keeps its own three refusal
+messages, never unified.
+
+**The defect the green checks did not show.** `validateLlmTemplateJson` had not
+followed the format: it still checked `output` as if it had one shape and never
+looked at `kind`, while claiming to return an `OperationDescriptor`. That
+reopened exactly the gap B6a exists to close — an imported template that only
+detonates at Run — on a real path, since hand-editing and importing JSON is
+currently the only way a user can author their own workflow. Fixed by
+dispatching on `kind` first, refusing an absent or unknown `kind` outright with
+**no silent fallback to `"object"`**, and validating the list shape by
+membership (a `validity` field must be declared in `item.fields`), the same
+principle B6a already applied to render forms. A round-trip test over the eight
+built-in descriptors now makes format and validator unable to drift apart in
+silence.
+
+Suite 346 → 366. Four browser paths, four PASS: the bench surface shipped that
+same morning is unregressed, and a valid `kind: "list"` template is accepted at
+import and opened in the bench without crashing, showing "List-output templates
+cannot be inspected here yet." rather than its output fields.
+
+**Two false alarms worth recording, both the supervisor's own doing.** The first
+browser pass reported the list import refused — the supervisor's test JSON used
+`notAnArray` where the format declares `notArray`; the validator was right. It
+also captured a server-side `ReferenceError: isBenchReturnToQueryKey is not
+defined`; the import is present, `tsc` and the build pass, and the page stopped
+producing it — the cause was running `npm run build` twice against the live dev
+server, which rewrites `.next` underneath it. **Do not run a production build
+against a running dev server**, or expect a corrupted chunk and a phantom
+defect.
+
+**This ticket blocked the next one.** B7b was to write four list descriptors.
+There are at most three, and they needed the five format extensions first. The
+user arbitrated on 2026-08-15: B7b ships the extensions, the descriptors move to
+B7c. Closed by the section below.
+
+### B7b — the six gaps closed, and the test that was lying (2026-08-16)
+
+`LLMW.OUTPUT.LIST.2`, commit `12fdcc7`. The six declarative gaps B7a found are
+now expressible: numeric item fields, a second JSON-key fallback, an
+enum-with-default, a default seeded from the item's own array position, a
+post-parse sort of the whole list, and **the selection declaration** — which
+`FormData` key carries the subset the user keeps at cherry-pick.
+
+**Item fields became a union discriminated on `type`**, mandatory on every
+entry, with no silent fallback to `"string"` — the principle B7a had already
+applied to `output.kind` itself. `RunOperationResult`'s list items widened to
+`Record<string, string | number>`, the point B7a signalled without being able to
+model.
+
+**Three shapes were read off the source rather than designed.** Numeric bounds
+are `exclusiveMin` and `max` because `sequenceShots` accepts `duration_seconds`
+at `> 0 && <= 120` — one strict bound, one inclusive, and no parser evidences an
+inclusive lower one. A numeric field must declare whether an invalid value is
+omitted or seeded from the index, because both behaviours exist in production
+and differ. `sort.direction` is the literal `"asc"` and nothing else, because
+one parser sorts and it sorts ascending.
+
+**Two observable nuances were reproduced rather than improved**: the dual key
+reads with `??` and not `||`, so an empty string on the primary key still wins
+over the fallback; and enums compare by identity without trimming, so `" hero "`
+falls to the default the way `normalizeAssetType` already makes it.
+
+**`selection` carries only the destination key**, not a second payload shape.
+The four write actions re-parse what they receive through their own
+`normalize*`, so the payload must carry the model's own JSON keys — and B7d can
+rebuild that from the descriptor alone, since re-normalisation is idempotent.
+Recorded in the type itself so B7d does not invent a second mechanism.
+
+**The real deliverable is the proof.** B7a could only compare the *string*
+fields of the three representable parsers. All three equalities against the
+real, unmodified draft actions are now complete — every field of
+`GeneratedSequenceShot`, `GeneratedAssetCandidate` and `GeneratedSequence`
+declared and compared. `castingSuggestions` stays unrepresentable and
+**undecided**, per the user: B7h prices it now that typed item fields exist.
+
+**The defect the green checks did not show — the eighth in a row.** 444 tests
+were passing when the executor first reported, and one of them was lying:
+`it("NaN and Infinity are both invalid")` built its payload with
+`JSON.stringify`, which turns both into `null`. It exercised the
+`typeof === "number"` branch twice and never touched `Number.isFinite` — the
+guard added specifically to match `sequenceGeneration.ts:61`. The first
+correction was still not enough: with `max: 120` declared, `Infinity` is
+rejected by the upper bound whether or not the guard exists. It took a
+**bound-less, index-seeded** field — `order_index`'s own shape — for the guard
+to decide anything, proven by mutation: remove it and that test alone fails.
+
+Suite 414 → 446. Five browser paths, five PASS: a new-format list template
+imports and opens in the bench, an old-format one and a `selection`-less one are
+both refused, object mode is unregressed, and `llm_templates` was left empty.
+
+**Found by that pass, fixed separately.** The validator's precise refusal
+messages never reach the user: `importLlmTemplate` computes `result.error` and
+discards it, redirecting to a generic *"This file is not a valid LLM template."*
+Every one of the eight new rules names its exact path, is tested, and is
+invisible in the product — on the one path by which a user can currently author
+a workflow at all. Out of B7b's authorized files; raised to the user, who
+ordered it fixed as its own ticket (`LLMW.IMPORT.DETAIL.1`).
+
+### The import says what is wrong (2026-08-16)
+
+`LLMW.IMPORT.DETAIL.1`, commit `d628a5b`. The reason now travels on the query
+string — the only channel a `redirect()` leaves open — and renders as a second
+line under the human sentence, React-escaped. **On the `invalid_json` path
+only**, arbitrated by the user: the other error codes already say enough, and a
+browser path proves that submitting with no file still shows its own message
+with no detail beneath it.
+
+The two new tests decode through `URL` and assert the detail by **equality**
+rather than containment, so a message arriving truncated or half-encoded fails.
+Two pre-existing tests asserted the exact redirect target on this path and were
+updated — an observable contract change, recorded as such.
+
+**The executor corrected the ticket, and was right to.** The ticket said
+`result.error`; the real field is `reason`. It used the correct one and flagged
+the divergence instead of matching a wrong specification.
+
+### B7c — one descriptor of three, and the wall the other two hit (2026-08-16)
+
+`LLMW.DESCRIPTOR.LIST.1`, commit `e1ac26d`. §11.3 announced **three**
+row-creating descriptors. Reading the three sources before writing the ticket
+found only one describable with the bricks that existed — the same discovery
+B7a made about "four" list operations, except made *before* an execution round
+rather than after.
+
+**This is where the user settled the governing rule** (§11.3, "The governing
+rule"): a gap is a brick to build, never a reason to drop an operation. The two
+excluded descriptors became three brick tickets instead of three refusals.
+
+**The defect the green checks did not show — the ninth.** The executor reported
+that `runner.ts` could not feed its render forms a `targetCount`. Checking that
+report found worse: `buildVariableDispatchers` calls `fn(...args, selectedMode)`,
+so the slot the forms read as `targetCount` receives `selectedMode` — always
+`undefined` here — and every `targetCount ?? 6` falls back to 6. Registered, the
+descriptor would have rendered a prompt asking for exactly 6 shots whatever the
+user picked. No error. Invisible to `tsc`, the render-form tables carrying no
+`satisfies` constraint; invisible to the equality test, which hand-builds its own
+dispatcher.
+
+Verified against the builder that this was a missing brick and not a botched
+block split: every occurrence of the count sits in prose whose wording depends on
+the branch, and the branch is chosen by sequence data, so a `{parameter}` block
+cannot know which one it is in. **The descriptor therefore shipped deliberately
+unregistered**, with a header stating what the runner would do if it were not.
+
+`SEQ.CONTEXT` gained `narrativePurpose`, additively; four tests asserted the
+resolver's exact shape and were updated. `commit` is deliberately empty:
+`createGeneratedShots` **inserts** rows while all eight declared `ActionId`s
+update, and `ACTION_REGISTRY`'s vocabulary was written for updates.
+
+### B7c-n4 — the first brick, and the proof that goes through the real runner (2026-08-16)
+
+`LLMW.BLOCK.VARPARAM.1`, commit `a419e89`. The seventh `Block` variant carries
+variables **and** intent parameters into one render call, and
+`shots.fromSequence` is registered as its acceptance proof.
+
+**It takes one object argument**, against the five older variants' positional
+convention, and its table carries a real `satisfies` constraint. That is the
+point, not a style preference: B7c's near-miss came from positional dispatch
+against a table cast to `(...args: unknown[]) => string`. The runner now
+assembles the input from exactly what the block names, so declaration order
+cannot mislead a render form. The older variants keep their convention — their
+forms are shipped and proven, and rewriting them is its own chantier.
+
+**The proof runs through the real runner** (`resolveOperationPrompt`), not a
+hand-built dispatcher — precisely what B7c could not do, and precisely why the
+defect got through. Five cases over both branches, each asserting byte-for-byte
+equality against the builder *and* explicitly that the prompt says twelve shots
+and never six. Confirmed by mutation: drop the parameter channel and the test
+fails with 6; restore it and all five pass.
+
+**A third block-shape check existed that the ticket's file list had missed** —
+`describeBlock` on the bench page, testing `"variables"` with no `"parameters"`
+branch. Registering the descriptor made that page reachable for it, where it
+would have shown four blocks reading only `[SEQ.CURRENT_PROMPT]` while they also
+read `targetCount`. Found by grepping every block-shape check in `src/`, not by
+a test. **That one was the supervisor's own scoping error**, not the executor's.
+
+Suite 448 → 456. Four browser paths, four PASS, including the one no automated
+test could produce: the bench page now reads
+`variables: [SEQ.CURRENT_PROMPT], parameters: [targetCount] :: …`.
+
+**What this leaves.** `shots.fromSequence` runs in the bench but its `commit` is
+empty, so nothing can be approved. The write side is the next lock, and the
+three remaining bricks (§11.3) are what the other two row-creating operations
+still wait on.
+
+### B7d — the selection, and a title that was wrong (2026-08-16)
+
+`LLMW.PROPOSAL.LIST.1`, commit `4e550d9`. The bench runs and approves a
+list-output operation: propose, cherry-pick, approve.
+
+**The queued title was wrong, and that was the finding.** B7d was written as
+"list mode in `ProposalPanel`". `ProposalPanel` is generic on its own draft
+type and its `redirectOnly` branch already renders exactly the hidden-field
+form `createGeneratedShots` needs — it took **zero lines of change**. What was
+missing was the **selection**, which existed nowhere in the workspace, and the
+bench's list branch. The §11.3 row now says so, so a cold session does not
+re-derive the wrong scope.
+
+**The one thing that could have been wrong in silence** is the payload. The
+runner produces items keyed by entity field name; the write action
+re-normalizes through its own `normalizeShot`, which expects the model's own
+JSON keys. `buildListSelectionPayload` bridges the two, driven entirely by the
+descriptor's declared item fields — no operation name, no literal model key in
+its body. An absent field is omitted rather than written `null`, so the write
+action's own absence handling still applies, and selected indexes are emitted
+in **list order**, never click order, because list order is insertion order and
+therefore `orderIndex` order.
+
+**The proof does not stop at the parser.** Neither `normalizeShot` nor
+`parseShotsResult` is exported and `sequenceShots.ts` was out of scope, so
+rather than widen scope the executor ran the real `createGeneratedShots` end to
+end against a disposable database and asserted field by field on the rows
+actually written — a stricter oracle than the ticket asked for. It also pins
+that a reversed, non-contiguous selection comes out in list order, and that
+`shotCode` is regenerated from the nomenclature template rather than passed
+through by an accidental key match. Mutating `jsonKey` to `field` fails 2 of 3
+tests, re-run by the supervisor rather than believed.
+
+Suite 456 → 238 in `tests/llmWorkspace/` alone, all green; `tsc`, targeted
+lint, `npm run build` and `git diff --check` clean. Browser-validated against a
+real model call on a throwaway project since deleted: all checkboxes ticked by
+default, `N of M selected` coherent, Approve disabled at zero, item fields
+read-only, exactly the two ticked shots created in display order.
+
+**Two supervisor errors worth keeping.** The validation checklist expected a
+redirect to the sequence page; the bench passes its **own** URL as `returnTo`,
+so returning to the bench is correct and the checklist was wrong. And the
+mutation control was first reverted with `git checkout --`, which discarded the
+executor's uncommitted work — restored from a copy taken before mutating. On an
+uncommitted tree, a mutation control is reverted from a copy, never from git.
+
+**What this leaves.** The bench renders **no confirmation after any
+`redirectOnly` Approve** — `page.tsx` reads none of `shotsCreated`,
+`shotPromptSaved`, `sequencePromptSaved`. Two shots are created and the panel
+silently returns to its Run state. Identical for the two object-mode actions
+B6c1 shipped, so B7d inherits it rather than causing it. Its own ticket.
+
+Also outstanding, pre-existing: **B7c-w and B7c-w2 have no section here**,
+though both are committed (`85ea5ac`, `e5fa0a4`). Only §11.3 records them.
+
+### B7d-f — the bench's silent Approve (2026-08-17)
+
+`LLMW.BENCH.CONFIRM.1`, commit `f892850`. Approving in the bench created rows
+and said nothing: the panel fell back to its Run state, leaving only a query
+parameter the page never read. Pre-existing and identical for the two
+object-mode `redirectOnly` actions B6c1 shipped — the production surfaces have
+consumed these parameters all along through a `saved` prop.
+
+**A banner alone would have duplicated knowledge.** `BENCH_RETURN_TO_EXCLUDED_KEYS`
+was a hand-written list of the same keys, so the keys become one table,
+`REDIRECT_CONFIRMATION_KEYS`, constrained by
+`satisfies Record<RedirectOnlyActionId, …>`, and both the exclusion list and
+the banner derive from it. **That constraint is the deliverable**: a future
+`redirectOnly` action does not compile until it declares how it reports itself
+— which is to say, until it stops being able to write in silence. Removing an
+entry fails `tsc` with TS1360.
+
+**The supervisor's frozen contract was wrong**, and the executor caught it: the
+table was frozen at three entries where `RedirectOnlyActionId` has five. The
+contract reasoned about which ids `planBenchCommit` can *reach*, where
+`satisfies` is a type-level check over the whole union. `createSelectedAssets`
+and `createGeneratedSequences` were declared from their own actions' redirect
+keys rather than by weakening the constraint, and both render nothing — no
+wording was frozen for them and none was invented.
+
+**A real build constraint, learned here:** `benchRun.ts` is pulled into the
+client bundle through `BenchRunPanel`, so a runtime import from `bench.ts`
+drags `runner → llm → comfy → fs/promises` in and the build fails. Only the
+type is imported; the one-line reader is local, duplicated on purpose.
+
+Validated by forging URLs rather than approving anything — the banner is a pure
+function of the query string, so nine cases were played with no model call and
+no write.
+
+### B7e — the first list migration, and the bound that was decoration (2026-08-17)
+
+`LLMW.MIGRATE.LIST.1`, commit `c6ad874`. `generateShotsFromSequenceDraft`
+becomes a thin adapter over `runOperation`, the gesture the seven object-mode
+operations already made. The four guards it carried are the runner's now, and
+the descriptor's `messages` reproduces all four strings verbatim, so nothing
+the user reads changed.
+
+**`SequenceShotsLLMAssistPanel` was never opened.** The adapter keeps the exact
+return shape, so the panel had no reason to move — and the cherry-pick
+selection stayed a bench capability instead of arriving in production through
+the back door of a migration. The supervisor had floated adding it; the
+migration pattern dissolved the question.
+
+**The contract was indiscernibility, not "it works".** Two gaps stood in the
+way: `readStringField` always produces a value, so `""` arrives where
+`normalizeShot` produced `null`; and an out-of-bounds number is dropped
+entirely by the `omit` fallback where the old code kept the key with `null`.
+Both are bridged, and proven by an equality test against a value computed by
+hand from the pre-migration code, with a comment on every `null` naming the old
+line it came from. B7d's bridge was reused rather than copied —
+`benchListSelection.test.ts` passing **unmodified** is what proves the
+extraction changed nothing.
+
+**It shipped with one reported regression**, closed by the section below: the
+old code pulled an out-of-range shot count back to 6, the new one let it reach
+the prompt. Re-implementing the bound in the adapter would have duplicated a
+rule the descriptor already declares, so it was reported rather than patched
+locally — the user arbitrated to commit and fix it in the runner next.
+
+### B7e-n — the runner enforces what the descriptors declare (2026-08-17)
+
+`LLMW.PARAM.BOUNDS.1`, commit `e67a187`. `intent.parameters` has carried
+`default`, `min` and `max` since B1a and **the runner enforced none of them**;
+the render forms each patched around it with their own `?? 6`.
+
+**The rule was read, not invented.** Both integer parameters the product has
+behaved identically before migration: `targetCount` fell back to its declared
+`6`, `targetSections` — which declares no default — fell back to being omitted.
+One rule reproduces both: valid if it satisfies its type and, for an integer,
+its declared bounds; otherwise the declared `default`, or dropped when there is
+none. **Never clamped to `min`/`max`** — clamping would look smarter and would
+not be what either action did. An undeclared key is dropped.
+
+Applied **once**, in `resolvePromptInternal`, upstream of both dispatchers. That
+single point also covers the bench for free: its parameter control is driven by
+the query string and still accepts any finite number, but every path reaches the
+model through `runOperation`. No bench file was touched.
+
+The proof runs through the real `resolveOperationPrompt`, because the effect
+being fixed is *what the model is asked* — `targetCount: 9999` must produce a
+prompt asking for 6, and an out-of-range `targetSections` must produce a prompt
+identical character for character to one built with no parameter. Removing the
+bounds check fails five of nine cases. **No existing test was modified**, which
+is the whole claim that no observable behaviour moved.
+
+**What it means beyond the bug.** §8.3 of the vision has the author prototyping
+without a dev ticket. A declaration the engine ignores is a trap for exactly
+that author: write `min: 1, max: 30` and watch nothing enforce it.
+
+### B7g → B7h-b2 — nine tickets, and what each one cost to learn (2026-08-17)
+
+Written as one section rather than nine: the commits carry the detail, and what
+a cold session needs is the handful of things it would otherwise re-derive
+wrong. Queue rows and commits are in `docs/LLM_WORKSPACE_ARCHITECTURE.md`
+§11.3, all struck through.
+
+**The three bricks are built.** The post-response stage (`e867636`), boolean and
+multi-choice inputs (`bd38db5`), project-scope collection variables
+(`95d2a3c`). With them, **all four list operations have a descriptor** and three
+of the four are migrated — only casting still carries its own engine.
+
+**The rule that decided every split.** A variable proves itself through its
+resolver, alone. A pipeline stage, a parameter type or a format extension
+proves nothing until a descriptor consumes it. So variables ship early and
+alone; bricks ship **with** their first consumer. Learned by paying for it: the
+post-response stage had no consumer of its own, and shipping it bare would have
+been code no honest test could exercise.
+
+**Three defects that no test could have caught, found by reading.**
+`sequences.fromOutline`'s migration inherited a second copy of the override the
+runner had just taken over — idempotent, so nothing looked wrong, and the
+mutation control proves the suite was blind to it. `assets.fromProject`'s
+adapter had to pass an **empty** `multiEnum` through untouched, because
+substituting the default there would have silently defeated the "Select at
+least one asset type." gate and run an extraction the user had refused. And
+`PROJECT.ASSETS` was first sorted by `orderIndex`, which buys no determinism
+(every row defaults to `0`) and diverges from a source query that has no
+`ORDER BY` — a divergence a fixture would naturally have hidden.
+
+**Two supervisor errors worth keeping.** A frozen table was written with three
+entries where the type demanded five, because the supervisor reasoned about
+which action ids are *reachable* where `satisfies` checks the whole union; the
+executor caught it and declared the missing two from their real sources rather
+than weakening the constraint. And the phrase "one new source file" in a ticket
+budget made an executor delete its own tests after running them — *source* means
+`src/`, never `tests/`. Both are now written into the tickets that follow.
+
+**UC3 is delivered** (`41d16b8`), and its retake (`9266d64`). Writing
+`description` alone means there is **no preservation trap** in it at all, unlike
+UC2. There is also no oracle: the prompt is written rather than transcribed, so
+its quality is a human judgement and the resolved prompt goes in the report
+instead of into a test. The first round left "Respond to the director's
+direction below" standing unconditionally in the *system* message — the same
+defect that sent UC2 back, one message higher, because the check had only looked
+at the closing line.
+
+**Casting stopped being unrepresentable** (`d89ee87`), and the way it happened
+is the chantier's method working. An executor returned **blocked without writing
+a file**: the builder embeds the sequence's own id, and no variable carried it.
+Verified line by line — it is the **first builder in the repository needing its
+own anchor's id** rather than a child's. `SEQ.IDENTITY` answers it. Enrichment
+**replaces** the model's names rather than completing them ("don't trust LLM
+names"), and `ListItemField` gains no boolean type: `alreadyAssigned` is
+computed after parsing, never parsed, so only a post-response form's output
+widens.
+
+**Two things that are true and not defects.** `alreadyAssigned` is computed and
+asserted but invisible in the bench, whose list renderer shows declared item
+fields; production reads it from the returned object. And the asset-type filter
+is a prompt instruction, so a model asked for three types may still answer with
+a fourth — pre-existing, proven byte for byte against the builder, and now
+scheduled to become a real filter (queue row S2).
+
+**Four arbitrations were taken on 2026-08-17** and recorded in
+`docs/ARCHITECTURE_DECISIONS.md`: schema authorized for Asset Bible freshness
+and asset sourcing metadata, the asset-type filter becomes real, the bench gains
+boolean and multi-choice controls, and the two untracked `.agents/` files stay
+untracked on purpose.
+
+### B15b — lighting reaches the screen, and a label that lied (2026-08-18)
+
+Commit `bc4c498`. B15 is complete: the field is editable at the three levels and
+a Sequence can inherit its environment's in one click — the second half of the
+user's both-ways decision.
+
+**The S4 trap, in reverse, and worth generalising.** Until now the danger was an
+action writing *too many* columns. Here `updateShot`, `updateSequence` and
+`updateAsset` are multi-column actions that **erase what is not passed back to
+them**, so adding `lighting` to each meant the field had to appear in each form
+or every ordinary page save would silently wipe it. Proven on all three with a
+column diff. **Rule: adding a column to an existing multi-column form action is
+only half the change — the form must carry it too, and the proof is a save that
+does not touch the field.**
+
+**Why the button does not call `resolveSeqLighting`.** It would have been the
+obvious reuse and it would have been wrong: that resolver short-circuits to
+`{ source: "own" }` as soon as the Sequence's own field is filled, and never
+reaches the environment query — which is precisely the case the button exists to
+overwrite. The shared traversal `resolveSequenceEnvironmentAssets` was extracted
+instead. The near-miss is recorded because the correct-looking reuse would have
+made the button silently unavailable exactly when it is wanted.
+
+The decision of what to copy lives in a pure `buildSequenceLightingFillText` a
+test can call with a plain array; the page and the button's action both go
+through the same wrapper, so they cannot disagree about whether anything is
+copyable. The button is rendered only when something is, never fires by itself,
+and lists every environment by name — no election rule, consistent with B15a.
+
+**The defect no automated check in this repository could have caught.** The
+button's caption said it copied the value "into the Lighting field below". It
+does not: it writes to the database immediately and reloads. With two submit
+buttons of different scopes on one page, a user could click it, see the field
+filled, change their mind, press Cancel, and believe nothing was saved — having
+already overwritten their hand-written lighting for good. `tsc`, 749 tests and a
+clean build were all green on that sentence. Behaviour was right; only its
+description was not.
+
+**Not validated in a real browser**, by the executor or the supervisor — the
+same reservation as E1b, and the same reason: `AGENTS.md`'s UI checklist went to
+the user with the commit rather than blocking the chantier he asked to review as
+a whole.
+
+**UC impact: none.**
+
+### B15a — lighting, and a relation that already existed (2026-08-18)
+
+Commit `f163da6`, migration `0054_modern_wasp` (three additive nullable columns,
+applied by the user). §5.9's field at three levels — Shot, Sequence, Environment
+Asset — with the write actions and the reads. No surface, no model call: B15b
+brings the forms, B16 the assistance.
+
+**The reason the migration is three columns and not four.** Scoping asked how a
+Sequence knows its environment, and the answer was already in the schema:
+`sequence_assets` links a Sequence to its assets, and `assets.type` already
+carries `"environment"`. Nothing to model, only to traverse. Worth remembering
+as a habit — the question "what relation do we need" should first be asked as
+"what relation do we have".
+
+**The user's decision, 2026-08-18.** Asked whether a Sequence *uses* its
+environment's lighting by reading it at prompt time or by copying it into its own
+field, he chose **both**, with a precedence rule: the Sequence's own field wins
+when filled, otherwise the variable reads the environment. B15a delivers the
+variable and the rule; the copy button is a surface, so B15b.
+
+`SEQ.LIGHTING` implements it: own field when non-blank **after `trim()`** — so
+`"   "` does not beat the environment — otherwise the `type: "environment"`
+assets of its cast ordered by name, **all of them**, otherwise nothing. No
+election rule was invented; several environments return several entries, the way
+`SHOT.CAST` returns several cast members. A "first one wins" would have been a
+product decision nobody took.
+
+**The resolver reports its source** (`"own"` / `"environment"` / `"none"`). This
+is the half of the ticket that mattered: a lighting value displayed without its
+provenance is undebuggable, since nothing distinguishes an inherited value from a
+typed one. Any later field that can be inherited should carry the same.
+
+**Accepted deliberately, so it is not "fixed" later:** `source: "environment"`
+can return entries whose own `lighting` is `null` — an environment nobody has
+described yet. Collapsing that to `"none"` would lose information, since
+`"none"` means "no environment at all"; the entries carry the environment names,
+so the gap is visible rather than silent.
+
+One touch outside the ticket's file list, mechanically forced and reported rather
+than slipped in: `bench.ts`'s switch over `returnValue` actions must stay
+exhaustive, so the new asset action required a branch there — answered with a
+named refusal.
+
+**UC impact: none.** Library growth, §11.3's governing rule.
+
+### E1b — the editor screen, and the boundary only the build can see (2026-08-18)
+
+Commit `638832f`. E1 is complete: authoring a workflow no longer means leaving
+the application to hand-edit JSON.
+
+**The finding worth keeping, because it defeats two of the three checks this
+project relies on.** `templateEditor.ts`, shipped by E1a one commit earlier,
+could not be imported by a Client Component at all: it statically imported
+`variables/registry.ts`, which is `import "server-only"` and pulls
+`better-sqlite3` behind it.
+
+`import "server-only"` is a **build-time sentinel, not merely a runtime guard**.
+Any module that imports it statically — transitively, and even when the importer
+calls none of the affected exports — becomes unbuildable for a client bundle.
+`npx tsc --noEmit` cannot see this. The vitest suite cannot see this. Only
+`npm run build` can, and it failed with `Module not found: Can't resolve 'fs'`.
+
+So: **a client/server boundary is only verifiable at build time.** Any ticket
+adding a Client Component, or making an existing module client-importable, must
+run `npm run build` — the two usual checks are blind to the one thing that
+matters. E1a's review did not catch it and could not have with the checks it ran.
+
+The fix was the smaller of the two available: the six registry-derived catalogue
+functions moved to `templateEditorCatalogues.ts`, computed in the Server
+Component and passed down as props, leaving the block/variable manipulation
+client-importable. The alternative — duplicating the rules inside the component
+— would have left two implementations of the same rule to keep in sync.
+
+**What the screen does.** Closed vocabulary stays closed: variables from the
+registry, and each block type offered only its own render forms, six distinct
+sources never pooled. Only a `{text}` block is free entry, since its content is
+text. Mode ids and parameter names are free entry too, and correctly so — they
+are descriptor-defined strings, not registry entries; only the render form
+attached to them is closed. The coupled triangle is displayed **read-only and
+labelled as inherited**, so the author sees what he is writing onto.
+
+**Two things that look like violations and are not**, recorded so they are not
+"fixed" later:
+
+- the draft is mirrored to `sessionStorage`. §5.8 of the vision forbids
+  reproducing *the `sessionStorage` handoff to the Generation Panel* — a
+  transfer between two screens. This preserves a form across a failed save,
+  which `.claude/rules/frontend.md` requires, and the save action refuses by
+  redirecting, which would otherwise discard every edit;
+- the screen collapses E1a's three patch states to two. It always sends the whole
+  editable surface, so "key absent" never occurs from this caller. The third
+  state stays meaningful for programmatic ones.
+
+`describeBlock` — a switch over all seven `Block` variants, order-sensitive
+because the mixed variant carries both `parameters` and `variables` — had been
+copied byte-for-byte into the new component. Now shared, with one assertion per
+variant. It had survived as a duplicate precisely because it was proven nowhere.
+
+**Not validated in a real browser, by the executor or the supervisor.** The
+checks say it compiles, builds and regresses nothing; they do not say it is
+usable. `AGENTS.md` requires a user-validation checklist on a UI ticket, and §2
+of the Opus protocol excludes UI work needing validation from its scope. The
+commit proceeded under the user's standing instruction to chain and review the
+chantier as a whole; the checklist went to him with it. **This is the one ticket
+of Chantier 1 where the supervisor's checks prove least.**
+
+**UC impact: none directly.** E1 is the condition of §7's third success
+criterion.
+
+### E1a — the editor's engine, and the merge that cannot widen (2026-08-18)
+
+Commit `6f44c72`. The first half of E1: the pure module and the
+save action. No screen — that is E1b.
+
+**The decision the whole ticket rests on: the save action accepts a patch, never
+a descriptor.** `updateLlmTemplateContent` takes the editable surface only and
+merges it onto the stored JSON. Had it accepted a whole descriptor, posting a
+different `commit` would let a template write into any of the sixty tables, and
+E1 would silently have become E2. Two independent barriers enforce it:
+`parseEditableTemplatePatch` reads only the eight editable property names off
+untrusted input, and `applyEditablePatch` spreads the stored descriptor first
+and never names the coupled triangle on the left-hand side. Proven in the pure
+module and again against a disposable database.
+
+**Nothing is recopied.** The render-form catalogue and the available-variable
+list derive from the closed registries at call time, exactly as
+`variableLibrary.ts` does. The derivation proof runs **in both directions** —
+each table's keys stay out of the other five's catalogues — which is what makes
+it a derivation proof rather than a spot check.
+
+**The scoping document was stale, and correcting it shrank the ticket.** It
+claimed `intent.freeText` had no runtime control anywhere and needed a ticket of
+its own; that was true on 2026-08-15 and false by 2026-08-18, since B9a shipped
+the control and the bench renders it for any descriptor declaring it. E1 only had
+to make it declarable. Recorded because the cost estimate that reached the user
+came from that document.
+
+**Three corrections in review, one of them the supervisor's own error:**
+
+- the ticket named five render-form tables; `Block` has **six** variants carrying
+  a `render`, and the sixth is used by six shipped descriptors. The executor
+  followed the ticket literally and **reported the gap instead of inventing a
+  contract** — the behaviour §7 of the protocol exists to produce;
+- `name` is editable, but the action wrote only `templateJson`, leaving the
+  `llm_templates.name` column stale while the workflows list reads it. Both other
+  writers of `templateJson` maintain that invariant;
+- the merge used `??`, so an `intent` field could be added and never removed. An
+  editor that can only add is broken, and this is the field UC1/UC2/UC3 all need.
+  The convention is now explicit: key absent leaves it, key present as `null`
+  removes it, on the three `intent` fields only.
+
+**UC impact: none directly.** E1 is the condition of §7's third success
+criterion — the user authoring his own templates.
+
+### B12b-2 — the jar can be filled, and B12 is complete (2026-08-18)
+
+Commit `d097278`. `narrativePrompt.compose` is the first descriptor to declare a
+text output, and it closes B12: the jar (B12a), the engine (B12b-1), the recipe
+(this one).
+
+**The proof that gives the whole chantier its point.**
+`tests/llmWorkspace/narrativePromptCompose.surface.test.ts` runs the operation,
+takes the draft, approves it against a disposable database, and asserts that
+`shots.narrative_prompt` holds the model's prose while `shots.shot_prompt` still
+holds exactly the human's text. §5.3's separation is demonstrated, not claimed —
+the two halves of a prompt can no longer be merged by an Approve.
+
+**Two decisions defended in the code, not only in the ticket**, because both are
+the kind a later ticket would undo:
+
+- `SHOT.NARRATIVE_PROMPT` is **not** an ingredient of its own recipe. Reading
+  the jar back would make each run drift from whatever the previous run produced
+  instead of restarting from the same six ingredients — which is exactly the
+  property that makes this §5.3's *marmite* ("toujours de la meme maniere");
+- no `intent.freeText`. The director's note is E1's and B16's subject, and
+  declaring it here would pre-empt their design — the same primitive §4's
+  Reachability section records as having been deferred three times by accident.
+
+The ingredient set is `shotPrompt.assist`'s six, unchanged: same anchor entity,
+same raw material, nothing invented. That was a supervisor decision, flagged to
+the user as overturnable.
+
+**A hole B12b-1 left, found only by the first descriptor that could trip it.**
+`templateStorage.ts`'s `validateOutput` had no `"text"` branch, so a stored
+template declaring the kind B12b-1 had just shipped would have been refused on
+import with `"output.kind" must be "object" or "list"`. Nothing could surface it
+until `narrativePrompt.compose` entered `DESCRIPTORS` and the round-trip test
+began exporting and re-importing it. Worth generalising: **a new descriptor-format
+variant is not finished when the runner handles it — the storage validator is a
+second, independent switch over the same union, and only a descriptor actually
+declaring the variant exercises it.**
+
+**Where the supervisor's ticket was wrong.** It asked for the Approve form to
+post under the name given by `output.field`. The executor instead named the key
+as a literal, exactly as the sibling `buildUpdateShotPromptHiddenFields` does,
+and used `output.field` for the bench label. That is the better design and was
+accepted: deriving the posted key from a descriptor string would replace a
+compile-time constant, checked against what the action actually reads, with a
+runtime value a stored template could set to anything.
+
+**UC impact: none.** The bench is the only surface; the Shot page shows nothing
+yet, exactly as UC1 and UC3 shipped.
+
+### B12b-1 — the runner learns prose, and the JSON it was forcing (2026-08-18)
+
+Commit `00093d8`. Preparing B12b found the obstacle the queue had not named:
+**`runOperation` only ever called `callLLMJson`, and that call forces JSON on
+both provider families** — `response_format: {type:"json_object"}` in
+`openaiCompatible.ts`, `format: "json"` hard-coded in `callOllama`. A text-mode
+operation routed through it would have asked the model for a narrative prompt
+encoded as JSON, the exact opposite of §5.3's cooking stage. B12b was split at
+that line: B12b-1 is the engine, B12b-2 is the descriptor.
+
+**The missing brick was small, which is the useful part of the finding.**
+`callLLMChat` already routes both provider families with nothing forced, and
+both provider chat functions were already written and already used. What was
+missing was only the `LLMPrompt` -> two-`ChatMessage` adapter, so `callLLMText`
+is six lines and **no provider code was written**. Worth remembering the next
+time a capability looks absent from the workspace: check whether it exists one
+layer down, unrouted.
+
+`output` gains a third `kind` and `RunOperationResult` a third variant, widened
+deliberately breaking on B11-b1's pattern so `tsc` names every consumer. Two
+were named: the bench action's serialisable copy relays the new kind, and the
+bench page refuses it **by name** rather than rendering a surface no test
+exercises — B7c-n3's rule, applied to a UI branch this time.
+
+**The text branch strips no code fence.** A strip that is correct against
+corrupted JSON would mutilate prose containing backticks or braces, and the test
+asserts precisely that payload survives.
+
+**A failure class worth naming: invisible to `tsc`, invisible to a targeted
+run.** Widening the model call's destructure to
+`const { callLLMJson, callLLMText } = await import("@/lib/llm")` broke every
+pre-existing runner test, because they mock `@/lib/llm` with a factory declaring
+`callLLMJson` alone and Vitest's mock proxy throws when an **undeclared export
+is destructured** — even for an `"object"` descriptor that never calls the new
+function. Reading the property off the module namespace inside its own branch
+fixes it, and removes the coupling that caused it: the JSON path no longer
+depends on the presence of the text path. It only surfaced under the full suite,
+which is the argument for asking for the broad regression whenever a shared
+union is widened.
+
+The proof, `tests/llmWorkspace/outputText.runner.test.ts`, could not follow its
+two precedents in mocking `@/lib/llm`, because `callLLMText` calls `callLLMChat`
+as a same-module reference such a mock does not intercept. It mocks the two
+**provider** modules instead, so "the text mode does not borrow the JSON call"
+is asserted against the real provider function invoked, in both directions.
+
+**UC impact: none.** Library growth, §11.3's governing rule.
+
+### B12a — the narrative prompt gets a jar, and the column diff that proves it (2026-08-18)
+
+Commit `c4d7af1`. The first ticket of the re-derived Chantier 1 queue, and the
+first application of vision §5.3's storage rule: **a deterministic assembly is
+never stored, a generated content always is.**
+
+Until this commit the Prompt Compiler's output was poured into
+`shots.shot_prompt` through Replace/Append, and after that nobody could tell
+which half a human had written. The generated narrative prompt now has a jar of
+its own — `shots.narrative_prompt` (migration `0053_light_killraven`, additive,
+nullable, no default, applied by the user), the write action
+`updateShotNarrativePrompt`, and the variable `SHOT.NARRATIVE_PROMPT`. §5.2
+requires the variable: a jar is an ingredient like any other, and without a
+resolver the prompt would be a cul-de-sac, written and never read back.
+
+**Nothing fills the jar and no surface shows it.** That is deliberate — a field
+that is always null is noise. B12b brings the text output mode and the
+descriptor. The ticket is provable anyway, and stated why in its own body: a
+write action is proven against a disposable database (precedent `B7c-w`,
+`85ea5ac`) and a variable is proven by its resolver (precedent `B7c-n2`,
+`95d2a3c`). Neither is a pipeline stage, which is what B7c-n3 had ruled
+unprovable without a consumer.
+
+**The S4 trap, closed by construction rather than by care.** The action never
+reads `shotPrompt`, so it cannot overwrite it. The assertion that guards this is
+stronger than "shotPrompt is unchanged": the test computes the column diff with
+`changedColumns` and requires it to equal exactly `["narrativePrompt"]` once
+`updatedAt` is set aside, so a future widening of the write fails loudly instead
+of silently erasing a sibling column.
+
+**Two defects the ticket created and the review caught**, both fixed in one
+corrective round:
+
+- the new `ACTION_REGISTRY` note promised "see registry.test.ts's structural
+  assertion", but that file's `cases` array is hand-curated and did not list the
+  new action. A registry note claiming a proof it does not have is precisely the
+  drift the registry exists to prevent, so the case was added rather than the
+  note softened;
+- `variableLibrary.ts` said "22 variables" twice — correct before the ticket,
+  false after it. The hard count was **removed**, not bumped to 23: it would
+  have drifted again at the next variable.
+
+**Verified rather than implemented:** `SHOT.NARRATIVE_PROMPT` appears in the
+variable library with nothing written for it. `variableLibrary.ts` derives its
+rows from `Object.entries(VARIABLE_REGISTRY)` and derives each anchor from the
+id's own namespace prefix, so any new `SHOT.*` id is anchored on the shot for
+free. Worth knowing before a later ticket writes a registration it does not
+need.
+
+**UC impact: none.** Neither UC1, UC2 nor UC3 is touched or constrained. This is
+node-library growth in the sense of the governing rule of
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3.
+
+### B8 is dissolved, and the prompt mechanics are written down (2026-08-18)
+
+No code changed. A ticket was prepared, costed, and then not written — which is
+the outcome worth recording.
+
+**What preparing B8 found.** Its two declared hard parts were the action's lack
+of database access and its staleness fingerprint. Reading the operation end to
+end found both to be misdescribed and a third fact to be the real one:
+
+- the fingerprint was never the adapter's. `PromptCompilerPanel` builds the
+  context and computes the fingerprint **client-side**; the server action's
+  returned fingerprint is a byte-identical echo of it, and the staleness check
+  in `PromptCompilerHandoffGate` is client-side too;
+- the expensive part was elsewhere and unnamed: **the context is chosen by the
+  user, not derived from the database.** Five presets, five source checkboxes,
+  and a hand-ordered subset of reference images whose click order becomes
+  `@Image1..N`. No variable can express an ordered user-ticked subset, so a
+  faithful migration meant inventing a primitive the workspace does not have.
+
+**The supervisor put the cost in front of the user before writing the ticket,
+and separated the constraints that came from the user from the ones it had
+given itself.** The second list — reproduce the current behaviour exactly, keep
+the five presets, keep the checkboxes, keep the manual image ordering, keep the
+staleness warning identical — was the whole cost. The user's answer: *je ne me
+sert jamais des presets du prompt compiler car il est pas bien pensé pour
+l'instant.*
+
+**The lesson, and it generalises past this ticket.** A migration inherits the
+authority of whatever it is migrating. Nobody had re-judged the Prompt Compiler
+since it was written — before the workspace existed, before UC1/UC2/UC3 ran —
+and a faithful migration would have carried that unexamined design forward,
+priced as engineering rather than as a product decision. **Before costing
+fidelity to an existing surface, ask whether the surface is still wanted.** The
+question cost one exchange; the answer removed about half the ticket and
+redirected the rest.
+
+**What replaced it.** The user gave a vision statement on prompt mechanics; it
+is now `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5, an acceptance reference beside
+§4, and both are named in `AGENTS.md` and `CLAUDE.md` so the §4 drift cannot
+repeat for §5. In short: entity fields are **ingredients**; a transformed output
+is a **jar**, cherry-pickable like any other ingredient; a saved ingredient
+selection is a **recipe**. Assembly and generation are two stages of one chain,
+and **only the generated one is stored** — which is why a deterministic
+assembly needs no staleness machinery, and why generated text needs a field of
+its own instead of being poured into the field the user types in by hand. The
+user chooses ingredients and writes the director's note; the app owns the
+engine formatting.
+
+**Two things measured while preparing it, both now in §5.**
+
+The Seedance guide the prompt work descends from was read and compared against
+what exists. Subject, action, camera, environment, style, duration and timecodes
+are all covered by ingredients. Three ingredients are genuinely missing —
+lighting (which the guide calls the highest-leverage single element), negative
+constraints, and a controlled camera vocabulary. Two whole families are missing
+rather than incomplete: video and audio references, with their extension chains.
+And the largest item is not a gap in the stock at all: the reference-image role
+catalogue already carries `first_frame` / `last_frame` / `character` /
+`environment` / `style` with an explicit stored order — an almost exact match
+for the guide's five named image modes. **The information the Prompt Compiler
+asks the user to restate by ticking and ordering images is already in the
+database.** What is missing is the rendering.
+
+The storyboard prompt, which the user called a black box, was opened. Per Shot
+it carries a header line and then `compileShotPrompt(...)` — which is **only the
+Shot Prompt text**, plus a `Timeline:` block on video shots with Prompt
+Segments. No casting, no camera, no framing, no mood, no continuity, no project
+style. The recipe consumes one jar and has no access to the pantry. One defect
+noted and not repaired: `sequenceVideoGeneration.ts` includes package warnings
+in the text sent to the model, where the storyboard and image paths both pass
+`includeWarnings: false`.
+
+**The author then ruled on each gap, and one correction was needed.** Lighting
+is accepted and he designed it on the spot — a field at Shot, Sequence and
+**Environment Asset** level, the last being the point, since a Sequence can then
+read its environment's lighting instead of inventing one; fillable by hand, by a
+**vision model reading an uploaded or referenced image**, or by a director's note
+that *adjusts* the existing value rather than regenerating it. The author then recalled that
+the vision fill may already exist, and he was right: Project Style's Reference
+Board analysis (`src/lib/projectStyle/referenceAnalysis/`) already re-validates
+image bytes at call time, builds one multimodal message both provider families
+understand, wraps the call so no provider body can leak, validates a JSON answer
+— and already asks about lighting by name. The missing piece is therefore
+narrower than stated an hour earlier: **the descriptor format cannot declare an
+image input**, so that capability lives outside the workspace, hand-written and
+anchored on the Reference Board. Negative
+constraints he named a real gap in his own work and **explicitly not MVP**. The
+camera he framed as a design job on what already exists, not the adoption of the
+guide's vocabulary. All three, plus the media families, are in
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.6 and §5.9.
+
+**The correction:** the first draft of §5.6 said video and audio references had
+no entity at all. `shot_reference_videos` is delivered — upload, ordering,
+label, notes, probed duration and dimensions, file quarantine on cascade. It has
+never been exercised by the author, and it carries **no role column**, which is
+precisely what the guide's video modes are keyed on. Audio genuinely has
+nothing.
+
+**The queue, re-derived and delegated.** The user delegated the sequencing and
+asked which items belonged after the cleanup. Chantier 1: **B12** (text mode +
+the narrative jar), **E1** (the template editor — his own "listes de course
+sauvegardées"), **B15** (the lighting field), **B16** (lighting assisted),
+**B13** (the conformation stage), **B14** (the storyboard prompt under the
+workspace). Then Chantier 2 unchanged. Then **B17** (video roles, tuning, and
+the audio family — his own call to wait), **B18** (negative constraints, not
+MVP), **B19** (the camera redesign, waiting because C4–C6 are about to move the
+Shot forms it would touch, so doing it first means doing it twice). B13 carries
+a constraint from that last one: it must not hard-code today's camera shape.
+Then **B20**: asked whether Reference Board
+analysis — 1 259 hand-written lines doing exactly what the workspace exists to
+express — was a brick to build or a deliberate exception like chat, image
+generation and translation, the author ruled **a brick to build**. Reading its
+code before scheduling it found three format gaps rather than the one assumed:
+an image input with per-image keys, a **composite output** (one scalar plus two
+lists, where `output.kind` picks a single shape today), and cross-item
+referential validity. Three non-format properties must survive it untouched —
+the file confinement and decode gate, the prompt's provenance hash, and the
+drift detection between the pre-call snapshot and a fresh read inside the
+committing transaction. B16's image-input declaration is therefore constrained
+to be designed against B20's needs, not only lighting's single-image case.
+Full table in `docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3, "B8 dissolved".
+
+### What is left, and the reporting error that hid part of it (2026-08-18)
+
+The user asked whether only B8 and C0 remained. They did not, and the gap was
+the supervisor's reporting rather than the queue's content.
+
+**E1 had been dropped from three successive summaries.** It is the last ticket
+of Chantier 1 and the point of the whole thing — the template editor is what
+turns the workspace from a runner of eight built-ins into something the user
+authors in, which is §7's third success criterion in his own words. And "the
+deletions" was said as if it were one item where the queue lists **seven**
+(C0 through C6) plus three independents plus two follow-ups.
+
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3 now opens with an explicit
+"What remains" checklist for exactly this reason: a struck-through table is
+easy to summarise wrong, and the summary is what a session reset inherits.
+
+**Order settled by the user, 2026-08-18: B8, then E1, then Chantier 2.** The
+supervisor had recommended E1 first, on the argument that autonomy is worth more
+than tenability and that B8 unblocks nothing since translation left the
+workspace. The user chose otherwise; the recommendation is recorded, not
+re-argued.
+
+### UC3 reaches the product, and a blocked report stops a supervisor (2026-08-18)
+
+`4210df8`. With UC1 on the Sequence page, **all three founding use cases are
+reachable where the work happens.**
+
+**The ticket's central premise was false, and the executor refused it.** It
+asserted — insistently, as the section the whole ticket was built around — that
+`asset.retakeDirected` writes through `updateAssetDetailsInline`, the
+five-column rewriter, and that approving a retake without carrying the other
+four columns would erase the asset's notes and Bible. Four sources in the
+repository said otherwise: the descriptor's own `commit:
+["updateAssetDescriptionFieldInline"]`, `commitBenchProposal`'s routing, this
+document's own B10 entry, and a passing test asserting the single-column write.
+
+The executor read all four, stopped without writing a line, and reported the
+contradiction. **Had it complied, UC3 would have been rewired to the wider write
+to guard against a danger that the rewiring would itself have created** — and
+the supervisor had already relayed that danger to the user as a risk of losing
+real data.
+
+This is the second blocked report in the chantier to prevent a design error, and
+it is the strongest argument for the loop: **a ticket's authority must never
+outweigh what the code demonstrates.** The rule generalizes past this incident —
+when a ticket and four independent sources disagree, the ticket is the thing
+most likely to be wrong, because it was written by whoever had least recently
+read the code.
+
+### UC1 reaches the product, tuned four times by its own answers (2026-08-18)
+
+`shot.insertDirected` is on the Sequence page (`05f381a`) and the user validated
+it in the running product. **All three founding use cases are now reachable
+where he works.**
+
+**Four tunings, none of which a test could have found.** Every one came from the
+user reading a real answer on a real project: an interval (`"MS to WS"`) where
+the rule gave examples but forbade nothing; a fabricated shot code in the title,
+**taught to the model by our own rendering**, which glued code to title with an
+em dash in two places; two fields — `action_pitch` and `continuity_notes` —
+carrying no rule at all while their neighbours each had one, so the model filled
+the vacuum with the intent from the director's note; and then a bound that
+became too tight *because* the new rule made the field longer, cutting
+`action_pitch` mid-word at 300.
+
+That last one is the pattern worth keeping: **a prompt rule can create the next
+defect.** S7c asked for beat-by-beat action and S7d had to widen the field that
+answer needed. Neither was foreseeable from the other.
+
+**What the final answer showed about the design.** Asked to convey hesitation
+under a helmet, the model used Azelle's tail as an acting instrument and staged
+a breath through the shoulders — neither is in any rule; both come from the
+project pitch describing an anthropomorphic macaque. §3.2's bet, that context
+selected by named variables produces craft rather than decoration, is visible in
+the output.
+
+**The surface's one design decision.** `afterShotId` is implicit in the click,
+on the connector between two shots. The bench asked for an id in a field because
+a bench may; a product may not, and §1 of the vision names that friction
+directly.
+
+**S2 shipped the chantier's first deliberate behaviour change** (`5fc5156`): an
+asset candidate whose type was not requested is now dropped. It also cost a
+lesson about scoping test changes — the ticket authorized one proof to move, and
+two needed to, the second visible only by running the suite.
+
+**The flaky suite had a second cause, found at last.** `maxWorkers` fixed the
+contention failures; the total load failure — all files failing on
+`Cannot read properties of undefined (reading 'config')` — is a **stale Vite
+cache**, cured by `rm -rf node_modules/.vite`. Hours were spent treating it as a
+scheduling problem. Every ticket since carries the remedy in its own text.
+
+### S7, S5, S3, S1 — five tickets driven by first contact (2026-08-18)
+
+All delivered the day after UC1 landed, and four of the five exist because
+something was **used** rather than reasoned about.
+
+**UC1's prompt was tuned twice by the user's own runs** (`133816e`, `85b276e`).
+The first real answer returned `framing: "MS to WS"` — an interval, because the
+rule offered examples and forbade nothing — and a `continuity_out` that
+delivered the hero to the *next* shot's destination. The second returned
+`title: "Sh_250 — Passage Through the Bulkhead Door"`, a fabricated shot code in
+the title, **caused by our own rendering**: two lines glued code to title with
+an em dash and the model copied the format it was shown. Fixing only the rule
+would have left the inducing format in place. The shot list also cost 2477 of
+2588 tokens on a fourteen-shot sequence and truncated mid-word; the four shots
+framing the insertion point now render in full and the rest as one title line,
+halving the block. `SEQ.SHOT_TARGETS` was deliberately **not** bounded —
+`casting.fromSequence` reads it under a frozen proof.
+
+**The test suite was answering at random** (`716fc55`). The same tree gave 655
+passing, then 89 files failing to load, then 3 failures, then 12 — and 12 again
+on a clean tree. Always the heavy DB-backed files. `maxWorkers: 4` holds it:
+eight consecutive green runs, identical counts, for +65-85% wall time. **The
+unstable runs were also skipping 15 to 26 tests outright** — the contention was
+not only breaking tests, it was silently not running them. A second symptom
+remains open and rarer: all files failing to load at once on
+`Cannot read properties of undefined (reading 'config')`, cured by a re-run.
+
+**The cost of a non-deterministic gate, paid in full.** Before the fix, the
+supervisor accused an executor of mislabelling a flake as "pre-existing", then
+verified on a clean tree and found the executor had been right. The lesson is
+not about that executor: a gate that answers differently each run makes the
+sentence "this failure is pre-existing" unverifiable, and every review after it
+rests on the luck of the draw.
+
+**S1's freshness took a corrective round on a subtle distinction.**
+`updateAssetDetailsInline` is the only path that writes an Asset Bible — the
+executor traced every caller and was right — but it is not a path that *only*
+writes Bibles. It rewrites all five columns on every call, so a plain
+description edit reports the Bible back unchanged. Capturing the fingerprint
+unconditionally declared the Bible `current` at the exact moment it went stale,
+silencing the advisory precisely where it earns its keep. The question to ask
+was not "is this the only path that writes X" but "does this path write only X".
+
+### B11 — UC1 delivered, and two predictions that were wrong (2026-08-17)
+
+`LLMW.ACTION.INSERT_AT.1`, `LLMW.OUTPUT.OBJECT_NUMBER.1`, `LLMW.UC1.INSERT.1`,
+`LLMW.UC1.BENCH.1` — commits `548e8e9`, `0895907`, `78ccc14`, `b560cf9`. **The
+three founding use cases are now all delivered**, UC1 last and bench-only, like
+UC3.
+
+**The queue row for B11 predicted three things and two were wrong.** It said
+`insertionPoint` had to be really implemented in the runner: it does not, and
+will not be. An insertion point is not an anchor identity — it changes with
+every request — so the position is an `intent.parameters` entry and the
+operation is anchored on the sequence, exactly as `shots.fromSequence` already
+is while creating shots. That deleted a whole ticket's worth of runner work. It
+said twelve output fields: there are ten, because "Production Details" in §4 of
+the vision is a **form section heading**, not a column, and `shotCode` is
+generated from the nomenclature template like every other generated row rather
+than taken from the model. Only the third prediction held, and only in the
+user's own reading of it: "re-run with another seed" is Redo, decided by him on
+2026-08-17 — `src/lib/llm/` has no seed plumbing at all, and the bench's Run
+plus `ProposalPanel`'s Redo already provide what he meant.
+
+**The one real brick was numbers in object mode.** `durationSeconds` could not
+be declared: object fields were text-only. The runner's own comment had already
+named the gap when B7b widened list items — "a plain `string` record cannot
+honestly carry `duration_seconds`… the `"object"` variant is untouched" — so
+this was a port, not an invention. Widening `RunOperationResult` broke eight
+consumers on purpose, each given a throwing guard rather than a coercion.
+
+**Three supervisor errors, all paid for in this series.** First, a redundant
+variable: `SEQ.SHOT_CONTINUITY` was specified, built, shipped and removed the
+same day, because `SEQ.SHOT_TARGETS` (B7h-b1) already projected both continuity
+fields *and* the `id` UC1 needs. The overlap was visible in the diff that was
+approved — the new variable's own comment argued for the distinction — and the
+argument did not survive contact with the resolver, which already orders by
+`orderIndex`. Second, a ticket rule written too wide: "no existing test may be
+modified" protects byte-for-byte prompt proofs, not structural assertions on a
+descriptor object, and an executor obeyed it into leaving the tree red rather
+than adjusting four mechanical assertions. Third, a false claim in a commit
+message: B11-b2 said `shot.insertDirected` was runnable at the bench while a
+guard from B11-b1 still threw on any numeric value — true only after B11-b3.
+
+**The trap the serializer could have hidden.** The bench edits every field in a
+textarea, so a duration returns as text; emitting `"4"` instead of `4` makes the
+write action drop it in silence, since it requires `typeof === "number"`. The
+two halves are therefore proven *together* — a bench draft serialized, fed to
+the real action against a disposable database, and the created row checked to
+carry duration 4 at the right index. Mutating the serializer to emit a string
+fails that test and two others.
+
+**Browser validation is partial, and stated as such.** The resolved prompt was
+verified in the real bench on a throwaway project: the position named in clear
+("Insert the new shot after SH020 — Vex gives chase."), the director's direction
+in place, ~746 estimated tokens. **The model round trip did not complete** — the
+OpenRouter call was still pending after several minutes with no server-side
+error — so the Approve button's own click path is unproven in a browser. What it
+would do is proven at the action level end to end. 650 tests, 89 files.
+
+### B7h-m — the eighth migration, and the first that is not indiscernible (2026-08-17)
+
+`LLMW.MIGRATE.LIST.4`, commit `ba1e435`. **All eight list operations are now
+migrated**, so Phase C's prerequisite on the list side is met. The bench also
+gains its fourth Approve branch: `applySelectedCastingSuggestions` had sat in
+`REDIRECT_CONFIRMATION_KEYS` since B7h-a, forced there by a `satisfies` clause
+but reachable from no button.
+
+**Three migrations were held to indiscernibility; this one could not be.** The
+old chain's id gate lived in `normalizeRawSuggestion`, *before* its own empty
+refusal. `item.validity` is frozen and gates only on non-empty **string**
+fields, so the runner's equivalent gate lives in the `postResponse` form, which
+always runs *after* that refusal. Consequence: a response whose items all carry
+an unrecognised `targetType`, or an id that is not a positive integer, now
+yields `{ ok: true, suggestions: [] }` where the old chain threw « The model
+returned no valid suggestions. Try again. »
+
+**The repair was refused on purpose**, and the reason matters more than the
+divergence. Folding the `empty` message onto a post-filter empty array would
+corrupt the *far more common* case — the model invents ids that are well formed
+but do not exist — where the old chain already returns an empty list. A rare
+divergence was preferred to a frequent one. That agreement case is now asserted
+under its own name, so the next reader does not mistake it for the divergence.
+
+**What the supervision loop caught, and what no check would have.** The first
+round's divergence test used well-formed but non-existent ids (`999999`) — an
+input on which **both chains agree**, because `num()` only checks « integer and
+`> 0` ». The test passed, claimed to prove a divergence, and contained two
+comments contradicting each other on what the old chain did. A corrective round
+replaced it with the two families that genuinely disagree. The ambiguity came
+from the ticket, which said « id invalide » meaning invalid per `num()` — the
+same class of error as B7h-b2's frozen table: a supervisor's shorthand, read
+literally by an executor who cannot see what was meant.
+
+**A second divergence of the same family** was found by the executor and left
+unrepaired by design: mixing an unrecognised `targetType` into a >60-item
+response shifts the `maxItems` truncation boundary by one item between the two
+chains, because the old chain dropped such an item before its own `.slice(0,
+60)`. It refused to write a test that would have asserted a false equality, and
+proved truncation on a uniformly valid array instead.
+
+**`No castings applied.` on 0 breaks the precedent deliberately.** The three
+`create*` actions render nothing on a count `<= 0`, which is safe because 0 is
+unreachable for them — Approve is disabled with an empty selection, and every
+selected item creates a row. For casting, 0 is ordinary: re-select a pairing
+that already exists, the unique constraint rejects it, an empty `catch` swallows
+it. Silence there is the Approve-went-nowhere gap B7d-f paid to close.
+
+604 tests, 87 files. Eight browser paths PASS on a throwaway project. One state
+was **not** reachable in the browser and is recorded as such: `alreadyAssigned:
+true` never fired, because the prompt tells the model which pairings already
+exist and it complied on all three runs — it is proven instead at the action and
+runner levels, and by a mutation control.
+
+### B9a — the plain-language directive becomes real (2026-08-15)
+
+`LLMW.INTENT.FREETEXT.1`. **The first ticket of Phase B to deliver a new
+capability rather than reorganise an existing one.** On a Shot's assist panel
+the user can now write "low angle shot, show more empathy with the character"
+and the model answers to it.
+
+**Why it took nine tickets.** `intent.freeText` has been in the descriptor
+format since B1a. No descriptor declared it, so no control was ever built: B6b
+and B6c1 each deferred it, and each was locally right — a control with no
+declarer would have been untestable dead code. The cumulative effect went
+unnoticed until the user asked whether the work in flight still served his three
+founding use cases. It did not: all three *are* a plain-language request, and
+nothing in the queue delivered the primitive that carries them. See
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 "Reachability".
+
+**The constraint that made it safe.** `shotPrompt.assist` carries a
+byte-for-byte prompt equality proof against its frozen builder (B1c discipline).
+The format already had the answer — §4.1 correction 4, a block that renders
+empty is dropped before joining — so an unfilled directive yields a
+character-identical prompt. The two proof files do not appear in the ticket's
+changed-file list at all, and both stayed green. The ticket stated that having
+to modify one of them would be a defect, not a test to adjust.
+
+**Landed on an operation that already worked end to end**, deliberately:
+`shotPrompt.assist` is migrated, backed by `ProposalPanel`, runnable and
+applicable from the bench, and its write action is already declared. No new
+write action, no new registry entry.
+
+`ProposalPanel` gained an optional pre-trigger input — the shared engine behind
+seven wrappers, which UC1, UC2 and UC3 will all need. The other seven wrappers
+pass nothing and are unchanged.
+
+**The deviation worth keeping in mind.** The executor modified
+`src/actions/llm/shotPrompt.ts`, which the ticket did not enumerate: without it
+the production input existed but was silently ignored, since the action never
+read a `freeText` field or passed it to the runner. A decorative control that
+does nothing would have passed every test. It was flagged, not slipped in.
+
+Suite 366 → 387. Seven browser paths, seven PASS, with the evidence that
+matters: no occurrence of the directive in the effective prompt when the field
+is empty (~669 tokens), exactly one occurrence at the declared position when
+filled (~688), a draft that visibly answers the direction, and a production
+Replace that rewrote shot 153's prompt end to end.
+
+**Three user-visible strings await the user's own judgement**, written by the
+executor for lack of a specification: the field label `Director's note
+(optional)`, the rendered fragment `Director's direction: <text>`, and the
+production placeholder `e.g. a low angle shot, the hero entering and exiting
+frame` — the last being the user's own UC1 sentence returned in the interface.
+
+**B9b is blocked on two arbitrations**, both found while preparing this ticket
+and deliberately left out of it: `updateShot` fits neither `response` shape the
+action registry declares (positional arguments *and* `FormData`, answering by
+`redirect()`), and it silently rewrites `shotPrompt` from
+`description`/`actionPitch`/`cameraPitch` while also doing nothing at all —
+no write, no error, no redirect — when `title` is blank.
+
+### B9b — UC2 delivered, then corrected by first use (2026-08-15)
+
+`LLMW.UC2.RETAKE.1`, then `LLMW.RETAKE.OUTPUT.1` on the same day. **The user's
+first founding use case works**: on a Shot he writes "propose me another action
+and another framing, more empathy with the character" and the assistant answers.
+
+**The arbitration that shaped it.** A directed retake rewrites **the three
+narrative fields** — `description`, `actionPitch`, `cameraPitch` — and nothing
+else. Decided by the user on 2026-08-15 after the supervisor surfaced what
+`updateShot` really does: it redirects to Sequence Detail, silently rewrites
+`shotPrompt` from the narrative fields, and does nothing at all — no write, no
+error, no redirect — when `title` is blank. `updateShotNarrativeContext` was
+already written for exactly this need, returns `{ ok }`, verifies the ownership
+chain, and touches neither `shotPrompt` nor `framing` nor `cameraMovement`.
+`framing` and `cameraMovement` stay the user's.
+
+**`SEQ.SHOTS`, the fourteenth variable.** UC2 requires "the context of all other
+Shots" and nothing resolved it — `SEQ.CONTEXT` returns the sequence's own five
+fields only. The new variable serves UC1 too, which needs continuity with the
+preceding and following Shots. One variable, two founding use cases.
+
+**The first descriptor with no oracle.** Every prior descriptor was proven
+byte-for-byte against a frozen prompt builder — the B1c discipline that caught
+three drifted system prompts. Here the prompt is *written*, not transcribed, so
+no equality test could prove anything. The ticket forbade inventing one and
+required the full resolved prompt in the report instead. Its quality is a human
+judgement, and that is exactly where the defect turned up.
+
+**The preservation trap, and why it is not theoretical.** `output.require` is
+`"any"`, so the model may leave a field empty, but the action replaces all
+three. Without preservation, asking for "another action" would erase the shot's
+description. The B6c1 pattern was reused and the column list derived from
+`ACTION_REGISTRY`, not hardcoded. Proven in the real application: the model
+returned an empty description and the stored value survived.
+
+**What the supervisor's diff review caught.** The closing template block said
+"per the director's direction above" — a static text, while the directive block
+disappears when the note is blank. With an empty note the model was told to
+follow a direction present nowhere, and nothing prevented triggering that way.
+Fixed by a neutral closing block, a trigger disabled until a note exists, and
+the regression test that was missing.
+
+**What only first use could catch.** The user tried it on his own Shots and
+reported fields coming back empty. The cause was in the prompt: "never all three
+are required" plus "return an empty string" gave the model explicit permission
+to answer half the question. The rules now read "fill in every field the
+director's direction actually concerns… do not stop at one when the direction
+names several", and an unfilled field is labelled `Unchanged — keeps current
+value` with the shot's real value shown as placeholder — a blank box read as a
+failure regardless of the help text beneath it.
+
+The same round renamed the Shot Prompt card's main textarea from `Prompt` to
+`Narrative Creative Prompt` (the user's own diagnosis: it holds literary prose
+while it is meant to produce a technical image prompt) and added one explainer
+line under each of the two adjacent cards. The two `Director's note` fields
+still share a name; a further rename was proposed and **deferred by the user**
+until he reworks the shot-prompt system as a whole.
+
+Suite 387 → 414. Seven browser paths then six, all PASS, including the proof
+that a two-theme direction now fills both fields and a single-theme one
+correctly leaves the others untouched.
+
+**Flagged, not fixed — a Phase C obstacle.** `buildShotRetakeCommitArgs` is the
+second production caller of `preserveAssetBibleField`, which lives in
+`src/lib/prompts/` — the frozen oracle this document describes as having no
+production caller and scheduled for deletion. B5 created the dependency; B9b
+deepened it. The three-line helper needs a neutral home before C3.
+
+**A supervisor process failure worth keeping.** `npm run build` was run against
+the live dev server and corrupted the bench route's dev chunk, producing a
+phantom `ReferenceError` in two separate browser passes. The post-build check
+had queried a different route than the one affected. Procedure corrected: verify
+every route the ticket touched, or do not build while the dev server is live.
