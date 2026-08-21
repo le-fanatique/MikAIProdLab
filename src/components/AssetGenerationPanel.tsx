@@ -23,6 +23,7 @@ import {
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { runAssetGenerationFromForm, attachOutputAsAssetReference } from "@/actions/generation";
 import JobOutputSelectionToggle from "@/components/JobOutputSelectionToggle";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { generatedOutputUrl } from "@/lib/getOutputUrl";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
@@ -600,11 +601,23 @@ export default async function AssetGenerationPanel({
                           key={output.index}
                           className="group relative flex cursor-pointer flex-col gap-1 rounded border border-[#2c3035] bg-[#0d0e10] p-1.5 hover:border-[#3a4046] transition-colors"
                         >
-                          <img
+                          {/* Same hover preview as the reference images: one
+                              component, one global size, object-contain so the
+                              popup never crops. The checkbox inside this label
+                              is already focusable, so `focusable` stays false —
+                              onFocus bubbles from it and two tab stops for one
+                              thumbnail are avoided. */}
+                          <ThumbnailHoverPreview
                             src={generatedOutputUrl(output.path) ?? `/${output.path}`}
                             alt={`Output ${output.index + 1}`}
-                            className="w-full aspect-square rounded object-cover"
-                          />
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={generatedOutputUrl(output.path) ?? `/${output.path}`}
+                              alt={`Output ${output.index + 1}`}
+                              className="w-full aspect-square rounded object-cover"
+                            />
+                          </ThumbnailHoverPreview>
                           <span className="flex items-center gap-1.5">
                             <input
                               type="checkbox"
