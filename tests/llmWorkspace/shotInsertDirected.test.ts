@@ -547,7 +547,7 @@ describe("shot.insertDirected — output parsing", () => {
   // that never existed — position, speed, and the subject the move targets,
   // which the Seedance 2.5 formula requires and no field could express.
   // Eleven fields now, and the JSON key is `shot_size`, not `framing`.
-  it("a complete model response produces all eleven fields, durationSeconds as a number", async () => {
+  it("a complete model response produces all twelve fields, durationSeconds as a number", async () => {
     mockedLLM().mockResolvedValueOnce(
       JSON.stringify({
         title: "Hero enters and exits frame",
@@ -560,6 +560,7 @@ describe("shot.insertDirected — output parsing", () => {
         camera_movement: "Pan",
         movement_speed: "slow",
         camera_subject: "follows the hero from screen left to screen right, ending on the far ledge",
+        camera_lens: "35mm",
         continuity_in: "Vex is one rooftop behind the hero.",
         continuity_out: "The hero has crossed the rooftop, Vex not yet visible.",
       })
@@ -580,6 +581,7 @@ describe("shot.insertDirected — output parsing", () => {
         movementSpeed: "slow",
         cameraSubject:
           "follows the hero from screen left to screen right, ending on the far ledge",
+        cameraLens: "35mm",
         continuityIn: "Vex is one rooftop behind the hero.",
         continuityOut: "The hero has crossed the rooftop, Vex not yet visible.",
       },

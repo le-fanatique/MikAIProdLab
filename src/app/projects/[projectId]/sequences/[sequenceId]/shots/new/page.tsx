@@ -105,6 +105,7 @@ export default async function NewShotPage({ params }: Props) {
         <CameraVocabularyField axisId="cameraMovement" name="camera_movement" />
         <CameraVocabularyField axisId="movementSpeed" name="movement_speed" />
         <CameraVocabularyField axisId="cameraSubject" name="camera_subject" />
+        <CameraVocabularyField axisId="cameraLens" name="camera_lens" />
         <FormField
           label="Continuity In"
           name="continuity_in"

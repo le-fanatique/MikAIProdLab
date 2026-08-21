@@ -35,6 +35,7 @@ export async function createShot(
   const cameraPosition = (formData.get("camera_position") as string) || null;
   const movementSpeed = (formData.get("movement_speed") as string) || null;
   const cameraSubject = (formData.get("camera_subject") as string) || null;
+  const cameraLens = (formData.get("camera_lens") as string) || null;
   const continuityIn = (formData.get("continuity_in") as string) || null;
   const continuityOut = (formData.get("continuity_out") as string) || null;
 
@@ -74,6 +75,7 @@ export async function createShot(
     cameraPosition,
     movementSpeed,
     cameraSubject,
+    cameraLens,
     continuityIn,
     continuityOut,
     shotPrompt,
@@ -103,6 +105,7 @@ export async function updateShot(
   const cameraPosition = (formData.get("camera_position") as string) || null;
   const movementSpeed = (formData.get("movement_speed") as string) || null;
   const cameraSubject = (formData.get("camera_subject") as string) || null;
+  const cameraLens = (formData.get("camera_lens") as string) || null;
   const continuityIn = (formData.get("continuity_in") as string) || null;
   const continuityOut = (formData.get("continuity_out") as string) || null;
   // LLMW.LIGHTING.SURFACE.1 (B15b) — joins this existing multi-column
@@ -151,6 +154,7 @@ export async function updateShot(
       cameraPosition,
       movementSpeed,
       cameraSubject,
+    cameraLens,
       continuityIn,
       continuityOut,
       lighting,

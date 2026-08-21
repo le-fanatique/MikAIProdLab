@@ -151,6 +151,11 @@ export default async function EditShotPage({ params }: Props) {
           name="camera_subject"
           defaultValue={shot.cameraSubject}
         />
+        <CameraVocabularyField
+          axisId="cameraLens"
+          name="camera_lens"
+          defaultValue={shot.cameraLens}
+        />
         <FormField
           label="Continuity In"
           name="continuity_in"

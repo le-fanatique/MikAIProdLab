@@ -125,6 +125,7 @@ CAMERA FIELDS:
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
 - camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
+- camera_lens is the lens or focal length when the source states one ("35mm", "85mm macro", "wide-angle"). It has no list either, and it is secondary: never invent one.
 - A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.
 
 Always respond with a valid JSON object matching exactly this schema:
@@ -142,6 +143,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
+      "camera_lens": "string or null — lens or focal length, only when stated",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -224,6 +226,7 @@ CAMERA FIELDS:
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
 - camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
+- camera_lens is the lens or focal length when the source states one ("35mm", "85mm macro", "wide-angle"). It has no list either, and it is secondary: never invent one.
 - A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.
 
 Always respond with a valid JSON object matching exactly this schema:
@@ -241,6 +244,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
+      "camera_lens": "string or null — lens or focal length, only when stated",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -315,6 +319,7 @@ CAMERA FIELDS:
 - movement_speed is exactly one value from this set: Slow, Smooth, Stable, Gradual, Gentle, Rapid.
 - None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
 - camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
+- camera_lens is the lens or focal length when the source states one ("35mm", "85mm macro", "wide-angle"). It has no list either, and it is secondary: never invent one.
 - A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.
 
 Always respond with a valid JSON object matching exactly this schema:
@@ -332,6 +337,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "camera_movement": "string or null — Static / Locked-off, Dolly, Dolly In, Dolly Out, Tracking, Truck Left, Truck Right, Pan, Tilt, Pedestal Up, Pedestal Down, Roll, Zoom, Arc, Crane, Handheld, Rack Focus. One value only.",
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
+      "camera_lens": "string or null — lens or focal length, only when stated",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }

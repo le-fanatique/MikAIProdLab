@@ -71,6 +71,8 @@ export type StoryboardShotCompositionInput = {
     cameraMovement: string | null;
     movementSpeed: string | null;
     cameraSubject: string | null;
+    /** Secondary by design: the guide says focal length supplements, never replaces, the observable result. Printed last. */
+    cameraLens: string | null;
   };
   /**
    * The Project Style text.
@@ -205,6 +207,7 @@ export function composeStoryboardShot(
     position,
     movement,
     nonEmpty(continuity.cameraSubject),
+    nonEmpty(continuity.cameraLens),
   ].filter((phrase): phrase is string => phrase !== null && phrase.length > 0);
 
   /**

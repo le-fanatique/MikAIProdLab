@@ -182,7 +182,7 @@ export const shotInsertDirectedDescriptor: OperationDescriptor = {
         },
         {
           text: `Always respond with a valid JSON object matching exactly this schema:
-{ "title": "<shot title>", "description": "<shot description>", "duration_seconds": <number>, "action_pitch": "<action pitch>", "continuity_notes": "<continuity notes>", "shot_size": "<shot size>", "camera_position": "<camera position>", "camera_movement": "<camera movement>", "movement_speed": "<movement speed>", "camera_subject": "<camera subject>", "continuity_in": "<continuity in>", "continuity_out": "<continuity out>" }
+{ "title": "<shot title>", "description": "<shot description>", "duration_seconds": <number>, "action_pitch": "<action pitch>", "continuity_notes": "<continuity notes>", "shot_size": "<shot size>", "camera_position": "<camera position>", "camera_movement": "<camera movement>", "movement_speed": "<movement speed>", "camera_subject": "<camera subject>", "camera_lens": "<lens or focal length, only if stated>", "continuity_in": "<continuity in>", "continuity_out": "<continuity out>" }
 No markdown. No explanation. Only the JSON object.`,
         },
       ],
@@ -254,6 +254,7 @@ No markdown. No explanation. Only the JSON object.`,
       { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
       { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
       { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
+      { type: "string", field: "cameraLens", jsonKey: "camera_lens", truncateTo: 80 },
       { type: "string", field: "continuityIn", jsonKey: "continuity_in", truncateTo: 500 },
       { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },
     ],

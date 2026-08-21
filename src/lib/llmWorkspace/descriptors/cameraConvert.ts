@@ -51,6 +51,7 @@ export const cameraConvertDescriptor: OperationDescriptor = {
 - One movement per shot. If the text names several ("tracking push with whip-pan and final dolly-in"), keep the principal one, put the rest in camera_subject, and say in \`note\` that you chose.
 - A value that mixes two axes belongs to both: "OTS to MCU" is camera_position "Over-the-Shoulder (OTS)" and shot_size "MCU". That is a conversion, not an interval.
 - Prose that describes what the camera follows goes to camera_subject — "following her gloved hand" names a subject, not a position.
+- A lens or focal length stated in the text ("35mm lens", "85mm macro") goes to camera_lens, and nowhere else. It is the one thing the other axes cannot hold.
 - Return one entry per shot you can convert, and none for a shot whose text yields nothing.`,
       },
       { text: renderCameraInstructionRulesBlock() },
@@ -65,6 +66,7 @@ export const cameraConvertDescriptor: OperationDescriptor = {
       "camera_movement": "string or null",
       "movement_speed": "string or null",
       "camera_subject": "string or null",
+      "camera_lens": "string or null — lens or focal length, only when the source states one",
       "note": "string or null — only when you had to choose, in one short sentence"
     }
   ]
@@ -97,6 +99,7 @@ No markdown. No explanation. Only the JSON object.`,
         { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
         { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
         { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
+        { type: "string", field: "cameraLens", jsonKey: "camera_lens", truncateTo: 80 },
         { type: "string", field: "note", jsonKey: "note", truncateTo: 300 },
       ],
       // The format only lets a validity rule reference *string* fields, so it
@@ -111,7 +114,14 @@ No markdown. No explanation. Only the JSON object.`,
       // must stay empty — requiring all five would force exactly the guessing
       // this operation exists to prevent.
       validity: {
-        fields: ["shotSize", "cameraPosition", "cameraMovement", "movementSpeed", "cameraSubject"],
+        fields: [
+          "shotSize",
+          "cameraPosition",
+          "cameraMovement",
+          "movementSpeed",
+          "cameraSubject",
+          "cameraLens",
+        ],
         require: "any",
       },
     },

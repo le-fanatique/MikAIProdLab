@@ -750,6 +750,7 @@ export type SeqShotCameraEntry = {
   cameraMovement: string | null;
   movementSpeed: string | null;
   cameraSubject: string | null;
+  cameraLens: string | null;
 };
 
 export async function resolveSeqShotCamera(sequenceId: number): Promise<SeqShotCameraEntry[]> {
@@ -765,6 +766,7 @@ export async function resolveSeqShotCamera(sequenceId: number): Promise<SeqShotC
       cameraMovement: shots.cameraMovement,
       movementSpeed: shots.movementSpeed,
       cameraSubject: shots.cameraSubject,
+      cameraLens: shots.cameraLens,
     })
     .from(shots)
     .where(eq(shots.sequenceId, sequenceId))
@@ -2441,6 +2443,7 @@ Always respond with a valid JSON object matching exactly this schema:
       ${renderCameraFieldSchemaLine("camera_movement")},
       ${renderCameraFieldSchemaLine("movement_speed")},
       ${renderCameraFieldSchemaLine("camera_subject")},
+      ${renderCameraFieldSchemaLine("camera_lens")},
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }

@@ -66,6 +66,7 @@ export type SequenceGenerationContinuityInput = {
   cameraMovement?: string | null;
   movementSpeed?: string | null;
   cameraSubject?: string | null;
+  cameraLens?: string | null;
   continuityIn?: string | null;
   continuityOut?: string | null;
   continuityNotes?: string | null;
@@ -77,6 +78,7 @@ export type SequenceGenerationContinuity = {
   cameraMovement: string | null;
   movementSpeed: string | null;
   cameraSubject: string | null;
+  cameraLens: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
   continuityNotes: string | null;
@@ -161,6 +163,7 @@ function buildContinuity(input: SequenceGenerationContinuityInput): SequenceGene
     cameraMovement: trimOrNull(input.cameraMovement),
     movementSpeed: trimOrNull(input.movementSpeed),
     cameraSubject: trimOrNull(input.cameraSubject),
+    cameraLens: trimOrNull(input.cameraLens),
     continuityIn: trimOrNull(input.continuityIn),
     continuityOut: trimOrNull(input.continuityOut),
     continuityNotes: trimOrNull(input.continuityNotes),
@@ -354,6 +357,7 @@ export function formatSequenceGenerationPackageText(
             cameraMovement: s.continuity.cameraMovement,
             movementSpeed: s.continuity.movementSpeed,
             cameraSubject: s.continuity.cameraSubject,
+            cameraLens: s.continuity.cameraLens,
           },
           projectStyle: storyboardComposition.projectStyle,
           lighting: storyboardComposition.lighting.byShotId[s.shotId] ?? null,

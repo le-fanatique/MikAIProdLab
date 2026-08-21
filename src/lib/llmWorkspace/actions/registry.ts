@@ -611,7 +611,8 @@ export const ACTION_REGISTRY = {
     response: "redirectOnly",
     ownership: { checked: true, transactional: false },
     columns: {
-      written: ["shotSize", "cameraPosition", "cameraMovement", "movementSpeed", "cameraSubject"],
+      written: ["shotSize", "cameraPosition", "cameraMovement", "movementSpeed", "cameraSubject",
+        "cameraLens", "cameraLens"],
       writesUpdatedAt: true,
     },
     writeSemantics: "replace",

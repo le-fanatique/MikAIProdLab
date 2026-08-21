@@ -14,10 +14,10 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("axis declaration", () => {
-  it("declares exactly the five axes, each with a label and a definition", () => {
+  it("declares exactly the six axes, each with a label and a definition", () => {
     const ids = CAMERA_VOCABULARY.map((a) => a.id).sort();
     expect(ids).toEqual(
-      ["cameraMovement", "cameraPosition", "cameraSubject", "movementSpeed", "shotSize"].sort()
+      ["cameraMovement", "cameraPosition", "cameraSubject", "cameraLens", "movementSpeed", "shotSize"].sort()
     );
     for (const axis of CAMERA_VOCABULARY) {
       expect(axis.label.length).toBeGreaterThan(0);

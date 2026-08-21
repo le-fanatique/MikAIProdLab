@@ -33,6 +33,7 @@ type ProposedConversion = {
   cameraMovement?: string | null;
   movementSpeed?: string | null;
   cameraSubject?: string | null;
+  cameraLens?: string | null;
 };
 
 /** Trim, and treat blank as "not proposed" — the same rule the forms apply. */
@@ -90,6 +91,7 @@ export async function applyCameraConversions(formData: FormData): Promise<void> 
       cameraMovement: typeof r.cameraMovement === "string" ? r.cameraMovement : null,
       movementSpeed: typeof r.movementSpeed === "string" ? r.movementSpeed : null,
       cameraSubject: typeof r.cameraSubject === "string" ? r.cameraSubject : null,
+      cameraLens: typeof r.cameraLens === "string" ? r.cameraLens : null,
     });
   }
   if (proposals.length === 0) errRedirect("Nothing to apply.");
@@ -123,11 +125,13 @@ export async function applyCameraConversions(formData: FormData): Promise<void> 
     const cameraMovement = filled(p.cameraMovement);
     const movementSpeed = filled(p.movementSpeed);
     const cameraSubject = filled(p.cameraSubject);
+    const cameraLens = filled(p.cameraLens);
     if (shotSize) patch.shotSize = shotSize;
     if (cameraPosition) patch.cameraPosition = cameraPosition;
     if (cameraMovement) patch.cameraMovement = cameraMovement;
     if (movementSpeed) patch.movementSpeed = movementSpeed;
     if (cameraSubject) patch.cameraSubject = cameraSubject;
+    if (cameraLens) patch.cameraLens = cameraLens;
     if (Object.keys(patch).length === 0) continue;
 
     await db

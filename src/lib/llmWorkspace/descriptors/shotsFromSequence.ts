@@ -191,6 +191,7 @@ CONTINUITY RULES:
         { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
         { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
         { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
+        { type: "string", field: "cameraLens", jsonKey: "camera_lens", truncateTo: 80 },
         { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },
         { type: "string", field: "shotPrompt", jsonKey: "shot_prompt", truncateTo: 1000 },
       ],

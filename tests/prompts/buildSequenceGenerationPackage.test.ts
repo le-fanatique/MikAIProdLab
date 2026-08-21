@@ -21,6 +21,7 @@ const shotOne: SequenceGenerationPackageShotInput = {
     cameraMovement: "static",
     movementSpeed: null,
     cameraSubject: null,
+    cameraLens: null,
     continuityIn: "Calm",
     continuityOut: "Alert",
     continuityNotes: "Mara notices the drone.",
@@ -143,7 +144,7 @@ describe("formatSequenceGenerationPackageText", () => {
     it("replaces each Shot's body with composeStoryboardShot's composition, carrying the ingredients §5.7 found missing", () => {
       const shotWithEverything: SequenceGenerationPackageShotInput = {
         ...shotOne,
-        continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "slow push in", movementSpeed: null, cameraSubject: null},
+        continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "slow push in", movementSpeed: null, cameraSubject: null, cameraLens: null},
         promptContext: {
           ...shotOne.promptContext,
           shot: { ...shotOne.promptContext.shot, cameraPitch: "low angle", actionPitch: "Mara steps out of cover." },
@@ -198,7 +199,7 @@ describe("formatSequenceGenerationPackageText", () => {
       // finding exists without ever having gated the text above.
       const composed = composeStoryboardShot({
         context: pkg.shots[0].context,
-        continuity: { shotSize: pkg.shots[0].continuity.shotSize, cameraPosition: null, cameraMovement: pkg.shots[0].continuity.cameraMovement, movementSpeed: null, cameraSubject: null},
+        continuity: { shotSize: pkg.shots[0].continuity.shotSize, cameraPosition: null, cameraMovement: pkg.shots[0].continuity.cameraMovement, movementSpeed: null, cameraSubject: null, cameraLens: null},
         projectStyle: options.storyboardComposition.projectStyle,
         lighting: null,
       });

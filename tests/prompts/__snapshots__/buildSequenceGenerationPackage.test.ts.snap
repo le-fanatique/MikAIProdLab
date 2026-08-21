@@ -78,6 +78,7 @@ exports[`buildSequenceGenerationPackage > applies ignorePromptSegments and ignor
         ],
       },
       "continuity": {
+        "cameraLens": null,
         "cameraMovement": "static",
         "cameraPosition": null,
         "cameraSubject": null,
@@ -225,6 +226,7 @@ Timeline:
         ],
       },
       "continuity": {
+        "cameraLens": null,
         "cameraMovement": "static",
         "cameraPosition": null,
         "cameraSubject": null,
@@ -293,6 +295,7 @@ Timeline:
         "warnings": [],
       },
       "continuity": {
+        "cameraLens": null,
         "cameraMovement": null,
         "cameraPosition": null,
         "cameraSubject": null,

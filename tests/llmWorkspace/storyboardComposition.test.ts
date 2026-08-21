@@ -59,7 +59,7 @@ function inputWith(
 ): StoryboardShotCompositionInput {
   return {
     context: contextWith(),
-    continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "static", movementSpeed: null, cameraSubject: null},
+    continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "static", movementSpeed: null, cameraSubject: null, cameraLens: null},
     projectStyle: "Grainy anamorphic, muted palette.",
     lighting: "Cold blue screen glow.",
     ...overrides,
@@ -202,7 +202,7 @@ describe("composeStoryboardShot", () => {
         assetBibles: [],
         sources: { ...ALL_SOURCES },
       }),
-      continuity: { shotSize: null, cameraPosition: null, cameraMovement: null, movementSpeed: null, cameraSubject: null},
+      continuity: { shotSize: null, cameraPosition: null, cameraMovement: null, movementSpeed: null, cameraSubject: null, cameraLens: null},
       projectStyle: null,
       lighting: null,
     });
@@ -220,7 +220,7 @@ describe("composeStoryboardShot", () => {
           cameraPosition: "Low Angle",
           cameraMovement: null,
           movementSpeed: null,
-          cameraSubject: null,
+          cameraSubject: null, cameraLens: null
         },
       })
     );
@@ -236,7 +236,7 @@ describe("composeStoryboardShot", () => {
           cameraPosition: "Over-the-Shoulder (OTS)",
           cameraMovement: "Dolly In",
           movementSpeed: "Slow",
-          cameraSubject: "follows Mara from the doorway to the console",
+          cameraSubject: "follows Mara from the doorway to the console", cameraLens: null
         },
       })
     );
@@ -253,7 +253,7 @@ describe("composeStoryboardShot", () => {
           cameraPosition: "Over-the-Shoulder (OTS)",
           cameraMovement: "Dolly In",
           movementSpeed: "Slow",
-          cameraSubject: "follows Mara from the doorway to the console",
+          cameraSubject: "follows Mara from the doorway to the console", cameraLens: null
         },
       })
     );
@@ -276,7 +276,7 @@ describe("composeStoryboardShot", () => {
           cameraPosition: "Low Angle",
           cameraMovement: null,
           movementSpeed: null,
-          cameraSubject: null,
+          cameraSubject: null, cameraLens: null
         },
       })
     ).parts.find((p) => p.id === "camera");
@@ -288,7 +288,7 @@ describe("composeStoryboardShot", () => {
           cameraPosition: null,
           cameraMovement: null,
           movementSpeed: null,
-          cameraSubject: null,
+          cameraSubject: null, cameraLens: null
         },
       })
     ).parts.find((p) => p.id === "camera");

@@ -481,6 +481,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               cameraMovement: s.continuity.cameraMovement,
               movementSpeed: s.continuity.movementSpeed,
               cameraSubject: s.continuity.cameraSubject,
+              cameraLens: s.continuity.cameraLens,
             },
         projectStyle,
         lighting: lighting.byShotId[s.shotId] ?? null,

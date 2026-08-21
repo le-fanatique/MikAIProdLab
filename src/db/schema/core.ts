@@ -75,6 +75,10 @@ export const shots = sqliteTable("shots", {
   cameraPosition: text("camera_position"),
   movementSpeed: text("movement_speed"),
   cameraSubject: text("camera_subject"),
+  // B19g — the focal length. Opened because the conversion pass proved it had
+  // to be: 22 shots stated a lens inside `camera_pitch`, and 20 had nowhere to
+  // put it once the other axes had taken their share.
+  cameraLens: text("camera_lens"),
   continuityIn: text("continuity_in"),
   continuityOut: text("continuity_out"),
   shotPrompt: text("shot_prompt"),

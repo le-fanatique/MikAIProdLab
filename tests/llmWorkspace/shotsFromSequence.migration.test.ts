@@ -53,6 +53,7 @@ const rawModelResponse = JSON.stringify({
       camera_movement: "static",
       movement_speed: "stable",
       camera_subject: longCameraSubject,
+      camera_lens: "",
       continuity_out: "Courier and rival face off, weapons drawn.",
       shot_prompt: "Wide static shot of two figures facing off on a rooftop at dusk.",
     },
@@ -91,6 +92,7 @@ const expectedShots = [
     camera_movement: "static",
     movement_speed: "stable",
     camera_subject: longCameraSubject.slice(0, 300), // truncateTo: 300
+    camera_lens: "",
     continuity_out: "Courier and rival face off, weapons drawn.",
     shot_prompt: "Wide static shot of two figures facing off on a rooftop at dusk.",
   },
@@ -106,6 +108,7 @@ const expectedShots = [
     camera_movement: "",
     movement_speed: "",
     camera_subject: "",
+    camera_lens: "",
     continuity_out: "",
     shot_prompt: "",
   },

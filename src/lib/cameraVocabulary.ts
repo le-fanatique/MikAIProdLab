@@ -44,7 +44,8 @@ export type CameraVocabularyAxisId =
   | "cameraPosition"
   | "cameraMovement"
   | "movementSpeed"
-  | "cameraSubject";
+  | "cameraSubject"
+  | "cameraLens";
 
 /**
  * `cameraPosition` alone is split into three independent questions: how the
@@ -199,6 +200,28 @@ export const CAMERA_VOCABULARY: readonly CameraVocabularyAxisDefinition[] = [
     // this field exists at all.
     definition:
       "Who or what the camera follows, and where the move starts and ends.",
+    values: [],
+  },
+  {
+    id: "cameraLens",
+    writtenForm: "label",
+    label: "Lens",
+    // No palette either, and for a different reason than `cameraSubject`: a
+    // focal length is a number, not a term, and the set is open. "35mm",
+    // "85mm macro", "wide-angle" are all legitimate and none belongs to a
+    // closed list.
+    //
+    // The axis exists because the conversion pass proved it had to: 22 of the
+    // author's shots stated a focal length inside the legacy camera field, and
+    // 20 of them had nowhere to put it once the other four axes had taken
+    // their share. Deleting that field without this one would have destroyed
+    // those focal lengths.
+    //
+    // Secondary to the engine on purpose — the Seedance 2.5 skill says focal,
+    // aperture and shutter "may only supplement these instructions; they
+    // cannot replace the final visible result". It is kept for the author and
+    // the camera crew, not to drive the model.
+    definition: "The lens or focal length, when it matters.",
     values: [],
   },
 ];

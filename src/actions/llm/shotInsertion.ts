@@ -65,6 +65,7 @@ type ProposedShot = {
   cameraMovement: string | null;
   movementSpeed: string | null;
   cameraSubject: string | null;
+  cameraLens: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
 };
@@ -107,6 +108,7 @@ function normalizeProposedShot(raw: unknown): ProposedShot | null {
     // matches the descriptor's own `truncateTo: 300`. Equal on both sides,
     // like every pair above, or one truncates what the other accepts.
     cameraSubject: str(r.cameraSubject, 300),
+    cameraLens: str(r.cameraLens, 80),
     continuityIn: str(r.continuityIn, 500),
     continuityOut: str(r.continuityOut, 500),
   };
@@ -230,6 +232,7 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
         cameraMovement: proposed!.cameraMovement,
         movementSpeed: proposed!.movementSpeed,
         cameraSubject: proposed!.cameraSubject,
+        cameraLens: proposed!.cameraLens,
         continuityIn: proposed!.continuityIn,
         continuityOut: proposed!.continuityOut,
         shotPrompt,
