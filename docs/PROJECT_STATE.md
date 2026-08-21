@@ -68,6 +68,27 @@ so three axes lived as prose in `camera_pitch` on 88 shots.
 **B19 is complete.** B19d, B19e and B19f were finished in the main thread:
 the executor hit its weekly limit mid-file on B19d.
 
+**Validated on real shots, 2026-08-21.** The author ran the conversion on
+`The Awakening and The Trap` — six shots, every one carrying a compound
+movement and a size mixing two axes, the hardest set in the database. It held:
+`"OTS to MCU"` split into placement plus size, `"slow tracking arc"` into `Arc`
+plus `Slow`, and `"tracking push with whip-pan and final dolly-in"` kept
+`Tracking` as principal with the other two preserved in `camera_subject` and a
+note saying so. `camera_position` and `movement_speed` were left **empty**
+wherever the source said nothing — the discipline that is hardest to get from a
+model, and the whole point of the operation.
+
+One decision came out of it, and it is the author's: **`camera_subject`
+restates the movement its own field already names, and that stays.** The
+composed line reads "… — Tracking — Follow Azelle into the pocket …". The 2.5
+formula asks for the movement inside that sentence, and the guide says
+repeating a key instruction does not hurt. It is recorded in
+`cameraInstruction.ts` so it is not mistaken for an oversight later.
+
+A decision that also held end to end: `"tilt and lateral tracking"` became
+`Tracking`, not `Truck Left`, because the source never says which side. That is
+exactly why B19a refused to alias `tracking` onto a directional movement.
+
 **Three reversals, all sourced.** Size intervals are allowed — the 2.5 guide
 speaks of a starting and an ending shot size, and the ban came from 2.0. The
 "one primary camera instruction" rule was counting fields, so it warned on

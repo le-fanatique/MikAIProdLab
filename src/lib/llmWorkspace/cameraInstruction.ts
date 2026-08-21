@@ -107,6 +107,15 @@ export function renderCameraFieldSchemaLine(fieldId: CameraInstructionFieldId): 
  * - `camera_subject`'s formula ("movement + subject + start + direction +
  *   arrival") and its "do not use only a term detached from its subject"
  *   line are the Seedance 2.5 skill's own wording.
+ *
+ * **`camera_subject` restates the movement, and that is kept on purpose.**
+ * The composed line reads "… — Tracking — Follow Azelle into the pocket …",
+ * naming the move twice: once in its own field, once inside the prose. The
+ * author saw this on his own shots on 2026-08-21 and decided to keep it. The
+ * duplication is not an oversight and is not a defect to clean up — the 2.5
+ * formula asks for the movement inside that sentence, and the guide states
+ * that repeating a key instruction does not hurt. Removing it would need the
+ * author's word, not a tidy-up.
  */
 export function renderCameraInstructionRulesBlock(): string {
   const shotSize = renderAxisValueList(FIELD_TO_AXIS.shot_size);
