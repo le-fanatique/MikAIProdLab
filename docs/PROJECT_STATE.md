@@ -63,7 +63,10 @@ so three axes lived as prose in `camera_pitch` on 88 shots.
 | B19c | `65261e2` | the form shows the values **and what they mean**, via `<datalist>` so an out-of-palette value stays typable |
 | B19d | `8bc467b`, `ec711f6` | both instructions render from the declaration; nothing is hand-copied. Values are written the way the trade writes them — `MS`, but `Low Angle` |
 | B19e | `2ba4ac8` | the camera line follows the Seedance 2.5 template, and the conformation counts **movements** instead of filled fields |
-| B19f | — | the conversion pass. Written, not built: the executor hit its weekly limit |
+| B19f | `b5a8ce2` | the conversion pass — a list operation over the sequence, bench-only, every proposal shown beside the text it came from |
+
+**B19 is complete.** B19d, B19e and B19f were finished in the main thread:
+the executor hit its weekly limit mid-file on B19d.
 
 **Three reversals, all sourced.** Size intervals are allowed — the 2.5 guide
 speaks of a starting and an ending shot size, and the ban came from 2.0. The
