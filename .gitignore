@@ -110,3 +110,11 @@ next-env.d.ts
 .vscode/
 .cline/
 .clineignore
+
+# Installed skills fetched from a remote source. The skill body rewrites itself
+# on every session (`sd25-pe` self-updates on first use), so tracking it would
+# produce a diff on every run for no gain. `skills-lock.json` IS tracked, and
+# deliberately: it records which version of the guide this repository is
+# running against, which is the only way to tell later whether the guide
+# changed under us.
+.claude/skills/sd25-pe/

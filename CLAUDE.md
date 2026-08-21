@@ -111,4 +111,19 @@ Run targeted tests first. Broaden validation according to risk and the ticket.
 - the active protocol's executor report updated honestly
   (`.agents/executor_report.md` under the Opus protocol);
 - no staging, commit, or push before a fresh approval — an explicit user go
-  under the Opus protocol, a Codex verdict under the Codex protocol.
+  under the Opus protocol, a Codex verdict under the Codex protocol;
+- **after the push, the ticket's status is updated in the same breath.** A
+  commit is not the end of a ticket — a ticket whose status still says "in
+  progress" after it shipped will be re-run by the next session, and that
+  session has no way to know better. Three files carry that status and all
+  three go stale together:
+  - `.agents/supervised_task.md` — a shipped ticket is replaced by the next
+    one, or by an explicit "no active ticket". Never left as-is: `CLAUDE.md`
+    already forbids re-running a closed ticket, and a stale file is exactly how
+    it happens anyway;
+  - `docs/ROADMAP.md` — the item leaves "En cours". If nothing replaces it, that
+    section says so plainly rather than describing finished work;
+  - `docs/PROJECT_STATE.md` — what shipped, and what it cost to learn.
+
+  This was written on 2026-08-22, after all three were found describing work
+  that had been committed, pushed and migrated hours earlier.

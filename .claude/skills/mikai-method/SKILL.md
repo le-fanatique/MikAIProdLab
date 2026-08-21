@@ -160,6 +160,21 @@ Before handing back:
 
 That last list is usually the most valuable thing a ticket produces.
 
+### And after the push, close the status in the same breath
+
+A commit does not close a ticket. Three files carry its status, they go stale
+together, and a session that reads them afterwards has no way to know they lie:
+
+- `.agents/supervised_task.md` — replaced by the next ticket, or by an explicit
+  "no active ticket". A shipped ticket left here **will** be re-run;
+- `docs/ROADMAP.md` — the item leaves "En cours"; if nothing replaces it, that
+  section says so rather than describing finished work;
+- `docs/PROJECT_STATE.md` — what shipped, and what it cost to learn.
+
+Written on 2026-08-22, after all three were found describing a ticket that had
+been committed, pushed and migrated hours earlier. Nothing in the repository
+would have caught it: no test reads a roadmap.
+
 ## 10. Where things are
 
 - the active ticket, under the Opus protocol: `.agents/supervised_task.md`
