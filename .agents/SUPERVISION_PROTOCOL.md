@@ -226,7 +226,43 @@ a prompt for Claude. MikAI UI labels, tooltips, messages and errors remain in
 **English**. This protocol document and the verdict file are in English, like
 `AGENTS.md`.
 
-## 9. Escalation To The User
+## 9. Two Conversations, One Working Tree
+
+**The user decided on 2026-08-21 that two developments may run in parallel**,
+in two Claude Code conversations, against the same checkout. This section is
+what keeps them from overwriting each other; the live occupancy — who owns
+which paths right now — lives in `.agents/parallel_lanes.md`, which is
+gitignored because it is true only while the lanes are open.
+
+**Claim before you start, clear when you finish.** A stale lane is worse than
+no lane: it makes an idle path look occupied. Two lanes maximum — past that,
+`git status` stops being usable as a review surface.
+
+What genuinely cannot be shared:
+
+- **The ticket files are single-occupant.** This protocol has one
+  `.agents/supervised_task.md`, and overwriting it destroys the other lane's
+  contract. The same holds for `executor_report.md`, `supervisor_review.md`
+  and `supervisor_verdict.json`. A second lane either does work the supervisor
+  carries itself without a ticket, or the user opens it a ticket file under
+  another name, explicitly.
+- **One `mikai-executor` at a time.** Two executors on one tree write files
+  without seeing each other, and neither report can be verified afterwards.
+- **Staging is explicit, always.** Never `git add .`, never `git add -A`, never
+  a path outside your lane. This is the only real protection, and it is what
+  held on the first parallel run.
+- **A full suite run includes the other lane's in-flight work.** A red is not
+  necessarily yours, and a green does not mean your neighbour is finished.
+  Check `git status` before concluding.
+- **Mutation proof stays allowed**, on one condition: restore with
+  `git checkout -- <path>` and verify the checksum before and after. Never
+  mutate a file the other lane has modified — there is no clean version to
+  return to.
+- **`docs/` shares badly.** Two lanes writing `PROJECT_STATE.md` or
+  `ROADMAP.md` produce a silent conflict, since neither re-reads the whole file
+  before writing. Whoever wants it says so in the lane board first.
+
+## 10. Escalation To The User
 
 The supervisor stops and asks when:
 

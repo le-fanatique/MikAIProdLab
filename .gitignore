@@ -78,6 +78,13 @@ next-env.d.ts
 .agents/supervisor_review.md
 .agents/supervisor_verdict.json
 
+# Which conversation owns which paths, when two run in parallel on one working
+# tree (decided by the user 2026-08-21). Live state by construction — it is
+# true for as long as the two lanes are open and false the moment they close.
+# The rules it applies belong to .agents/SUPERVISION_PROTOCOL.md; only the
+# current occupancy lives in the file.
+.agents/parallel_lanes.md
+
 # .agents/ local working material — handoffs, one-off agent prompts, design
 # references and per-executor skills. Same category as the live workflow files
 # above: useful in a working copy, not part of the committed contract. Durable
