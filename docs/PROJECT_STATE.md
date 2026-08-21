@@ -1,6 +1,6 @@
 # MikAI Project State
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
 
 ## Chantier 1 and Chantier 2 — COMPLETE (2026-08-20)
 
@@ -128,6 +128,82 @@ why `camera_subject` exists at all.
 have wiped `camera_pitch` on the first edit once the form stopped submitting
 it, and 358 tests still passed. And Insert Shot would have asked for the three
 new axes while `normalizeProposedShot` dropped them.
+
+## GEN.MULTIOUT.1 — a job may return many files, 2026-08-22
+
+Found by the author using the product: a `Grid2Batch` workflow takes one image
+and gives back four, and only one ever reached MikAI.
+
+**What was wrong.** `ImageGridtoBatch → SaveImage` publishes a whole batch into
+a single `images` array, and `extractFirstComfyOutput` took `images[0]`. Not a
+bug — an assumption, "one job, one output", never reopened since. It was sealed
+by the schema: `generation_jobs.output_path` is one TEXT column. Measured on job
+544 (asset 51, Comfy Cloud): four images returned, one stored, and the other
+three still served by `/api/view` two days later at four distinct sizes.
+
+| Commit | What landed |
+| --- | --- |
+| `6cef0e4` | `extractComfyOutputs` returns every file with the kind ComfyUI filed it under; `generation_job_outputs` records one row per file; both poll paths download the batch |
+| `7a35ac6` | the Content Generator gallery — all outputs ticked by default, `Unselect all`, and `Attach as Reference` storing each selected source |
+| `cb6f032`, `97fb4b9` | the hover preview, uncropped, on the Asset gallery and the Shot outputs list |
+
+**`output_path` was never replaced.** It still points at index 0, so the twenty
+call sites that read it — video approval, reference attachment, storyboard,
+sequence video, the PLY cache — are untouched. The table sits beside it.
+
+**Two rules the design rests on.** A sibling that cannot be fetched never fails
+the job, because the primary output is already published and valid; the missing
+`output_index` is the durable trace, which is why indexes are never compacted.
+And ordering has two different guarantees: inside a node it is ComfyUI's batch
+order, between nodes it is ascending node id — a language rule about integer-like
+keys, not a choice.
+
+**Migration `0058`** applied by the author. **`G5`, back-filling the jobs that
+predate this, was declined** — the old rows keep their single output.
+
+**Caught by mutation, not by review.** Two tests passed for the wrong reasons:
+removing the confinement check changed nothing, because both escape fixtures
+pointed at files that do not exist and `fs.access` refused them first; and
+sorting by filename passed the ordering test, because the fixtures happened to
+be named in index order. Both were rewritten to isolate what they claim.
+
+**Verified in a browser** with Playwright against a throwaway copy of the
+database — no paid Cloud call — then confirmed by the author on a real
+generation.
+
+## What the `camera_pitch` drop cost, measured 2026-08-22
+
+Migration `0060` (`ALTER TABLE shots DROP COLUMN camera_pitch`) is **applied**;
+the column is gone. This section exists because the measurement was taken while
+it still stood, and the answer is worth keeping.
+
+**Six shots lost their camera angle, and it is six out of six.** Of the 88 rows
+still carrying a `camera_pitch`, six spelled out an angle after a dash, and none
+of those values appears in any of the new axes:
+
+| Shots | Value lost |
+| --- | --- |
+| 36, 41 | `2/3 angle` |
+| 37, 39 | `3/4 angle` |
+| 38, 40 | `Eye Level` |
+
+The first count taken said "six out of 88", which was comforting and wrong: rows
+with no dash were skipped and silently counted as safe. Every shot that recorded
+an angle lost it. `Eye Level` is the neutral case and costs little; `2/3` and
+`3/4` are an orientation that `Over-the-Shoulder` and `Establishing Shot` only
+partly cover.
+
+**They are recoverable, and nothing needs restoring to get them.** The column
+survives in the pre-`0060` backups — `mikailab-DBHEALTHREPAIR1-pre-live-2026-08-10`
+holds all six verbatim. Reading six values out of a backup file is a query, not
+a restore, so the decision to reinstate them can be taken calmly, later, and
+without touching the live database. The 2026-08-21 backups are already past the
+conversion and do **not** carry it.
+
+**Two `shot_size` values are still a truncated sentence, not a code.** Shots 37
+and 39 hold `"ELS - Eyes on Max, emphasizing his confident demea"` and its twin,
+cut at 50 characters: the conversion wrote the model's justification into the
+field. Unrelated to `0060`, still true today, repairable by hand.
 
 ## Three bugs from real use, 2026-08-20 — and the pattern two of them shared
 

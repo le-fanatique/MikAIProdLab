@@ -27,11 +27,18 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Le dernier chantier ouvert, la refonte du vocabulaire caméra, est clos
-— voir la section 6.
+**Rien.** Les deux derniers chantiers — la refonte du vocabulaire caméra et
+`GEN.MULTIOUT.1` — sont clos, voir la section 6.
 
 Tout ce qui reste demande une décision de l'auteur (section 2) ou attend ses
 données réelles. Aucun ticket n'est prêt à être exécuté.
+
+**Deux traces laissées par la conversion caméra**, mesurées après coup et
+détaillées dans `docs/PROJECT_STATE.md` : six plans ont perdu leur angle de
+caméra en même temps que `camera_pitch` — récupérables dans une sauvegarde
+antérieure au 2026-08-21, sans rien restaurer — et deux `shot_size` contiennent
+une phrase tronquée au lieu d'un code. Ni l'un ni l'autre ne bloque quoi que ce
+soit ; ils attendent que tu décides.
 
 ---
 
@@ -220,6 +227,18 @@ séquences sont converties. `camera_pitch` est supprimée. Le détail, les trois
 revirements sourcés et les sept pertes silencieuses attrapées sont dans
 `docs/PROJECT_STATE.md`.
 
+
+**`GEN.MULTIOUT.1` — un job ComfyUI rend plusieurs fichiers. Clos le
+2026-08-22**, quatre commits : `6cef0e4`, `7a35ac6`, `cb6f032`, `97fb4b9`.
+Migration `0058` appliquée.
+
+Un `Grid2Batch` rendait quatre images et MikAI en gardait une, parce que la
+lecture s'arrêtait au premier fichier et que `output_path` est une colonne
+unique. `generation_job_outputs` porte désormais une ligne par fichier dans
+l'ordre du batch, la galerie du Content Generator les présente toutes cochées
+avec `Unselect all`, et `Attach as Reference` stocke la sélection. `output_path`
+n'a pas bougé, donc ses vingt lecteurs sont intacts. Le rattrapage des jobs
+antérieurs a été écarté par l'auteur.
 
 Le registre complet de ce qui a été livré, ticket par ticket et commit par
 commit, est dans `docs/archive/ROADMAP_2026-08-02.md` : l'epic `STYLE.1` (A à G,
