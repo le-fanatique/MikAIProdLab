@@ -1,4 +1,4 @@
-import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { int, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { sequences, shots } from "./core";
 import { assets } from "./assets";
@@ -99,3 +99,54 @@ export const generationJobs = sqliteTable(
 
 export type GenerationJob = typeof generationJobs.$inferSelect;
 export type NewGenerationJob = typeof generationJobs.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// GEN.MULTIOUT.1 — one row per file a prompt actually produced.
+//
+// `generation_jobs.output_path` is one column, and a prompt can return many
+// files: `ImageGridtoBatch → SaveImage` publishes a whole batch into a single
+// `images` array. Job 544 returned four images and MikAI kept one.
+//
+// `output_path` is deliberately NOT replaced. It keeps pointing at index 0,
+// because roughly twenty call sites read it — video approval, reference
+// attachment, storyboard, sequence video, the Camera Lab PLY cache and five
+// pages — and none of them changes. This table is additive: the extra files
+// become reachable without any existing path being rewritten.
+// ---------------------------------------------------------------------------
+export const generationJobOutputs = sqliteTable(
+  "generation_job_outputs",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    jobId: int("job_id")
+      .notNull()
+      .references(() => generationJobs.id, { onDelete: "cascade" }),
+    /**
+     * Position in the job's result, 0-based. Index 0 is the same file as
+     * `generation_jobs.output_path`. This is the batch order ComfyUI returned
+     * — panel 1, panel 2, … for a grid — and it is the only ordering the user
+     * ever sees. Never re-derive it from the filename: Cloud names its outputs
+     * by content hash, so alphabetical order is meaningless.
+     */
+    outputIndex: int("output_index").notNull(),
+    /** Repository-relative, always under `outputs/jobs/<jobId>/`. */
+    path: text("path").notNull(),
+    kind: text("kind", { enum: ["image", "video", "gif"] }).notNull(),
+    /**
+     * The name ComfyUI itself gave the file, kept for provenance: it is what
+     * `/view` (local) and `/api/view` (Cloud) are queried with, so a missing
+     * local file can be traced back to — or re-fetched from — its source.
+     */
+    sourceFilename: text("source_filename").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    // One row per position per job: makes a double-publish by two concurrent
+    // polls a constraint violation rather than a duplicated gallery entry.
+    unique("generation_job_outputs_job_index_unique").on(table.jobId, table.outputIndex),
+  ]
+);
+
+export type GenerationJobOutput = typeof generationJobOutputs.$inferSelect;
+export type NewGenerationJobOutput = typeof generationJobOutputs.$inferInsert;

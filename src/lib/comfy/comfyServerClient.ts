@@ -361,36 +361,89 @@ export function buildComfyPlyViewUrl(args: {
 }
 
 // ---------------------------------------------------------------------------
-// extractFirstComfyOutput
+// extractComfyOutputs / extractFirstComfyOutput
 // ---------------------------------------------------------------------------
 
-export function extractFirstComfyOutput(
+/** The categories a history node can publish, in the order they win. */
+const OUTPUT_KINDS = ["videos", "gifs", "images"] as const;
+
+/** Singular of the winning category, as stored in `generation_job_outputs.kind`. */
+export type ComfyOutputKind = "video" | "gif" | "image";
+
+const KIND_OF: Record<(typeof OUTPUT_KINDS)[number], ComfyOutputKind> = {
+  videos: "video",
+  gifs: "gif",
+  images: "image",
+};
+
+/**
+ * A returned file plus the category ComfyUI itself filed it under. The kind
+ * travels with the file rather than being guessed from the extension later:
+ * the extension is a guess, this is the source's own answer, and it is what
+ * `generation_job_outputs.kind` stores.
+ */
+export type ComfyOutputFileWithKind = ComfyOutputFile & { kind: ComfyOutputKind };
+
+/**
+ * GEN.MULTIOUT.1 — every file a prompt produced, not just the first.
+ *
+ * A single node can publish a whole batch: `ImageGridtoBatch → SaveImage`
+ * writes N files into one `images` array, and job 544 proved it on real data
+ * (four images returned, one kept). This is the read that stops discarding
+ * them; who stores them is the caller's business.
+ *
+ * Priority stays videos → gifs → images, and **kinds are never mixed**: the
+ * first category with anything in it wins outright, across all nodes. A
+ * workflow that publishes both a video and its preview frames is one result,
+ * not two.
+ *
+ * On ordering, two different guarantees — do not confuse them:
+ *   - INSIDE a node, the array order is ComfyUI's own, which for a batch is
+ *     the batch order (panel 1, panel 2, …). This is the one that matters to
+ *     the user, and it is preserved exactly.
+ *   - BETWEEN nodes, `Object.values` visits integer-like keys in ascending
+ *     numeric order whatever the JSON said — a language rule, not a choice
+ *     made here. Deterministic and stable, but it is node-id order, not
+ *     "ComfyUI's order".
+ *
+ * Returns `[]` — never throws — on an unknown prompt, an entry with no
+ * `outputs`, or nodes carrying only unrecognized keys. That last case is how a
+ * PLY job looks, and it must keep falling through to `extractPlyComfyOutput`.
+ */
+export function extractComfyOutputs(
   history: ComfyHistoryResponse,
   promptId: string
-): ComfyOutputFile | null {
+): ComfyOutputFileWithKind[] {
   const entry = history[promptId];
-  if (!entry || !isRecord(entry["outputs"])) return null;
+  if (!entry || !isRecord(entry["outputs"])) return [];
 
   const outputNodes = Object.values(
     entry["outputs"] as Record<string, ComfyHistoryOutput>
   );
 
-  // Priority: videos → gifs → images
-  for (const output of outputNodes) {
-    if (Array.isArray(output.videos) && output.videos.length > 0) {
-      return output.videos[0];
+  for (const category of OUTPUT_KINDS) {
+    const files: ComfyOutputFileWithKind[] = [];
+    for (const output of outputNodes) {
+      const value = output[category];
+      if (Array.isArray(value) && value.length > 0) {
+        for (const file of value) files.push({ ...file, kind: KIND_OF[category] });
+      }
     }
-  }
-  for (const output of outputNodes) {
-    if (Array.isArray(output.gifs) && output.gifs.length > 0) {
-      return output.gifs[0];
-    }
-  }
-  for (const output of outputNodes) {
-    if (Array.isArray(output.images) && output.images.length > 0) {
-      return output.images[0];
-    }
+    if (files.length > 0) return files;
   }
 
-  return null;
+  return [];
+}
+
+/**
+ * The single-output read every existing caller still uses. A thin adapter over
+ * `extractComfyOutputs`, deliberately: `generation_jobs.output_path` is one
+ * column, read by approval, reference attachment, storyboard, sequence video
+ * and the PLY cache, and none of them changes here.
+ */
+export function extractFirstComfyOutput(
+  history: ComfyHistoryResponse,
+  promptId: string
+): ComfyOutputFile | null {
+  return extractComfyOutputs(history, promptId)[0] ?? null;
 }

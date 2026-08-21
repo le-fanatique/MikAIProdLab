@@ -3,19 +3,21 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { generationJobs } from "@/db/schema";
+import { generationJobs, generationJobOutputs } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import type { GenerationJob } from "@/db/schema";
 import {
   getConfiguredComfyBaseUrl,
   getComfyHistory,
-  extractFirstComfyOutput,
+  extractComfyOutputs,
   extractPlyComfyOutput,
   buildComfyViewUrl,
   buildComfyPlyViewUrl,
   isPromptInComfyQueue,
   type ComfyHistoryResponse,
+  type ComfyOutputFileWithKind,
 } from "@/lib/comfy/comfyServerClient";
+import { downloadAndRecordJobOutputs } from "@/lib/comfy/jobOutputs";
 import { PLY_MAX_BYTES, validatePlyFile } from "@/lib/comfy/plyArtifact";
 import { getComfySettings } from "@/lib/settings";
 import { getCloudJobDetail, fetchCloudOutputResponse } from "@/lib/comfy/comfyCloudClient";
@@ -66,6 +68,36 @@ function serializeJob(job: JobRow) {
     completedAt: job.completedAt ?? null,
     payloadSnapshot: job.payloadSnapshot ?? null,
   };
+}
+
+/**
+ * GEN.MULTIOUT.1 — every response carries the job's full result list, in
+ * ComfyUI's own order. `job.outputPath` is unchanged and still the primary,
+ * so a client that ignores `outputs` behaves exactly as before.
+ *
+ * The list is empty for jobs that predate this ticket: they were published
+ * before the table existed, and nothing back-fills them. A reader must treat
+ * an empty list as "fall back to outputPath", never as "no output".
+ */
+async function jobResponse(job: JobRow): Promise<NextResponse> {
+  let outputs: Array<{ index: number; path: string; kind: string }> = [];
+  try {
+    const rows = await db
+      .select({
+        outputIndex: generationJobOutputs.outputIndex,
+        path: generationJobOutputs.path,
+        kind: generationJobOutputs.kind,
+      })
+      .from(generationJobOutputs)
+      .where(eq(generationJobOutputs.jobId, job.id))
+      .orderBy(generationJobOutputs.outputIndex);
+    outputs = rows.map((r) => ({ index: r.outputIndex, path: r.path, kind: r.kind }));
+  } catch {
+    // Never let the gallery break status polling: the job's own state is the
+    // load-bearing part of this response, the list is an addition.
+    outputs = [];
+  }
+  return NextResponse.json({ ok: true, job: { ...serializeJob(job), outputs } });
 }
 
 async function updateJobFields(
@@ -125,6 +157,43 @@ async function timeoutJob(jobId: number): Promise<JobRow> {
 // Output download + save
 // ---------------------------------------------------------------------------
 
+/**
+ * GEN.MULTIOUT.1 — record every file the prompt produced, beside the primary
+ * one that `output_path` already carries.
+ *
+ * **Never throws, and never changes the response.** By the time this runs the
+ * job is published, `output_path` is set, and the user has a valid result. A
+ * failure to fetch or record a secondary file must not turn that into a failed
+ * job — it is logged, and the missing `output_index` is the durable trace.
+ */
+async function recordAllOutputs(args: {
+  jobId: number;
+  files: ComfyOutputFileWithKind[];
+  primaryPath: string;
+  download: (file: ComfyOutputFileWithKind) => Promise<string>;
+}): Promise<void> {
+  if (args.files.length === 0) return;
+  try {
+    const { recorded, failures } = await downloadAndRecordJobOutputs({
+      jobId: args.jobId,
+      files: args.files,
+      primaryPath: args.primaryPath,
+      download: (file) => args.download(file),
+    });
+    if (failures.length > 0) {
+      console.warn(
+        `[MULTIOUT] job ${args.jobId}: recorded ${recorded}/${args.files.length} outputs. ` +
+          failures.map((f) => `#${f.index} (${f.filename}): ${f.error}`).join("; ")
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[MULTIOUT] job ${args.jobId}: could not record its outputs —`,
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
 async function downloadAndSaveOutput(
   jobId: number,
   baseUrl: string,
@@ -143,7 +212,11 @@ async function downloadAndSaveOutput(
 
   // Derive extension from the ComfyUI filename — never use filename directly as local path
   const ext = path.extname(file.filename) || ".bin";
-  const localFilename = `output-${Date.now()}${ext}`;
+  // GEN.MULTIOUT.1 — random suffix, matching the Cloud path's convention.
+  // `Date.now()` alone was unambiguous while a job downloaded exactly one
+  // file; a batch is fetched in a tight loop, so several siblings can land in
+  // the same millisecond and the second would silently overwrite the first.
+  const localFilename = `output-${Date.now()}-${randomUUID().slice(0, 8)}${ext}`;
   const outputDir = path.join(process.cwd(), "public", "outputs", "jobs", String(jobId));
 
   await fs.mkdir(outputDir, { recursive: true });
@@ -410,12 +483,12 @@ export async function GET(
     job.status === "failed" ||
     job.status === "timeout"
   ) {
-    return NextResponse.json({ ok: true, job: serializeJob(job) });
+    return jobResponse(job);
   }
 
   // --- Pending / uploading: return as-is (F.5-C owns those transitions) ---
   if (job.status === "pending" || job.status === "uploading") {
-    return NextResponse.json({ ok: true, job: serializeJob(job) });
+    return jobResponse(job);
   }
 
   // --- Queued / running: check ComfyUI ---
@@ -424,7 +497,7 @@ export async function GET(
     const promptId = job.promptId;
     if (!promptId) {
       job = await failJob(jobId, "Missing ComfyUI prompt id.");
-      return NextResponse.json({ ok: true, job: serializeJob(job) });
+      return jobResponse(job);
     }
 
     // Timeout check (before calling ComfyUI)
@@ -433,7 +506,7 @@ export async function GET(
       : Date.parse(job.createdAt);
     if (Date.now() - startTimestamp > JOB_TIMEOUT_MS) {
       job = await timeoutJob(jobId);
-      return NextResponse.json({ ok: true, job: serializeJob(job) });
+      return jobResponse(job);
     }
 
     // Mark as running only if still queued — conditional so a stale poll
@@ -481,7 +554,7 @@ export async function GET(
           .from(generationJobs)
           .where(eq(generationJobs.id, jobId));
         job = fresh ?? job;
-        return NextResponse.json({ ok: true, job: serializeJob(job) });
+        return jobResponse(job);
       }
 
       job = transitioned;
@@ -495,7 +568,7 @@ export async function GET(
         const comfySettings = await getComfySettings();
         if (!comfySettings.hasCloudApiKey) {
           job = await failJob(jobId, "Comfy Cloud API key is not configured; cannot poll this job.");
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
         const cloudApiKey = comfySettings.cloudApiKey;
 
@@ -510,26 +583,27 @@ export async function GET(
                 ? `${e.nodeType ? `${e.nodeType}: ` : ""}${e.exceptionMessage}`
                 : "Comfy Cloud execution error.";
           job = await failJob(jobId, msg.slice(0, 500));
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
 
         if (detail.status !== "completed" || !detail.outputs) {
           // pending / in_progress — nothing to download yet
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
 
         // Reuse the EXACT SAME priority extraction (videos -> gifs -> images)
         // and PLY detection as local, by wrapping Cloud's outputs dict into
         // the same shape getComfyHistory() would have returned.
         const historyLike: ComfyHistoryResponse = { [promptId]: { outputs: detail.outputs } };
-        const outputFile = extractFirstComfyOutput(historyLike, promptId);
+        const outputFiles = extractComfyOutputs(historyLike, promptId);
+        const outputFile = outputFiles[0] ?? null;
 
         if (!outputFile) {
           const plyResult = extractPlyComfyOutput(historyLike, promptId);
 
           if (plyResult.status === "invalid") {
             job = await failJob(jobId, `Invalid PLY output metadata: ${plyResult.reason}`);
-            return NextResponse.json({ ok: true, job: serializeJob(job) });
+            return jobResponse(job);
           }
 
           if (plyResult.status === "found") {
@@ -583,16 +657,16 @@ export async function GET(
                 .from(generationJobs)
                 .where(eq(generationJobs.id, jobId));
               job = fresh ?? job;
-              return NextResponse.json({ ok: true, job: serializeJob(job) });
+              return jobResponse(job);
             }
 
             job = published;
-            return NextResponse.json({ ok: true, job: serializeJob(job) });
+            return jobResponse(job);
           }
 
           // Completed on Cloud but no recognizable image/video/gif/PLY output.
           job = await failJob(jobId, "Comfy Cloud job completed but produced no recognizable output.");
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
 
         const { relativePath, finalPath } = await downloadAndSaveOutputFromCloud(jobId, cloudApiKey, outputFile);
@@ -648,15 +722,27 @@ export async function GET(
             .from(generationJobs)
             .where(eq(generationJobs.id, jobId));
           job = fresh ?? job;
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
 
+        // GEN.MULTIOUT.1 — this poll won the publish race, so it is the one
+        // that records the whole result. Runs AFTER the publish so the
+        // existing guard stays the single arbiter, and never fails the
+        // request: `output_path` is already set and valid.
+        await recordAllOutputs({
+          jobId,
+          files: outputFiles,
+          primaryPath: relativePath,
+          download: (file) =>
+            downloadAndSaveOutputFromCloud(jobId, cloudApiKey, file).then((r) => r.relativePath),
+        });
+
         job = publishedGeneric;
-        return NextResponse.json({ ok: true, job: serializeJob(job) });
+        return jobResponse(job);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error checking Comfy Cloud.";
         job = await failJob(jobId, message);
-        return NextResponse.json({ ok: true, job: serializeJob(job) });
+        return jobResponse(job);
       }
     }
 
@@ -691,11 +777,12 @@ export async function GET(
               ? raw.trim()
               : "ComfyUI execution error.";
           job = await failJob(jobId, msg.slice(0, 500));
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
       }
 
-      const outputFile = extractFirstComfyOutput(history, promptId);
+      const outputFiles = extractComfyOutputs(history, promptId);
+      const outputFile = outputFiles[0] ?? null;
 
       // CAMLAB.PLY.1 — PLY artifact path, only when no image/video output
       // was recognized (priority videos -> gifs -> images is preserved).
@@ -707,7 +794,7 @@ export async function GET(
             jobId,
             `Invalid PLY output metadata: ${plyResult.reason}`
           );
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
 
         if (plyResult.status === "found") {
@@ -778,11 +865,11 @@ export async function GET(
               .from(generationJobs)
               .where(eq(generationJobs.id, jobId));
             job = fresh ?? job;
-            return NextResponse.json({ ok: true, job: serializeJob(job) });
+            return jobResponse(job);
           }
 
           job = published;
-          return NextResponse.json({ ok: true, job: serializeJob(job) });
+          return jobResponse(job);
         }
       }
 
@@ -795,11 +882,11 @@ export async function GET(
               jobId,
               "ComfyUI job was lost. The ComfyUI server may have restarted."
             );
-            return NextResponse.json({ ok: true, job: serializeJob(job) });
+            return jobResponse(job);
           }
         }
         // Still in queue or history not yet available
-        return NextResponse.json({ ok: true, job: serializeJob(job) });
+        return jobResponse(job);
       }
 
       // Output available — download and save
@@ -814,15 +901,24 @@ export async function GET(
         updatedAt: now,
       });
 
-      return NextResponse.json({ ok: true, job: serializeJob(job) });
+      // GEN.MULTIOUT.1 — see the Cloud branch: same rule, same ordering,
+      // only the transport differs.
+      await recordAllOutputs({
+        jobId,
+        files: outputFiles,
+        primaryPath: outputPath,
+        download: (file) => downloadAndSaveOutput(jobId, baseUrl, file),
+      });
+
+      return jobResponse(job);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unknown error checking ComfyUI.";
       job = await failJob(jobId, message);
-      return NextResponse.json({ ok: true, job: serializeJob(job) });
+      return jobResponse(job);
     }
   }
 
   // Fallback — unknown status: return as-is
-  return NextResponse.json({ ok: true, job: serializeJob(job) });
+  return jobResponse(job);
 }
