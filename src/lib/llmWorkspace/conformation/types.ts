@@ -62,7 +62,20 @@ export type ConformationRequest = {
    * Same discipline B16a applied to image paths: domain knowledge stays with
    * whoever owns the domain.
    */
-  cameraPhrases: string[];
+  camera: {
+    /** Every non-blank camera statement, in the order the composition prints them. */
+    phrases: string[];
+    /**
+     * The movement statements alone.
+     *
+     * B19e split this out of `phrases` because the guide's "one move per shot"
+     * is a rule about **movements**, not about how many camera fields are
+     * filled. Counting fields warned on a shot that correctly named a size and
+     * a movement, and would have warned on every shot once four axes existed.
+     * A profile that wants the old behaviour can still count `phrases`.
+     */
+    movements: string[];
+  };
 };
 
 /**

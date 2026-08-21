@@ -475,7 +475,13 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
       shotLabel: s.shotCode ?? s.title,
       findings: composeStoryboardShot({
         context: s.context,
-        continuity: { framing: s.continuity.framing, cameraMovement: s.continuity.cameraMovement },
+        continuity: {
+              shotSize: s.continuity.shotSize,
+              cameraPosition: s.continuity.cameraPosition,
+              cameraMovement: s.continuity.cameraMovement,
+              movementSpeed: s.continuity.movementSpeed,
+              cameraSubject: s.continuity.cameraSubject,
+            },
         projectStyle,
         lighting: lighting.byShotId[s.shotId] ?? null,
       }).findings,

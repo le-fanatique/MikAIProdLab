@@ -66,8 +66,11 @@ export type StoryboardShotCompositionInput = {
   context: PromptCompilationContext;
   /** Continuity/camera fields the Prompt Compiler contract does not carry (`SequenceGenerationContinuity`). */
   continuity: {
-    framing: string | null;
+    shotSize: string | null;
+    cameraPosition: string | null;
     cameraMovement: string | null;
+    movementSpeed: string | null;
+    cameraSubject: string | null;
   };
   /**
    * The Project Style text.
@@ -182,9 +185,37 @@ export function composeStoryboardShot(
   const { context, continuity } = input;
   const shot = context.shot;
 
-  const cameraPhrases = [shot.cameraPitch, continuity.framing, continuity.cameraMovement]
-    .map((phrase) => nonEmpty(phrase))
-    .filter((phrase): phrase is string => phrase !== null);
+  // B19e — the camera line follows the Seedance 2.5 template's own order,
+  // `shot size + camera position + camera movement`, with the speed attached
+  // to the movement it qualifies and the subject last, since it is the prose
+  // that names what the move targets.
+  const movement = joinFragments(
+    [nonEmpty(continuity.movementSpeed), nonEmpty(continuity.cameraMovement)],
+    " "
+  );
+  // Precedence, not accumulation: the Shot's own axis wins, and the legacy
+  // free-text field stands in only while that axis is empty. The instruction
+  // that filled 88 shots asked for "camera angle, lens, position" in
+  // `cameraPitch`, so it is their only angle until B19f converts them — and
+  // this fallback disables itself, shot by shot, as the axis fills. Adding
+  // both would state the angle twice, in two vocabularies.
+  const position = nonEmpty(continuity.cameraPosition) ?? nonEmpty(shot.cameraPitch);
+  const cameraPhrases = [
+    nonEmpty(continuity.shotSize),
+    position,
+    movement,
+    nonEmpty(continuity.cameraSubject),
+  ].filter((phrase): phrase is string => phrase !== null && phrase.length > 0);
+
+  /**
+   * What the guide's "one move per shot" is actually about. Counting filled
+   * camera *fields* — which is what the profile received until now — warned on
+   * a shot that named a size and a movement, which is exactly correct usage,
+   * and would have warned on every shot once four axes existed.
+   */
+  const cameraMovements = [nonEmpty(continuity.cameraMovement)].filter(
+    (m): m is string => m !== null
+  );
 
   const candidates: Array<{ id: StoryboardCompositionPartId; label: string; text: string | null }> = [
     { id: "subject", label: "Subject", text: buildSubject(context.castAssets) },
@@ -226,12 +257,12 @@ export function composeStoryboardShot(
 
   const references = profile.conformReferences({
     references: conformationReferences,
-    cameraPhrases,
+    camera: { phrases: cameraPhrases, movements: cameraMovements },
   });
 
   const findings = profile.inspect({
     references: conformationReferences,
-    cameraPhrases,
+    camera: { phrases: cameraPhrases, movements: cameraMovements },
     body: text,
     // `lightingMissing` fires only when nothing resolved at any level — the
     // one case the author called "no lighting direction yet". Advisory, never

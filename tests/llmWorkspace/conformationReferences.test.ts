@@ -27,7 +27,7 @@ describe("guide.default — reference conformation", () => {
   it("renders the guide's five named modes, and only those five", () => {
     const result = profile.conformReferences({
       references: refs("first_frame", "last_frame", "character", "style", "environment"),
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result.map((r) => r.mode)).toEqual([
@@ -43,7 +43,7 @@ describe("guide.default — reference conformation", () => {
     const result = profile.conformReferences({
       // Deliberately not the order the mode table lists them in.
       references: refs("style", "first_frame", "character"),
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result.map((r) => r.tag)).toEqual(["@Image1", "@Image2", "@Image3"]);
@@ -54,7 +54,7 @@ describe("guide.default — reference conformation", () => {
   it("keeps the tag and reports no mode for a role the guide does not name", () => {
     const result = profile.conformReferences({
       references: refs("pose", "motion", "rhythm", "prop_state"),
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result.map((r) => r.tag)).toEqual(["@Image1", "@Image2", "@Image3", "@Image4"]);
@@ -69,7 +69,7 @@ describe("guide.default — reference conformation", () => {
         { role: null, label: "No role" },
         { role: "some_legacy_value_nobody_knows", label: "Stale row" },
       ],
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result.map((r) => r.tag)).toEqual(["@Image1", "@Image2"]);
@@ -80,7 +80,7 @@ describe("guide.default — reference conformation", () => {
   it("does not fold keyframe into the first-frame mode — they are two roles the user chose between", () => {
     const result = profile.conformReferences({
       references: refs("keyframe"),
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result[0].role).toBe("keyframe");
@@ -93,7 +93,7 @@ describe("guide.default — reference conformation", () => {
         { role: "first frame", label: "spaced spelling" },
         { role: "FIRST_FRAME", label: "upper case" },
       ],
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result.map((r) => r.role)).toEqual(["first_frame", "first_frame"]);
@@ -103,7 +103,7 @@ describe("guide.default — reference conformation", () => {
   it("carries the label through untouched, and never a path", () => {
     const result = profile.conformReferences({
       references: [{ role: "character", label: "Lead, three-quarter" }],
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(result[0].label).toBe("Lead, three-quarter");
@@ -111,25 +111,25 @@ describe("guide.default — reference conformation", () => {
   });
 
   it("is deterministic — the same request twice yields an identical result", () => {
-    const request = { references: refs("first_frame", "pose", null), cameraPhrases: ["slow push in"] };
+    const request = { references: refs("first_frame", "pose", null), camera: { phrases: ["slow push in"], movements: ["slow push in"] } };
     expect(profile.conformReferences(request)).toEqual(profile.conformReferences(request));
   });
 
   it("ignores the camera phrases entirely at this stage — they are counted by B13b, never read", () => {
     const withCamera = profile.conformReferences({
       references: refs("character"),
-      cameraPhrases: ["slow push in", "handheld", "crane down"],
+      camera: { phrases: ["slow push in", "handheld", "crane down"], movements: ["slow push in", "handheld", "crane down"] },
     });
     const withoutCamera = profile.conformReferences({
       references: refs("character"),
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
     });
 
     expect(withCamera).toEqual(withoutCamera);
   });
 
   it("returns nothing for no references, rather than an empty-tag placeholder", () => {
-    expect(profile.conformReferences({ references: [], cameraPhrases: [] })).toEqual([]);
+    expect(profile.conformReferences({ references: [], camera: { phrases: [], movements: [] } })).toEqual([]);
   });
 
   it("exposes exactly one profile today, named for what it is and not for an engine", () => {

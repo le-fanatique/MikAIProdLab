@@ -60,16 +60,23 @@ export const SEQUENCE_GENERATION_PACKAGE_VERSION = 1 as const;
 
 /** Continuity/sequencing fields the Prompt Compiler contract does not carry — kept separate so this ticket never touches that contract. */
 export type SequenceGenerationContinuityInput = {
-  framing?: string | null;
+  /** B19b renamed the column; B19e widened this to the five axes. */
+  shotSize?: string | null;
+  cameraPosition?: string | null;
   cameraMovement?: string | null;
+  movementSpeed?: string | null;
+  cameraSubject?: string | null;
   continuityIn?: string | null;
   continuityOut?: string | null;
   continuityNotes?: string | null;
 };
 
 export type SequenceGenerationContinuity = {
-  framing: string | null;
+  shotSize: string | null;
+  cameraPosition: string | null;
   cameraMovement: string | null;
+  movementSpeed: string | null;
+  cameraSubject: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
   continuityNotes: string | null;
@@ -149,8 +156,11 @@ function dedupePreservingOrder(values: string[]): string[] {
 
 function buildContinuity(input: SequenceGenerationContinuityInput): SequenceGenerationContinuity {
   return {
-    framing: trimOrNull(input.framing),
+    shotSize: trimOrNull(input.shotSize),
+    cameraPosition: trimOrNull(input.cameraPosition),
     cameraMovement: trimOrNull(input.cameraMovement),
+    movementSpeed: trimOrNull(input.movementSpeed),
+    cameraSubject: trimOrNull(input.cameraSubject),
     continuityIn: trimOrNull(input.continuityIn),
     continuityOut: trimOrNull(input.continuityOut),
     continuityNotes: trimOrNull(input.continuityNotes),
@@ -338,7 +348,13 @@ export function formatSequenceGenerationPackageText(
     const body = storyboardComposition
       ? composeStoryboardShot({
           context: s.context,
-          continuity: { framing: s.continuity.framing, cameraMovement: s.continuity.cameraMovement },
+          continuity: {
+            shotSize: s.continuity.shotSize,
+            cameraPosition: s.continuity.cameraPosition,
+            cameraMovement: s.continuity.cameraMovement,
+            movementSpeed: s.continuity.movementSpeed,
+            cameraSubject: s.continuity.cameraSubject,
+          },
           projectStyle: storyboardComposition.projectStyle,
           lighting: storyboardComposition.lighting.byShotId[s.shotId] ?? null,
         }).text || "(no compiled prompt)"

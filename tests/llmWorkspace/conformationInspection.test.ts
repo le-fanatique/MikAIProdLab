@@ -30,7 +30,7 @@ function words(count: number): string {
 function compliantRequest(): ConformationInspectionRequest {
   return {
     references: refs(3),
-    cameraPhrases: ["slow push in"],
+    camera: { phrases: ["slow push in"], movements: ["slow push in"] },
     body: words(80),
     lighting: "Golden hour, warm rim light",
     fileTagCount: 3,
@@ -82,7 +82,7 @@ describe("guide.default — output discipline (inspect)", () => {
   });
 
   it("primaryCamera: zero camera phrases triggers it", () => {
-    const findings = profile.inspect({ ...compliantRequest(), cameraPhrases: [] });
+    const findings = profile.inspect({ ...compliantRequest(), camera: { phrases: [], movements: [] } });
     expect(findings).toHaveLength(1);
     expect(findings[0].code).toBe("primaryCamera");
     expect(findings[0].severity).toBe("warn");
@@ -91,24 +91,24 @@ describe("guide.default — output discipline (inspect)", () => {
   it("primaryCamera: three camera phrases triggers it too", () => {
     const findings = profile.inspect({
       ...compliantRequest(),
-      cameraPhrases: ["slow push in", "handheld", "crane down"],
+      camera: { phrases: ["slow push in", "handheld", "crane down"], movements: ["slow push in", "handheld", "crane down"] },
     });
     expect(findings).toHaveLength(1);
     expect(findings[0].code).toBe("primaryCamera");
   });
 
   it("primaryCamera: exactly one non-blank phrase reports nothing", () => {
-    expect(profile.inspect({ ...compliantRequest(), cameraPhrases: ["slow push in"] })).toEqual([]);
+    expect(profile.inspect({ ...compliantRequest(), camera: { phrases: ["slow push in"], movements: ["slow push in"] } })).toEqual([]);
   });
 
   it("primaryCamera: a blank camera phrase does not count", () => {
-    const withBlankOnly = profile.inspect({ ...compliantRequest(), cameraPhrases: ["   "] });
+    const withBlankOnly = profile.inspect({ ...compliantRequest(), camera: { phrases: ["   "], movements: ["   "] } });
     expect(withBlankOnly).toHaveLength(1);
     expect(withBlankOnly[0].code).toBe("primaryCamera");
 
     // one real phrase plus a blank one still counts as exactly one primary instruction
     expect(
-      profile.inspect({ ...compliantRequest(), cameraPhrases: ["slow push in", "   "] }),
+      profile.inspect({ ...compliantRequest(), camera: { phrases: ["slow push in", "   "], movements: ["slow push in", "   "] } }),
     ).toEqual([]);
   });
 
@@ -154,7 +154,7 @@ describe("guide.default — output discipline (inspect)", () => {
   it("reports findings in a fixed, deterministic order", () => {
     const findings = profile.inspect({
       references: refs(10),
-      cameraPhrases: [],
+      camera: { phrases: [], movements: [] },
       body: words(10),
       lighting: null,
       fileTagCount: 13,
@@ -171,16 +171,16 @@ describe("guide.default — output discipline (inspect)", () => {
 
   it("never throws and never returns a refusal, whatever the input", () => {
     const inputs: ConformationInspectionRequest[] = [
-      { references: [], cameraPhrases: [], body: "", lighting: null, fileTagCount: 0 },
-      { references: [], cameraPhrases: [], body: "   ", lighting: "", fileTagCount: -5 },
+      { references: [], camera: { phrases: [], movements: [] }, body: "", lighting: null, fileTagCount: 0 },
+      { references: [], camera: { phrases: [], movements: [] }, body: "   ", lighting: "", fileTagCount: -5 },
       {
         references: refs(1000),
-        cameraPhrases: Array(1000).fill(""),
+        camera: { phrases: Array(1000).fill(""), movements: Array(1000).fill("") },
         body: words(10000),
         lighting: null,
         fileTagCount: Number.MAX_SAFE_INTEGER,
       },
-      { references: [], cameraPhrases: [], body: words(80), lighting: "set", fileTagCount: NaN },
+      { references: [], camera: { phrases: [], movements: [] }, body: words(80), lighting: "set", fileTagCount: NaN },
     ];
 
     for (const input of inputs) {

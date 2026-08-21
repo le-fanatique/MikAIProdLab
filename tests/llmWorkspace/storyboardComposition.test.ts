@@ -59,7 +59,7 @@ function inputWith(
 ): StoryboardShotCompositionInput {
   return {
     context: contextWith(),
-    continuity: { framing: "WS", cameraMovement: "static" },
+    continuity: { shotSize: "WS", cameraPosition: null, cameraMovement: "static", movementSpeed: null, cameraSubject: null},
     projectStyle: "Grainy anamorphic, muted palette.",
     lighting: "Cold blue screen glow.",
     ...overrides,
@@ -141,10 +141,15 @@ describe("composeStoryboardShot", () => {
       inputWith({ lighting: null })
     );
 
-    // Three camera phrases, a short body, and no lighting — all reported.
-    expect(result.findings.map((f) => f.code)).toContain("primaryCamera");
+    // A short body and no lighting are reported.
     expect(result.findings.map((f) => f.code)).toContain("lightingMissing");
     expect(result.findings.map((f) => f.code)).toContain("wordBudget");
+    // B19e — and `primaryCamera` is NOT, which is the point. This fixture
+    // names a shot size and one movement, which is correct usage; the guide
+    // asks for one *move* per shot, not for one camera field to be filled.
+    // Counting filled fields, as the profile did until now, warned here — and
+    // would have warned on every shot once four axes existed.
+    expect(result.findings.map((f) => f.code)).not.toContain("primaryCamera");
     // Reported, never enforced: the text is produced whole either way.
     expect(result.text.length).toBeGreaterThan(0);
   });
@@ -197,7 +202,7 @@ describe("composeStoryboardShot", () => {
         assetBibles: [],
         sources: { ...ALL_SOURCES },
       }),
-      continuity: { framing: null, cameraMovement: null },
+      continuity: { shotSize: null, cameraPosition: null, cameraMovement: null, movementSpeed: null, cameraSubject: null},
       projectStyle: null,
       lighting: null,
     });
@@ -205,5 +210,94 @@ describe("composeStoryboardShot", () => {
     expect(result.parts.map((p) => p.id)).toEqual(["action"]);
     expect(result.text).toBe("Action: A door closes.");
     expect(result.references).toEqual([]);
+  });
+
+  it("still reports primaryCamera when no movement is named at all — the finding kept its real meaning", () => {
+    const result = composeStoryboardShot(
+      inputWith({
+        continuity: {
+          shotSize: "WS",
+          cameraPosition: "Low Angle",
+          cameraMovement: null,
+          movementSpeed: null,
+          cameraSubject: null,
+        },
+      })
+    );
+
+    expect(result.findings.map((f) => f.code)).toContain("primaryCamera");
+  });
+
+  it("does not report primaryCamera for a size, a position, a speed and one movement together", () => {
+    const result = composeStoryboardShot(
+      inputWith({
+        continuity: {
+          shotSize: "MS",
+          cameraPosition: "Over-the-Shoulder (OTS)",
+          cameraMovement: "Dolly In",
+          movementSpeed: "Slow",
+          cameraSubject: "follows Mara from the doorway to the console",
+        },
+      })
+    );
+
+    // Four axes filled, one movement — the shape B19c's form invites.
+    expect(result.findings.map((f) => f.code)).not.toContain("primaryCamera");
+  });
+
+  it("prints the camera line in the template's own order: size, position, speed + movement, then subject", () => {
+    const { parts } = composeStoryboardShot(
+      inputWith({
+        continuity: {
+          shotSize: "MS",
+          cameraPosition: "Over-the-Shoulder (OTS)",
+          cameraMovement: "Dolly In",
+          movementSpeed: "Slow",
+          cameraSubject: "follows Mara from the doorway to the console",
+        },
+      })
+    );
+
+    // The Seedance 2.5 template asks for "shot size + camera position +
+    // camera movement"; the speed rides with the movement it qualifies, and
+    // the subject comes last because it is the prose naming what the move
+    // targets.
+    const camera = parts.find((p) => p.id === "camera");
+    expect(camera?.text).toBe(
+      "MS — Over-the-Shoulder (OTS) — Slow Dolly In — follows Mara from the doorway to the console"
+    );
+  });
+
+  it("falls back to the legacy cameraPitch only while cameraPosition is empty, never alongside it", () => {
+    const withAxis = composeStoryboardShot(
+      inputWith({
+        continuity: {
+          shotSize: "WS",
+          cameraPosition: "Low Angle",
+          cameraMovement: null,
+          movementSpeed: null,
+          cameraSubject: null,
+        },
+      })
+    ).parts.find((p) => p.id === "camera");
+
+    const withoutAxis = composeStoryboardShot(
+      inputWith({
+        continuity: {
+          shotSize: "WS",
+          cameraPosition: null,
+          cameraMovement: null,
+          movementSpeed: null,
+          cameraSubject: null,
+        },
+      })
+    ).parts.find((p) => p.id === "camera");
+
+    // The fixture's shot carries `cameraPitch: "slow push in"`. It stands in
+    // when the axis is empty — 88 shots hold their only angle there until
+    // B19f converts them — and disappears the moment the axis is filled, so
+    // the angle is never stated twice in two vocabularies.
+    expect(withAxis?.text).toBe("WS — Low Angle");
+    expect(withoutAxis?.text).toBe("WS — slow push in");
   });
 });

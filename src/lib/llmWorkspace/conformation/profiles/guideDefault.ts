@@ -123,7 +123,14 @@ function countWords(body: string): number {
   return body.trim().split(/\s+/).filter((word) => word.length > 0).length;
 }
 
-/** Non-blank camera phrases only — a blank entry does not count as an instruction. */
+/**
+ * Non-blank statements only — a blank entry does not count as an instruction.
+ *
+ * B19e feeds this `camera.movements`, not every camera phrase. The guide asks
+ * for one *move* per shot; it does not ask that only one camera field be
+ * filled. Counting fields warned on a shot that named a size and a movement —
+ * correct usage — and would have warned on every shot once four axes existed.
+ */
 function countCameraPhrases(cameraPhrases: string[]): number {
   return cameraPhrases.filter((phrase) => phrase.trim().length > 0).length;
 }
@@ -152,7 +159,7 @@ function inspect(request: ConformationInspectionRequest): ConformationFinding[] 
     });
   }
 
-  const cameraPhraseCount = countCameraPhrases(request.cameraPhrases);
+  const cameraPhraseCount = countCameraPhrases(request.camera.movements);
   if (cameraPhraseCount !== 1) {
     findings.push({
       code: "primaryCamera",
