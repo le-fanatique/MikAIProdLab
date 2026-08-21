@@ -91,7 +91,11 @@ function renderAxisValueList(axisId: CameraVocabularyAxisId): string {
 export function renderCameraFieldSchemaLine(fieldId: CameraInstructionFieldId): string {
   switch (fieldId) {
     case "shot_size":
-      return `"shot_size": "string or null — ${renderAxisValueList(FIELD_TO_AXIS.shot_size)}, or a start-to-end interval such as "MS to WS""`;
+      // The example uses single quotes on purpose. This line sits inside a
+      // block the instruction calls "a valid JSON object matching exactly this
+      // schema", and double quotes here closed the string early — the schema
+      // it showed the model was not itself valid JSON.
+      return `"shot_size": "string or null — ${renderAxisValueList(FIELD_TO_AXIS.shot_size)}, or a start-to-end interval such as 'MS to WS'"`;
     case "camera_position":
       return `"camera_position": "string or null — ${renderAxisValueList(FIELD_TO_AXIS.camera_position)}"`;
     case "camera_movement":

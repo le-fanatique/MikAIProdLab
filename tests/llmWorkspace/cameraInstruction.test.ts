@@ -118,3 +118,38 @@ describe("renderCameraInstructionRulesBlock", () => {
     expect(renderCameraInstructionRulesBlock()).toBe(block);
   });
 });
+
+describe("renderCameraFieldSchemaLine — the block calls itself valid JSON", () => {
+  // The instruction introduces this block with "Always respond with a valid
+  // JSON object matching exactly this schema". A line that is not itself valid
+  // JSON shows the model a malformed example of the very format it is being
+  // asked to produce.
+  //
+  // shot_size did exactly that: its interval example was written "MS to WS"
+  // with double quotes, inside a double-quoted string, so the value ended
+  // early. Nothing caught it — the rules block was fine, and only the rendered
+  // prompt showed it.
+  const FIELDS = [
+    "shot_size",
+    "camera_position",
+    "camera_movement",
+    "movement_speed",
+    "camera_subject",
+    "camera_lens",
+  ] as const;
+
+  for (const field of FIELDS) {
+    it(`${field}'s schema line parses as JSON`, () => {
+      const line = renderCameraFieldSchemaLine(field);
+      expect(() => JSON.parse(`{${line}}`)).not.toThrow();
+    });
+  }
+
+  it("every schema line is a single key whose value is a string", () => {
+    for (const field of FIELDS) {
+      const parsed = JSON.parse(`{${renderCameraFieldSchemaLine(field)}}`) as Record<string, unknown>;
+      expect(Object.keys(parsed)).toEqual([field]);
+      expect(typeof parsed[field]).toBe("string");
+    }
+  });
+});
