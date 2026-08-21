@@ -22,6 +22,7 @@ import { shotInsertDirectedDescriptor } from "./shotInsertDirected";
 import { shotsFromSequenceDescriptor } from "./shotsFromSequence";
 import { sequencesFromOutlineDescriptor } from "./sequencesFromOutline";
 import { assetsFromProjectDescriptor } from "./assetsFromProject";
+import { cameraConvertDescriptor } from "./cameraConvert";
 import { castingFromSequenceDescriptor } from "./castingFromSequence";
 import { narrativePromptComposeDescriptor } from "./narrativePrompt";
 import { lightingFromImageDescriptor } from "./lightingFromImage";
@@ -65,6 +66,7 @@ export {
   shotsFromSequenceDescriptor,
   sequencesFromOutlineDescriptor,
   assetsFromProjectDescriptor,
+  cameraConvertDescriptor,
   castingFromSequenceDescriptor,
   narrativePromptComposeDescriptor,
   lightingFromImageDescriptor,

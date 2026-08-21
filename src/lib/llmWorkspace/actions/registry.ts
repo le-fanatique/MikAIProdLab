@@ -603,6 +603,25 @@ export const ACTION_REGISTRY = {
   // discipline every earlier action declared before its own descriptor
   // (`createGeneratedShots`, `applySelectedCastingSuggestions`,
   // `createShotAtPosition`, `updateShotNarrativePrompt`).
+  applyCameraConversions: {
+    id: "applyCameraConversions",
+    operation: "update",
+    source: { module: "@/actions/llm/cameraConversion", export: "applyCameraConversions" },
+    target: { entity: "shot" },
+    response: "redirectOnly",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["shotSize", "cameraPosition", "cameraMovement", "movementSpeed", "cameraSubject"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "B19f's write side. Applies only the axes a selected proposal actually fills: a null or blank field leaves the column exactly as it stands. The operation exists so an axis the legacy text says nothing about stays empty rather than guessed, and this action has to honour that or the instruction is worthless.",
+      "`cameraPitch` is never written, never cleared. It is the source being converted, and 88 shots hold their only camera angle in it; it is removed on the author's word, in its own ticket.",
+      "Ownership is checked by set against the sequence named in the request, never by bare id — a proposal naming a shot outside that sequence is dropped rather than written. Same discipline as `applySelectedCastingSuggestions`.",
+    ],
+  },
+
   updateShotLighting: {
     id: "updateShotLighting",
     operation: "update",

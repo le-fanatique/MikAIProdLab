@@ -728,6 +728,85 @@ export async function resolveSeqShotTargets(sequenceId: number): Promise<SeqShot
     .orderBy(asc(shots.orderIndex));
 }
 
+
+// ---------------------------------------------------------------------------
+// SEQ.SHOT_CAMERA — anchors: sequence. B19f. Every Shot of the sequence with
+// its camera fields, addressable by `id`.
+//
+// Kept apart from `SEQ.SHOT_TARGETS`, which carries narrative continuity and
+// no camera at all — one variable, one question. `cameraPitch` is projected
+// because it is the whole point: the instruction that filled these shots asked
+// for "camera angle, lens, position" in that single free-text field, so it
+// holds the only angle and placement 88 shots have.
+// ---------------------------------------------------------------------------
+
+export type SeqShotCameraEntry = {
+  id: number;
+  shotCode: string | null;
+  title: string;
+  cameraPitch: string | null;
+  shotSize: string | null;
+  cameraPosition: string | null;
+  cameraMovement: string | null;
+  movementSpeed: string | null;
+  cameraSubject: string | null;
+};
+
+export async function resolveSeqShotCamera(sequenceId: number): Promise<SeqShotCameraEntry[]> {
+  const { db } = await import("@/db");
+  return db
+    .select({
+      id: shots.id,
+      shotCode: shots.shotCode,
+      title: shots.title,
+      cameraPitch: shots.cameraPitch,
+      shotSize: shots.shotSize,
+      cameraPosition: shots.cameraPosition,
+      cameraMovement: shots.cameraMovement,
+      movementSpeed: shots.movementSpeed,
+      cameraSubject: shots.cameraSubject,
+    })
+    .from(shots)
+    .where(eq(shots.sequenceId, sequenceId))
+    .orderBy(asc(shots.orderIndex));
+}
+
+/** Template: names the project and the sequence being converted. */
+export function renderCameraConvertHeader(
+  project: ProjectIdentityData,
+  seqIdentity: SeqIdentityData
+): string {
+  return [
+    `Project: ${project.name}`,
+    `SEQUENCE [ID: ${seqIdentity.id}]: ${seqIdentity.title}`,
+    "",
+    "Shots to convert:",
+  ].join("\n");
+}
+
+/** Template: one line per Shot, showing what it currently holds — the model converts from this, and the user reads the same thing back in the ProposalPanel. */
+export function renderCameraConvertShotLines(shots: SeqShotCameraEntry[]): string {
+  if (shots.length === 0) return "(this sequence has no shots)";
+  return shots
+    .map((s) => {
+      const label = s.shotCode ? `${s.shotCode} "${s.title}"` : `"${s.title}"`;
+      const held = [
+        s.shotSize ? `shot_size: ${s.shotSize}` : null,
+        s.cameraMovement ? `camera_movement: ${s.cameraMovement}` : null,
+        s.cameraPosition ? `camera_position: ${s.cameraPosition}` : null,
+      ]
+        .filter((v): v is string => v !== null)
+        .join(", ");
+      const legacy = (s.cameraPitch ?? "").trim();
+      return [
+        `- id ${s.id} — ${label}`,
+        held ? `  already set: ${held}` : "  already set: (nothing)",
+        legacy ? `  legacy camera text: ${legacy}` : "  legacy camera text: (none)",
+      ].join("\n");
+    })
+    .join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT.ASSET_LIBRARY — anchors: project. LLMW.VAR.CASTING.1 (B7h-b1). The
 // project's assets, **addressable** — carrying their own `id`, unlike
@@ -2666,6 +2745,9 @@ export const VARIABLE_RENDER_FORMS = {
   "SEQ.SHOT_TARGETS": {
     "castingFromSequence.shotsLines": renderCastingFromSequenceShotsLines,
   },
+  "SEQ.SHOT_CAMERA": {
+    "cameraConvert.shotLines": renderCameraConvertShotLines,
+  },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
     "assetDescription.finalRuleLine": renderProjectStyleDescriptionOnlyFinalRule,
@@ -2728,6 +2810,7 @@ export const MULTI_VARIABLE_RENDER_FORMS = {
   "castingFromSequence.sequenceContextLines": renderCastingFromSequenceSequenceContextLines,
   "castingFromSequence.existingCastingsBlock": renderCastingFromSequenceExistingCastingsBlock,
   "narrativePrompt.contextLines": renderNarrativePromptContextLines,
+  "cameraConvert.header": renderCameraConvertHeader,
 } as const;
 
 /**
@@ -2856,6 +2939,7 @@ export const VARIABLE_REGISTRY = {
   "PROJECT.SHOTS": resolveProjectShots,
   "PROJECT.ASSETS": resolveProjectAssets,
   "SEQ.SHOT_TARGETS": resolveSeqShotTargets,
+  "SEQ.SHOT_CAMERA": resolveSeqShotCamera,
   "PROJECT.ASSET_LIBRARY": resolveProjectAssetLibrary,
   "SEQ.EXISTING_CASTINGS": resolveSeqExistingCastings,
   "SEQ.IDENTITY": resolveSeqIdentity,

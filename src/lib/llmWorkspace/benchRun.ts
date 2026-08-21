@@ -335,6 +335,10 @@ export const REDIRECT_CONFIRMATION_KEYS = {
   // is `response: "returnValue"`, not `redirectOnly` — it has no entry here,
   // the same reason `updateAssetDescriptionFieldInline` has none either.
   updateShotLighting: { successKey: "shotLightingSaved", errorKey: "shotLightingError" },
+  applyCameraConversions: {
+    successKey: "cameraConversionApplied",
+    errorKey: "cameraConversionError",
+  },
   updateSequenceLighting: { successKey: "sequenceLightingSaved", errorKey: "sequenceLightingError" },
 } as const satisfies Record<RedirectOnlyActionId, { successKey: string; errorKey: string }>;
 
