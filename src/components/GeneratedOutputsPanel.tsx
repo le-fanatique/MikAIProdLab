@@ -1,4 +1,5 @@
 import WorkflowKindBadge from "@/components/WorkflowKindBadge";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { attachOutputAsShotReference } from "@/actions/generation";
 import { generatedOutputUrl } from "@/lib/getOutputUrl";
 
@@ -93,11 +94,25 @@ export default function GeneratedOutputsPanel({
                 {/* Preview */}
                 <div className="w-full aspect-video bg-[#141618] rounded overflow-hidden flex items-center justify-center">
                   {isImage ? (
-                    <img
+                    /* Same hover preview as the reference images and the Asset
+                       gallery. `focusable` is TRUE here, unlike there: this
+                       wrapper holds a bare <img>, and the card's own focusable
+                       controls (Open, Attach as Reference) are siblings further
+                       down, not descendants — so nothing would forward focus
+                       and the wrapper has to become the keyboard target itself. */
+                    <ThumbnailHoverPreview
                       src={src}
                       alt={wfName}
-                      className="w-full h-full object-cover"
-                    />
+                      focusable
+                      className="w-full h-full"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={src}
+                        alt={wfName}
+                        className="w-full h-full object-contain"
+                      />
+                    </ThumbnailHoverPreview>
                   ) : isVideo ? (
                     <video
                       src={src}

@@ -603,33 +603,39 @@ export default async function AssetGenerationPanel({
                         >
                           {/* Same hover preview as the reference images: one
                               component, one global size, object-contain so the
-                              popup never crops. The checkbox inside this label
-                              is already focusable, so `focusable` stays false —
-                              onFocus bubbles from it and two tab stops for one
-                              thumbnail are avoided. */}
+                              popup never crops.
+
+                              It wraps the WHOLE cell, checkbox included, and
+                              that placement is the point: `focusable` may only
+                              stay false when something focusable sits INSIDE
+                              the wrapper, since onFocus bubbles up from it.
+                              Wrapping the image alone left the checkbox a
+                              sibling, so keyboard focus reached nothing and the
+                              preview never opened without a mouse. */}
                           <ThumbnailHoverPreview
                             src={generatedOutputUrl(output.path) ?? `/${output.path}`}
                             alt={`Output ${output.index + 1}`}
+                            className="flex flex-col gap-1"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={generatedOutputUrl(output.path) ?? `/${output.path}`}
                               alt={`Output ${output.index + 1}`}
-                              className="w-full aspect-square rounded object-cover"
+                              className="w-full aspect-square rounded object-contain"
                             />
-                          </ThumbnailHoverPreview>
-                          <span className="flex items-center gap-1.5">
-                            <input
-                              type="checkbox"
-                              name="outputIndex"
-                              value={String(output.index)}
-                              defaultChecked
-                              className="accent-[#6b9e72]"
-                            />
-                            <span className="text-[10px] text-[#a4abb2]">
-                              {output.index + 1}
+                            <span className="flex items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                name="outputIndex"
+                                value={String(output.index)}
+                                defaultChecked
+                                className="accent-[#6b9e72]"
+                              />
+                              <span className="text-[10px] text-[#a4abb2]">
+                                {output.index + 1}
+                              </span>
                             </span>
-                          </span>
+                          </ThumbnailHoverPreview>
                         </label>
                       ))}
                     </div>
