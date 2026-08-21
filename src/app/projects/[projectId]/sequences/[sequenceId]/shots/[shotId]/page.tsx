@@ -354,7 +354,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       description: shot.description,
       actionPitch: shot.actionPitch,
       cameraPitch: shot.cameraPitch,
-      framing: shot.framing,
+      framing: shot.shotSize,
       cameraMovement: shot.cameraMovement,
     },
     castAssets: assignedRows.map((r) => ({
@@ -415,8 +415,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       `Camera: ${shot.cameraPitch.slice(0, 60)}${shot.cameraPitch.length > 60 ? "…" : ""}`
     );
   }
-  if (shot.framing) {
-    composerIngredients.push(`Framing: ${shot.framing}`);
+  if (shot.shotSize) {
+    composerIngredients.push(`Framing: ${shot.shotSize}`);
   }
   if (shot.cameraMovement) {
     composerIngredients.push(`Movement: ${shot.cameraMovement}`);
@@ -427,7 +427,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     shot.description || shot.actionPitch || shot.cameraPitch
   );
   const hasContinuity = Boolean(shot.continuityIn || shot.continuityOut || shot.continuityNotes);
-  const hasCamera = Boolean(shot.framing || shot.cameraMovement);
+  const hasCamera = Boolean(shot.shotSize || shot.cameraMovement);
 
   // ── Capture destinations ────────────────────────────────────────────────────
   const approvedVideoExt = shot.approvedVideoPath?.split(".").pop()?.toLowerCase() ?? "";
@@ -775,8 +775,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
           <Collapsible label="Camera">
             <Card title="Camera">
               <div className="flex flex-col gap-4">
-                {shot.framing && (
-                  <Field label="Framing" value={shot.framing} />
+                {shot.shotSize && (
+                  <Field label="Framing" value={shot.shotSize} />
                 )}
                 {shot.cameraMovement && (
                   <Field label="Camera Movement" value={shot.cameraMovement} />

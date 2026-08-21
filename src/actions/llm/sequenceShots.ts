@@ -123,7 +123,7 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
       durationSeconds: shot.duration_seconds ?? null,
       actionPitch: shot.action_pitch ?? null,
       cameraPitch: shot.camera_pitch ?? null,
-      framing: shot.framing ?? null,
+      shotSize: shot.framing ?? null,
       cameraMovement: shot.camera_movement ?? null,
       continuityIn: shot.continuity_in ?? null,
       continuityOut: shot.continuity_out ?? null,

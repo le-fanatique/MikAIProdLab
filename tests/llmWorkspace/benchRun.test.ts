@@ -118,7 +118,7 @@ describe("buildShotJsonPayload — LLMW.UC1.BENCH.1 (B11-b3)", () => {
     actionPitch: "Hero walks in, pauses, walks out.",
     cameraPitch: "Low angle, static.",
     continuityNotes: "Picks up from the previous shot's exit direction.",
-    framing: "WS",
+    shotSize: "WS",
     cameraMovement: "static",
     continuityIn: "Hero was off-frame, entering left.",
     continuityOut: "Hero exits right, into the next shot.",
@@ -137,7 +137,7 @@ describe("buildShotJsonPayload — LLMW.UC1.BENCH.1 (B11-b3)", () => {
     expect(parsed.actionPitch).toBe(fullDraft.actionPitch);
     expect(parsed.cameraPitch).toBe(fullDraft.cameraPitch);
     expect(parsed.continuityNotes).toBe(fullDraft.continuityNotes);
-    expect(parsed.framing).toBe(fullDraft.framing);
+    expect(parsed.shotSize).toBe(fullDraft.shotSize);
     expect(parsed.cameraMovement).toBe(fullDraft.cameraMovement);
     expect(parsed.continuityIn).toBe(fullDraft.continuityIn);
     expect(parsed.continuityOut).toBe(fullDraft.continuityOut);

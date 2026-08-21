@@ -48,7 +48,7 @@ describe("buildInsertShotDirectedHiddenFields — shot.insertDirected surface (S
     actionPitch: "Hero walks in, pauses, walks out.",
     cameraPitch: "Low angle, static.",
     continuityNotes: "Picks up from the previous shot's exit direction.",
-    framing: "WS",
+    shotSize: "WS",
     cameraMovement: "static",
     continuityIn: "Hero was off-frame, entering left.",
     continuityOut: "Hero exits right, into the next shot.",

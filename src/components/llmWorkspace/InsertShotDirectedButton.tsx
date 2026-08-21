@@ -65,7 +65,7 @@ const FIELD_LABELS: Record<string, string> = {
   actionPitch: "Action Pitch",
   cameraPitch: "Camera Pitch",
   continuityNotes: "Continuity Notes",
-  framing: "Framing",
+  shotSize: "Framing",
   cameraMovement: "Camera Movement",
   continuityIn: "Continuity In",
   continuityOut: "Continuity Out",
@@ -237,7 +237,7 @@ export default function InsertShotDirectedButton({
                       const value = e.target.value;
                       setDraft((prev) => ({ ...prev, [f.field]: value }));
                     }}
-                    rows={f.field === "title" || f.field === "framing" || f.field === "cameraMovement" ? 1 : 2}
+                    rows={f.field === "title" || f.field === "shotSize" || f.field === "cameraMovement" ? 1 : 2}
                     className={textareaClass}
                   />
                 )}

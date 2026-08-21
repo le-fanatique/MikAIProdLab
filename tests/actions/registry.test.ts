@@ -439,7 +439,7 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].durationSeconds).toBe(5);
     expect(created[0].actionPitch).toBe("ap1");
     expect(created[0].cameraPitch).toBe("cp1");
-    expect(created[0].framing).toBe("wide");
+    expect(created[0].shotSize).toBe("wide");
     expect(created[0].cameraMovement).toBe("pan");
     expect(created[0].continuityIn).toBe("ci1");
     expect(created[0].continuityOut).toBe("co1");
@@ -982,7 +982,7 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
         "actionPitch",
         "cameraPitch",
         "continuityNotes",
-        "framing",
+        "shotSize",
         "cameraMovement",
         "continuityIn",
         "continuityOut",
@@ -1175,7 +1175,7 @@ describe("UC1 end to end — buildShotJsonPayload feeds createShotAtPosition (LL
       actionPitch: "Hero walks in, pauses, walks out.",
       cameraPitch: "Low angle, static.",
       continuityNotes: "Picks up the previous shot's exit direction.",
-      framing: "WS",
+      shotSize: "WS",
       cameraMovement: "static",
       continuityIn: "Hero off-frame, entering left.",
       continuityOut: "Hero exits right.",
@@ -1204,7 +1204,7 @@ describe("UC1 end to end — buildShotJsonPayload feeds createShotAtPosition (LL
     // serializer. A `"4"` here would have been dropped to null in silence.
     expect(inserted.durationSeconds).toBe(4);
     expect(inserted.orderIndex).toBe(1);
-    expect(inserted.framing).toBe("WS");
+    expect(inserted.shotSize).toBe("WS");
     expect(inserted.continuityOut).toBe("Hero exits right.");
   });
 

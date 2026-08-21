@@ -31,7 +31,7 @@ describe("updateShotPrompt — exact write", () => {
     const shotId = await insertShot(ctx, sequenceId, {
       shotPrompt: "Old prompt",
       description: "Untouched description",
-      framing: "Untouched framing",
+      shotSize: "Untouched framing",
     });
     const before = await readShot(ctx, shotId);
 

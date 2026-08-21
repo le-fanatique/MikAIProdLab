@@ -347,7 +347,7 @@ export async function resolveShotCore(shotId: number): Promise<ShotCoreData> {
     description: shot.description,
     actionPitch: shot.actionPitch,
     cameraPitch: shot.cameraPitch,
-    framing: shot.framing,
+    framing: shot.shotSize,
     cameraMovement: shot.cameraMovement,
     durationSeconds: shot.durationSeconds,
   };
@@ -468,7 +468,7 @@ export async function resolveShotReferences(shotId: number): Promise<ShotReferen
 // l'identifiant" per §4.1 of the ticket; not the DB primary key, which is
 // never meaningful prose for the model), `orderIndex`, `title`,
 // `description`, `actionPitch` — the five fields §4.1 asks for at minimum,
-// and no more: `cameraPitch`/`framing`/`cameraMovement` are not included,
+// and no more: `cameraPitch`/`shotSize`/`cameraMovement` are not included,
 // since UC2's own "other Shots" context (§4 of the vision doc) only asks for
 // continuity of story and action, not camera, and every extra field costs
 // tokens on every call, on every Shot, in every render.
@@ -2009,7 +2009,7 @@ export const SHOT_RETAKE_SYSTEM_INTRO =
 export const SHOT_INSERT_SYSTEM_INTRO =
   "You are a storyboard supervisor on an animation production. You write single shots that slot into an existing sequence without breaking its continuity, using the professional vocabulary a layout or animation team can act on.";
 
-/** Template: the Shot being retaken — its own narrative fields, not its camera/movement (§0bis: framing/cameraMovement are never read or written by this operation). */
+/** Template: the Shot being retaken — its own narrative fields, not its camera/movement (§0bis: shotSize/cameraMovement are never read or written by this operation). */
 export function renderShotCoreRetakeLines(shot: ShotCoreData): string {
   const label = shot.shotCode ? `${shot.shotCode} — ${shot.title}` : shot.title;
   const lines: string[] = [`Shot being retaken: ${label}`];

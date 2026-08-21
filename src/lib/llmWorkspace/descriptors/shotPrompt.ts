@@ -26,7 +26,7 @@
 // `PROJECT.IDENTITY` subset — no `description`, no `outline`),
 // `sequence.{title, summary, description, mood, locationHint}`
 // (`SEQ.CONTEXT`, all five fields), `shot.{title, shotCode, description,
-// actionPitch, cameraPitch, framing, cameraMovement, durationSeconds}`
+// actionPitch, cameraPitch, shotSize, cameraMovement, durationSeconds}`
 // (`SHOT.CORE`, all eight fields), `shot.shotPrompt` (`SHOT.CURRENT_PROMPT`),
 // the Shot's cast Assets ordered by name (`SHOT.CAST`), and the Shot's
 // reference images ordered by `orderIndex` (`SHOT.REFERENCES`).

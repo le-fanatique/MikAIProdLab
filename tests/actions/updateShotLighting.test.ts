@@ -42,7 +42,7 @@ describe("updateShotLighting — exact write", () => {
       narrativePrompt: "Generated narrative prompt",
       lighting: "Old lighting",
       description: "Untouched description",
-      framing: "Untouched framing",
+      shotSize: "Untouched framing",
     });
     const before = await readShot(ctx, shotId);
 

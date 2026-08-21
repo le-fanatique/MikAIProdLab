@@ -32,7 +32,7 @@ describe("updateShotNarrativePrompt — exact write", () => {
       shotPrompt: "Human-written shot prompt",
       narrativePrompt: "Old narrative prompt",
       description: "Untouched description",
-      framing: "Untouched framing",
+      shotSize: "Untouched framing",
     });
     const before = await readShot(ctx, shotId);
 

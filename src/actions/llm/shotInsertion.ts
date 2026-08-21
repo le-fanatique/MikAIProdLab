@@ -60,7 +60,7 @@ type ProposedShot = {
   actionPitch: string | null;
   cameraPitch: string | null;
   continuityNotes: string | null;
-  framing: string | null;
+  shotSize: string | null;
   cameraMovement: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
@@ -95,7 +95,7 @@ function normalizeProposedShot(raw: unknown): ProposedShot | null {
     // bounds must stay equal, or one side truncates what the other accepts.
     cameraPitch: str(r.cameraPitch, 500),
     continuityNotes: str(r.continuityNotes, 500),
-    framing: str(r.framing, 50),
+    shotSize: str(r.shotSize, 50),
     cameraMovement: str(r.cameraMovement, 50),
     continuityIn: str(r.continuityIn, 500),
     continuityOut: str(r.continuityOut, 500),
@@ -215,7 +215,7 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
         actionPitch: proposed!.actionPitch,
         cameraPitch: proposed!.cameraPitch,
         continuityNotes: proposed!.continuityNotes,
-        framing: proposed!.framing,
+        shotSize: proposed!.shotSize,
         cameraMovement: proposed!.cameraMovement,
         continuityIn: proposed!.continuityIn,
         continuityOut: proposed!.continuityOut,

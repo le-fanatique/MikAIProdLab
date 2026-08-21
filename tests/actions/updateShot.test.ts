@@ -43,7 +43,7 @@ function fullShotForm(shot: Awaited<ReturnType<typeof readShot>>, overrides: Rec
     action_pitch: shot.actionPitch ?? "",
     camera_pitch: shot.cameraPitch ?? "",
     continuity_notes: shot.continuityNotes ?? "",
-    framing: shot.framing ?? "",
+    framing: shot.shotSize ?? "",
     camera_movement: shot.cameraMovement ?? "",
     continuity_in: shot.continuityIn ?? "",
     continuity_out: shot.continuityOut ?? "",
@@ -98,7 +98,7 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
       // this test's changedColumns assertion is about `lighting` alone, not
       // a pre-existing quirk of that unrelated function.
       shotPrompt: "Untouched description",
-      framing: "MS",
+      shotSize: "MS",
     });
     const before = await readShot(ctx, shotId);
 
@@ -115,7 +115,7 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
     );
     expect(after.title).toBe("Shot B renamed");
     expect(after.description).toBe("Untouched description");
-    expect(after.framing).toBe("MS");
+    expect(after.shotSize).toBe("MS");
     expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual(["title"]);
   });
 

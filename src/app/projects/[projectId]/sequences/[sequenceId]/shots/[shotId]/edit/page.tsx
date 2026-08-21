@@ -122,7 +122,7 @@ export default async function EditShotPage({ params }: Props) {
         <FormField
           label="Framing"
           name="framing"
-          defaultValue={shot.framing}
+          defaultValue={shot.shotSize}
           placeholder='e.g. "CU", "MS", "WS", "ECU", "OTS"'
         />
         <FormField

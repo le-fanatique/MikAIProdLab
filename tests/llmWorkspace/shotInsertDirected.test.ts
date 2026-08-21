@@ -511,7 +511,7 @@ describe("shot.insertDirected — output parsing", () => {
         actionPitch: "The hero runs in from screen left and exits right.",
         cameraPitch: "Ground-level static camera, hero crosses the whole frame.",
         continuityNotes: "Hero is still being chased by Vex.",
-        framing: "WS",
+        shotSize: "WS",
         cameraMovement: "static",
         continuityIn: "Vex is one rooftop behind the hero.",
         continuityOut: "The hero has crossed the rooftop, Vex not yet visible.",

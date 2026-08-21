@@ -1,0 +1,1 @@
+ALTER TABLE `shots` RENAME COLUMN "framing" TO "shot_size";

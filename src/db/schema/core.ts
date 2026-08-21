@@ -67,8 +67,14 @@ export const shots = sqliteTable("shots", {
   actionPitch: text("action_pitch"),
   cameraPitch: text("camera_pitch"),
   continuityNotes: text("continuity_notes"),
-  framing: text("framing"),
+  shotSize: text("shot_size"),
   cameraMovement: text("camera_movement"),
+  // B19b — the three axes that had never been opened. Nullable, no default;
+  // camera_pitch (kept, see below) remains the sole source of angle/position
+  // for existing shots until B19f's LLM conversion pass.
+  cameraPosition: text("camera_position"),
+  movementSpeed: text("movement_speed"),
+  cameraSubject: text("camera_subject"),
   continuityIn: text("continuity_in"),
   continuityOut: text("continuity_out"),
   shotPrompt: text("shot_prompt"),

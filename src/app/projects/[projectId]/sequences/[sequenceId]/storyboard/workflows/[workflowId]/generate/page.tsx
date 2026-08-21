@@ -391,7 +391,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
       durationSeconds: s.durationSeconds,
       hasApprovedVideo: s.approvedVideoPath !== null,
       continuity: {
-        framing: s.framing,
+        framing: s.shotSize,
         cameraMovement: s.cameraMovement,
         continuityIn: s.continuityIn,
         continuityOut: s.continuityOut,

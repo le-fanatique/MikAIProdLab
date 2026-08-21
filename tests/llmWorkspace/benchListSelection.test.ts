@@ -152,7 +152,7 @@ describe("buildListSelectionPayload — the payload round trip proof (LLMW.PROPO
       "continuityIn",
       "actionPitch",
       "cameraPitch",
-      "framing",
+      "shotSize",
       "cameraMovement",
       "continuityOut",
       "shotPrompt",

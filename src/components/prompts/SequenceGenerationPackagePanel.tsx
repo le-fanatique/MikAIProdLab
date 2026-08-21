@@ -19,7 +19,7 @@ type ShotRow = {
   description: string | null;
   actionPitch: string | null;
   cameraPitch: string | null;
-  framing: string | null;
+  shotSize: string | null;
   cameraMovement: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
@@ -215,7 +215,7 @@ export default async function SequenceGenerationPackagePanel({
       durationSeconds: s.durationSeconds,
       hasApprovedVideo: s.approvedVideoPath !== null,
       continuity: {
-        framing: s.framing,
+        framing: s.shotSize,
         cameraMovement: s.cameraMovement,
         continuityIn: s.continuityIn,
         continuityOut: s.continuityOut,

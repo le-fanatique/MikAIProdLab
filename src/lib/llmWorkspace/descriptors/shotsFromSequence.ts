@@ -167,7 +167,7 @@ CONTINUITY RULES:
         { type: "string", field: "continuityIn", jsonKey: "continuity_in", truncateTo: 500 },
         { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 300 },
         { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 200 },
-        { type: "string", field: "framing", jsonKey: "framing", truncateTo: 50 },
+        { type: "string", field: "shotSize", jsonKey: "framing", truncateTo: 50 },
         { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
         { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },
         { type: "string", field: "shotPrompt", jsonKey: "shot_prompt", truncateTo: 1000 },

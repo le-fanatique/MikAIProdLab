@@ -51,7 +51,7 @@ export type ConformationRequest = {
    *
    * **This is the ticket's most important constraint, and it is deliberate.**
    * §5.6: *"The conformation stage (§5.4) must therefore not hard-code today's
-   * camera shape."* Today that shape is `cameraPitch` / `framing` /
+   * camera shape."* Today that shape is `cameraPitch` / `shotSize` /
    * `cameraMovement`, and B19 is scheduled to redesign it after Chantier 2.
    *
    * So this stage **counts** these phrases — the guide asks for one primary

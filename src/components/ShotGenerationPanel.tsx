@@ -263,7 +263,7 @@ export default async function ShotGenerationPanel({
             description: shot.description,
             actionPitch: shot.actionPitch,
             cameraPitch: shot.cameraPitch,
-            framing: shot.framing,
+            framing: shot.shotSize,
             cameraMovement: shot.cameraMovement,
           },
           castAssets: assignedRows.map((r) => ({

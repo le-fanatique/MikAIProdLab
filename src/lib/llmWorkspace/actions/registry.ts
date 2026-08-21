@@ -352,7 +352,7 @@ export const ACTION_REGISTRY = {
     notes: [
       "Full replacement: `set({ ...data })` writes all three fields on every call (src/actions/shots.ts:155-158) — a caller passing null for a field nulls the column. Proven by tests/actions/registry.test.ts's own column-correspondence case for this entry.",
       "Ownership check (src/actions/shots.ts:143-153, two SELECTs — shot->sequence, sequence->project) and mutation (src/actions/shots.ts:155-158, UPDATE) are three separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
-      "Never redirects, never touches shotPrompt/framing/cameraMovement/shotCode/title/duration/continuity — the narrow surface §0bis of the ticket arbitrated updateShot out for.",
+      "Never redirects, never touches shotPrompt/shotSize/cameraMovement/shotCode/title/duration/continuity — the narrow surface §0bis of the ticket arbitrated updateShot out for.",
     ],
   },
 
@@ -380,7 +380,7 @@ export const ACTION_REGISTRY = {
         "durationSeconds",
         "actionPitch",
         "cameraPitch",
-        "framing",
+        "shotSize",
         "cameraMovement",
         "continuityIn",
         "continuityOut",
@@ -517,7 +517,7 @@ export const ACTION_REGISTRY = {
         "actionPitch",
         "cameraPitch",
         "continuityNotes",
-        "framing",
+        "shotSize",
         "cameraMovement",
         "continuityIn",
         "continuityOut",

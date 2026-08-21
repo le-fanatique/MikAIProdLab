@@ -48,7 +48,7 @@
 //      — verified against that file directly, not assumed from the ticket's
 //      own table: `title` 200, `description` 500, `actionPitch` 300,
 //      `cameraPitch` 500 (raised from 200 by LLMW.UC1.TUNE.2, S7b, défaut 2
-//      — see below), `continuityNotes` 500, `framing` 50, `cameraMovement`
+//      — see below), `continuityNotes` 500, `shotSize` 50, `cameraMovement`
 //      50, `continuityIn` 500, `continuityOut` 500. A mismatch here would
 //      truncate the same field twice, at two different lengths — the
 //      ticket's own named risk.
@@ -105,7 +105,7 @@
 //      equal — see decision 4 above and `.agents/executor_report.md`.
 //
 // LLMW.UC1.TUNE.3 (S7c) — `action_pitch` and `continuity_notes` had no rule
-// of their own, unlike `framing`, `camera_movement` and `duration_seconds`.
+// of their own, unlike `framing` (`shotSize`), `camera_movement` and `duration_seconds`.
 // On the user's third real Run the model filled that gap with the
 // directive's own intention ("A deliberate, quiet pause that externalizes
 // Azelle's tactical hesitation...") instead of a playable action, and with
@@ -218,7 +218,7 @@ No markdown. No explanation. Only the JSON object.`,
       { type: "string", field: "actionPitch", jsonKey: "action_pitch", truncateTo: 500 },
       { type: "string", field: "cameraPitch", jsonKey: "camera_pitch", truncateTo: 500 },
       { type: "string", field: "continuityNotes", jsonKey: "continuity_notes", truncateTo: 500 },
-      { type: "string", field: "framing", jsonKey: "framing", truncateTo: 50 },
+      { type: "string", field: "shotSize", jsonKey: "framing", truncateTo: 50 },
       { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
       { type: "string", field: "continuityIn", jsonKey: "continuity_in", truncateTo: 500 },
       { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },

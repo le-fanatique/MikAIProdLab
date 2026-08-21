@@ -86,7 +86,7 @@ beforeAll(async () => {
     description: "The hero steps into frame.",
     actionPitch: "Walks forward, looks up.",
     cameraPitch: "Slow push-in.",
-    framing: "Medium shot",
+    shotSize: "Medium shot",
     cameraMovement: "Dolly",
     durationSeconds: 4,
     shotPrompt: "An existing shot prompt.",

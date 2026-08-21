@@ -15,7 +15,7 @@
 //
 // §0bis (the user's 2026-08-15 arbitrage): the write side is
 // `updateShotNarrativeContext` (`src/actions/shots.ts:132`) — description,
-// actionPitch, cameraPitch only. `framing`/`cameraMovement` are read nowhere
+// actionPitch, cameraPitch only. `shotSize`/`cameraMovement` are read nowhere
 // here and never written. `updateShot` is not used.
 // ---------------------------------------------------------------------------
 
