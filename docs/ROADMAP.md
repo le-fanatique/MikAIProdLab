@@ -40,9 +40,8 @@ groupe recopié dans un champ (`"Dutch / Canted (tilt)"`, corrigé), et 22 plans
 dont la focale n'avait aucun axe où aller — d'où `camera_lens`, sans lequel la
 suppression du champ hérité les aurait détruites.
 
-**Reste `B19h`** — retirer `camera_pitch`. Ticket écrit, pas exécuté :
-l'exécutant a atteint sa limite hebdomadaire, retour le 23. Le feu vert est
-mesuré : zéro plan ne perdrait quoi que ce soit.
+**B19 est complet** (`4370260`). `camera_pitch` est retiré ; il ne reste qu'à
+appliquer la migration `0060`, un simple `DROP COLUMN`.
 
 ---
 

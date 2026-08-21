@@ -64,7 +64,7 @@ so three axes lived as prose in `camera_pitch` on 88 shots.
 | B19d | `8bc467b`, `ec711f6` | both instructions render from the declaration; nothing is hand-copied. Values are written the way the trade writes them — `MS`, but `Low Angle` |
 | B19e | `2ba4ac8` | the camera line follows the Seedance 2.5 template, and the conformation counts **movements** instead of filled fields |
 | B19g | `2b79abc` | a **lens axis**, opened because the conversion proved one was needed: 22 shots stated a focal length the other five axes could not hold |
-| B19h | ticket written | removing `camera_pitch`, the last trace of the old model |
+| B19h | `4370260` | `camera_pitch` removed. `shot.retakeDirected` keeps its capability on `camera_subject`; the conversion operation is deleted with the column it read |
 | B19f | `b5a8ce2` | the conversion pass — a list operation over the sequence, bench-only, every proposal shown beside the text it came from |
 
 **B19 is complete.** B19d, B19e and B19f were finished in the main thread:
@@ -103,6 +103,13 @@ repeating a key instruction does not hurt. It is recorded in
 A decision that also held end to end: `"tilt and lateral tracking"` became
 `Tracking`, not `Truck Left`, because the source never says which side. That is
 exactly why B19a refused to alias `tracking` onto a directional movement.
+
+**Two silent losses the removal surfaced, neither by any check.** Generate
+Shots read `framing` for the shot size after B19d had rewritten the instruction
+to ask for `shot_size`, so it stored none — and it had no path at all for
+`camera_position`, `movement_speed`, `camera_subject` or `camera_lens`. A
+round-trip test had recorded that gap as *expected behaviour*; it now asserts
+the opposite.
 
 **Three reversals, all sourced.** Size intervals are allowed — the 2.5 guide
 speaks of a starting and an ending shot size, and the ban came from 2.0. The
