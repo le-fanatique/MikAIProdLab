@@ -27,23 +27,14 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Chantier « Galerie de templates de génération »**, ouvert le 2026-08-22 à la
-demande de l'auteur, après l'étude du catalogue `Comfy-Org/workflow_templates`.
-Aucun workflow n'est importé de ce projet : seul le design du catalogue sert de
-référence.
+**Rien.** Le chantier « Galerie de templates de génération » est clos le
+2026-08-22, ses trois tickets commités, poussés et migrés — voir la section 6.
 
-Le problème : choisir un workflow pour générer, c'est lire une liste plate,
-dupliquée dans cinq pages, où tout apparaît partout — le seul filtre existant
-est `kind === "image"`.
-
-| Ticket | État | Ce qu'il fait |
-| --- | --- | --- |
-| `WF.CATALOG.1` | **clos** — `cf5e5a8`, migration `0061` appliquée | le module pur `workflowCatalog.ts` (six contextes, huit catégories, `isWorkflowOfferedIn`) et six colonnes additives sur `comfy_workflows` |
-| `WF.CATALOG.2` | à venir | l'écriture : upload de vignette, validation stricte, formulaires du manager |
-| `WF.GALLERY.1` | à venir | la vitrine : composant partagé, adoption par les cinq pages, filtrage par contexte |
-
-Les deux chantiers précédents, `SEQGEN.STORYBOARD.SHOTRANGE.1` et
-`SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1`, sont clos — voir la section 6.
+Il reste **une vérification que l'auteur seul peut faire** : générer réellement
+une image et une vidéo depuis la nouvelle galerie. Ni le superviseur ni
+l'exécuteur ne l'ont lancée, parce que mettre un job en file engage ComfyUI et
+d'éventuels appels payants. Tout le chemin en amont est prouvé dans un vrai
+navigateur, jusqu'à l'ouverture de la page de génération incluse.
 
 Le reste demande une décision de l'auteur (section 2) ou attend ses données
 réelles.

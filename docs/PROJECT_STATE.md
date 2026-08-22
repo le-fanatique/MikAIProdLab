@@ -2,7 +2,58 @@
 
 Last updated: 2026-08-22
 
-## Workflow template gallery — `WF.CATALOG.1` shipped (2026-08-22)
+## Workflow template gallery — chantier COMPLETE (2026-08-22)
+
+Three tickets, all committed, pushed, migration `0061` applied by the author.
+
+| Ticket | Commit | What landed |
+| --- | --- | --- |
+| `WF.CATALOG.1` | `cf5e5a8` | the closed vocabulary and six additive columns (detailed below) |
+| `WF.CATALOG.2` | `364d458` | the manager can fill them: category, tags, contexts, status, thumbnail upload |
+| `WF.GALLERY.1` | `3eca598` | the gallery itself — five duplicated flat lists replaced by one shared component |
+
+**What the gallery changed.** The same block of workflow cards existed in five
+pages and showed everything everywhere; the only filter was a hardcoded
+`kind === "image"`. All five now call `isWorkflowOfferedIn`, so the filter has
+exactly one definition, and the storyboard's image-only restriction became a
+property of the registry instead of a literal in a page. The diff removes more
+lines than it adds while adding thumbnails, categories, tags and search.
+
+Search is a `<form method="get">` filtered server-side — no client island, the
+pages stay Server Components. It carries the caller's own URL parameters as
+hidden fields: without that, searching from the storyboard would drop
+`storyboardRefs` and reopen a documented regression fix.
+
+**What it cost to learn, beyond `WF.CATALOG.1`'s lessons below:**
+
+- **the write side can reintroduce the `NULL` vs `[]` trap the read side had
+  just closed.** "No context checked" must store `NULL` ("offered everywhere"),
+  never `[]` ("offered nowhere"). Mutating that in the action leaves all 1651
+  tests green — **nothing in this repository tests a server action**, and the
+  ticket forbade building a harness for it. That behaviour is proven only in
+  the browser;
+- **the executor had no browser access; the supervisor did.** Two visual
+  defects survived a self-declared-complete implementation and were only caught
+  by looking: the `kind` badge rendered twice on every card, and Settings showed
+  an empty band between two stacked section labels. Neither is findable by
+  `tsc`, tests, or reading a diff;
+- **file-then-row ordering, with compensation.** The thumbnail file is written
+  before the row, the old file is deleted only after the row update succeeds,
+  and a failed write deletes the orphan it just created.
+
+**Not verified, and the author owns it:** a real generation from the new
+gallery. Queuing a job engages ComfyUI and possibly paid calls. Everything
+upstream is proven in a real browser, including the generate page opening
+behind each card.
+
+Known debt: `deleteStoredReferenceImage` (`src/lib/uploadImage.ts`) swallows
+file-deletion failures silently. It is shared with the reference-image family,
+so fixing it was out of this chantier's scope — a thumbnail locked by the OS at
+replacement time stays on disk with nothing said.
+
+Tests: 1585 → 1651.
+
+## `WF.CATALOG.1` — the vocabulary (2026-08-22)
 
 `cf5e5a8`, migration `0061` generated here and applied by the author. Six
 additive columns on `comfy_workflows` (`category`, `tags`, `contexts`,
