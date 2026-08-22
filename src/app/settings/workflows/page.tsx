@@ -8,6 +8,7 @@ import SectionLabel from "@/components/SectionLabel";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import WorkflowTemplateGallery, { type WorkflowGalleryEntry } from "@/components/WorkflowTemplateGallery";
+import ThumbnailSizeControl from "@/components/ThumbnailSizeControl";
 import { deleteComfyWorkflow } from "@/actions/comfyWorkflows";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 
@@ -133,21 +134,24 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
         />
       ) : (
         <div className="flex flex-col gap-8">
-          <form method="get" className="flex items-center gap-2">
-            <input
-              type="text"
-              name="q"
-              defaultValue={search}
-              placeholder="Search by name, description or tag…"
-              className="w-full max-w-sm rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:outline-none focus:border-[#3a4046] transition-colors"
-            />
-            <button
-              type="submit"
-              className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
-            >
-              Search
-            </button>
-          </form>
+          <div className="flex items-center gap-4">
+            <form method="get" className="flex-1 flex items-center gap-2 min-w-0">
+              <input
+                type="text"
+                name="q"
+                defaultValue={search}
+                placeholder="Search by name, description or tag…"
+                className="w-full max-w-sm rounded bg-[#0d0e10] border border-[#2c3035] px-3 py-2 text-sm text-[#e7e9ec] placeholder-[#3a4046] focus:outline-none focus:border-[#3a4046] transition-colors"
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+              >
+                Search
+              </button>
+            </form>
+            <ThumbnailSizeControl />
+          </div>
 
           <div>
             {/* "Active" only means something opposite an "Archived" group —
@@ -162,6 +166,7 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
               renderActions={renderActions}
               renderBadges={(wf) => <DefaultBadges workflow={wf} defaults={defaults} />}
               renderSearchForm={false}
+              sizable
             />
           </div>
 
@@ -175,6 +180,7 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
                 renderActions={renderActions}
                 renderBadges={(wf) => <DefaultBadges workflow={wf} defaults={defaults} />}
                 renderSearchForm={false}
+                sizable
               />
             </div>
           )}

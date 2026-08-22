@@ -4,6 +4,7 @@ import SectionLabel from "@/components/SectionLabel";
 import WorkflowTemplateCard from "@/components/WorkflowTemplateCard";
 import { parseWorkflowTags, type WorkflowContextId } from "@/lib/comfy/workflowCatalog";
 import { selectGalleryWorkflows, type GalleryWorkflowRow } from "@/lib/comfy/workflowGallery";
+import { THUMBNAIL_SIZE_CSS_VAR, THUMBNAIL_SIZE_DEFAULT } from "@/lib/thumbnailSize";
 
 /** What a caller's row needs on top of `GalleryWorkflowRow` to render as a card. */
 export type WorkflowGalleryEntry = GalleryWorkflowRow & {
@@ -38,6 +39,14 @@ type Props<T extends WorkflowGalleryEntry> = {
    * must share one search bar, not two — pass `false` on every instance but
    * the one that owns the visible `<form>`. Default `true`. */
   renderSearchForm?: boolean;
+  /** WF.LIBRARY.2 — when true, each section's grid columns follow the
+   * shared thumbnail-size preference (`ThumbnailSizeControl`,
+   * `--wf-thumb-size`) instead of the fixed `grid-cols-1 sm:grid-cols-2
+   * lg:grid-cols-3` breakpoints. Only the Settings workflow manager opts in;
+   * the four production galleries (shots, assets, storyboard, storyboard
+   * video) are out of this ticket's scope and keep the fixed grid. Default
+   * `false`. */
+  sizable?: boolean;
 };
 
 export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>({
@@ -52,6 +61,7 @@ export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>(
   searchParamName = "q",
   hiddenFields,
   renderSearchForm = true,
+  sizable = false,
 }: Props<T>) {
   // Search-independent: is there anything at all to show here? If not, a
   // search box over an empty context is not useful — show the "no workflow"
@@ -98,7 +108,16 @@ export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>(
           {sections.map((section) => (
             <div key={section.categoryId}>
               <SectionLabel label={section.label} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div
+                className={sizable ? "grid gap-4" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"}
+                style={
+                  sizable
+                    ? {
+                        gridTemplateColumns: `repeat(auto-fill, minmax(var(${THUMBNAIL_SIZE_CSS_VAR}, ${THUMBNAIL_SIZE_DEFAULT}px), 1fr))`,
+                      }
+                    : undefined
+                }
+              >
                 {section.workflows.map((workflow) => (
                   <WorkflowTemplateCard
                     key={workflow.id}
