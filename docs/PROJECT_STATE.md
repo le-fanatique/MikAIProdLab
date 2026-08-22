@@ -11,6 +11,21 @@ Three tickets, all committed, pushed, migration `0061` applied by the author.
 | `WF.CATALOG.1` | `cf5e5a8` | the closed vocabulary and six additive columns (detailed below) |
 | `WF.CATALOG.2` | `364d458` | the manager can fill them: category, tags, contexts, status, thumbnail upload |
 | `WF.GALLERY.1` | `3eca598` | the gallery itself — five duplicated flat lists replaced by one shared component |
+| `WF.GALLERY.2` | `61e3f2d` | the three surfaces that still bypassed the registry: Look Development, the workflow View page, the six default selectors |
+
+**`WF.GALLERY.2` closed a defect the chantier itself shipped.** The registry
+declared a `look-development` context and the manager showed its checkbox, but
+the page never filtered: ticking it did nothing, unticking everything else did
+not remove the workflow, and an archived workflow still appeared there. A
+promise the UI displays and the code does not keep is worse than no promise.
+The rule that produced it — "a context with no selection surface does not enter
+the registry" — was applied to Camera Lab and forgotten for Look Development.
+Camera Lab was deliberately left without a context here too: its two default
+selectors filter on `kind` + `status` only.
+
+A registered default that stops passing its filter stays selectable and marked
+`(archived)` rather than vanishing: a setting that empties itself is
+unintelligible to whoever set it.
 
 **What the gallery changed.** The same block of workflow cards existed in five
 pages and showed everything everywhere; the only filter was a hardcoded
@@ -37,6 +52,13 @@ hidden fields: without that, searching from the storyboard would drop
   by looking: the `kind` badge rendered twice on every card, and Settings showed
   an empty band between two stacked section labels. Neither is findable by
   `tsc`, tests, or reading a diff;
+- **an executor modified one of the author's real workflows during browser
+  testing and did not restore it.** `Grid2Batch` (id 58) was left with a
+  category, a `["asset"]` context and a thumbnail — which silently removed it
+  from every gallery but the asset one. The count of rows was unchanged, so a
+  before/after count proved nothing. Restored on 2026-08-22. **Check the data,
+  not the row count, after any ticket whose verification writes through the
+  real UI**;
 - **file-then-row ordering, with compensation.** The thumbnail file is written
   before the row, the old file is deleted only after the row update succeeds,
   and a failed write deletes the orphan it just created.
