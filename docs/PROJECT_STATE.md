@@ -171,6 +171,86 @@ be named in index order. Both were rewritten to isolate what they claim.
 database — no paid Cloud call — then confirmed by the author on a real
 generation.
 
+## `SEQGEN.STORYBOARD.SHOTRANGE.1` — le storyboard n'avale plus toute la séquence, 2026-08-22
+
+Un commit, `0e9e121`. Aucune migration. Demandé par l'auteur le jour même : le
+prompt Sequence Storyboard prenait systématiquement **tous** les Shots de la
+séquence, sans moyen d'en cadrer un extrait.
+
+Deux params d'URL optionnels, `shotFrom`/`shotTo`, portant des **ids de Shot**
+et non des positions, posés par deux `<select>` dans une carte « Storyboard
+Shot Range ». Absents — le défaut — le texte produit est inchangé **octet pour
+octet**, et un test l'exige.
+
+### La décision qui a cadré le ticket
+
+`shotList` est chargé deux fois indépendamment, par la page Generate et par
+`buildSequenceStoryboardGenerationContext`, et **c'est assumé** dans ce fichier
+depuis `SEQGEN.STORYBOARD.3`. La plage est donc un helper pur appliqué aux deux
+endroits — `selectStoryboardShotRange`, générique sur `{ id: number }` — pour
+que preview et queue ne puissent pas diverger, la contrainte que ce fichier
+porte déjà pour `includeWarnings`.
+
+Elle ne filtre que `shotInputs`, `shotCount` et l'entrée de
+`resolveStoryboardLighting`. **`shotIds` reste la séquence entière**, donc le
+pool de références de casting aussi : décision de l'auteur, prise avant
+l'écriture du ticket. Restreindre le casting aurait fait disparaître en
+silence une référence qu'il avait explicitement sélectionnée hors plage, et
+renuméroté les `@ImageN`.
+
+### Deux refus de deviner
+
+- une borne nommant un Shot inexistant est **ignorée avec un warning nommant
+  l'id**, jamais rabattue sur un voisin ;
+- une plage inversée **replie sur la séquence entière avec un warning**, au
+  lieu d'échanger les bornes. Échanger supposerait une intention que
+  l'utilisateur ne verrait nulle part.
+
+### Deux pièges que le ticket n'avait pas vus
+
+- **`Number("") === 0`.** L'option vide des `<select>` soumet `shotFrom=`,
+  chaîne vide, que `Number.isInteger` accepte comme `0` : « First Shot »
+  aurait été lu comme « Shot id 0 ». Sans le garde `trim() === ""`, le
+  contrôle spécifié ne fonctionnait pas.
+- **La clé de remontage de `WorkflowRuntimeMappingPanel`** devait inclure la
+  plage. Cette clé existe parce qu'un changement de `suggestedText` doit
+  re-semer le « Suggested Text » que le panneau tient en `useState` ; la plage
+  change `suggestedText` exactement comme l'ordre de casting le fait. Sans
+  elle, le bug de staleness déjà corrigé pour le casting revenait pour la
+  plage.
+
+### Et une prémisse fausse dans le ticket lui-même
+
+Le ticket demandait d'afficher les warnings « au même endroit que ceux du
+prompt ». **Cet endroit n'existe pas** : `promptResult.warnings` n'est rendu
+nulle part sur cette page, et ne l'a jamais été. L'exécutant l'a dit au lieu
+de bricoler autour. Les warnings vivent donc dans la carte Shot Range, en
+style informatif, jamais bloquant. La leçon est pour le superviseur : une
+consigne de réutilisation doit être vérifiée avant d'être écrite, pas
+supposée.
+
+### Preuve
+
+1549 → **1561 tests**, 12 ajoutés, aucune assertion existante modifiée ; le
+diff du snapshot est en pure addition, ce qui est la garantie mécanique que le
+défaut n'a pas bougé. Cinq mutations, dont la borne haute rendue exclusive —
+**7 tests sur 10 en échec** — rejouée par le superviseur et non pas seulement
+rapportée.
+
+Vérifié en navigateur sur données réelles (projet 18, séquence 57, 6 Shots) :
+6 vignettes sans plage, 3 avec `Sh_200`→`Sh_400`, la ligne `Shot range:`
+présente, le casting inchangé, et la plage qui survit au « Update Preview » des
+Image Inputs — le bug historique de `storyboardRefs`, non reproduit.
+
+### Dette laissée, sciemment
+
+- aux deux sites, un `?? { id: …! }` inatteignable : quand la plage est réelle,
+  l'id vient forcément de `shotList`. Deux assertions non-nulles pour un cas
+  impossible ;
+- le warning de plage inversée nomme l'id brut (« Shot 999221 ») et non le
+  `shotCode` (« Sh_400 »), parce que l'helper est générique et ignore les
+  libellés. Conforme au ticket, désagréable à lire.
+
 ## `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` — a debt closed by measuring, 2026-08-22
 
 One commit, `e418865`. No migration. Open since 2026-08-02.

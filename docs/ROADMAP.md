@@ -27,8 +27,8 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Les deux derniers chantiers — la refonte du vocabulaire caméra et
-`GEN.MULTIOUT.1` — sont clos, voir la section 6.
+**Rien.** Le dernier chantier, `SEQGEN.STORYBOARD.SHOTRANGE.1`, est clos —
+voir la section 6.
 
 Tout ce qui reste demande une décision de l'auteur (section 2) ou attend ses
 données réelles. Aucun ticket n'est prêt à être exécuté.
@@ -212,6 +212,27 @@ avec leur raison.
 ---
 
 ## 6. Clos — où le retrouver
+
+**`SEQGEN.STORYBOARD.SHOTRANGE.1` — clos le 2026-08-22**, un commit :
+`0e9e121`. Aucune migration.
+
+Ouvert et livré le même jour, à la demande de l'auteur. Le prompt Sequence
+Storyboard prenait systématiquement tous les Shots de la séquence ; deux params
+d'URL optionnels, `shotFrom`/`shotTo`, le cadrent sur une plage inclusive,
+posés par deux `<select>` dans une carte « Storyboard Shot Range ». Sans eux,
+le texte produit est inchangé octet pour octet.
+
+Trois arbitrages de l'auteur ont cadré le ticket avant son écriture : **le
+casting n'est pas restreint** par la plage — sinon une référence sélectionnée
+hors plage disparaîtrait en silence et les `@ImageN` seraient renumérotés — le
+choix vit dans l'URL et non en base, et les bornes se désignent par des Shots,
+jamais par des positions.
+
+Ce que ça a appris est dans `docs/PROJECT_STATE.md` : `Number("")` vaut `0`,
+donc l'option vide d'un `<select>` se lit comme l'id `0` si on ne la garde pas ;
+et une consigne de réutilisation écrite dans un ticket sans être vérifiée
+(« afficher au même endroit que les warnings du prompt » — cet endroit n'existe
+pas) coûte un aller-retour à l'exécutant.
 
 **`STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` — clos le 2026-08-22**, un commit :
 `e418865`. Aucune migration.
