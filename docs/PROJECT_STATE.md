@@ -12,6 +12,33 @@ Three tickets, all committed, pushed, migration `0061` applied by the author.
 | `WF.CATALOG.2` | `364d458` | the manager can fill them: category, tags, contexts, status, thumbnail upload |
 | `WF.GALLERY.1` | `3eca598` | the gallery itself — five duplicated flat lists replaced by one shared component |
 | `WF.GALLERY.2` | `61e3f2d` | the three surfaces that still bypassed the registry: Look Development, the workflow View page, the six default selectors |
+| `WF.LIBRARY.1` | `8e9224f` | the overlay library behind "Change Workflow" — the path the author actually uses |
+
+**`WF.LIBRARY.1` exists because the chantier improved the wrong surface.** There
+are two ways to pick a workflow: the standalone `/workflows` pages, and the
+"Change Workflow" button inside the Generate Content panel. The first three
+tickets rebuilt the pages; the author uses the button, which went through a
+`WorkflowSelectorPanel` nobody had touched — a text list squeezed into the
+narrow side panel. **Ask which surface the user actually touches before
+rebuilding one.**
+
+No open/close machinery was invented: the URL contract already existed
+(`generation=open&selector=1`, selection via `workflowId`). Only what is
+rendered, and where, changed — the overlay leaves `GenerationPanelShell` and
+sits above it. Category links and the search form carry every current URL
+parameter forward; without that the library closes on the first click and the
+shot page's URL-borne state is lost on return.
+
+The thumbnail-size slider is the one client island, on `GenerationPanelShell`'s
+exact precedent (value read after mount, try/catch, default size when
+`localStorage` is unavailable). Measured in a real browser: 5 columns at the
+default on a 1440px viewport, 7 at minimum, 3 at maximum, value kept across a
+reload.
+
+**A one-class defect cost a round trip**: the content column lacked `flex-1`, so
+it sized to its content — the grid got 437px and rendered a single column with
+half the screen empty. Invisible to `tsc`, to 1665 tests and to reading the
+diff; found by measuring bounding boxes in the browser.
 
 **`WF.GALLERY.2` closed a defect the chantier itself shipped.** The registry
 declared a `look-development` context and the manager showed its checkbox, but
