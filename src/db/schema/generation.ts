@@ -17,6 +17,25 @@ export const comfyWorkflows = sqliteTable("comfy_workflows", {
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  // WF.CATALOG.1 — presentation metadata for the future workflow gallery.
+  // Lives beside the workflow, never inside its JSON (Comfy-Org's
+  // workflow_templates principle).
+  category: text("category"),
+  // JSON array of free-form tag strings, or NULL. Parsed via
+  // `parseWorkflowTags` / validated via `validateWorkflowTags`
+  // (src/lib/comfy/workflowCatalog.ts).
+  tags: text("tags"),
+  // JSON array of `WorkflowContextId`, or NULL. NULL is NOT "no context" —
+  // it means "every context whose `kind` allows this workflow", the current
+  // behaviour before this column existed. Never treat NULL as "hidden
+  // everywhere"; see `isWorkflowOfferedIn` in
+  // src/lib/comfy/workflowCatalog.ts.
+  contexts: text("contexts"),
+  thumbnailPath: text("thumbnail_path"),
+  thumbnailSourceFilename: text("thumbnail_source_filename"),
+  status: text("status", { enum: ["active", "archived"] })
+    .notNull()
+    .default("active"),
 });
 
 export type ComfyWorkflow = typeof comfyWorkflows.$inferSelect;
