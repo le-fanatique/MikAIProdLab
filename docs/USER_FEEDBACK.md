@@ -376,7 +376,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260810-002 - Multi-clip timeline drag stutters and does not track smoothly
 
-  - Status: `RESOLVED`
+- Status: `RESOLVED`
 - Date observed: 2026-08-10
 - Date fixed (implementation): 2026-08-10
 - Area: OpenReel / Timeline / Multi-selection
@@ -391,84 +391,21 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Impact: Timeline assembly with multiple Shots is slow and visually
   unreliable.
 - Related ticket: `OPENREEL.TIMELINE.MULTI_CLIP.DRAG.1`
-  - User validation: 2026-08-10 — confirmed working.
-  - Implementation note: root cause confirmed as one `clip/move` action plus one
-  Zustand project write per selected clip per RAF frame during a group drag.
-    Fixed and pushed as `f80853c` on the upstream sidecar candidate
-    (`mikai/upstream-8459024`) with a new atomic `clip/moveBatch` action/handler in
-  `@openreel/core` and a per-frame batch commit in `ClipComponent.tsx`: the
-  whole selection (primary + companions, derived from the drag-start
-  snapshot) now commits through one validated, all-or-nothing action per
-  animation frame — one history entry, one store write, regardless of
-  selection size, with a single track-array reconstruction pass per commit.
-  A first pass (Codex `REVISE`) also surfaced and fixed a real bug caught by
-  the required browser proof: the drag effect was tearing itself down and
-  rebuilding on every per-frame commit (because it depended on `allTracks`/
-  `trackHeights`, which get a new reference every project write), which both
-  fragmented a single drag into several undo groups and reset the delta
-  anchor used for companion clips mid-drag. Verified in a real isolated
-  Chromium build with local disposable H.264 fixtures: 1/5/20-clip group
-  drags now move with an identical delta across the whole selection,
-  cross-track drag of the primary correctly leaves companions on their
-  original track, both collapse to a single undo/redo step, Snap off does
-  not snap, reload persists with no duplicated/lost clips, and no new
-  console errors appear (only pre-existing sandbox network noise unrelated
-  to this change). A second pass (Codex `REVISE`) found a remaining P1: an
-  earlier RAF-flushed batch commit could still be in flight at `mouseup` and
-  resolve after a cross-track drop, reverting the primary's track, and the
-  effect's cleanup could close the undo group before that finalization
-  settled. Fixed by chaining every commit (already-flushed or final) onto
-  one ordered promise per drag (`enqueueDragCommit` in the new
-  `drag-finalize.ts`) and awaiting that chain's tail before the cross-track
-  move; the group now closes exactly once, in a `finally`, and the effect's
-  own cleanup only closes it as a fallback when no finalization is in
-  flight. Re-verified in a real browser with a diagonal (time + cross-track)
-  20-clip drag using intentionally uneven frame timing to leave commits
-  in-flight at mouseup: primary lands on the target track, all 19
-  companions keep an identical delta on the original track, and a single
-  undo/redo covers the whole gesture. A third pass (Codex `REVISE`) found
-  the chain only guarded against thrown exceptions: `moveClip`/`moveClips`
-  report a functional rejection (locked track, invalid batch member, ...)
-  as a resolved `{ success: false }` ActionResult, not a throw, so a
-  refused batch still read as "settled" and the primary could still change
-  track alone on top of a group move that never actually happened — an
-  atomicity break. Fixed by having the commit chain normalize both
-  ActionResult and void-returning commits into a success/failure outcome
-  (`enqueueDragCommit`/`finalizeClipDrag` in `drag-finalize.ts`, plus
-  `Timeline.tsx`'s move handlers now surfacing that result instead of
-  discarding it) and skipping the cross-track move entirely whenever the
-  commit chain's final outcome is a failure. Covered by 12 unit tests
-  including the exact two scenarios Codex named (a rejected final batch,
-  and a rejected batch already in flight before mouseup) and re-verified in
-  a real browser with the same 20-clip diagonal drag plus Snap on/off and a
-  single undo/redo, with no new console errors. See
-  `.agents/claude_report.md` for full evidence and the manual validation
-  checklist.
-- Resolution: None.
-- Resolved or validated on: None.
-- Update (`OPENREEL.SIDECAR.PROMOTION.1`, 2026-08-10): the atomic-batch fix
-  ships on candidate `f80853ce3de432751847eb1bab3d03a669267c37` (tip of
-  `mikai/upstream-8459024`), unchanged since the commit named above — this
-  pass only audits/tests/documents it for promotion, no further edit. The
-  candidate's own regression suite for this fix
-  (`packages/core/src/actions/handlers/clip-move-batch.test.ts`, 13/13
-  tests) passes. A first browser re-verification attempt could not
-  conclusively demonstrate the gesture (three tries: Playwright's native
-  element-to-element drag, then two immediate `mousedown`/`mousemove`/
-  `mouseup` DOM-dispatch sequences) — root cause found on retake: the
-  component defers attaching its `window` drag listeners to a `useEffect`
-  gated on React state (`isPendingDrag`/`isDragging`), so events dispatched
-  in the same synchronous tick as `mousedown` land before those listeners
-  exist. Retake (Codex `REVISE`, P2) re-ran the gesture with a
-  frame-timed sequence (`requestAnimationFrame` pause after `mousedown` and
-  after crossing the 5px drag threshold, before further `mousemove`s) in a
-  real isolated browser session: two selected clips (`Sh1`+`Sh2`) moved
-  together by an identical +150px/+3s delta while the unselected third clip
-  stayed put, a single `Undo` reverted both to their exact original
-  positions, and a single `Redo` reapplied both to the exact dragged
-  positions — one history entry for the whole gesture, no new console
-  errors. The grouped-drag + undo/redo contract is now demonstrated live,
-  not just by the automated suite.
+- User validation: 2026-08-10 — confirmed working.
+- Resolution: one atomic `clip/move` batch action instead of a per-clip
+  store/render cascade. Ships on the OpenReel candidate
+  `f80853ce3de432751847eb1bab3d03a669267c37` (tip of
+  `mikai/upstream-8459024`), with its own 13-test regression suite
+  (`packages/core/src/actions/handlers/clip-move-batch.test.ts`) and a live
+  browser demonstration of grouped drag plus single-entry undo/redo. The
+  `Resolution: None` that stood here until 2026-08-22 was wrong: the real
+  resolution had only ever been written in the follow-up chronicle below,
+  which is why condensing this entry made it visible.
+- Resolved or validated on: 2026-08-10.
+- Condensed 2026-08-22: 75 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260807-001 - OpenReel playback appears to start but never advances
 
@@ -531,317 +468,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   string only, never reading or interpolating the caught error; proven with a
   console-spy test using a deliberately sensitive mock error message. See
   `.agents/claude_report.md` for full evidence.
-- Resolved or validated on: pending user retest with their real multi-clip
-  `Bold Havana` and King of the Office projects on the live `5173` instance.
-- Update (`OPENREEL.PLAYBACK.REAL.PROJECT.REPRO.1`, 2026-08-09): the user
-  still saw the freeze on the real persisted `Cosmic Seoul` project after
-  importing several local clips, so the prior three fixes above were not the
-  full story. Reproduced end to end in an isolated Playwright/production
-  build with disposable local H.264 fixtures (with and without audio,
-  sequential non-overlapping placement matching the user's layout): the first
-  stalled layer was not `PlaybackController`/`MasterTimelineClock` itself but
-  a second, independent playback pipeline in `apps/web/src/components/editor/
-  Preview.tsx` (`startNativeVideoPlayback`, a hardware-accelerated
-  HTMLVideoElement/canvas fast path used whenever the timeline has no
-  overlapping clips or active audio effects — the layout produced by normal
-  multi-clip import). Its top-level effect re-runs on every project-store
-  mutation while playing (import, metadata probe, thumbnail/waveform
-  generation all recreate the project reference), tearing down and
-  restarting the whole native pipeline each time; because that setup is
-  async and un-guarded, a superseded run could finish late and start an
-  orphaned, uncancellable render loop, and — measured with temporary
-  diagnostics — the dormant `PlaybackController`, which still reacted to the
-  shared clock being stopped/restarted by that churn, forced the timeline
-  store back to "stopped" while the native pipeline kept actually running
-  underneath, permanently desyncing the visible monitor/playhead from real
-  playback. Fixed with a small generation guard in `Preview.tsx` plus an
-  explicit "external playback active" flag on `PlaybackController` so it
-  stops reacting to/driving the shared clock while the native pipeline owns
-  it. Verified with the same burst-import-while-playing scenario continuing
-  to advance for 12+ seconds to natural end, and confirmed clean via the full
-  monorepo typecheck, lint on touched files, and the existing playback test
-  suite (198/198 passing). Full evidence in `.agents/claude_report.md`.
-- Update (`OPENREEL.UPSTREAM.REBASE.SPIKE.1`, 2026-08-09): the user
-  separately confirmed clean, performant multi-clip playback in a pristine
-  upstream OpenReel checkout (`F:\AI\OpenReel_vanilla`, commit `8459024`),
-  proving current upstream playback works for the real case even though the
-  sidecar (fork point `5711925`) does not. An isolated audit/transplant
-  spike (`docs/audits/OPENREEL_UPSTREAM_REBASE_SPIKE.md`) found that
-  upstream `8459024` replaced the shared playback architecture the three
-  fixes above target — including the `isExternalPlaybackActive()` flag from
-  `OPENREEL.PLAYBACK.REAL.PROJECT.REPRO.1` above, which has no upstream
-  equivalent — with its own, far more developed native multi-clip playback
-  path directly inside `Preview.tsx`. The spike's disposable transplant of
-  the MikAI integration surface onto `8459024` compiled clean (0 TypeScript
-  errors) and passed 128/129 existing unit tests unmodified. Recommendation:
-  **GO WITH LIMITS** on migrating the sidecar to upstream `8459024` rather
-  than further patching the old playback stack; see the audit document for
-  the full conflict matrix and bounded migration sequence. Status remains
-  `TO VALIDATE` pending that migration and a full browser regression pass.
-- Update (`OPENREEL.UPSTREAM.MIGRATION.1`, 2026-08-09): rebuilt the MikAI
-  integration on upstream `8459024` in a dedicated worktree/branch
-  (`F:\AI\tmp-openreel-sidecar-upstream-8459024`,
-  `mikai/upstream-8459024`), dropping all three sidecar-authored playback
-  patches (`bace876`, `492dd01`, `33f917a`) including
-  `isExternalPlaybackActive()`, per the spike's recommendation. `tsc
-  --noEmit` clean, `pnpm build` clean, targeted lint zero new diagnostics,
-  `git diff --check` clean, and 129/129 MikAI integration tests pass (one
-  stale fixture duration corrected per the spike, assertion updated to the
-  correct value, no assertion weakened). Full `apps/web` suite: 939/939
-  excluding one flaky, unrelated, pre-existing upstream test
-  (`NoiseReductionSection.persistence.test.tsx`, fails only under full
-  parallel run due to jsdom/ffmpeg-wasm timing, passes isolated, file
-  untouched by this ticket). Isolated Playwright browser proof on port
-  `4610` (not `5173`/`3000`) against a production build with three
-  disposable local H.264 fixtures and a local mock MikAI export/timing-patch
-  endpoint (no real user data): MikAI bootstrap loaded the mock export and
-  opened the editor directly; the MikAI Bridge panel rendered
-  project/sequence/clip-count/warnings/snapshot data and a non-destructive
-  "Validate Patch" call round-tripped against the mock endpoint; native
-  multi-clip playback (upstream's own `Preview.tsx` path, untouched by this
-  ticket) advanced the playhead continuously across all three clip
-  boundaries from 0s to natural end (~12s) without freezing, with the
-  transport control correctly reverting to "Play" (never stuck on
-  "Playing" with a frozen clock); Pause/Space, seek via the timeline ruler,
-  and a full page reload with the same URL all behaved correctly; no
-  console/page/hydration error or sensitive error detail (the only console
-  noise was the sandbox's blocked outbound network — Google Fonts, an AV
-  browser extension, and upstream's own unrelated FFmpeg-CDN audio-waveform
-  fallback — present regardless of MikAI integration). Status remains `TO
-  VALIDATE`: this migration worktree is held for Codex review and has not
-  been promoted to sidecar `main` (still at `33f917a`); the user's own
-  retest against `Bold Havana` / `Cosmic Seoul` / King of the Office is
-  still pending. Full evidence in `.agents/claude_report.md`.
-- Update (`OPENREEL.MIKAI.IMPORT.PLAYBACK.PERF.1`, 2026-08-09): investigated
-  the specific "stutter at the start of each imported segment" the user
-  reported for the upstream-based MikAI candidate, using a controlled A/B
-  Playwright comparison (candidate on `127.0.0.1:5173`, MikAI on `:3000`,
-  never `npm run dev:all`) between a normal upstream local import and a
-  MikAI bootstrap of the same local H.264 media. Ruled out the MikAI
-  integration surface itself as the cause: a full MikAI bootstrap (panel
-  render, store hydration, `replaceMediaBlob` work, bootstrap subscription)
-  with editorial trim `trimInSeconds: 0` played 6 clips over 18s with only
-  start/end timing noise — no stutter at any of the 5 clip boundaries.
-  Reproducing the same bootstrap with a non-zero, non-keyframe-aligned
-  `trimInSeconds: 1.5` (representative of a real mid-take editorial trim)
-  reliably reproduced clustered ~60-100ms stalls at 4 of 5 clip boundaries
-  and nowhere else. Root cause: upstream's native playback path in
-  `Preview.tsx` (`syncVideoToClipTime`) seeks the `<video>` element to the
-  clip's `inPoint` synchronously at the moment that clip becomes active
-  (not during the earlier pre-load pass), and a non-keyframe `inPoint`
-  forces the browser to decode forward from the previous keyframe before
-  it can render — a real, one-time-per-boundary decode cost. MikAI-sourced
-  clips carry this pattern far more often than a plain drag-and-drop
-  import (whose clips almost always start at `inPoint: 0`, i.e. a
-  guaranteed keyframe), which is why only the MikAI path visibly stutters
-  even though the underlying playback code is shared and unmodified. No
-  fix applied: the actual seek/decode logic responsible lives entirely in
-  `Preview.tsx`/the native playback path, outside this ticket's authorized
-  MikAI-integration scope, and no changed within
-  `apps/web/src/integrations/mikai/**`, `App.tsx`, or `playback-bridge.ts`
-  can influence it. Reported to Codex as `NEEDS_CODEX_CONTRACT` with the
-  full measurement.
-- Correction (`OPENREEL.MIKAI.IMPORT.PLAYBACK.PERF.1` retake, 2026-08-09):
-  Codex rejected the `trimIn`/keyframe-seek explanation above — the real
-  MikAI export for Space Corsair (Project 18 / Sequence 54, the actual
-  sequence the user tested) has `trimInSeconds`/`trimOutSeconds` `null` on
-  all 20 items, both in the live export and in the `sequence_editorial_items`
-  table, so that mechanism (real, reproducible, but for a different data
-  shape) does not explain this case. Re-measured against this real export
-  with MikAI running standalone on `:3000` (`npm run dev`, no `dev:all`).
-  Found the actual cause: `sequence_editorial_items.duration_seconds` (the
-  slot each shot occupies on the timeline — 3 to 7s each, 90s total) does
-  not match the real duration of the video files attached to those shots
-  via `shot_videos`/`shot_video_candidates` (source `sequence_split`,
-  0.375s to 1.375s each — 3 to 19x shorter than their assigned slot).
-  Reproduced with the real Space Corsair export and the real, unmodified
-  video files copied read-only from this machine's own MikAI uploads
-  folder: canvas-content sampling (pixel hashing every 200ms — a plain
-  `drawImage`-timing probe is blind to this failure mode, since the canvas
-  keeps being redrawn every frame with a stale, unchanging source) showed
-  the visible frame freezing solid around 10.5s into playback and **never
-  recovering** for the remainder of the 90s sequence, while the
-  timeline/playhead clock kept advancing normally to a natural end at
-  90s. This reads to the user as the video hanging/stuttering partway
-  through and never really catching back up — a data-integrity mismatch
-  between MikAI's editorial timeline durations and its own generated/split
-  video lengths, not a keyframe or trim issue, and not obviously fixable
-  from `apps/web/src/integrations/mikai/**` alone (the mismatch originates
-  in MikAI's own data). Status remained `TO VALIDATE`; reported to Codex as
-  `NEEDS_CODEX_CONTRACT` with both measurements.
-- Resolution (`EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1`, 2026-08-09):
-  implemented per Codex's product decision. For
-  `videoSourceMode=latest-generation` only, the editorial export now
-  represents each shot's REAL, decodable media duration
-  (`shot_videos.durationSeconds`, never guessed) and recomputes
-  compact, gap-free `startSeconds`/`durationSeconds` in existing editorial
-  order (`src/lib/editorial/compactRealDurationTiming.ts`); a shot with no
-  valid real duration is omitted from the compact timeline with a bounded
-  diagnostic in the export's new `timingWarnings` field, never stretched
-  to its planned slot. The export carries an explicit
-  `timingBasis: "compact-real-duration"` marker; the legacy no-param
-  export and `approved-only` are untouched (proved byte-identical), and
-  the `editorialSnapshot` stays the planned/production fingerprint exactly
-  as before (proved, same fingerprint across all three modes). All four
-  sidecar write-back paths were audited: Validate/Apply Timing Patch and
-  Push Duration are now refused outright with a clear, visible reason on a
-  compact export (they would otherwise write compact positions back as if
-  they were production ones); Insert Shot and Publish Advanced stay
-  accessible, proven safe by construction (relative anchors / a real
-  rendered file, never absolute compact positions written as production
-  truth). Verified against the REAL Space Corsair export (Project 18 /
-  Sequence 54, MikAI run standalone on `:3000`): the 20 real clips now
-  compact to their real ~15.07s (was a fictitious 90s), and the OpenReel
-  candidate (`mikai/upstream-8459024` worktree) plays all 20 clips
-  continuously to a clean natural end with no freeze — canvas-content
-  sampling confirmed continuous change for the full ~15s, matching the
-  compact timeline exactly, versus the prior test's freeze at ~10.5s with
-  the clock still climbing to a fictitious 90s. Status: `TO VALIDATE`
-  pending Codex review of the candidate worktree and the user's own
-  hands-on retest.
-- Retake (`EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1`, 2026-08-09):
-  Codex `REVISE`d the first pass with 4 P1s, all fixed. (1) A rejected
-  media source (missing file / cross-owner confinement failure —
-  `videoPath: null`) could still occupy compact timeline time if it
-  carried a durable duration; now a source must have BOTH a verified
-  `videoPath` and a valid duration to be compact-eligible, otherwise
-  omitted like any other invalid source. (2) The sidecar's
-  project/sequence resolver returned on the first tagged clip found
-  instead of verifying every clip agreed; it now scans all clips and
-  refuses on any disagreement (mixed project, sequence, timing basis, or
-  a present-but-different editorial snapshot), proven with a corrupted
-  mixed-project fixture. (3) Insert Shot is now blocked outright for
-  every compact-real-duration sequence (compaction can omit a planned
-  shot between two visible clips, so a relative anchor no longer
-  reliably matches the planned timeline) — it remains available in
-  Approved only/legacy sessions; Publish Advanced stays enabled,
-  independently re-verified safe. (4) The compact duration assigned to a
-  trimmed item is now clamped to the trim's real playable span
-  (`min(trimOut, realDuration) - max(0, trimIn)`) so it can never exceed
-  the actual source length, and a trim that clamps to an empty/negative
-  span is omitted rather than falling back to the planned duration.
-  Re-verified against the real Space Corsair export with all fixes
-  applied: still compacts to ~15.07s, Insert Shot now shows a blocked
-  message and a disabled button, Publish Advanced remains fully
-  functional, playback still advances continuously to a clean natural
-  end. 147/147 sidecar tests pass (was 129 before this ticket, 136 after
-  the first pass). Status remained `TO VALIDATE` pending Codex re-review.
-- Retake 2 (`EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1`, 2026-08-09):
-  Codex `REVISE`d again with a P1 and a P2, both fixed, sidecar-only. (1)
-  `timingBasis` is a write-back safety boundary that was never validated
-  at runtime — an export with an unknown `timingBasis` value would have
-  been accepted and silently treated as non-compact by the strict-equality
-  write-back guards, letting compact positions reach a production timing
-  patch. Now validated exactly at the one point untrusted network input
-  enters the adapter: absent stays compatible; present must be exactly
-  `"compact-real-duration"`; only valid together with
-  `videoSourceMode: "latest-generation"`; a malformed companion
-  `timingWarnings` is also rejected. 13 new adversarial tests prove no
-  malformed combination can ever reach `buildProjectFromMikaiExport` (zero
-  clips, zero write-back surface). (2) A stale comment in
-  `insertMikaiShotAtPlayhead.ts` still claimed Insert Shot was unblocked
-  on compact timing — corrected to match the real, already-blocked
-  behavior. 159/159 sidecar tests pass. Re-verified against the real
-  Space Corsair export: loads and behaves identically (its real
-  `videoSourceMode`/`timingBasis` pair is well-formed). Status remains
-  `TO VALIDATE` pending Codex re-review. Full evidence in
-  `.agents/claude_report.md`.
-- Update (`EDITORIAL.APPROVED.REAL.DURATIONS.1`, 2026-08-10): the user
-  reproduced the same freeze/stutter behavior using APPROVED Shot videos
-  (not just Latest generation) — same root cause: Editorial can assign a
-  planned Shot duration longer than the real decodable MP4 duration,
-  regardless of which mode selected it. Extended the reviewed compact
-  real-media timing contract to explicit `videoSourceMode=approved-only`,
-  reusing the SAME `timingBasis: "compact-real-duration"` marker and the
-  SAME compact computation (`computeCompactRealDurationPositions`, never a
-  second one). New: `augmentApprovedSourcesWithDurableDuration`
-  (`src/lib/editorial/videoSourceMode.ts`) matches `shots.approvedVideoPath`
-  to that exact Shot's own durable `shot_videos` row (same Shot id AND
-  same path) to source its real duration — never the newest library entry,
-  never estimated. The legacy no-param export and Latest generation are
-  both proved byte-identical/unaffected. The sidecar candidate's
-  `assertValidMikaiExport` now accepts `timingBasis` alongside EITHER
-  explicit mode (still refusing absent/unknown modes and malformed
-  companion fields); all four write-back guards already keyed off the
-  clip-level `mikaiTimingBasis` tag alone, so no guard logic changed —
-  only their user-facing messages, which previously said "Switch to
-  Approved only", now correctly say "reload without an explicit video
-  source mode" (the old wording would have told a user already in
-  Approved only to switch to the mode they were already in). 160/160
-  sidecar tests pass (was 159). Verified in an isolated environment with
-  real, ffmpeg-encoded H.264 clips (never port 3000/5173, never the real
-  DB/uploads): the compact Approved-only timeline sums exactly to the
-  three real clip durations (4.75s), plays back continuously with no
-  freeze to a clean natural end, pause/seek/reload all behave correctly,
-  Insert Shot/Validate/Apply/Push Duration are blocked with accurate
-  messages, and Publish Advanced stays available — while the legacy
-  no-param export of the same Sequence keeps Insert Shot/Push Duration
-  enabled with the PLANNED durations, unaffected. Status: `TO VALIDATE`
-  pending Codex review of the candidate worktree and the user's own
-  retest. Full evidence in `.agents/claude_report.md`.
-- Retake (`EDITORIAL.APPROVED.REAL.DURATIONS.1`, 2026-08-10): Codex
-  `REVISE`d with 2 P1s and a P2, all fixed. (1) `timingWarnings` was not
-  actually bounded — the producer could emit one entry per omitted item
-  with no cap, and the sidecar parser accepted any array/string length.
-  Fixed with a shared, documented contract (`MAX_TIMING_WARNINGS = 50`,
-  `MAX_TIMING_WARNING_MESSAGE_LENGTH = 300`, duplicated on both sides):
-  the producer now caps the array via a small `BoundedWarningCollector`
-  (individual entries up to the cap, then one honest synthesis entry
-  counting the remainder — never a silently incomplete-looking list) and
-  truncates any single message with an explicit ellipsis; the sidecar
-  parser rejects an export whose `timingWarnings` exceeds either bound.
-  (2) A direct binary read found 2 literal NUL bytes physically present in
-  `videoSourceMode.ts`'s source, inside a delimiter-joined Map key
-  (`` `${shotId} ${videoPath}` ``) — an encoding artifact from how that
-  key was originally constructed. Fixed by replacing the string-joined key
-  entirely with a nested `Map<shotId, Map<videoPath, duration>>`, which
-  has no string-join step and is structurally immune to this class of bug;
-  verified the file (and every other file touched by this ticket, in both
-  repositories) now contains zero NUL bytes via a direct binary scan. (3)
-  `MIKAI_SIDECAR.md` still described the superseded latest-only,
-  Insert-Shot-stays-accessible contract — corrected to match the shipped
-  code (both explicit modes, Insert Shot blocked, shared warning bounds
-  documented). 164/164 sidecar tests pass (was 160). Re-verified the
-  Approved-only compact, Latest generation compact, and legacy
-  byte-compatible exports through the real route handler; the four
-  write-back intentions (Validate/Apply/Push refused, Insert Shot refused,
-  Publish Advanced available) are covered by the existing sidecar
-  integration test suite, unchanged by this retake (no playback-affecting
-  behavior changed — only an internal bug fix, a bound, and documentation).
-  Status remained `TO VALIDATE` pending Codex re-review. Full evidence in
-  `.agents/claude_report.md`.
-- Validation utilisateur (2026-08-10) : le flux Approved-only compact est
-  confirme fonctionnel sur la session reelle. Le feedback est clos ; le
-  contrat legacy sans parametre reste conserve pour les usages de timing
-  planifie.
-- Update (`OPENREEL.SIDECAR.PROMOTION.1`, 2026-08-10): the fixes above ship
-  on the upstream-based candidate `f80853ce3de432751847eb1bab3d03a669267c37`
-  (branch `mikai/upstream-8459024`), which replaces the legacy sidecar
-  lineage (`33f917a` and its ancestors `bace876`/`492dd01`) with upstream
-  `8459024`'s own native playback controller
-  (`packages/core/src/playback/`). Parity-audited against legacy `main`: no
-  MikAI integration file lost a supported contract, every legacy playback
-  patch is confirmed absent by content (no `native-playback-generation.ts`,
-  no `isExternalPlaybackActive()`), and none of `bace876`/`492dd01`/`33f917a`
-  are ancestors of the candidate. Candidate typecheck/tests/build pass
-  (1197/1219 tests, 2 unrelated pre-existing flaky timing tests in
-  `video-engine-export-effects.test.ts`, reproduced independently
-  unchanged); isolated browser smoke (mock export + local fixture media, own
-  port, no live 5173 use) confirmed import, continuous playback across two
-  clip boundaries, pause/seek/reload, and full MikAI Bridge visibility with
-  no new console errors. Status stays `RESOLVED`, pending Codex review and
-  the actual `main` promotion (not yet performed — this pass only audits
-  and prepares). See `.agents/claude_report.md` for full evidence.
-- Retake (Codex `REVISE`, P1, 2026-08-10): the first smoke session above only
-  exercised the normal/production-timing path. A second isolated browser
-  smoke session against an explicit `videoSourceMode: "latest-generation"` /
-  `timingBasis: "compact-real-duration"` mock export confirmed the inverse
-  contract: Validate Patch, Apply Timing Patch to MikAI, Insert New Shot at
-  Playhead, and Push Duration to MikAI were all disabled with an explicit
-  on-screen reason, while Publish as Active/Published stayed enabled — import,
-  continuous multi-clip playback, pause, and reload all remained functional
-  in this mode too, with no new console errors. Both smoke sessions (normal
-  and compact) are now covered.
+- Resolved or validated on: **2026-08-10 — validated by the user** (« le flux
+  Approved-only compact est confirmé fonctionnel sur la session réelle. Le
+  feedback est clos »). The fixes ship on the upstream-based sidecar candidate
+  `f80853ce3de432751847eb1bab3d03a669267c37` (branch `mikai/upstream-8459024`),
+  which replaces the legacy playback lineage with upstream `8459024`'s own
+  controller; two isolated browser smoke sessions covered both the normal and
+  the compact-real-duration timing paths. The line that stood here until
+  2026-08-22 — "pending user retest" — was stale: the retest had happened on
+  2026-08-10 and was only recorded in the follow-up chronicle below, which is
+  why condensing this entry made it visible.
+- Condensed 2026-08-22: 309 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260726-001 - Influence Research completes with no sources
 
@@ -851,18 +491,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Context: The user opened Research for the Roger Deakins Creative Influence,
   searched the web for `his lighting approach`, and received completed Runs
   with no Candidate or Source to review.
-- Original observation:
-
-  > j avais mis ca en influence:
-  > Roger Deakins / Person / his lighting approach
-  > et j ai fait "search web"
-  > le run a fonctionne mais il ne me sort aucune sources. est ce normal?
-  >
-  > je voudrais que le LLM utilisable pour la recherche soit le meme que celui
-  > selectionne dans Language Model dans les settings. et comme LLM Chat /
-  > Chat LLM Provider, ajouter une case a cocher pour decoreller le provider
-  > du discover influence, de l'utilisation du reste de l'app pour les LLM.
-
 - Expected outcome: A successful Discover call yields reviewable cited
   Candidates. A response with no valid citations is an explicit failure and
   creates no empty Run. Influence Research inherits the active Language Model
@@ -878,31 +506,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   active Language Model provider/model unless a separate Research provider is
   enabled in Settings.
 - Resolved or validated on: 2026-07-26.
-
-#### Follow-up notes
-
-- 2026-07-26: Web Discover remains OpenRouter-only in this retake. If the
-  effective Research provider is not OpenRouter, the UI and server must refuse
-  clearly rather than silently falling back. No arbitrary page re-fetch is
-  added.
-- 2026-07-26: Existing zero-candidate historical Runs remain immutable and are
-  not deleted by the fix.
-- 2026-07-26: Commit `9a0d96b` pushed to `origin/main`; awaiting a real
-  successful Discover search and Settings validation from the user.
-- 2026-07-26: User confirmed the corrected Influence Research flow works.
-- 2026-07-26: Implementation completed by Claude Code under
-  `STYLE.1.C.SEARCH.FIX1`: `parseSearchAnnotations` now reads the canonical
-  nested `url_citation` contract and returns an explicit failure when zero
-  valid citations survive; `researchInfluenceAction` and
-  `synthesizeInfluenceResearchAction` resolve and capture the effective
-  Research provider/model before every network call and never persist a Run
-  or Synthesis when the effective provider is unsupported or the response
-  yields no valid citations; Influence Research now inherits the active
-  Language Model provider/model by default, with an
-  `Influence Research LLM Provider` Settings card (mirroring `Chat LLM
-  Provider`) to opt into a separate provider. Roger Deakins' existing
-  zero-candidate Runs were verified untouched. Status remains `IN PROGRESS`
-  pending Codex review and user validation in the running app.
+- Condensed 2026-08-22: 35 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260723-001 - Define the Project Style V1 workspace
 
@@ -912,25 +519,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Area: Project Style / Assets / Sequences / Shots / Storyboard / Generation
 - Context: Defining the Project Style MVP after completing Story, extracting
   Asset drafts and preparing to generate visually coherent Assets and Shots.
-- Original observation:
-
-  > c est à ce moment là que je vais devoir commencer à penser project style.
-  > [...] les resultat seront de style variable [...] et de registre variable.
-  > Ces informations devrait etre defini à echelle du projet, car se
-  > repercuter sur tout les assets et les shots pour avoir une unité de style.
-  >
-  > la creative Influences devrait avoir un espece d'auto feed, qui
-  > permettrait à un llm de fill les information basique et proposerai des
-  > informations pertinante trouvé sur internet à injecter.
-  >
-  > si un field n'est pas rempli, alors le critere ne devra pas etre injecté
-  > dans le prompt composer. [...] Il faut que je sois capable de faire simple.
-  >
-  > il faut ajouter un champ général à la sequence "Project Style", qui par
-  > defaut vient du Project Style actif projet. [...] cela permet de faire un
-  > override à la sequence, et ainsi spread facilement l'override sur tout les
-  > shots de cette sequence.
-
 - Expected outcome: A dedicated Project Style workspace lets the user build a
   sparse, source-grounded and versioned artistic direction from a brief,
   Creative Influences, visual references and optional AI analysis. The active
@@ -949,510 +537,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   implementation complete and pushed through `72f9d89`; transversal
   acceptance (`STYLE.1.ACCEPTANCE.1`) `ACCEPTED` and epic `STYLE.1`
   formally closed with user confirmation on 2026-08-02 (`c est ok`).
-
-#### Follow-up notes
-
-- 2026-07-23: The Style Bible has two pillars: `World & Design Language`
-  changes the design of content itself; `Visual Treatment` changes how that
-  content is represented.
-- 2026-07-23: All fields are optional. Empty fields, empty headings and
-  internal metadata must never appear in compiled prompts.
-- 2026-07-23: Creative Influence research is user-triggered, source-grounded
-  and approval-gated. Saved URLs, metadata, bounded evidence and syntheses are
-  durable; full third-party articles are not copied by default.
-- 2026-07-23: Project Style uses Working Draft and immutable published
-  versions. Normal generations use the published version; Look Development
-  may use a selected draft revision.
-- 2026-07-23: A Sequence dynamically inherits the active Project Style until
-  `Customize for Sequence` creates a complete local replacement. Shots have no
-  Style override in the MVP and always resolve their Sequence Style.
-- 2026-07-23: No semantic clash detector or style-conflict warning is part of
-  the MVP.
-- 2026-07-26: `STYLE.1.C.UI` implemented by Claude — the visible Research
-  review workflow (`InfluenceResearchWorkspace.tsx`) consuming the
-  `STYLE.1.C.CORE` contracts: Discover (search, review/save/dismiss
-  candidates), Sources (select/notes/withdraw), Synthesis & Rules
-  (synthesize, review claims, edit/reject/approve Candidate Rules into the
-  Working Draft). Approval reconciles the Working Draft's rules/revision
-  without a page reload, preserving any unsaved Direction Brief/pillar
-  edit. Pending Codex review.
-- 2026-07-23: The original eleven-step user story is preserved in
-  `docs/PROJECT_STYLE_ORIGINAL_USER_STORY.md`. Accepted decisions are
-  separated into `docs/PROJECT_STYLE_MVP_DECISIONS.md`, while
-  `docs/PROJECT_STYLE_SUPERVISOR_HANDOFF.md` records the implementation order,
-  repository baseline and supervision gates.
-- 2026-07-23: `STYLE.RESEARCH.SPIKE.1` approved (`GO WITH LIMITS`) — the
-  OpenRouter `openrouter:web_search` Server Tool is the selected retrieval/
-  citation contract for the future research ticket; no arbitrary page
-  re-fetch by MikAI for the MVP.
-- 2026-07-23: `STYLE.1.A` implemented by Claude — durable Working Draft +
-  immutable published version foundation. Additive migration
-  (`drizzle/0040_sharp_raza.sql`) adds `project_style_drafts` (DB-unique per
-  Project, optimistic-concurrency `revision` column),
-  `project_style_sections`, `project_style_rules`, `project_style_versions`
-  (immutable, DB-unique version number per Project), and
-  `project_style_active_pointers` (the only mutable row that can change
-  which version is active — never a write to a version row itself). A pure
-  compiler (`src/lib/projectStyle/compileStyleSnapshot.ts`) turns a sparse
-  snapshot into exact prompt text, omitting every empty field/heading/
-  disabled rule and never injecting rule metadata as literal prompt
-  content, per the "internal metadata is not literal prompt content"
-  decision above. The `/projects/{id}/style` workspace (Direction Brief,
-  both Style Bible pillars, sparse specialized sections, atomic rules,
-  exact compiled preview, Versions & Publish with history) is live; the
-  `Project Style` navigation entry is enabled in both `ContextStrip` and
-  `Sidebar`. Real proofs on a dedicated, deleted-after test Project:
-  migration preserved all 26 pre-existing tables' row counts byte-for-byte;
-  a real two-tab double-publish race produced exactly one new version,
-  never a duplicate or partial state, with the earlier version proven
-  byte-identical afterward; editing after publish never touches the
-  published version. No Web research, no Creative Influences, no Sequence
-  inheritance, and no prompt/generation integration in this ticket — those
-  remain their own tickets. Awaiting Codex review.
-- 2026-07-23: `STYLE.1.A`'s report documents one honest limitation: the
-  double-publish race's exact per-tab error message could not be captured
-  from the test script (a Puppeteer `click()` hung on the losing tab during
-  the winning tab's page reload); the invariant itself (never two vN rows,
-  never a partial state) was instead verified directly against the real
-  post-race database state, which is an equally direct — arguably more
-  direct — source of truth.
-- 2026-07-23: Codex review returned `REVISE` on `STYLE.1.A` (4 findings):
-  the compiled preview could show unsaved edits while Publish read stale
-  DB text; fields stayed blank-but-editable after publication, letting a
-  stray keystroke create a throwaway draft that bypassed `Edit Active
-  Style`; Server Actions trusted TypeScript enum types with no runtime
-  check; version history showed only version/date with no way to inspect
-  what was actually published. Claude applied the retake: `Publish Style`
-  now sends the exact live field values the preview was computed from,
-  publishing them atomically in the same transaction (never a stale DB
-  read); fields are read-only and show the real active version's content
-  until `Edit Active Style` is clicked; every Server Action now runs a
-  real runtime validator (new `src/lib/projectStyle/validation.ts`) on
-  every enum/id/revision before touching the database; each version's
-  compiled text is now inspectable inline in History. Re-validated: 43/43
-  pure validator tests, 37/37 real adversarial DB proofs (every invalid
-  enum/direction/id/revision rejected with zero row mutation, verified
-  against real row counts), and 21/21 real-browser checks proving all four
-  fixes end-to-end on a live server. Full detail in
-  `.agents/claude_report.md` (retake section). Awaiting fresh Codex
-  verdict.
-- 2026-07-23: Codex review returned a second `REVISE` on `STYLE.1.A` (2
-  findings, both in `ProjectStyleWorkspace.tsx`): Reorder persisted the new
-  `orderIndex` in the database but never re-sorted the local React array,
-  so the moved item didn't visually move and the Up/Down button states
-  went stale; and a rejected Add/Edit (stale revision, validation refusal,
-  server error) still cleared the typed heading/content or closed the
-  editor, silently discarding the user's input. Claude applied retake 2: a
-  new `sortByOrderIndex` helper keeps `sections`/`rules` state always
-  sorted after every mutation; `onAdd`/`onUpdate` callbacks now return a
-  real success boolean, and the form/editor is only cleared or closed on
-  an actual success. Re-validated with 24/24 real-browser checks,
-  including four real stale-rejection scenarios (Add/Edit × Section/Rule)
-  driven by a genuine concurrent `UPDATE` on the draft's revision column,
-  each proving byte-identical input preservation. Full detail in
-  `.agents/claude_report.md` (retake 2 section). Awaiting fresh Codex
-  verdict.
-- 2026-07-24: `STYLE.1.B.CORE` implemented by Claude — Project Style
-  Reference Board images and Creative Influence dossiers, backend only.
-  Additive migration (`drizzle/0041_left_natasha_romanoff.sql`) adds six
-  tables: `project_style_reference_images` (Project-scoped, separate from
-  Asset/Shot reference tables), `project_style_reference_domains` and
-  `project_style_reference_consumers` (relational facts, DB-unique per
-  reference, never a JSON blob), `project_style_influences`,
-  `project_style_influence_domains` (weighted primary/supporting/accent),
-  and `project_style_influence_references` (many-to-many link, DB-unique
-  per pair, app-layer-checked to always share one Project — SQLite cannot
-  express that cross-table equality as a plain FK). Upload is a dedicated
-  path (`src/lib/projectStyle/uploadReferenceImage.ts`) that never trusts
-  the declared filename/MIME: real magic-byte detection (PNG/JPEG/WebP
-  only, no GIF/SVG), the bundled FFmpeg both decodes the file for real and
-  reports its real dimensions, exclusive temp write then atomic rename
-  publish. Delete follows the established quarantine/transaction/restore
-  discipline (`src/actions/shotReferenceImages.ts`'s own pattern). Real
-  proofs on a disposable DB copy plus real PNG/JPEG/WebP/GIF files produced
-  by the bundled FFmpeg (78/78 passed, cleaned up after): every enum/id/
-  URL/domain validator; case-insensitive duplicate-domain rejection;
-  cross-Project refusal on update/delete/link; Influence-Reference link
-  refused when the two belong to different Projects; GIF, a `.png`-named
-  SVG, a truncated PNG, and an 11 MB file all refused with zero file
-  published; a forced DB failure after a real publish left zero orphaned
-  file; a forced mid-transaction delete failure restored the quarantined
-  file to its exact original path; nominal delete removed the row, its
-  cascaded domain/consumer rows, and the file together; `deleteProject`
-  (`src/actions/projects.ts`) now collects Project Style reference paths
-  before the cascaded DB delete and removes the files afterward, logging
-  any leftover path rather than claiming a silent success — proven end to
-  end (file and every Project Style row gone after deleting a real test
-  Project). Pre-existing 26 tables' row counts and `PRAGMA
-  foreign_key_check` unchanged after migration. No UI in this ticket
-  (`STYLE.1.B.UI` follows); no Web research, synthesis or candidate rules
-  (`STYLE.1.C.CORE`). Full detail in `.agents/claude_report.md`. Awaiting
-  Codex review.
-- 2026-07-24: Codex review returned `REVISE` on `STYLE.1.B.CORE` (4 P1
-  findings, 1 P2). The relational model and migration were accepted as-is;
-  the revision was limited to error/deletion paths that did not yet honor
-  the ticket's honest-cleanup contract. Claude applied a targeted retake,
-  no schema change: an upload DB failure's cleanup outcome is now checked
-  explicitly (`deleted`/`already_absent`/`failed`) instead of assumed, so a
-  real unlink failure is reported as a genuinely orphaned file rather than
-  a false "cleaned up" message; a reference delete's final-cleanup failure
-  now restores the row, its domains, consumers and influence links (not
-  only the file), with an exact per-side "X/Y restored" report when
-  recovery is incomplete; `deleteProject` now refuses an unconfined stored
-  path outright, quarantines every eligible file before the Project row is
-  deleted (restoring everything already quarantined if either the
-  quarantine step or the DB delete itself fails), and throws a real error
-  instead of redirecting to a false success if a quarantined file cannot be
-  permanently removed after commit; `linkInfluenceReferenceAction` now uses
-  a targeted `onConflictDoNothing` instead of a blanket try/catch, so a
-  genuine database failure propagates instead of being presented as an
-  "already linked" success; the upload temp file is now written with the
-  exclusive `wx` flag, the real materialized buffer size is re-checked
-  (not just the caller-declared size), every temp-cleanup failure is
-  reported with its exact path, and `sourceFilename` is normalized as
-  untrusted input before being persisted. Re-validated: 69/69 assertions on
-  a disposable DB copy, including fault injection via intercepted
-  `node:fs`/`node:fs/promises` calls to force each of the four P1 failure
-  paths precisely (a technique the first pass could not use, since Windows
-  file-locking tricks proved unreliable) — every one restores or reports
-  honestly rather than claiming success. `npx tsc --noEmit`, `npm run
-  build`, `npx drizzle-kit generate` (no drift) and `git diff --check` all
-  clean. Full detail in `.agents/claude_report.md` (retake section).
-  Awaiting fresh Codex verdict.
-- 2026-07-24: Codex returned a second `REVISE` on `STYLE.1.B.CORE` (2 P1
-  remaining). Three corrections from retake 1 were accepted; two blocking
-  paths remained: (1) the Reference delete used out-of-transaction
-  snapshots that could restore a stale or partial state, and (2)
-  `deleteProject` swallowed pre-commit restore failures while claiming
-  nothing changed. Claude applied retake 2, no schema change: (1)
-  `deleteProjectStyleReferenceAction` rewritten in 4 phases — snapshot and
-  DELETE now happen in ONE synchronous `better-sqlite3` transaction
-  (impossible concurrent mutation between snapshot reads and cascade
-  delete); post-commit compensation only restores DB rows AFTER confirming
-  the file was restored to its original path (never recreates rows pointing
-  at a `.trash-*` file); DB restoration uses a single transaction with
-  `onConflictDoNothing` on every table (all-or-nothing rollback). (2)
-  `deleteProject` now collects per-file restore results with exact original
-  and quarantine paths and OS error; never says "nothing was changed" if a
-  restore is incomplete. Re-validated: 43/43 assertions (transactional
-  snapshot correctness, onConflictDoNothing safety, all-or-nothing rollback
-  via SQL trigger injection, DB-delete-blocked diagnostics with per-file
-  restore counts, quarantine failure handling, unconfined path refusal,
-  plus nominal delete/deleteProject regression). `npx tsc --noEmit` clean,
-  `npm run build` succeeded, `npx drizzle-kit generate` (no drift), `git
-  diff --check` clean. Full detail in `.agents/claude_report.md` (retake 2
-  section). Awaiting fresh Codex verdict.
-- 2026-07-24: Codex returned a third `REVISE` on `STYLE.1.B.CORE` (1 P1
-  remaining). Snapshot transactional and `deleteProject` diagnostics
-  accepted; one local issue: `onConflictDoNothing` in the compensation
-  transaction could silently skip a conflicting row, attach snapshot
-  relations to a different concurrent line, and report false full
-  restoration. Claude applied retake 3, no schema change: removed all
-  `onConflictDoNothing` from the compensation transaction — any conflict
-  (concurrent insert reusing the same id) now fails the INSERT and rolls
-  back the entire restoration transaction, preserving the existing
-  "database restoration failed ... rolled back" diagnostic. Three targeted
-  proofs validated: (1) conflict on Reference id — concurrent row intact,
-  no snapshot relations attached, full rollback (8 assertions); (2)
-  conflict on a relation id mid-restoration — no snapshot row survives
-  (6 assertions); (3) nominal full restoration still works (6 assertions).
-  `npx tsc --noEmit` clean, `npm run build` succeeded, `npx drizzle-kit
-  generate` (no drift). Full detail in `.agents/claude_report.md` (retake 3
-  section). Awaiting fresh Codex verdict.
-- 2026-07-27: `STYLE.1.E.CORE.1` implemented by Claude — the canonical,
-  deterministic and inspectable generation Style source, split ahead of
-  surface integration (`STYLE.1.E.SURFACES.1`). New
-  `src/lib/projectStyle/generationStyleSource.ts` defines the six-consumer
-  contract (`asset`, `shot-image`, `shot-video`, `shot-storyboard`,
-  `sequence-storyboard`, `sequence-video`), a deterministic
-  `consumer:`/`media:`/`all` applicability grammar that keeps existing
-  free-text values such as "Night interiors" applicable to all (never
-  semantically interpreted, never silently excluded), a sparse
-  consumer-filtered generation segment beginning with a literal
-  `PROJECT STYLE` header (distinct from and never mutating the immutable
-  `compileStyleSnapshot()` authoring text), a byte-identical no-Style
-  composition helper, and exact character/UTF-8 byte accounting (never
-  called tokens). `resolveActiveProjectStyle` was added to
-  `resolveSequenceStyle.ts` as the canonical Asset-consumer resolver,
-  reusing the existing pointer-read and corruption-guard logic rather than
-  duplicating it; Shot/Storyboard/Sequence consumers resolve through the
-  existing `resolveSequenceStyle`/`resolveShotStyle` unchanged.
-  `GenerationSnapshot` gained one optional, backward-compatible
-  `styleProvenance` field. No generation action, payload, queue, ComfyUI
-  call or user-facing UI was touched — that rollout is
-  `STYLE.1.E.SURFACES.1`. 117/117 pure assertions and 21/21 disposable-DB
-  assertions passed (inheritance, override freeze, cross-Project refusal,
-  corrupted snapshot/compiled-text refusal, consumer-filtered provenance).
-  Full detail in `.agents/claude_report.md`. Awaiting Codex verdict.
-- 2026-07-27: `STYLE.1.E.SURFACES.1` implemented by Claude — the canonical
-  Style source is now integrated into Asset generation, normal Shot
-  image/video generation and Shot Storyboard generation only (Sequence
-  Storyboard/Video remain `STYLE.1.E.SURFACES.2`). A shared server-only
-  preparation helper (`src/lib/projectStyle/generationStylePreparation.ts`)
-  resolves and composes once for both preview and action parity. The trusted
-  consumer is always server-derived: hard-coded `asset` for Assets,
-  `workflow.kind` for normal Shot generation, and a dedicated hard-coded
-  `shot-storyboard` wrapper/action for Storyboard — never a client-supplied
-  value. Camera Lab keeps its exact existing `runWorkflowGeneration` entry
-  point, unstyled, byte-identical. All four preview surfaces (embedded
-  Asset/Shot panels, both dedicated generate pages) render the compiled
-  `PROJECT STYLE` segment, resolution/version identity and exact
-  character/UTF-8 byte counts before the payload preview, and disable
-  Generate on a resolver error. An edited Advanced Payload JSON that removes
-  the composed Style-bearing text is refused before job creation. Retry
-  preserves a prior Storyboard consumer from the job's own snapshot; a
-  legacy job without Style provenance falls back to the normal image/video
-  consumer. Full detail and proofs in `.agents/claude_report.md`. Awaiting
-  Codex verdict.
-- 2026-07-27: `STYLE.1.E.SURFACES.2` implemented by Claude — completes the
-  `STYLE.1.E` rollout by integrating the canonical Style into Sequence
-  Storyboard contact-sheet and Sequence Video generation, with the fixed
-  consumers `sequence-storyboard`/`sequence-video` always server-derived
-  from `{ kind: "sequence", projectId, sequenceId }`, never a client-supplied
-  value. Both `runSequenceGeneration` and `runSequenceVideoGeneration` reuse
-  `prepareGenerationStyleSource`, `buildGenerationPayload` and
-  `findEditedStyleTextMismatch` exactly as accepted in `CORE.1`/
-  `SURFACES.1` — no second resolver, composer or payload patcher. Both
-  dedicated generate pages render `ProjectStyleGenerationPreview` (source
-  label "Resolved Sequence Style") before the Payload Preview, resolved
-  server-side with the same shared helper the action re-resolves at submit,
-  and disable Generate on a resolver error. Sequence Video keeps its
-  existing board image-provenance guard (`validateImageProvenanceUnchanged`)
-  unmodified, now checked alongside the Style-text Advanced Payload guard,
-  both before any job row or provider call. 46/46 real action/DB/payload
-  assertions passed on a disposable SQLite DB with a mocked ComfyUI upload/
-  queue boundary (no real ComfyUI, no paid call): exact provenance for
-  inherited and Sequence-override resolution on each consumer, byte-identical
-  no-Style behavior, no-claimed-injection when a workflow has no patchable
-  text input, fresh re-resolution between preview and submit, resolver
-  corruption refusing generation with zero job rows, consumer/kind coherence
-  refusing an image workflow for Sequence Video and a video workflow for
-  Sequence Storyboard, Advanced Payload accepting an unrelated edit while
-  refusing a Style-text removal, and the pre-existing image-provenance guard
-  still refusing a rewired board. A temporary `next start` server against the
-  same disposable DB confirmed every UI state (`Inherited from Project`,
-  `Sequence Override`, exact character/UTF-8 counts, "No effective Style",
-  "no compatible text input", and the resolver-error disabled state) on both
-  pages. Full detail and proofs in `.agents/claude_report.md`. Awaiting Codex
-  verdict.
-- 2026-07-27: User validation completed for `STYLE.1.E.SURFACES.2` after
-  commit `5e92d71`: the Sequence Storyboard and Sequence Video Style
-  integration works as expected. The wider `FB-20260723-001` epic remains
-  `IN PROGRESS` until the remaining Project Style roadmap tickets are closed.
-- 2026-07-27: Implementation completed by Claude Code under `STYLE.1.F.CORE`:
-  `Enhance Description` (single and batch) and `Enhance Asset Bible` now
-  resolve the active published Project Style through the canonical
-  `resolveActiveProjectStyle` and inject a pillar-separated, Asset-filtered
-  Style segment into their existing prompts, with proven byte-for-byte
-  compatibility when no Style is active. The complete backend contract for
-  an explicit `Align with Project Style` proposal/apply flow is implemented:
-  a pure deterministic context builder (Project Story + Asset fields +
-  Style), a strict two-outcome JSON parser with an anti-suffix-only boundary
-  (rejects a response that only appends decorative rendering vocabulary with
-  no field-level design decision — proven against the original space-postman
-  fixture), a zero-write generate action that refuses before any LLM call
-  when there is no active Style, an atomic single-transaction apply action
-  (ownership, active-version re-check, Asset-fingerprint staleness check,
-  field update, alignment-marker upsert — all-or-nothing), and a read-only
-  status model (`no-active-style` / `not-reviewed` / `aligned` /
-  `style-changed` / `asset-changed`). One additive migration
-  (`asset_style_alignments`) was generated via `drizzle-kit`; it stores only
-  the reviewed Style version and a post-review Asset content fingerprint,
-  never the temporary proposal. No Asset Detail UI was touched — that is
-  `STYLE.1.F.UI`. Full detail and proofs (18 disposable-DB checks, 30 pure
-  checks, all provider calls mocked/no-cost) in `.agents/claude_report.md`.
-  Awaiting Codex verdict.
-- 2026-07-27: `STYLE.1.F.CORE` closed at commit `1fe873e` after two Codex
-  retake rounds (post-LLM-call revalidation, bounded canonical baseline
-  with no truncation, a strict Apply input parser, explicit marker-
-  corruption handling, and a raw-vs-normalized fingerprint fix). Migration
-  `0044_whole_nocturne.sql` applied to the real development DB with backup;
-  pre-existing table counts and the 33 pre-existing FK violations
-  unchanged.
-- 2026-07-28: Implementation completed by Claude Code under `STYLE.1.F.UI`:
-  Asset Detail now exposes `Align with Project Style` as a new collapsed-by-
-  default "AI Assist" panel (`src/components/AssetAlignmentPanel.tsx`),
-  placed before `Enhance Description`/`Enhance Asset Bible`, consuming the
-  frozen `STYLE.1.F.CORE` actions exactly as written — no change to any
-  CORE prompt, parser, transaction, schema or migration. The panel renders
-  every read-model state honestly (`no-active-style` with a link to
-  Project Style, `not-reviewed`, `aligned`, `style-changed`, `asset-changed`,
-  and a sanitized local error that never fails the page), drives an
-  explicit generate -> edit five fields (Description, Notes, Visual
-  Identity, Usage/Performance Rules, Forbidden Variations) side-by-side
-  against their generated baseline -> apply-or-discard workflow, and
-  derives the effective apply outcome (`changes-proposed` vs
-  `already-aligned`) client-side from the same trimmed-canonical semantics
-  CORE itself uses, so a fully-reverted edit is confirmed rather than
-  rejected as a fake mutation. A committed Apply triggers a full same-page
-  navigation (mirrors the existing `AssetBibleEnhancePanel` convention) so
-  the Details form and the alignment status both refresh from one source of
-  truth. Proven: all 5 statuses plus a corrupted-marker read error over a
-  real temporary `next start` server against a disposable DB (HTTP 200 in
-  every case, correct status payload delivered for each); the exact
-  user-visible status/CTA text via real `react-dom/server` rendering of the
-  actual component (6 cases); the effective-outcome/no-fake-mutation
-  derivation via a small additive pure helper
-  (`compareFields.ts`, 5 cases). No real LLM credits spent. Interactive
-  click-driven flows (generate/apply/discard/regenerate confirmation,
-  keyboard traversal, Default/Custom theme, compact viewport) were **not**
-  verified in a real browser — no browser automation tooling was available
-  in this environment and none was installed, per the ticket's own
-  documented-honestly fallback; an expanded manual testing checklist is
-  provided in `.agents/claude_report.md` for the user to run. Awaiting
-  Codex verdict.
-- 2026-07-30: Implementation completed by Claude Code under `STYLE.1.G.UI.1`
-  (following the merged `STYLE.1.G.CORE.1` Look Development backend): a new
-  Look Development Bench at `/projects/[projectId]/style/look-development`
-  (`src/components/projectStyle/lookDevelopment/LookDevelopmentBench.tsx`,
-  `LookDevelopmentRecentTests.tsx`), reachable from a new "Open Look
-  Development" entry in the Project Style workspace. It lets a user choose an
-  explicit Style source (Working Draft or a Published version), prepare an
-  Image or Video Look Test with From Story/Neutral Benchmark/Custom test
-  content, map up to 12 Reference Board images onto ordinary or Dynamic
-  Batch workflow inputs, inspect the exact compiled Look prompt (via the real
-  `compileLookPrompt`) and mapping diagnostics before submitting, launch the
-  job through `createLookTestAction` with a Partner Node confirm/cancel gate
-  and a synchronous anti-double-submit lock, follow it via the existing
-  `GenerationJobStatusPanel`, and publish the durable result through
-  `publishLookResultAction`. Recent Look Tests is read-only in this ticket
-  (comparison, notes, status, duplication and Look Target selection are
-  `STYLE.1.G.UI.2`). No CORE action, schema, or generation runtime file was
-  modified. Full audit, proof results and an English manual validation
-  checklist are in `.agents/claude_report.md`. Awaiting Codex verdict.
-- 2026-07-30: Implementation completed by Claude Code under `STYLE.1.G.UI.2`:
-  the Look Development Bench's Recent Look Tests became a full review
-  workspace over the existing CORE contract — editable notes, Candidate/
-  Reject/Mark-as-Look-Target (with project-wide uniqueness reconciled
-  locally), Delete Result, a 2-to-4 durable-result comparison grid with
-  `Clear comparison`, and a Duplicate-for-rerun -> configure -> Partner Node
-  gate -> run cycle reusing the exact `duplicateLookTestAction` /
-  `runExistingLookTestAction` contract and UI.1's frozen-fingerprint Partner
-  Node gate. One new pure, client-safe helper
-  (`restoreLookTestSnapshotSelections.ts`) restores a duplicate's prior
-  mapping from its source's own generation snapshot only when
-  contextType/contextId/workflowId match exactly and every referenced
-  reference id still belongs to the duplicate — otherwise it refuses and the
-  user must configure explicitly. No CORE action, schema, or generation
-  runtime file was modified. Full audit, proof results (21 pure + 17 DB
-  assertions) and an English manual validation checklist are in
-  `.agents/claude_report.md`. Awaiting Codex verdict.
-- 2026-07-30: Codex Round 1 review returned `REVISE` (5xP1, 1xP2). Claude
-  Code retake corrected all six findings: the duplicate-rerun cycle now
-  actually reaches `publishLookResultAction` after a `done` job instead of
-  stopping at polling; notes/status/Look Target mutations reconcile the
-  opened detail from a real read and only claim `committed, pending sync`
-  after a KNOWN CORE success (never after a plain transport exception), with
-  a `Retry sync` that only re-reads; Duplicate now has a synchronous
-  double-submit guard and never loses its created id if the list refresh
-  fails; `restoreLookTestSnapshotSelections` is fully defensive against
-  legacy/corrupt snapshots (reproducing Codex's exact crash case) and
-  validates every restored node id against the CURRENT workflow's inputs; a
-  duplicate's Style selector now starts on its own frozen Style identity
-  instead of defaulting to the first option; the Comparison grid now shows
-  the exact queued `promptText` instead of the raw Style block. 12 new pure
-  + 18 new DB assertions, all passing; full detail in
-  `.agents/claude_report.md`. Awaiting Codex re-review.
-- 2026-07-30: Codex Round 2 review returned `REVISE` (3xP1, 1xP2). Claude
-  Code retake corrected all four remaining findings: the rerun's poll/
-  publish UI no longer unmounts the instant a job is queued (a new
-  `activeRerunId` lifecycle flag keeps one controlled view mounted through
-  queued -> running -> done -> published, then hands off to the normal
-  reviewed-result view only after a KNOWN publish success, never showing
-  "No durable result saved" right after publishing); Candidate/Reject/Look
-  Target/notes now patch the opened detail immediately on a known CORE
-  success (status label, pressed state and `pending sync` no longer
-  contradict each other when a confirming re-read fails); duplicating a
-  Working Draft-sourced test now matches the EXACT frozen revision (not just
-  "Working Draft" in general), blocking Run with an explicit diagnostic if
-  the draft has since moved on; and the snapshot-restoration helper now
-  requires all four canonical selection fields (rejecting the exact
-  `selections: {}` case Codex reproduced) while both the opened detail and
-  the Comparison grid now validate `promptText` is a real string before
-  rendering it. 24 new pure + 15 new DB assertions, all passing; full detail
-  in `.agents/claude_report.md`. Awaiting Codex re-review.
-- 2026-07-30: Codex Round 3 review returned `REVISE` (1xP1). Claude Code
-  retake lifted the rerun's known job id (`activeRerunJobId`) up to
-  `LookDevelopmentRecentTests`, alongside the existing `activeRerunId`: the
-  pre-run editor now receives it as a `resumeJobId` prop and seeds its local
-  state from it, so closing a rerun-in-progress row and reopening it (or
-  opening a different row first) resumes directly on the poll/publish view
-  instead of losing the job and re-showing the configuration form. `Close`
-  no longer clears this tracking — only a known publish success does.
-  Verified with a temporarily-installed (`npm install --no-save`, fully
-  removed after, `package.json`/`package-lock.json` byte-identical
-  before/after) real React DOM harness exercising actual mount/unmount/
-  remount cycles, plus a full re-run of the Round 2 regression proofs. Full
-  detail in `.agents/claude_report.md`. Awaiting Codex re-review.
-- 2026-07-30: Codex Round 4 review returned `REVISE` (1xP1). Claude Code
-  retake replaced the Round 3 single global `activeRerunId`/
-  `activeRerunJobId` pair in `LookDevelopmentRecentTests` with a controlled
-  `lookTestId -> jobId` registry (`activeReruns`): queuing a second rerun no
-  longer overwrites/loses a first, still-active one — each Look Test's
-  entry is added/removed independently, and a publish only removes the
-  exact `lookTestId`/`jobId` pair just published. Still only one
-  `LookDevelopmentPrerunEditor`/poller is ever mounted at a time (whichever
-  row is open). Verified with a temporarily-installed (fully removed after,
-  package files byte-identical) real React DOM harness proving two
-  concurrent reruns (A and B) each resume their own job independently and
-  publishing one never affects the other, plus a full re-run of the Round
-  2/3 regression proofs. Full detail in `.agents/claude_report.md`. Awaiting
-  Codex re-review.
-- 2026-08-02: `STYLE.1.ACCEPTANCE.1` transversal acceptance gate executed by
-  Claude Code in an isolated environment (HEAD `72f9d89`). Full A-G matrix,
-  schema/migration audit, provenance/version/ownership DB checks and a
-  dead-code audit are recorded in
-  `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`. Technical evidence is
-  complete; status is `TO VALIDATE` pending manual user confirmation and a
-  final Codex verdict. This epic-level entry stays `IN PROGRESS` until that
-  confirmation lands.
-- 2026-08-02: Codex Round 1 review of `STYLE.1.ACCEPTANCE.1` returned
-  `REVISE` — several acceptance scenarios were documented as `PASS` without
-  being executed, migration preservation and cross-Project refusals were
-  inspected rather than proven, and `PROJECT_STATE.md` still contained
-  stale `STYLE.1.D.UI`/pre-epic state. Claude Code retake (new isolated
-  environment, no shared `node_modules`) completed all missing scenarios
-  with real evidence: Reference deletion guards (nominal delete + blocked
-  delete on a Run-cited reference), `Reset to Project Style`, all 6
-  generation consumers with DB-verified `styleProvenance.consumer`
-  discrimination, Asset Alignment stale/edit-preservation and
-  no-double-Apply reconciliation, Look Development duplicate/rerun,
-  close/reopen resuming the exact in-progress job, and authorized result
-  deletion (DB + media), a real DB-level migration-preservation proof
-  (pre-`0040` fixture rows preserved byte-identical through `0040`-`0047`),
-  live cross-Project refusal proofs for Sequence Style/generation/Asset
-  Alignment plus code-verified guards for Look Development/Influence
-  Research/Reference Analysis, and a compact-viewport + real keyboard
-  activation + zero-hydration-error browser pass. `PROJECT_STATE.md` was
-  reconciled and the `server-only` finding reclassified as defensive
-  hardening. Full detail in `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md`
-  and `.agents/claude_report.md`. Status remains `TO VALIDATE` pending
-  Codex re-review and manual user confirmation.
-- 2026-08-02: Codex Round 2 review returned `REVISE` on 3 bounded points:
-  Look Development/Influence Research/Reference Analysis cross-Project
-  refusals were still code-inspection only, a residual
-  `F:\AI\tmp-style1-acceptance` directory (with a leftover `.next`) was not
-  deleted, and the audit mis-stated the Asset job's stored consumer as
-  `"shot-image"` instead of `"asset"`. Claude Code retake (no browser, no
-  full build, no worktree) proved all 3 remaining cross-Project refusals by
-  calling the real Server Actions directly against a minimal disposable
-  SQLite DB (structured refusal + byte-identical zero mutation for each),
-  deleted and confirmed-absent the residual directory, and re-verified the
-  Asset job's real `consumer` value via an actual `runAssetGeneration` call
-  on the same disposable DB — confirmed `"asset"`, correcting a
-  documentation error (not a product defect). No application file was
-  modified. Full detail in `docs/audits/PROJECT_STYLE_V1_ACCEPTANCE.md` and
-  `.agents/claude_report.md`. Status remains `TO VALIDATE` pending Codex
-  re-review and manual user confirmation.
-- 2026-08-02: User confirmed final acceptance (`c est ok`). Codex closed the
-  review with `STYLE.1.ACCEPTANCE.1` accepted. Claude Code closure pass
-  deleted the remaining temporary residue (`F:\AI\tmp-style1-retake2`,
-  confirmed `Test-Path` `False`), marked `docs/audits/
-  PROJECT_STYLE_V1_ACCEPTANCE.md` as `ACCEPTED` with final sign-off,
-  updated `docs/PROJECT_STATE.md` and `docs/ROADMAP.md` to reflect the
-  closed epic and promoted `SEQGEN.VIDEO.CUT.CORE.1` as the next active
-  ticket. **This entry is now `RESOLVED` — the `STYLE.1` epic (A through G)
-  is formally closed.**
+- Condensed 2026-08-22: 521 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260722-004 - Correct Gaussian depth and wheel precision
 
@@ -1636,8 +724,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Date observed: 2026-07-19
 - Area: Storyboard / Sequence Video Split
 - Context: Clicking Split at Current Frame while reviewing a selected segment.
-- Original observation: The page scrolls back to the top after the split and
-  the newly created segment is not selected.
 - Expected outcome: The Split Workspace remains at the user's working
   position after submission, and the newly created second half is selected
   automatically and loaded in the player.
@@ -1650,31 +736,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   after successful frame splits and keeps the Frame/Split toolbar below the
   resizable player.
 - Resolved or validated on: 2026-07-20
-
-#### Follow-up notes
-
-- 2026-07-19: Select the exact inserted segment returned by the server, not a
-  heuristic such as "last segment". Preserve scroll without relying on a
-  fragile fixed pixel offset.
-- 2026-07-20: User validation after `b007f87` confirms selection and seek are
-  correct, but scroll restoration still fails: every split returns to the top
-  of the page. Follow-up moved to `SEQGEN.SPLIT.CLEANUP.1-FIX1`.
-- 2026-07-20: User manually validated `SEQGEN.SPLIT.CLEANUP.1-FIX4` in a real
-  browser. The native `#split-video-player` anchor lands on the resizable
-  player after Split at Current Frame and the resulting workflow is confirmed
-  functional.
-- 2026-07-20: The DOM-anchor/multi-frame FIX1 also failed user validation.
-  Product decision: remove that mechanism, move Frame/Split controls above the
-  player, and make the player 50% wide by default with adjustable width in
-  `SEQGEN.SPLIT.CLEANUP.1-FIX2`.
-- 2026-07-20: User visually validated the FIX2 player sizing. Final product
-  retake: keep the resizable player, restore the Frame/Split toolbar below it,
-  and use the native `#split-segment-bar` URL fragment after a successful
-  Split at Current Frame instead of any JavaScript scroll restoration.
-- 2026-07-20: FIX3 native navigation works, but anchoring the segment bar
-  lands visually too low, around the newest segment. Final retake moves the
-  native fragment target to the resizable video-player container via
-  `#split-video-player`.
+- Condensed 2026-08-22: 27 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260717-SEQVIDEO - Sequence video generation and Split review, closed
 
@@ -3257,16 +2322,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Area: Shot / Gaussian Camera / Generation UX
 - Context: Testing Column 3 of the Gaussian Camera workspace with the real
   `GaussianQwen` default workflow.
-- Original observation:
-
-  > le workflow de la colonne de droite doit exposer les input, nomme avec
-  > (Input), additionnelle du workflow
-  >
-  > l'output snapshot de la colonne 2 doit ce retrouver dans l'input
-  > "Load Image Gaussian (Input)", ainsi l'input image de la colonne 1 devra
-  > se retrouver dans l'input nommee "Load Image (Input)" du workflow de la
-  > colonne 3
-
 - Expected outcome: Column 3 maps its two visual sources by their exact
   workflow labels, never by JSON order, and renders every additional supported
   `(Input)` node as an editable control whose explicit override reaches the
@@ -3294,46 +2349,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   ComfyUI/job-runner/polling change. Awaiting Codex review and user
   validation checklist before this is marked resolved.
 - Resolved or validated on: 2026-07-23
-
-#### Follow-up notes
-
-- 2026-07-22: The real dev workflow `GaussianQwen` confirms two image labels,
-  `Load Image Gaussian (Input)` and `Load Image (Input)`, plus `Seed (Input)`
-  and `Additional Prompy (Input)`. Node ids are fixture evidence only and must
-  never be hard-coded.
-- 2026-07-22: No migration, dependency, provider, job-runner, or polling change
-  is authorized. Server-side revalidation and proof against the actual queued
-  payload are mandatory.
-- 2026-07-23: User validation passed. The exact snapshot/source mapping,
-  additional Gaussian-to-image inputs, generation flow, and resulting output
-  work as expected. Feedback closed after commit `41d7004`.
-- 2026-07-22: Implementation complete. Mapping resolution proven order-
-  independent (reversed JSON node-key order produces the identical mapping)
-  with both pure tests and a harness run directly against the real stored
-  `GaussianQwen` JSON. The canonical-patcher/image-injection payload pipeline
-  was proven with a mock/harness of the real payload rather than a real Comfy
-  Cloud submission, since this workspace's configured provider is Cloud with
-  a real API key — a real submission would have incurred real Partner Node
-  cost for a proof that a harness already covers, per the ticket's own
-  explicit instruction not to spend on Cloud when a harness suffices. See
-  `.agents/claude_report.md` for full proof detail and limits.
-- 2026-07-22: Codex review returned `REVISE` (mapping correct, 3 targeted
-  findings): patcher warnings on explicit overrides were only partially
-  enforced (only the "could not be parsed" case blocked); that validation
-  ran after the snapshot file was already written; and the UI/shared
-  classifier still referenced the retired ordinal contract (`Input 1`/
-  `Input 2`) or the wrong column name. Claude applied the retake: any
-  warning from the canonical patcher on an explicit override now blocks
-  generation outright, and that check now runs before any snapshot
-  file/job work; Column 3 now shows the real `Load Image Gaussian (Input)`
-  / `Load Image (Input)` labels; `classifyNonImageInputs` takes an
-  optional caller-context so its diagnostic names "Gaussian-to-image" for
-  Column 3 while Column 1's original wording is unchanged. Re-validated:
-  12/12 pure tests, a real (zero-cost) end-to-end call proving an invalid
-  override creates zero temp files and zero jobs, a re-verification that
-  valid overrides still land byte-exact, and a real-browser check that the
-  new labels render. Full detail in `.agents/claude_report.md` (retake
-  section). Awaiting fresh Codex verdict.
+- Condensed 2026-08-22: 48 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260723-002 - Correct the Camera Lab Additional Prompt label
 
@@ -3444,31 +2463,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Area: Project Style / Reference Board / Creative Influences / Look Development
 - Context: User validation after completing the Reference Board, Creative
   Influences and Look Development MVP surfaces.
-- Original observations:
-
-  > le bouton image file n est pas assez visible
-
-  > les image sont au format carré, il faudrait qu elle fit par l'edge le plus
-  > long, et ajouter notre feature de popup quand je met le curseur sur l'image
-
-  > met la parti referenceBoard au dessus de la parti Creative board
-
-  > met un popup helper à coté des titres de chaques field de reference board
-  > et creative influences,qui dit à quoi sert chaque field, et ajoute un
-  > exemple
-
-  > mettre le check Approved for Style analysis et Approved for generation
-  > use, dès la creation de la reference board
-
-  > dans look dev bench, le from story est trom long [...] 20 mots maximum
-
-  > en mode Neutral Benchmark, j aimerai bien un bouton random
-
-  > ajouter dans les settings, la possiblilité de renseigner le workflow par
-  > defaut pour le look dev bench
-
-  > collapse la partie Test Content [...] "recent look tests" [...] "history"
-
 - Expected outcome: Reference and Influence metadata are self-explanatory;
   Reference images remain fully visible and inspectable; approvals are chosen
   during creation; Look Development opens with concise content, an optional
@@ -3481,45 +2475,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Resolution: Project Style polish shipped at `82b04d0`; Reference Board
   analysis shipped at `72f9d89` and was validated by the user on 2026-08-02.
 - Resolved or validated on: 2026-08-02
-
-#### Follow-up notes
-
-- 2026-07-31: Reference Board multimodal analysis is deliberately excluded
-  from this polish ticket. It remains a mandatory MVP closure gate under
-  `STYLE.1.B.ANALYSIS.CORE` and `STYLE.1.B.ANALYSIS.UI`.
-- 2026-07-31: The Look Development default is one workflow. Its persisted
-  workflow kind determines the initial Image/Video mode; absent or stale
-  settings retain the historical image-first fallback.
-- 2026-07-31: From Story summarization must be deterministic and local. This
-  UI preset must never trigger a hidden or paid LLM request.
-- 2026-07-31: `STYLE.1.B.ANALYSIS.CORE` (backend/schema for Reference Board
-  multimodal analysis) is implemented — see `.agents/claude_report.md`. This
-  is backend-only: no UI exists yet, so the "Approved for Style analysis"
-  badge remains not visibly actionable until `STYLE.1.B.ANALYSIS.UI` ships.
-  Do not consider this observation resolved on the CORE ticket alone.
-- 2026-08-01: Retake 12 (Cline / GLM-5.2) restored exact `next@16.2.9` and
-  mounted the real React components in jsdom (15/42 proofs pass). The
-  harnais could not intercept Server Action calls inside tsx-compiled `.tsx`
-  files — tsx resolves `@/` imports internally before ESM `load` hooks can
-  rewrite them. No product bug was found. Status remains `TO VALIDATE`.
-- 2026-08-02: Retake 14 (Cline / GPT-5.6 Luna Pro) replaced the unstable
-  `next dev` proof with a real Playwright pass against `next start`. Reference
-  selection, explicit provider confirmation, one completed analysis Run,
-  history inspection and Candidate Rule approval into the Working Draft were
-  proven without losing an unsaved Direction Brief. The exact post-commit
-  read-failure injection is deferred to
-  `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1`; status remains `TO VALIDATE`
-  pending the user's manual pass.
-- 2026-08-02: User confirmed the shipped Reference Analysis workflow works in
-  the application. `FB-20260731-001` is now `RESOLVED`; the separate
-  post-commit pending-sync hardening remains tracked under
-  `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1`.
-- 2026-07-31: `STYLE.1.B.ANALYSIS.UI` (Reference Board Analysis Review
-  Workspace) is implemented by Cline / Mimo v2.5 Pro. The UI now allows
-  selecting references, confirming provider/model, launching multimodal
-  analysis, reviewing observations, and approving candidate rules into the
-  Working Draft. Visible usage remains reserved for manual user validation;
-  do not mark RESOLVED until the user has tested the workflow end-to-end.
+- Condensed 2026-08-22: 54 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260803-002 - Use Border color for primary Project Style headings
 
@@ -3793,14 +2752,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   `sequence_split` video in `shot_videos` but zero approvals, making the
   Editorial viewer and Publish unusable under the previous approved-only-only
   behavior.
-- Original observation:
-
-  > un selecteur Approved only / Latest generation dans Editorial ; Approved
-  > only conserve par defaut ; Latest generation prend la video durable la
-  > plus recente de la Shot Video Library pour chaque Shot ; apercu, timeline
-  > et publication du Basic Sequence Result synchronises ; provenance exacte
-  > enregistree dans le manifest ; aucun changement des approvals ; aucun
-  > fallback silencieux ; verrou contre la double publication.
 - Expected outcome: A segmented `Approved only` / `Latest generation` control
   above the Sequence Viewer, URL-driven, defaulting to `Approved only`. The
   chosen mode drives the viewer, the Shot list/timeline availability, and
@@ -3823,19 +2774,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   the mode being published in its button label, confirm dialog, and success
   message.
 - Resolved or validated on: 2026-08-07 (user-validated; commit `c3ed6fa` pushed)
-
-#### Follow-up notes
-
-- 2026-08-06: Ticket explicitly scoped the new mode to the Editorial viewer
-  and Publish Basic Sequence Result only — `Export Editorial JSON` and
-  `Open in Advanced Editor`/OpenReel keep their existing approved/Editorial-
-  based contract unchanged, and Shot approvals themselves are never touched
-  by this feature.
-
-- 2026-08-07: The approved retake extended `Open in Advanced Editor`/OpenReel
-  to use the selected Approved only or Latest generation mode. Direct Export
-  Editorial JSON keeps its legacy approved-only contract when no query
-  parameter is provided. User validation confirmed both flows.
+- Condensed 2026-08-22: 20 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
 
 ### FB-20260810-001 - Approve every eligible Latest generation video in one action
 
@@ -4157,12 +3099,6 @@ or `DUPLICATE`. Keep the full entry and its history.
 - Area: LLM Workspace / Bench / Entity picker
 - Context: Trying the read-only three-pane bench delivered by B6b
   (`/settings/llm-workflows/[templateId]`), choosing a test entity.
-- Original observation:
-
-  > lorsque je choisi un projet, ca serait bien de pouvoir un bouton pour aller
-  > lister les sequence et shot, de ce projet, car actuellement, lorsque je
-  > choisi un projet, j ai rien dans la liste des sequence et des shot
-
 - Expected outcome: choosing a Project immediately lists that Project's
   Sequences, and choosing a Sequence immediately lists its Shots, without the
   user having to discover that a separate action is required first.
@@ -4177,27 +3113,7 @@ or `DUPLICATE`. Keep the full entry and its history.
   auto-submit — a form must not reload on every keystroke — and the `Apply`
   button stays, both for them and as the no-JavaScript path.
 - Resolved or validated on: 2026-08-14
-
-#### Follow-up notes
-
-- 2026-08-14: `Mode` was included beyond the literal request. It is the same
-  control type with the same expectation of immediate feedback; leaving one
-  select manual would have produced an inconsistent surface, worse than either
-  behaviour applied throughout.
-- 2026-08-14: Deliberately rejected — loading every Project's Sequences and
-  Shots up front to filter client-side. That would move data and state into the
-  browser for no gain and replace a bounded query with a dump.
-- 2026-08-14: Accepted trade-off of the technique — some browsers fire `change`
-  on each arrow-key step inside a `<select>`, so keyboard navigation can trigger
-  several submits. Documented rather than worked around with an invented
-  `onBlur` rule.
-- 2026-08-14: Observed while validating, and left as is: a value typed into a
-  parameter input but not yet applied is carried along by an auto-submit
-  triggered from another control, and takes effect. Consistent with how a form
-  works, mildly at odds with what `Apply` suggests.
-- 2026-08-14: The no-JavaScript fallback is **reasoned, not proven**. The
-  browser tooling available offers no safe way to disable JavaScript, and the
-  validation pass correctly refused to reach for an arbitrary-code-execution
-  tool to force it. The markup is a plain `<select>` inside a
-  `<form method="get">` with a submit button, so without JavaScript the control
-  degrades to the previous click-to-apply behaviour.
+- Condensed 2026-08-22: 28 lines of quoted observation,
+  follow-up notes and investigation log were removed at the author's
+  request. They are in this file's git history; the tickets named
+  above are the live reference.
