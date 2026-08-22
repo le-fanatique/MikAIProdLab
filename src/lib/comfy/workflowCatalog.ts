@@ -331,6 +331,34 @@ export function validateWorkflowContexts(raw: string | null): WorkflowContextsVa
 }
 
 // ---------------------------------------------------------------------------
+// WF.CATALOG.2 §2.1 — parseTagsInput: the one addition this ticket allows to
+// this module. A user types a comma-separated list in a plain text field
+// (`storyboard, gemini, rapide`), never JSON. Splits on comma, trims
+// whitespace, drops empty entries, and deduplicates case-insensitively while
+// keeping the first spelling seen (`Gemini` and `gemini` collapse to
+// `Gemini`). Pure; the action serializes the result and passes it through
+// `validateWorkflowTags`, which stays the single strict gate.
+// ---------------------------------------------------------------------------
+
+export function parseTagsInput(raw: string): string[] {
+  const tags: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of raw.split(",")) {
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) continue;
+
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    tags.push(trimmed);
+  }
+
+  return tags;
+}
+
+// ---------------------------------------------------------------------------
 // 2.4 — isWorkflowOfferedIn: the single definition of "is this workflow
 // offered here". Every page under src/app/ that lists workflows will call
 // this instead of reimplementing the filter (next ticket).

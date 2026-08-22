@@ -6,6 +6,7 @@ import {
   WORKFLOW_CONTEXT_IDS,
   isWorkflowCategoryId,
   isWorkflowOfferedIn,
+  parseTagsInput,
   parseWorkflowContexts,
   parseWorkflowTags,
   validateWorkflowContexts,
@@ -217,6 +218,76 @@ describe("parseWorkflowContexts — tolerant read", () => {
 
   it("a well-formed array parses through", () => {
     expect(parseWorkflowContexts('["asset","storyboard"]')).toEqual(["asset", "storyboard"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTagsInput — WF.CATALOG.2 §2.1, the comma-separated form field parser
+// ---------------------------------------------------------------------------
+
+describe("parseTagsInput", () => {
+  it("an empty string produces no tags", () => {
+    expect(parseTagsInput("")).toEqual([]);
+  });
+
+  it("multiple commas, including empty segments, are dropped", () => {
+    expect(parseTagsInput("storyboard,,gemini,,,rapide")).toEqual([
+      "storyboard",
+      "gemini",
+      "rapide",
+    ]);
+  });
+
+  it("surrounding and inner whitespace is trimmed", () => {
+    expect(parseTagsInput("  storyboard ,  gemini  ,   rapide  ")).toEqual([
+      "storyboard",
+      "gemini",
+      "rapide",
+    ]);
+  });
+
+  it("case-insensitive duplicates collapse, keeping the first spelling seen", () => {
+    expect(parseTagsInput("Gemini, gemini, GEMINI")).toEqual(["Gemini"]);
+  });
+
+  it("a single tag with no comma parses through", () => {
+    expect(parseTagsInput("storyboard")).toEqual(["storyboard"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTagsInput -> JSON.stringify -> validateWorkflowTags — the real path
+// the action runs. Whatever a user types must either pass the strict
+// validator or be refused for a named reason.
+// ---------------------------------------------------------------------------
+
+describe("parseTagsInput through validateWorkflowTags", () => {
+  function submit(raw: string) {
+    const parsed = parseTagsInput(raw);
+    if (parsed.length === 0) return { ok: true as const, value: null };
+    return validateWorkflowTags(JSON.stringify(parsed));
+  }
+
+  it("an empty field is valid, no tags stored", () => {
+    expect(submit("")).toEqual({ ok: true, value: null });
+  });
+
+  it("a normal comma-separated list passes through untouched", () => {
+    expect(submit("storyboard, gemini, rapide")).toEqual({
+      ok: true,
+      value: ["storyboard", "gemini", "rapide"],
+    });
+  });
+
+  it("case-insensitive duplicates typed by the user never reach validateWorkflowTags as duplicates", () => {
+    // parseTagsInput already dedupes case-insensitively, so the strict
+    // validator (which only catches exact-string duplicates) never sees two
+    // entries that differ only by case.
+    expect(submit("Gemini, gemini")).toEqual({ ok: true, value: ["Gemini"] });
+  });
+
+  it("whitespace-only input is treated as empty, not as a blank tag", () => {
+    expect(submit("   ,  ,  ")).toEqual({ ok: true, value: null });
   });
 });
 
