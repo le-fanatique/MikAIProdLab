@@ -14,6 +14,23 @@ Five tickets, all committed, pushed, migration `0061` applied by the author.
 | `WF.GALLERY.2` | `61e3f2d` | the three surfaces that still bypassed the registry: Look Development, the workflow View page, the six default selectors |
 | `WF.LIBRARY.1` | `8e9224f` | the overlay library behind "Change Workflow" — the path the author actually uses |
 | `WF.LIBRARY.2` | `6da112b` | the thumbnail-size control, extracted once and shared by both surfaces |
+| `WF.FAVORITE.1` | `d09d27e` | the favorite flag and its star toggle, migration `0062` applied by the author |
+
+**Favorite is a flag, not a category — deliberately.** The author asked for a
+"favorite category"; `category` is single-valued, so honouring that literally
+would have pulled `SeedanceMid` out of `video` and traded its filing for the
+star. It is stored as `is_favorite` and *displayed* as a category: a "Favorites"
+section at the top of every gallery, an entry at the top of the library
+sidebar, both hidden while no favorite exists. A favorite therefore appears
+twice — under Favorites and under its real category — which is the accepted
+price of not stealing its filing. Do not "fix" that duplication.
+
+The star must be a **sibling** of the card's `<Link>`, never a descendant: in
+the library the whole card is a link, and a `<form>` inside an anchor is invalid
+HTML that would have selected the workflow instead of marking it.
+`toggleWorkflowFavorite` re-reads the stored value rather than trusting the
+client, and writes `is_favorite` alone — touching `updated_at` would reorder
+lists on a star click.
 
 **The author's 33 workflows were classified on 2026-08-22, at his request**, into
 the eight categories — a data change, not a code one, applied after a verified
