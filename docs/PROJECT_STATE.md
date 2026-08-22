@@ -4,7 +4,7 @@ Last updated: 2026-08-22
 
 ## Workflow template gallery — chantier COMPLETE (2026-08-22)
 
-Three tickets, all committed, pushed, migration `0061` applied by the author.
+Five tickets, all committed, pushed, migration `0061` applied by the author.
 
 | Ticket | Commit | What landed |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ file-deletion failures silently. It is shared with the reference-image family,
 so fixing it was out of this chantier's scope — a thumbnail locked by the OS at
 replacement time stays on disk with nothing said.
 
-Tests: 1585 → 1651.
+Tests: 1585 → 1665.
 
 ## `WF.CATALOG.1` — the vocabulary (2026-08-22)
 
