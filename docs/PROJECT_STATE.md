@@ -13,6 +13,23 @@ Five tickets, all committed, pushed, migration `0061` applied by the author.
 | `WF.GALLERY.1` | `3eca598` | the gallery itself — five duplicated flat lists replaced by one shared component |
 | `WF.GALLERY.2` | `61e3f2d` | the three surfaces that still bypassed the registry: Look Development, the workflow View page, the six default selectors |
 | `WF.LIBRARY.1` | `8e9224f` | the overlay library behind "Change Workflow" — the path the author actually uses |
+| `WF.LIBRARY.2` | `6da112b` | the thumbnail-size control, extracted once and shared by both surfaces |
+
+**The author's 33 workflows were classified on 2026-08-22, at his request**, into
+the eight categories — a data change, not a code one, applied after a verified
+backup by a script that refused to overwrite any already-classified row. Two
+calls were arbitrary and he was told so: `gemin ref` to `image-edit` (from its
+"ref mix avec gemini" description) and `Make ContactSheet` to `storyboard`
+rather than `utility`. Every gallery now shows eight filled sections instead of
+one `Uncategorized` heap.
+
+`WF.LIBRARY.2` put the size slider on `/settings/workflows` too. The mechanism
+was **extracted rather than copied**: one client component, one storage key for
+both surfaces, and the chosen size travels as a CSS custom property on the root
+— a client-computed number cannot cross the RSC boundary into a gallery that is
+a Server Component. `normalizeThumbnailSize` (pure, mutation-proven) sends any
+absent, non-numeric or out-of-range value back to the default, so a value
+written by one surface can never break the other's grid.
 
 **`WF.LIBRARY.1` exists because the chantier improved the wrong surface.** There
 are two ways to pick a workflow: the standalone `/workflows` pages, and the
