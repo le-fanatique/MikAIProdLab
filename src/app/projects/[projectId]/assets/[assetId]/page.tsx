@@ -91,6 +91,16 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const forceSelector =
     rawSelector === "1" || (Array.isArray(rawSelector) && rawSelector[0] === "1");
 
+  // WF.LIBRARY.1 — the library's own search/category state, owned by it
+  // alone (never reconducted through `frozenParams`).
+  const rawLibrarySearch = resolvedSearchParams["q"];
+  const librarySearch =
+    typeof rawLibrarySearch === "string" ? rawLibrarySearch : Array.isArray(rawLibrarySearch) ? rawLibrarySearch[0] ?? "" : "";
+
+  const rawLibraryCategory = resolvedSearchParams["cat"];
+  const libraryCategory =
+    typeof rawLibraryCategory === "string" ? rawLibraryCategory : Array.isArray(rawLibraryCategory) ? rawLibraryCategory[0] ?? null : null;
+
   // Parse generation-related search params
   const selectedImageByNodeId: Record<string, string> = {};
   const scalarValueByNodeId: Record<string, string> = {};
@@ -214,25 +224,47 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
     }
   }
 
-  // Fetch workflows for selector only when panel is open and no effective workflow
-  const imageWorkflows =
+  // Fetch workflows for the library only when the panel is open and no
+  // effective workflow. WF.LIBRARY.1 — no longer filtered by `kind` at the
+  // DB level: the `asset` context (image-only, per `WORKFLOW_CONTEXTS`)
+  // filters that via `isWorkflowOfferedIn` inside the library itself, the
+  // same context-filtering path the shot picker uses.
+  const savedWorkflows =
     generationOpen && !effectiveWorkflowId
       ? await db
           .select({
             id: comfyWorkflows.id,
             name: comfyWorkflows.name,
             kind: comfyWorkflows.kind,
+            status: comfyWorkflows.status,
             description: comfyWorkflows.description,
+            category: comfyWorkflows.category,
+            tags: comfyWorkflows.tags,
+            contexts: comfyWorkflows.contexts,
+            thumbnailPath: comfyWorkflows.thumbnailPath,
           })
           .from(comfyWorkflows)
-          .where(eq(comfyWorkflows.kind, "image"))
           .orderBy(desc(comfyWorkflows.updatedAt))
       : [];
 
   const detailBaseUrl = `/projects/${pid}/assets/${aid}`;
   const closeUrl = detailBaseUrl;
   const openPanelUrl = `${detailBaseUrl}?generation=open`;
-  const changePanelUrl = `${detailBaseUrl}?generation=open&selector=1`;
+
+  // WF.LIBRARY.1 §3 — every current param except `q`/`cat` (owned by the
+  // library alone) and `workflowId` (a stale selection must not leak back
+  // in) is reconducted verbatim, so state like `storyboardRefs` survives
+  // both "Change Workflow" and browsing inside the open library.
+  // `generation`/`selector` are then force-set, matching the old static
+  // `changePanelUrl` exactly, on top of whatever else is reconducted.
+  const libraryFrozenParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(currentSearchParams)) {
+    if (key === "q" || key === "cat" || key === "workflowId") continue;
+    libraryFrozenParams[key] = value;
+  }
+  libraryFrozenParams.generation = "open";
+  libraryFrozenParams.selector = "1";
+  const changePanelUrl = `${detailBaseUrl}?${new URLSearchParams(libraryFrozenParams).toString()}`;
 
   // Build returnTo that preserves generation panel state
   const detailsEditParams = new URLSearchParams();
@@ -560,34 +592,49 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
       </div>
 
       {/* ── Generation Panel ──────────────────────────────── */}
-      {generationOpen && (
+      {generationOpen && effectiveWorkflowId && (
         <GenerationPanelShell scrollKey={`asset-${aid}`}>
-          {effectiveWorkflowId ? (
-            <AssetGenerationPanel
-              projectId={pid}
-              assetId={aid}
-              workflowId={effectiveWorkflowId}
-              closeUrl={closeUrl}
-              selectorUrl={changePanelUrl}
-              basePath={detailBaseUrl}
-              currentSearchParams={currentSearchParams}
-              selectedImageByNodeId={selectedImageByNodeId}
-              scalarValueByNodeId={scalarValueByNodeId}
-              textOverrideByNodeId={textOverrideByNodeId}
-              generationError={generationError}
-              activeJobId={activeJobId}
-              attachedReference={attachedReference}
-              attachError={attachError ?? null}
-            />
-          ) : (
-            <WorkflowSelectorPanel
-              workflows={imageWorkflows}
-              basePanelUrl={openPanelUrl}
-              closeUrl={closeUrl}
-              context="asset"
-            />
-          )}
+          <AssetGenerationPanel
+            projectId={pid}
+            assetId={aid}
+            workflowId={effectiveWorkflowId}
+            closeUrl={closeUrl}
+            selectorUrl={changePanelUrl}
+            basePath={detailBaseUrl}
+            currentSearchParams={currentSearchParams}
+            selectedImageByNodeId={selectedImageByNodeId}
+            scalarValueByNodeId={scalarValueByNodeId}
+            textOverrideByNodeId={textOverrideByNodeId}
+            generationError={generationError}
+            activeJobId={activeJobId}
+            attachedReference={attachedReference}
+            attachError={attachError ?? null}
+          />
         </GenerationPanelShell>
+      )}
+
+      {/* ── Workflow Library — WF.LIBRARY.1: a full-screen overlay, not part
+          of GenerationPanelShell's side panel. ────────────────────────── */}
+      {generationOpen && !effectiveWorkflowId && (
+        <WorkflowSelectorPanel
+          workflows={savedWorkflows}
+          contexts={["asset"]}
+          basePath={detailBaseUrl}
+          frozenParams={libraryFrozenParams}
+          search={librarySearch}
+          category={libraryCategory}
+          closeUrl={closeUrl}
+          emptyTitle="No image workflows available."
+          emptyDescription="Upload a ComfyUI image workflow in Settings to enable asset generation."
+          emptyAction={
+            <Link
+              href="/settings/workflows"
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Manage Workflows →
+            </Link>
+          }
+        />
       )}
     </div>
   );

@@ -125,6 +125,11 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
 
   const forceSelector = sp("selector") === "1";
 
+  // WF.LIBRARY.1 — the library's own search/category state, owned by it
+  // alone (never reconducted through `frozenParams`).
+  const librarySearch = sp("q") ?? "";
+  const libraryCategory = sp("cat") ?? null;
+
   const selectedImageByNodeId: Record<string, string> = {};
   const selectedVideoByNodeId: Record<string, string> = {};
   const scalarValueByNodeId: Record<string, string> = {};
@@ -282,7 +287,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
     }
   }
 
-  // Only load workflow list when the selector needs to be shown
+  // Only load workflow list when the selector needs to be shown. WF.LIBRARY.1
+  // — `contexts`/`status` added so the library can filter by context via
+  // `isWorkflowOfferedIn` instead of the old hardcoded `kind === "image"` /
+  // `"video"`; `category`/`tags`/`thumbnailPath` for the gallery card.
   const savedWorkflows =
     generationOpen && !effectiveWorkflowId
       ? await db
@@ -290,7 +298,12 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             id: comfyWorkflows.id,
             name: comfyWorkflows.name,
             kind: comfyWorkflows.kind,
+            status: comfyWorkflows.status,
             description: comfyWorkflows.description,
+            category: comfyWorkflows.category,
+            tags: comfyWorkflows.tags,
+            contexts: comfyWorkflows.contexts,
+            thumbnailPath: comfyWorkflows.thumbnailPath,
             updatedAt: comfyWorkflows.updatedAt,
           })
           .from(comfyWorkflows)
@@ -573,7 +586,21 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const detailBaseUrl = `/projects/${pid}/sequences/${sid}/shots/${shid}`;
   const closeUrl = detailBaseUrl;
   const openPanelUrl = `${detailBaseUrl}?generation=open`;
-  const changePanelUrl = `${detailBaseUrl}?generation=open&selector=1`;
+
+  // WF.LIBRARY.1 §3 — every current param except `q`/`cat` (owned by the
+  // library alone) and `workflowId` (a stale selection must not leak back
+  // in) is reconducted verbatim, so `storyboardRefs`, `batchImages_*`, etc.
+  // survive both "Change Workflow" and browsing inside the open library.
+  // `generation`/`selector` are then force-set, matching the old static
+  // `changePanelUrl` exactly, on top of whatever else is reconducted.
+  const libraryFrozenParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(currentSearchParams)) {
+    if (key === "q" || key === "cat" || key === "workflowId") continue;
+    libraryFrozenParams[key] = value;
+  }
+  libraryFrozenParams.generation = "open";
+  libraryFrozenParams.selector = "1";
+  const changePanelUrl = `${detailBaseUrl}?${new URLSearchParams(libraryFrozenParams).toString()}`;
 
   return (
     <div className={generationOpen ? "flex gap-0 items-start" : ""}>
@@ -1014,45 +1041,60 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       </div>
 
       {/* ── Generation Panel ──────────────────────────────────── */}
-      {generationOpen && (
+      {generationOpen && effectiveWorkflowId && (
         <GenerationPanelShell scrollKey={`shot-${shid}`}>
-          {effectiveWorkflowId ? (
-            <ShotGenerationPanel
-              projectId={pid}
-              sequenceId={sid}
-              shotId={shid}
-              workflowId={effectiveWorkflowId}
-              closeUrl={closeUrl}
-              selectorUrl={changePanelUrl}
-              basePath={detailBaseUrl}
-              currentSearchParams={currentSearchParams}
-              selectedImageByNodeId={selectedImageByNodeId}
-              selectedVideoByNodeId={selectedVideoByNodeId}
-              scalarValueByNodeId={scalarValueByNodeId}
-              textOverrideByNodeId={textOverrideByNodeId}
-              generationError={generationError}
-              activeJobId={activeJobId}
-              attachedReference={attachedReference === "1"}
-              attachError={attachError ?? null}
-              approvedVideo={approvedVideo === "1"}
-              approveError={approveError ?? null}
-              librarySaved={librarySaved === "1"}
-              libraryAlreadySaved={libraryAlreadySaved === "1"}
-              libraryError={libraryError ?? null}
-              shotPromptSaved={shotPromptSaved === "1"}
-              shotPromptError={shotPromptError ?? null}
-              storyboardDraftSaved={storyboardDraftSaved === "1"}
-              storyboardDraftError={storyboardDraftError ?? null}
-            />
-          ) : (
-            <WorkflowSelectorPanel
-              workflows={savedWorkflows}
-              basePanelUrl={openPanelUrl}
-              closeUrl={closeUrl}
-              context="shot"
-            />
-          )}
+          <ShotGenerationPanel
+            projectId={pid}
+            sequenceId={sid}
+            shotId={shid}
+            workflowId={effectiveWorkflowId}
+            closeUrl={closeUrl}
+            selectorUrl={changePanelUrl}
+            basePath={detailBaseUrl}
+            currentSearchParams={currentSearchParams}
+            selectedImageByNodeId={selectedImageByNodeId}
+            selectedVideoByNodeId={selectedVideoByNodeId}
+            scalarValueByNodeId={scalarValueByNodeId}
+            textOverrideByNodeId={textOverrideByNodeId}
+            generationError={generationError}
+            activeJobId={activeJobId}
+            attachedReference={attachedReference === "1"}
+            attachError={attachError ?? null}
+            approvedVideo={approvedVideo === "1"}
+            approveError={approveError ?? null}
+            librarySaved={librarySaved === "1"}
+            libraryAlreadySaved={libraryAlreadySaved === "1"}
+            libraryError={libraryError ?? null}
+            shotPromptSaved={shotPromptSaved === "1"}
+            shotPromptError={shotPromptError ?? null}
+            storyboardDraftSaved={storyboardDraftSaved === "1"}
+            storyboardDraftError={storyboardDraftError ?? null}
+          />
         </GenerationPanelShell>
+      )}
+
+      {/* ── Workflow Library — WF.LIBRARY.1: a full-screen overlay, not part
+          of GenerationPanelShell's side panel. ─────────────────────────── */}
+      {generationOpen && !effectiveWorkflowId && (
+        <WorkflowSelectorPanel
+          workflows={savedWorkflows}
+          contexts={["shot-keyframe", "shot-video"]}
+          basePath={detailBaseUrl}
+          frozenParams={libraryFrozenParams}
+          search={librarySearch}
+          category={libraryCategory}
+          closeUrl={closeUrl}
+          emptyTitle="No workflows available."
+          emptyDescription="Upload a ComfyUI workflow in Settings to enable generation."
+          emptyAction={
+            <Link
+              href="/settings/workflows"
+              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+            >
+              Manage Workflows →
+            </Link>
+          }
+        />
       )}
     </div>
   );

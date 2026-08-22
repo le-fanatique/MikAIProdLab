@@ -121,3 +121,59 @@ export function selectGalleryWorkflows<T extends GalleryWorkflowRow>(
 
   return sections;
 }
+
+// ---------------------------------------------------------------------------
+// buildLibraryCategories — WF.LIBRARY.1 §5
+//
+// The workflow library's sidebar. Pure, and deliberately built on top of
+// `selectGalleryWorkflows` rather than duplicating its grouping rules: the
+// same context filter, the same `WORKFLOW_CATEGORY_IDS` order, the same
+// tolerant handling of a corrupt `category`/`tags`/`contexts` column. This
+// composition is *why* the counts already satisfy "reflect the context
+// already filtered, not the whole library" and "an empty category does not
+// appear" — both are `selectGalleryWorkflows`'s existing behaviour, not
+// reimplemented here.
+//
+// `contexts` is required (not optional, unlike `selectGalleryWorkflows`):
+// the library is always entered from a context (shot or asset), never from
+// the context-agnostic Settings manager.
+// ---------------------------------------------------------------------------
+
+export interface LibraryCategoryEntry {
+  /** "all" is synthetic — not a `WorkflowCategoryId` — and always first. */
+  id: WorkflowCategoryId | "uncategorized" | "all";
+  label: string;
+  count: number;
+}
+
+export function buildLibraryCategories<T extends GalleryWorkflowRow>(
+  workflows: readonly T[],
+  contexts: readonly WorkflowContextId[]
+): LibraryCategoryEntry[] {
+  const sections = selectGalleryWorkflows(workflows, { contexts });
+  const total = sections.reduce((n, s) => n + s.workflows.length, 0);
+
+  const entries: LibraryCategoryEntry[] = [{ id: "all", label: "All", count: total }];
+
+  let uncategorizedEntry: LibraryCategoryEntry | null = null;
+  for (const section of sections) {
+    const entry: LibraryCategoryEntry = {
+      id: section.categoryId,
+      label: section.label,
+      count: section.workflows.length,
+    };
+    if (section.categoryId === "uncategorized") {
+      uncategorizedEntry = entry;
+    } else {
+      entries.push(entry);
+    }
+  }
+
+  // `selectGalleryWorkflows` already appends "uncategorized" last among its
+  // sections, but that ordering is re-asserted here explicitly rather than
+  // relied upon implicitly, since this function's own contract ("All" first,
+  // "Uncategorized" last) must hold even if that upstream ordering changes.
+  if (uncategorizedEntry) entries.push(uncategorizedEntry);
+
+  return entries;
+}
