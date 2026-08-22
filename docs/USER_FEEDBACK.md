@@ -729,15 +729,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260716-021 - Reference videos for Assets and Shots
 
-- Status: `INBOX`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Assets / Shots / Reference media / ComfyUI workflows
 - Context: Preparing future reference video-to-video generation workflows.
-- Original observation:
-
-  > il faudra qu on voit ensemble pour pouvoir storer des videos de reference
-  > pour les assets et les shots, car cela sera necessaire pour les workflow
-  > reference video to video
 
 - Expected outcome: Define a durable way to upload, store, review, and select
   reference videos associated with Assets and Shots so compatible
@@ -746,22 +741,22 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   workflows cannot reliably reuse motion, appearance, camera, rhythm, or
   continuity material linked to the relevant Asset or Shot.
 - Related ticket: None
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: delivered for **Shots**: `shot_reference_videos`
+  (`src/db/schema/references.ts`), its upload/delete actions
+  (`src/actions/shotReferenceVideos.ts`), file-cleanup lifecycle, and a stored
+  `video_role` since ticket B17a.
+- Resolved or validated on: **2026-08-22 — closed by the author**, after
+  his own review.
+- Scope actually delivered, recorded 2026-08-22: the **Asset** half of this
+  request was never built — there is no `asset_reference_videos` table or
+  equivalent, only the Shot side. The author closed the entry anyway;
+  `docs/PROJECT_STATE.md` already records that B17b, the audio/video family
+  extension, was deliberately not built because the video table had only just
+  gained its roles. Reopen a fresh observation if Asset-level reference videos
+  become necessary.
 
-#### Follow-up notes
-
-- 2026-07-16: Product discussion must define reference-video roles, whether a
-  video belongs to an Asset, a Shot, or a shared catalog, and the expected
-  upload, preview, approval, ordering, replacement, and deletion workflow.
-- 2026-07-16: Architecture preparation must audit the existing media schema
-  and storage lifecycle, then decide what durable metadata is required, such
-  as source filename, path, duration, dimensions, frame rate, codec,
-  thumbnail, role, approval, provenance, and usage notes.
-- 2026-07-16: This observation does not yet authorize a schema, migration,
-  storage, ComfyUI protocol, generation-runtime, job-runner, polling, or
-  dependency change. Those decisions require a dedicated ticket after the
-  product discussion.
+- Condensed 2026-08-22: the quoted observation and the follow-up notes were
+  removed; they are in this file’s git history.
 
 ### FB-20260715-STORYBOARDGEN - Sequence Storyboard generation and package, consolidated
 
@@ -1117,15 +1112,11 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260715-013 - Central System Prompts category in Settings
 
-- Status: `OPEN`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Settings / LLM processes / System Prompts
 - Context: Reviewing and configuring the prompts used by the application's
   different LLM-assisted processes.
-- Original observation:
-
-  > j aimerai bien avoir une categorie dans settings "system prompt" ave acces
-  > à tout les prompt pout tout nos process llm de l'application
 
 - Expected outcome: Add a `System Prompts` category in Settings that provides
   centralized access to the prompts used by every LLM process across the
@@ -1134,47 +1125,18 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Impact: Central visibility would make LLM behavior easier to understand,
   audit, tune, and keep consistent across features.
 - Related ticket: None
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: delivered by the **LLM Workspace**, not by a separate
+  `System Prompts` Settings category — exactly as this entry's own 2026-08-13
+  note predicted. `/settings/llm-workflows` (templates, three-pane bench) and
+  `/settings/llm-workflows/variables` give one place to see and tune what every
+  LLM operation sends. `docs/LLM_OPERATIONS_INVENTORY.md`
+  (`PROMPTS.INVENTORY.CLEANUP.1`, `6a730b6` / `f31416a`) tabulates the 26
+  exported LLM actions behind it.
+- Resolved or validated on: **2026-08-22 — closed by the author**, after
+  his own review.
 
-#### Follow-up notes
-
-- 2026-07-15: Ticket preparation must inventory every LLM call site and define
-  which prompts are read-only or editable, their global/project scope,
-  defaults, validation, reset behavior, versioning, and fallback behavior for
-  invalid edits. Existing LLM Chat system-prompt controls do not by themselves
-  satisfy this application-wide request.
-- 2026-08-13: **The inventory prerequisite above is now satisfied.**
-  `docs/LLM_OPERATIONS_INVENTORY.md` (ticket `PROMPTS.INVENTORY.CLEANUP.1`,
-  commits `6a730b6` / `f31416a`) tabulates all 26 exported LLM actions with
-  their prompt builders, assist components, anchor entities, written fields
-  and output shapes. Status stays `OPEN`: the inventory unblocks ticket
-  preparation, it does not deliver the Settings category.
-  One constraint it establishes matters here: prompt builders are **not** all
-  under `src/lib/prompts/` — `translationPrompt.ts` lives in `src/lib/llm/` —
-  so any screen listing prompts by directory scan would silently omit one.
-- 2026-08-13: **Likely to be superseded by the LLM Workspace.** This entry has
-  never been promoted to `docs/ROADMAP.md`, so it commits nothing and gates
-  nothing. More to the point, what it asks for — one place to see and tune the
-  prompts of every LLM process — is what the workspace's three-pane bench and
-  variable library provide as a by-product
-  (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §5.1, §5.2). Building a separate
-  `System Prompts` Settings category now would duplicate that.
-  **Do not prepare a Settings-category ticket.** Re-evaluate this observation
-  once the workspace exists, against what it actually delivers. Status stays
-  `OPEN` — the need is real and unmet; only the intended solution has moved.
-- 2026-07-15: This observation does not authorize a schema, migration,
-  generation-runtime, or dependency change without a dedicated ticket and
-  architecture decision.
-- 2026-08-14: `LLMW.STORAGE.1` (B6a) delivers `/settings/llm-workflows`: one
-  list showing every LLM operation of the application — the eight built-in
-  (code) descriptors as read-only entries, plus the editable `llm_templates`
-  rows the workshop creates or imports, each with its scope (global or a
-  named Project). This is the "one place to see every LLM process's prompt"
-  half of the request. Status stays `OPEN`: B6a ships no workbench (no panel,
-  no entity selector, no Run) — B6b/B6c deliver the three-pane bench that
-  lets a prompt actually be read and tuned per entity, which is what closes
-  this observation.
+- Condensed 2026-08-22: the quoted observation and the follow-up notes were
+  removed; they are in this file’s git history.
 
 ### FB-20260715-014 - ComfyUI port presets in Render Settings
 
@@ -1292,14 +1254,11 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260716-033 - Make Edit Project text fields translatable
 
-- Status: `OPEN`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Project editing / Translation
 - Context: Editing the textual content of a Project from the `Edit Project`
   page.
-- Original observation:
-
-  > ajouter les text field de Edit project comme translatable
 
 - Expected outcome: The relevant text fields on `Edit Project` use the
   application's translatable-field workflow, allowing their content to be
@@ -1309,24 +1268,16 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   without copying content into an external translation tool.
 - Related ticket: The existing `TRANS.*` translation work should be audited
   when preparing this request.
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: closed by the author's decision on 2026-08-22, **not by a
+  delivery**. `src/app/projects/[projectId]/edit/page.tsx` still uses plain
+  `FormField` inputs: `PromptTextareaWithTranslate` is wired only into
+  `ShotPromptForm`, `SequencePromptForm` and `InlineShotPromptEditor`. Recorded
+  as-is rather than claimed as shipped.
+- Resolved or validated on: **2026-08-22 — closed by the author**, after
+  his own review.
 
-#### Follow-up notes
-
-- 2026-07-16: Ticket preparation must inventory the page fields and decide
-  which are creative translatable content, such as Pitch, Story, or Notes,
-  versus names, identifiers, paths, or technical values that should remain
-  unchanged.
-- 2026-07-16: Reuse the existing translation preview/apply behavior, preserve
-  the source text, and never overwrite a field silently. This observation
-  alone does not authorize schema, migration, provider, or dependency changes.
-- 2026-07-16: Evaluate a non-generative, low-latency French↔English option for
-  the translation workflow. Apertium is a rule-based/deterministic candidate
-  with an official French–English pair; it may suit UI labels, short technical
-  text, and quick previews, while an LLM can remain available for creative
-  wording and nuance. Keep the provider configurable and compare quality before
-  changing the default.
+- Condensed 2026-08-22: the quoted observation and the follow-up notes were
+  removed; they are in this file’s git history.
 
 ### FB-20260716-034 - Match Apply to Story with Save Changes button colors
 
@@ -2488,15 +2439,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260811-004 - Add Auto Casting at Shot level
 
-- Status: `OPEN`
+- Status: `RESOLVED`
 - Date observed: 2026-08-11
 - Area: Shot / Casting / Creative assistance
 - Context: Managing the cast and reference Assets for an individual Shot.
-- Original observation:
-
-  > ajouter un autre ticket, sur le fait qu il faudrait que j'ai un bouton auto
-  > casting aussi au niveau du shot, et pas just à la sequence comme
-  > actuellement
 
 - Expected outcome: Shot Detail exposes an `Auto Casting` action in addition to
   the existing Sequence-level action. It proposes suitable Project/Sequence
@@ -2506,20 +2452,15 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   rerun or alter the entire Sequence casting, making local Shot direction more
   efficient.
 - Related ticket: None; related feedback: `FB-20260804-008`
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: delivered by `CastingSuggestionsPanel` +
+  `src/actions/llm/castingSuggestions.ts`: the analysis produces both
+  Sequence-level and **Shot-level** groups (`targetType: "sequence" | "shot"`),
+  reviewed and applied by explicit selection — never auto-applied.
+- Resolved or validated on: **2026-08-22 — closed by the author**, after
+  his own review.
 
-#### Follow-up notes
-
-- 2026-08-11: The Shot-level action should show suggestions and their reasons
-  before applying them. It must distinguish inherited Sequence casting from
-  Shot-specific additions or overrides, preserve explicit user selections, and
-  never silently replace the Sequence cast.
-- 2026-08-11: Ticket preparation should define whether Auto Casting uses the
-  same specialist/provider and scoring rules as Sequence casting, how many
-  candidates it returns, and how image/video references are selected. The
-  observation alone does not authorize schema, migration, provider, or
-  generation-runtime changes.
+- Condensed 2026-08-22: the quoted observation and the follow-up notes were
+  removed; they are in this file’s git history.
 
 ### FB-20260821-001 - Retirer une plage frame-exacte d'un Sequence Video Draft
 
