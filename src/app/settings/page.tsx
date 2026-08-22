@@ -21,6 +21,7 @@ import { db } from "@/db";
 import { comfyWorkflows, llmTemplates } from "@/db/schema";
 import { sql, desc } from "drizzle-orm";
 import { DESCRIPTORS } from "@/lib/llmWorkspace/descriptors";
+import { selectDefaultWorkflowOptions } from "@/lib/comfy/selectDefaultWorkflowOptions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,15 +48,46 @@ export default async function SettingsPage({ searchParams }: Props) {
   const [{ workflowCount }, allWorkflows, defaults, { llmTemplateCount }] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
     db
-      .select({ id: comfyWorkflows.id, name: comfyWorkflows.name, kind: comfyWorkflows.kind })
+      .select({
+        id: comfyWorkflows.id,
+        name: comfyWorkflows.name,
+        kind: comfyWorkflows.kind,
+        status: comfyWorkflows.status,
+        contexts: comfyWorkflows.contexts,
+      })
       .from(comfyWorkflows)
       .orderBy(desc(comfyWorkflows.updatedAt)),
     getWorkflowDefaults(),
     db.select({ llmTemplateCount: sql<number>`count(*)` }).from(llmTemplates).then(([r]) => r),
   ]);
 
-  const imageWorkflows = allWorkflows.filter((wf) => wf.kind === "image");
-  const videoWorkflows = allWorkflows.filter((wf) => wf.kind === "video");
+  // WF.GALLERY.2 §3 — one call per dropdown. The mapping is asymmetric on
+  // purpose: the four production-context dropdowns filter by `kind` AND a
+  // `WorkflowContextId`; the two Camera Lab dropdowns pass `context: null`
+  // and filter on `kind` + `status` only (Camera Lab has no entry in
+  // `WORKFLOW_CONTEXTS` — WF.CATALOG.1 §2.1). Every dropdown also keeps its
+  // own currently registered default selectable even if archived, marked.
+  const assetImageOptions = selectDefaultWorkflowOptions(allWorkflows, "image", "asset", defaults.assetImageId);
+  const shotImageOptions = selectDefaultWorkflowOptions(allWorkflows, "image", "shot-keyframe", defaults.shotImageId);
+  const shotVideoOptions = selectDefaultWorkflowOptions(allWorkflows, "video", "shot-video", defaults.shotVideoId);
+  const gaussianPlyOptions = selectDefaultWorkflowOptions(allWorkflows, "image", null, defaults.gaussianPlyId);
+  const gaussianToImageOptions = selectDefaultWorkflowOptions(allWorkflows, "image", null, defaults.gaussianToImageId);
+  const lookDevelopmentImageOptions = selectDefaultWorkflowOptions(
+    allWorkflows,
+    "image",
+    "look-development",
+    defaults.lookDevelopmentId
+  );
+  const lookDevelopmentVideoOptions = selectDefaultWorkflowOptions(
+    allWorkflows,
+    "video",
+    "look-development",
+    defaults.lookDevelopmentId
+  );
+
+  function optionLabel(opt: { name: string; archived: boolean }): string {
+    return opt.archived ? `${opt.name} (archived)` : opt.name;
+  }
 
   let initialModels: string[] = [];
   let initialModelsError: string | null = null;
@@ -278,9 +310,9 @@ export default async function SettingsPage({ searchParams }: Props) {
                         className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
                         <option value="">-- None --</option>
-                        {imageWorkflows.map((wf) => (
+                        {assetImageOptions.map((wf) => (
                           <option key={wf.id} value={String(wf.id)}>
-                            {wf.name}
+                            {optionLabel(wf)}
                           </option>
                         ))}
                       </select>
@@ -293,9 +325,9 @@ export default async function SettingsPage({ searchParams }: Props) {
                         className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
                         <option value="">-- None --</option>
-                        {imageWorkflows.map((wf) => (
+                        {shotImageOptions.map((wf) => (
                           <option key={wf.id} value={String(wf.id)}>
-                            {wf.name}
+                            {optionLabel(wf)}
                           </option>
                         ))}
                       </select>
@@ -308,16 +340,18 @@ export default async function SettingsPage({ searchParams }: Props) {
                         className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
                         <option value="">-- None --</option>
-                        {videoWorkflows.map((wf) => (
+                        {shotVideoOptions.map((wf) => (
                           <option key={wf.id} value={String(wf.id)}>
-                            {wf.name}
+                            {optionLabel(wf)}
                           </option>
                         ))}
                       </select>
                     </div>
                     {/* CAMLAB.POLISH.1 — Lot A. Same "-- None --" absent/invalid
                         behavior as the three defaults above; lists existing workflows
-                        only, never inferred by name/id/SHARP class. */}
+                        only, never inferred by name/id/SHARP class. WF.GALLERY.2 §3 —
+                        Camera Lab has no entry in WORKFLOW_CONTEXTS, so this dropdown
+                        filters on kind + status only (context: null). */}
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs text-[#6e767d]">Default Gaussian PLY</label>
                       <select
@@ -326,9 +360,9 @@ export default async function SettingsPage({ searchParams }: Props) {
                         className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
                         <option value="">-- None --</option>
-                        {imageWorkflows.map((wf) => (
+                        {gaussianPlyOptions.map((wf) => (
                           <option key={wf.id} value={String(wf.id)}>
-                            {wf.name}
+                            {optionLabel(wf)}
                           </option>
                         ))}
                       </select>
@@ -341,9 +375,9 @@ export default async function SettingsPage({ searchParams }: Props) {
                         className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
                         <option value="">-- None --</option>
-                        {imageWorkflows.map((wf) => (
+                        {gaussianToImageOptions.map((wf) => (
                           <option key={wf.id} value={String(wf.id)}>
-                            {wf.name}
+                            {optionLabel(wf)}
                           </option>
                         ))}
                       </select>
@@ -351,7 +385,9 @@ export default async function SettingsPage({ searchParams }: Props) {
                     {/* STYLE.1.POLISH.1 — Default Look Development Workflow. Lists both
                         image and video workflows (via optgroups, kind visible in the
                         label) since the Bench's initial mode is derived from the
-                        chosen workflow's real kind. */}
+                        chosen workflow's real kind. WF.GALLERY.2 §3 — each optgroup is
+                        filtered by the "look-development" context, same as the Bench
+                        itself (§1). */}
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs text-[#6e767d]">Default Look Development Workflow</label>
                       <select
@@ -360,20 +396,20 @@ export default async function SettingsPage({ searchParams }: Props) {
                         className="rounded border border-[#2c3035] bg-[#141618] text-sm text-[#a4abb2] px-2 py-1.5 focus:outline-none focus:border-[#3a4046]"
                       >
                         <option value="">-- None --</option>
-                        {imageWorkflows.length > 0 && (
+                        {lookDevelopmentImageOptions.length > 0 && (
                           <optgroup label="Image">
-                            {imageWorkflows.map((wf) => (
+                            {lookDevelopmentImageOptions.map((wf) => (
                               <option key={wf.id} value={String(wf.id)}>
-                                {wf.name}
+                                {optionLabel(wf)}
                               </option>
                             ))}
                           </optgroup>
                         )}
-                        {videoWorkflows.length > 0 && (
+                        {lookDevelopmentVideoOptions.length > 0 && (
                           <optgroup label="Video">
-                            {videoWorkflows.map((wf) => (
+                            {lookDevelopmentVideoOptions.map((wf) => (
                               <option key={wf.id} value={String(wf.id)}>
-                                {wf.name}
+                                {optionLabel(wf)}
                               </option>
                             ))}
                           </optgroup>

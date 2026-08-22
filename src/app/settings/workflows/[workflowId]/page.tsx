@@ -14,6 +14,14 @@ import WorkflowOutputKindBadge from "@/components/WorkflowOutputKindBadge";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { deleteComfyWorkflow } from "@/actions/comfyWorkflows";
 import WorkflowInputPreviewPanel from "@/components/WorkflowInputPreviewPanel";
+import { refImageUrl } from "@/lib/refImageUrl";
+import {
+  WORKFLOW_CATEGORIES,
+  WORKFLOW_CONTEXTS,
+  isWorkflowCategoryId,
+  parseWorkflowContexts,
+  parseWorkflowTags,
+} from "@/lib/comfy/workflowCatalog";
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -57,6 +65,17 @@ export default async function WorkflowDetailPage({ params }: Props) {
     parsed !== null &&
     parsed.inferredKind !== "unknown" &&
     parsed.inferredKind !== workflow.kind;
+
+  // WF.GALLERY.2 §2 — tolerant parsers throughout: a corrupted stored value
+  // must not prevent this page (the one meant for diagnosing it) from
+  // rendering.
+  const categoryLabel =
+    workflow.category !== null && isWorkflowCategoryId(workflow.category)
+      ? WORKFLOW_CATEGORIES[workflow.category].label
+      : "Uncategorized";
+  const tags = parseWorkflowTags(workflow.tags);
+  const contexts = parseWorkflowContexts(workflow.contexts);
+  const contextLabels = contexts?.map((id) => WORKFLOW_CONTEXTS[id].label) ?? null;
 
   return (
     <div>
@@ -106,11 +125,39 @@ export default async function WorkflowDetailPage({ params }: Props) {
 
       {/* ── Info ──────────────────────────────────────────── */}
       <SectionLabel label="Info" />
+
+      {workflow.thumbnailPath && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={refImageUrl(workflow.thumbnailPath)}
+          alt=""
+          className="w-full max-w-xs aspect-video object-cover rounded border border-[#2c3035] mb-4"
+        />
+      )}
+
       <Card title="Details" className="mb-4">
         <dl className="flex flex-col gap-2">
           <div className="flex items-start gap-4">
             <dt className="text-xs text-[#6e767d] w-28 shrink-0">Kind</dt>
             <dd><WorkflowKindBadge kind={workflow.kind} /></dd>
+          </div>
+          <div className="flex items-start gap-4">
+            <dt className="text-xs text-[#6e767d] w-28 shrink-0">Category</dt>
+            <dd className="text-sm text-[#a4abb2]">{categoryLabel}</dd>
+          </div>
+          <div className="flex items-start gap-4">
+            <dt className="text-xs text-[#6e767d] w-28 shrink-0">Tags</dt>
+            <dd className="text-sm text-[#a4abb2]">{tags.length > 0 ? tags.join(", ") : "None"}</dd>
+          </div>
+          <div className="flex items-start gap-4">
+            <dt className="text-xs text-[#6e767d] w-28 shrink-0">Contexts</dt>
+            <dd className="text-sm text-[#a4abb2]">
+              {contextLabels !== null ? contextLabels.join(", ") : "Offered wherever the kind allows"}
+            </dd>
+          </div>
+          <div className="flex items-start gap-4">
+            <dt className="text-xs text-[#6e767d] w-28 shrink-0">Status</dt>
+            <dd className="text-sm text-[#a4abb2]">{workflow.status === "archived" ? "Archived" : "Active"}</dd>
           </div>
           {workflow.description && (
             <div className="flex items-start gap-4">

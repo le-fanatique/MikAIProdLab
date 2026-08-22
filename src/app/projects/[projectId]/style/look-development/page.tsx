@@ -9,6 +9,7 @@ import { listProjectStyleReferences, type ProjectStyleReferenceView } from "@/ac
 import { listLookTestsAction, type LookTestListItem } from "@/actions/lookDevelopment";
 import LookDevelopmentBench from "@/components/projectStyle/lookDevelopment/LookDevelopmentBench";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
+import { isWorkflowOfferedIn, parseWorkflowContexts } from "@/lib/comfy/workflowCatalog";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -51,7 +52,14 @@ export default async function LookDevelopmentPage({ params }: Props) {
     getVersionHistory(pid),
     listProjectStyleReferences(pid),
     db
-      .select({ id: comfyWorkflows.id, name: comfyWorkflows.name, kind: comfyWorkflows.kind, workflowJson: comfyWorkflows.workflowJson })
+      .select({
+        id: comfyWorkflows.id,
+        name: comfyWorkflows.name,
+        kind: comfyWorkflows.kind,
+        workflowJson: comfyWorkflows.workflowJson,
+        contexts: comfyWorkflows.contexts,
+        status: comfyWorkflows.status,
+      })
       .from(comfyWorkflows),
     listLookTestsAction(pid),
     // STYLE.1.POLISH.1 — independent read, same as every other section above;
@@ -82,7 +90,13 @@ export default async function LookDevelopmentPage({ params }: Props) {
 
   let workflows: WorkflowRow[] = [];
   if (workflowsOutcome.status === "fulfilled") {
-    workflows = workflowsOutcome.value;
+    // WF.GALLERY.2 §1 — this Bench is a Client Component and is not the
+    // place to filter: it receives an already-filtered list. Only workflows
+    // offered in the "look-development" context reach it, same rule
+    // (`isWorkflowOfferedIn`) as the four production galleries.
+    workflows = workflowsOutcome.value.filter((wf) =>
+      isWorkflowOfferedIn({ kind: wf.kind, contexts: parseWorkflowContexts(wf.contexts), status: wf.status }, "look-development")
+    );
   } else {
     loadErrors.workflows = "Failed to load the workflow library. Workflow selection may be incomplete.";
   }
