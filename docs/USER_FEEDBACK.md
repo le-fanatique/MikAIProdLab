@@ -1210,7 +1210,13 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Impact: Images could be prepared consistently for their intended Shot or
   generation format without relying on an external editor.
 - Related ticket: None
-- Resolution: None
+- Resolution: **partially covered, in one place only.** Verified 2026-08-22:
+  aspect-ratio presets exist (`src/lib/storyboardExtraction/ratioCrop.ts`,
+  `RATIO_PRESETS`, `ApplyRatioAllButton`, `BulkRegionControls`) but they are
+  scoped to storyboard **extraction regions** — that is `FB-20260716-031`,
+  already closed. What this entry asks for and what does NOT exist is a
+  general crop/fit tool usable on any image (reference media, uploads,
+  Assets), non-destructive, with preview and explicit save.
 - Resolved or validated on: None
 
 #### Follow-up notes
@@ -1223,6 +1229,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   original, preview the result, and save or apply explicitly with clear
   provenance. This observation alone does not authorize storage, schema,
   migration, image-processing dependency, or generation-runtime changes.
+
 
 ### FB-20260716-032 - Unify Edit-page text-field colors with API Key
 
@@ -1687,19 +1694,29 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260718-003 - Clear unused past Split runs
 
-- Status: `INBOX`
+- Status: `RESOLVED`
 - Date observed: 2026-07-18
 - Area: Storyboard / Split Workspace
 - Context: The `Other past run(s)` list accumulates obsolete detection runs.
-- Original observation: Add a clear button to clean old drafts/runs.
 - Expected outcome: `Clear unused past runs` removes only non-current runs that
   have no pushed candidates, with explicit confirmation and honest thumbnail
   cleanup. Provenance-linked runs remain protected.
 - Impact: Keeps the Split Workspace readable without destroying production
   provenance.
 - Related ticket: `SEQGEN.SPLIT.CLEANUP.1`
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: delivered by `SEQGEN.SPLIT.CLEANUP.1`. The `other past run(s)`
+  disclosure carries a `Clear unused past runs` button behind an explicit
+  confirmation (`src/app/.../storyboard/video/splits/page.tsx`). The action
+  (`src/actions/sequenceVideoSplitCleanup.ts`) protects the displayed run, runs
+  belonging to another draft, and any run whose candidate was pushed to a Shot;
+  it refuses a malformed `currentRunId` outright rather than treating it as
+  "nothing is protected"; and a failed thumbnail cleanup restores the directory
+  and the DB rows, reporting honestly what was or was not restored. Three tests
+  cover it.
+- Resolved or validated on: **2026-08-22 — closed by the author** after the
+  supervisor verified the delivery in the code. The entry had stayed `INBOX`
+  with `Resolution: None` while the work was already shipped.
+
 
 ### FB-20260718-004 - Remove a frame range from a Sequence Video Draft
 
@@ -1708,22 +1725,26 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Area: Storyboard / Sequence Video Drafts
 - Context: A generated Sequence video may contain a short unwanted passage,
   often only a few frames long.
-- Original observation: Define a start and end, remove that range, concatenate
-  the parts before and after it, review the result, then publish it.
 - Expected outcome: A frame-aware, non-destructive In/Out workflow previews the
   cut and saves a new derived Sequence Video Draft with durable provenance; the
   source video is never overwritten.
 - Impact: Repairs short generation artifacts before split detection while
   preserving version history and rollback.
-- Related ticket: `SEQGEN.VIDEO.CUT.1`
-- Resolution: None
-- Resolved or validated on: None
+- Related ticket: `SEQGEN.VIDEO.CUT.1`, originally split into
+  `SEQGEN.VIDEO.CUT.CORE.1` (frame-exact contract, FFmpeg, provenance) and
+  `SEQGEN.VIDEO.CUT.UI.1` (In/Out player in frames, preview of the removed
+  span, explicit publication).
+- Merged 2026-08-22: **`FB-20260821-001`** ("Retirer une plage frame-exacte
+  d'un Sequence Video Draft", observed 2026-08-21) asked for exactly this, a
+  month later, and is folded in here. It came back to this idea box when the
+  author took `SEQGEN.VIDEO.CUT.*` out of `docs/ROADMAP.md` on 2026-08-21 —
+  its **priority** was stale, not its substance.
+- Resolution: **nothing has been implemented.** Verified in the code on
+  2026-08-22: there is no cut action anywhere in `src/actions/`, no
+  `removeFrameRange` equivalent, and `src/lib/sequenceVideoSplit/` only
+  performs detection. This is a live request, not an oversight in the record.
+- Resolved or validated on: None — still open.
 
-#### Follow-up notes
-
-- 2026-07-18: An additive migration for parent-draft and edit provenance is
-  authorized if confirmed by the ticket audit. Frame units are required at the
-  UI boundary; FFmpeg output must be reviewed before explicit publication.
 
 ### FB-20260718-005 - Open OpenReel for a Shot with selected videos
 
@@ -1745,8 +1766,18 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Impact: This would provide a direct Shot-level editing loop without manually
   rebuilding the source selection in OpenReel or losing the relationship to
   the originating Shot.
-- Related ticket: None
-- Resolution: None
+- Related ticket: `SHOT.VIDEO.LIBRARY.1` (the outbound half only)
+- Resolution: **half delivered, and the other half is refused by design.**
+  Verified 2026-08-22. Outbound: `SHOT.VIDEO.LIBRARY.1` ships
+  `Open Selected in OpenReel` with `sourceMode: "shot-videos"`
+  (`src/lib/editorial/editorialExport.ts`), Shot-local, one Shot only.
+  Inbound: that same contract states the sidecar **MUST refuse** every
+  write-back action for this mode — Validate/Apply Patch, Publish Sequence
+  Result, Push Duration, Insert Shot — because a `shot-videos` export is not
+  backed by real `sequence_editorial_items` rows. So the push-back this entry
+  asks for cannot exist until the Bridge stops being Sequence-shaped. That
+  remaining half is the subject of `FB-20260821-002`. Kept `OPEN` on purpose:
+  its Expected outcome above includes the push-back.
 - Resolved or validated on: None
 
 #### Follow-up notes
@@ -1775,6 +1806,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   result, and attach it to the originating Shot without requiring a Sequence
   context. The unrelated `SEQGEN.SPLIT.CLEANUP.1` work must not be treated as
   resolving this limitation.
+
 
 ### FB-20260718-006 - Pushed first frame is not a valid PNG file
 
@@ -1902,18 +1934,11 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260722-002 - Rework the Shot video section into a compact workspace
 
-- Status: `INBOX`
+- Status: `RESOLVED`
 - Date observed: 2026-07-22
 - Area: Shot / Video library / UX
 - Context: Reviewing the validated Shot video and the other candidate videos
   in the Shot Detail page.
-- Original observation:
-
-  > je n'aime pas la parti video dans les shots, le fait d'avoir une premiere
-  > video qui est le shot validé, et apres un autre player avec la liste des
-  > autre video candidate, et le fait que les player soit grand, c est genant.
-  > J aimerai que lors du traitement de ce ticket, tu me propose qu on en parle
-  > plus
 
 - Expected outcome: The Shot video area is redesigned as a compact, coherent
   workspace instead of two large independent players. The approved video and
@@ -1922,21 +1947,22 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Impact: The current layout consumes too much vertical space and makes the
   relationship between the approved video and candidate library feel awkward,
   slowing Shot review and editing.
-- Related ticket: None; related feedback: `FB-20260718-008`
-- Resolution: None
-- Resolved or validated on: None
+- Related ticket: `SHOT.VIDEO.LIBRARY.1`; related feedback: `FB-20260718-008`
+- Resolution: delivered by `SHOT.VIDEO.LIBRARY.1`.
+  `src/components/shotVideoLibrary/ShotVideoLibraryPanel.tsx` replaces the two
+  large independent players with one unified `Shot Videos` section: a single
+  `VideoFrameReviewPlayer` for the selected entry, one compact newest-first
+  list covering both sources (Generation Content saves and Split-pushed clips),
+  per-row Approve/Delete, and a multi-select column feeding
+  `Open Selected in OpenReel`.
+- Note, 2026-08-22: the observation also asked for a conversation before
+  implementation ("j'aimerai que [...] tu me propose qu'on en parle plus").
+  That conversation never took place — the panel was built inside
+  `SHOT.VIDEO.LIBRARY.1` and happens to match the Expected outcome above. Said
+  plainly rather than counted as a request honoured.
+- Resolved or validated on: **2026-08-22 — closed by the author** after the
+  supervisor verified the delivery in the code.
 
-#### Follow-up notes
-
-- 2026-07-22: Before implementation, Codex must schedule a product discussion
-  with the user to decide the target information hierarchy and interaction:
-  compact thumbnails/list versus a single selected player, placement of approve,
-  delete, reuse, and OpenReel actions, and how the approved state is displayed.
-  Do not treat this observation as sufficient authorization for a visual rewrite
-  until that discussion is complete.
-- 2026-07-22: Preserve the existing Shot-video provenance, approval, and
-  deletion safeguards while exploring the new layout. The visual redesign alone
-  does not authorize schema, migration, or media-storage changes.
 
 ### FB-20260722-003 - Revisit workflows as tool-oriented interfaces
 
@@ -2415,7 +2441,14 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   context from neighboring Shots, while keeping Shot names ordered without
   renaming the following production content.
 - Related ticket: None
-- Resolution: None
+- Resolution: **half of it exists, and it is not the half this entry is
+  about.** Verified 2026-08-22: `insertShotInSequenceFromEditorialContext`
+  (`src/actions/editorialInsert.ts`) inserts a Shot at a chosen position and
+  shifts every later `orderIndex` by one. What does NOT exist is a
+  **Director Input** field anywhere in the schema or the UI, and the
+  numbering stays a plain index shift — never an intermediate number between
+  two existing Shots, which is what would let an inserted Shot keep a stable
+  code.
 - Resolved or validated on: None
 
 #### Follow-up notes
@@ -2436,6 +2469,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   Details`, `Framing`, `Camera Movement`, `Continuity In`, and `Continuity Out`.
   The generated values must combine neighboring-shot context with the user's
   `Director Input` and remain editable before `Create Shot`.
+
 
 ### FB-20260811-004 - Add Auto Casting at Shot level
 
@@ -2461,48 +2495,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 - Condensed 2026-08-22: the quoted observation and the follow-up notes were
   removed; they are in this file’s git history.
-
-### FB-20260821-001 - Retirer une plage frame-exacte d'un Sequence Video Draft
-
-- Status: `OPEN`
-- Date observed: 2026-08-21
-- Area: Sequence / Sequence Video Draft / Split Workspace
-- Context: Reconciling `docs/ROADMAP.md` against the code on 2026-08-21, after
-  Chantier 1 (LLM Workspace), Chantier 2 (cleanup) and the start of the camera
-  redesign. The roadmap still carried `SEQGEN.VIDEO.CUT.CORE.1` and
-  `SEQGEN.VIDEO.CUT.UI.1` as "the immediate next recommended product chantier",
-  a priority written on 2026-08-02 — before both chantiers.
-- Original observation:
-
-  > SEQGEN.VIDEO.CUT.CORE.1 on le push dans la boite à idee "User_Feedback" et
-  > on le sort de roadmap
-
-- Expected outcome: from a Sequence Video Draft, remove a frame-exact range,
-  concatenate the kept parts and publish a **new durable version** with
-  parent/cut provenance, without ever overwriting the source. The original
-  split was into a core ticket (frame-exact contract, FFmpeg, provenance) and a
-  UI ticket (In/Out player in frames, preview of the removed span, explicit
-  publication).
-- Impact: the need is not denied — it is removed from the roadmap because its
-  **priority** was stale, not its substance. Nothing was ever implemented: there
-  is no cut action in `src/actions/`, and `src/lib/sequenceVideoSplit/` only
-  performs detection. It returns here so it can be re-prioritised on real use
-  rather than inherited from a pre-chantier ordering.
-- Related ticket: None. Former roadmap entries `SEQGEN.VIDEO.CUT.CORE.1` and
-  `SEQGEN.VIDEO.CUT.UI.1`, preserved in `docs/archive/ROADMAP_2026-08-02.md`.
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-08-21: Removed from `docs/ROADMAP.md` by the author's decision, in the
-  same pass that archived the 2026-08-02 consolidated roadmap. The archive keeps
-  the two tickets' original wording and their place in the old ordering.
-- 2026-08-21: The durable-version-with-provenance shape is not an invention of
-  this entry — it is how `SEQGEN.VIDEO.1` already stores Sequence Video Drafts,
-  and how `SEQGEN.PUSH.1` already creates Shot video candidates without
-  automatic replacement. Whoever prepares this ticket should read those two
-  before designing a new contract.
 
 ### FB-20260821-002 - Prouver un vrai aller-retour MikAI / OpenReel
 
