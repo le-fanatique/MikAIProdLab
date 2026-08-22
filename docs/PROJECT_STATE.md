@@ -171,6 +171,94 @@ be named in index order. Both were rewritten to isolate what they claim.
 database — no paid Cloud call — then confirmed by the author on a real
 generation.
 
+## `SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1` — Extract rattrape la plage, 2026-08-22
+
+Un commit, `868869f`. Aucune migration. Suite directe du ticket ci-dessous,
+livrée le même jour : un storyboard peut désormais ne couvrir qu'une plage, et
+Extract from Storyboard appariait encore la vignette *i* au Shot *i* en partant
+du premier de la séquence.
+
+Le décalage n'était pas le pire. `expectedShotCount` pilote la **détection** :
+il cherchait 6 cases dans une image qui en avait 3, donc la grille elle-même
+était fausse avant tout appariement, et corriger le mapping après n'aurait rien
+rattrapé.
+
+### La cascade, et la contrainte qui la cadre
+
+Choix explicite sur la page Extract → sinon plage héritée du job de génération
+→ sinon séquence entière.
+
+Ce dernier cas est celui d'un **storyboard uploadé à la main** : pas de job,
+donc pas de provenance. L'auteur l'a posé comme contrainte avant l'écriture du
+ticket — « il ne faut pas que cette information soit mandatory » — et elle a
+son propre test : aucun champ obligatoire, aucun blocage, aucun avertissement,
+comportement identique à avant.
+
+### Zéro migration, et pourquoi ce n'était pas évident
+
+La plage voyage dans `GenerationSnapshot`, contrat JSON additif qui portait
+déjà `sequenceStoryboardReferenceMappings` et `styleProvenance` — deux
+précédents exacts. Elle se persiste ensuite dans le `paramsJson` de
+l'extraction, le blob qui enregistre déjà « les params réellement utilisés ».
+
+Elle y stocke **la liste ordonnée des ids couverts, pas deux bornes**. Un
+réordonnancement ou une suppression de Shots entre la génération et
+l'extraction réinterpréterait des bornes en silence sur une autre tranche ; une
+liste explicite se dégrade proprement — les Shots disparus sont listés et
+signalés, jamais remplacés par un voisin.
+
+**`promptSnapshot` contient pourtant la plage en clair** depuis `0e9e121`, sous
+la forme `Shot range: this Storyboard covers Shots …`. Le ticket l'a interdit
+explicitement comme source : c'est de la prose écrite pour un modèle, pas un
+format. La donnée passe par le JSON ou pas du tout.
+
+### Deux défauts, aucun visible dans le diff
+
+C'est ce que ce ticket a produit de plus utile.
+
+**Un crash introduit par le ticket lui-même.** `assignAllExtractionRegions`
+relisait `paramsJson.shotRange.shotIdsInOrder` **brut**, sans le confronter aux
+Shots vivants. Un Shot supprimé après la détection y restait nommé,
+`proposeShotMapping` l'attribuait à une région, et l'écriture de `targetShotId`
+violait la clé étrangère : `FOREIGN KEY constraint failed`, jeté hors de toute
+gestion d'erreur. Avant ce ticket le cas était impossible — Assign All
+requêtait toujours les Shots vivants.
+
+Reproduit sur le harnais DB réel **avant d'être signalé**, et corrigé en
+faisant passer les trois branches par le même `resolveExtractionShotRange` — la
+fonction écrite précisément pour filtrer les ids morts, et que sa propre
+branche court-circuitait. Deux tests, vus rouges avant la correction.
+
+**Un texte faux, trouvé en regardant la page.** La carte « Storyboard Shot
+Range » d'Extract héritait verbatim du composant partagé, qui affirme que « les
+références de casting restent calculées sur toute la séquence » — une notion
+qui n'existe pas sur cette page. Corrigé par une prop `helpText` dont le défaut
+est la phrase d'origine octet pour octet, donc la page de génération n'a pas
+bougé.
+
+La leçon vaut d'être gardée : **la relecture du diff n'a attrapé ni l'un ni
+l'autre.** Le premier a demandé de rejouer un scénario que personne n'avait
+écrit, le second de charger la page. `mikai-method` §2 et §5 disent exactement
+cela, et les deux se sont vérifiés le même jour.
+
+### Preuve
+
+1561 → **1585 tests**, 24 ajoutés, aucune assertion existante modifiée.
+Vérifié en navigateur sur l'extraction 78 (projet 18, séquence 54, 20 Shots) :
+« Covers the full Sequence (20 Shots) » sans plage, « Shot range set here: 5 of
+20 Shots » avec, et la grille suggérée qui passe de 20 à 5 — la preuve que
+`expectedShotCount` suit, donc que la détection se recale.
+
+Deux chemins **non prouvés à l'écran**, dit plutôt qu'arrondi : l'image
+uploadée (il aurait fallu lancer le worker OpenCV) et l'héritage réel depuis un
+job (une génération ComfyUI). Les deux ont un test dédié sur base réelle.
+
+### Laissé de côté
+
+Le `<select>` de réassignation d'une région liste toujours **tous** les Shots de
+la séquence : la plage propose, elle n'enferme pas. Même principe que le casting
+non restreint du ticket ci-dessous.
+
 ## `SEQGEN.STORYBOARD.SHOTRANGE.1` — le storyboard n'avale plus toute la séquence, 2026-08-22
 
 Un commit, `0e9e121`. Aucune migration. Demandé par l'auteur le jour même : le

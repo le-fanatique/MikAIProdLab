@@ -213,6 +213,29 @@ avec leur raison.
 
 ## 6. Clos — où le retrouver
 
+**`SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1` — clos le 2026-08-22**, un commit :
+`868869f`. Aucune migration.
+
+Suite directe du ticket suivant, livrée le même jour. Extract from Storyboard
+appariait la vignette *i* au Shot *i* en partant du premier de la séquence, ce
+qui décalait tout dès qu'un storyboard ne couvrait qu'une plage — et faussait
+la **détection** elle-même, `expectedShotCount` cherchant six cases dans une
+image qui en avait trois.
+
+La plage se résout en cascade : choix explicite sur la page Extract, sinon
+héritée du job de génération, sinon séquence entière. Ce dernier cas est celui
+d'un storyboard uploadé à la main, et l'auteur a exigé qu'il reste sans la
+moindre friction — contrainte posée avant l'écriture du ticket, et couverte par
+son propre test.
+
+Aucune migration : la plage voyage dans `GenerationSnapshot` (contrat JSON
+additif) et se persiste dans le `paramsJson` de l'extraction.
+
+Ce que ça a appris est dans `docs/PROJECT_STATE.md`, et c'est le plus utile du
+ticket : **deux défauts, aucun visible dans le diff** — un crash de clé
+étrangère qui a demandé de rejouer un scénario que personne n'avait écrit, et
+un texte faux qui a demandé de charger la page.
+
 **`SEQGEN.STORYBOARD.SHOTRANGE.1` — clos le 2026-08-22**, un commit :
 `0e9e121`. Aucune migration.
 
