@@ -5,19 +5,9 @@ import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
-import Card from "@/components/Card";
-import EmptyState from "@/components/EmptyState";
-import WorkflowKindBadge from "@/components/WorkflowKindBadge";
-
-function SectionLabel({ label }: { label: string }) {
-  return (
-    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
-      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
-        {label}
-      </span>
-    </div>
-  );
-}
+import SectionLabel from "@/components/SectionLabel";
+import WorkflowTemplateGallery from "@/components/WorkflowTemplateGallery";
+import type { WorkflowContextId } from "@/lib/comfy/workflowCatalog";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +16,10 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+function sp(raw: string | string[] | undefined): string | null {
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return null;
 }
 
 export default async function WorkflowPickerPage({ params, searchParams }: Props) {
@@ -49,18 +37,19 @@ export default async function WorkflowPickerPage({ params, searchParams }: Props
   // latter is the actual reference-selection transport it filters
   // `availableImages` against. Both flow through that page's existing
   // currentSearchParams passthrough — no other file needs to change for
-  // that part.
+  // that part. WF.GALLERY.1 — narrowing to the "shot-keyframe" context alone
+  // (image-only, by WORKFLOW_CONTEXTS) reproduces the same restriction via
+  // `isWorkflowOfferedIn` instead of a separate `kind === "image"` filter.
   const isStoryboardContext = resolvedSearchParams["storyboard"] === "1";
-  const rawStoryboardRefs = resolvedSearchParams["storyboardRefs"];
-  const storyboardRefsValue =
-    typeof rawStoryboardRefs === "string"
-      ? rawStoryboardRefs
-      : Array.isArray(rawStoryboardRefs)
-      ? rawStoryboardRefs[0]
-      : undefined;
+  const storyboardRefsValue = sp(resolvedSearchParams["storyboardRefs"]);
   const workflowLinkSuffix = isStoryboardContext
     ? `?storyboard=1${storyboardRefsValue ? `&storyboardRefs=${encodeURIComponent(storyboardRefsValue)}` : ""}`
     : "";
+  const search = sp(resolvedSearchParams["q"]) ?? "";
+
+  const contexts: WorkflowContextId[] = isStoryboardContext
+    ? ["shot-keyframe"]
+    : ["shot-keyframe", "shot-video"];
 
   const [project] = await db.select().from(projects).where(eq(projects.id, pid));
   if (!project) notFound();
@@ -71,21 +60,20 @@ export default async function WorkflowPickerPage({ params, searchParams }: Props
   const [shot] = await db.select().from(shots).where(eq(shots.id, shid));
   if (!shot || shot.sequenceId !== sid) notFound();
 
-  const allWorkflows = await db
+  const workflows = await db
     .select({
       id: comfyWorkflows.id,
       name: comfyWorkflows.name,
       kind: comfyWorkflows.kind,
+      status: comfyWorkflows.status,
       description: comfyWorkflows.description,
-      sourceFilename: comfyWorkflows.sourceFilename,
-      updatedAt: comfyWorkflows.updatedAt,
+      category: comfyWorkflows.category,
+      tags: comfyWorkflows.tags,
+      contexts: comfyWorkflows.contexts,
+      thumbnailPath: comfyWorkflows.thumbnailPath,
     })
     .from(comfyWorkflows)
     .orderBy(desc(comfyWorkflows.updatedAt));
-
-  const workflows = isStoryboardContext
-    ? allWorkflows.filter((wf) => wf.kind === "image")
-    : allWorkflows;
 
   const shotLabel = shot.shotCode
     ? `${shot.shotCode} — ${shot.title}`
@@ -117,57 +105,44 @@ export default async function WorkflowPickerPage({ params, searchParams }: Props
         <span className="text-[#a4abb2]">{shotLabel}</span>.
       </p>
 
-      {workflows.length === 0 ? (
-        <EmptyState
-          title={isStoryboardContext ? "No image workflows saved." : "No workflows saved."}
-          description="Upload a ComfyUI API workflow in Settings before mapping shot inputs."
-          action={
+      <WorkflowTemplateGallery
+        workflows={workflows}
+        contexts={contexts}
+        search={search}
+        emptyTitle={isStoryboardContext ? "No image workflows saved." : "No workflows saved."}
+        emptyDescription="Upload a ComfyUI API workflow in Settings before mapping shot inputs."
+        emptyAction={
+          <Link
+            href="/settings/workflows"
+            className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+          >
+            Manage Workflows
+          </Link>
+        }
+        hiddenFields={
+          <>
+            {isStoryboardContext && <input type="hidden" name="storyboard" value="1" />}
+            {storyboardRefsValue && (
+              <input type="hidden" name="storyboardRefs" value={storyboardRefsValue} />
+            )}
+          </>
+        }
+        renderActions={(wf) => (
+          <div className="flex flex-col gap-1.5">
+            {wf.kind === "video" && (
+              <p className="text-[10px] text-[#6e767d]">
+                Uses shot prompt and timeline segments.
+              </p>
+            )}
             <Link
-              href="/settings/workflows"
-              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+              href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map${workflowLinkSuffix}`}
+              className="inline-block rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm text-center hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
             >
-              Manage Workflows
+              {wf.kind === "video" ? "Generate Video →" : "Generate Keyframe →"}
             </Link>
-          }
-        />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {workflows.map((wf) => (
-            <Card key={wf.id}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <WorkflowKindBadge kind={wf.kind} />
-                    <span className="text-sm font-medium text-[#e7e9ec] truncate">
-                      {wf.name}
-                    </span>
-                  </div>
-                  {wf.description && (
-                    <p className="text-xs text-[#a4abb2] mb-1">{wf.description}</p>
-                  )}
-                  {wf.sourceFilename && (
-                    <p className="text-xs font-mono text-[#6e767d]">{wf.sourceFilename}</p>
-                  )}
-                  {wf.kind === "video" && (
-                    <p className="text-[10px] text-[#6e767d] mt-0.5">
-                      Uses shot prompt and timeline segments.
-                    </p>
-                  )}
-                  <p className="text-[10px] text-[#4b5158] mt-1">
-                    Updated {fmtDate(wf.updatedAt)}
-                  </p>
-                </div>
-                <Link
-                  href={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows/${wf.id}/map${workflowLinkSuffix}`}
-                  className="shrink-0 rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
-                >
-                  {wf.kind === "video" ? "Generate Video →" : "Generate Keyframe →"}
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      />
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link

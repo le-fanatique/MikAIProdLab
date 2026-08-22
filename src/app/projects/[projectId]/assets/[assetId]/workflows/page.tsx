@@ -5,39 +5,29 @@ import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
-import Card from "@/components/Card";
-import EmptyState from "@/components/EmptyState";
-import WorkflowKindBadge from "@/components/WorkflowKindBadge";
+import SectionLabel from "@/components/SectionLabel";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
-
-function SectionLabel({ label }: { label: string }) {
-  return (
-    <div className="border-t border-[#232629] pt-4 mt-6 mb-4">
-      <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
-        {label}
-      </span>
-    </div>
-  );
-}
+import WorkflowTemplateGallery from "@/components/WorkflowTemplateGallery";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ projectId: string; assetId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+function sp(raw: string | string[] | undefined): string | null {
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return null;
 }
 
-export default async function AssetWorkflowListPage({ params }: Props) {
+export default async function AssetWorkflowListPage({ params, searchParams }: Props) {
   const { projectId, assetId } = await params;
+  const resolvedSearchParams = await searchParams;
   const pid = parseInt(projectId, 10);
   const aid = parseInt(assetId, 10);
+  const search = sp(resolvedSearchParams["q"]) ?? "";
 
   const [project] = await db.select().from(projects).where(eq(projects.id, pid));
   if (!project) notFound();
@@ -45,17 +35,19 @@ export default async function AssetWorkflowListPage({ params }: Props) {
   const [asset] = await db.select().from(assets).where(eq(assets.id, aid));
   if (!asset || asset.projectId !== pid) notFound();
 
-  const imageWorkflows = await db
+  const workflows = await db
     .select({
       id: comfyWorkflows.id,
       name: comfyWorkflows.name,
       kind: comfyWorkflows.kind,
+      status: comfyWorkflows.status,
       description: comfyWorkflows.description,
-      sourceFilename: comfyWorkflows.sourceFilename,
-      updatedAt: comfyWorkflows.updatedAt,
+      category: comfyWorkflows.category,
+      tags: comfyWorkflows.tags,
+      contexts: comfyWorkflows.contexts,
+      thumbnailPath: comfyWorkflows.thumbnailPath,
     })
     .from(comfyWorkflows)
-    .where(eq(comfyWorkflows.kind, "image"))
     .orderBy(desc(comfyWorkflows.updatedAt));
 
   return (
@@ -82,52 +74,29 @@ export default async function AssetWorkflowListPage({ params }: Props) {
         <span className="text-[#a4abb2]">{asset.name}</span>.
       </p>
 
-      {imageWorkflows.length === 0 ? (
-        <EmptyState
-          title="No image workflows available."
-          description="Upload a ComfyUI API image workflow in Settings to enable asset generation."
-          action={
-            <Link
-              href="/settings/workflows"
-              className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
-            >
-              Manage Workflows
-            </Link>
-          }
-        />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {imageWorkflows.map((wf) => (
-            <Card key={wf.id}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <WorkflowKindBadge kind={wf.kind} />
-                    <span className="text-sm font-medium text-[#e7e9ec] truncate">
-                      {wf.name}
-                    </span>
-                  </div>
-                  {wf.description && (
-                    <p className="text-xs text-[#a4abb2] mb-1">{wf.description}</p>
-                  )}
-                  {wf.sourceFilename && (
-                    <p className="text-xs font-mono text-[#6e767d]">{wf.sourceFilename}</p>
-                  )}
-                  <p className="text-[10px] text-[#4b5158] mt-1">
-                    Updated {fmtDate(wf.updatedAt)}
-                  </p>
-                </div>
-                <Link
-                  href={`/projects/${pid}/assets/${aid}/workflows/${wf.id}/generate`}
-                  className="shrink-0 rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
-                >
-                  Generate →
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+      <WorkflowTemplateGallery
+        workflows={workflows}
+        contexts={["asset"]}
+        search={search}
+        emptyTitle="No image workflows available."
+        emptyDescription="Upload a ComfyUI API image workflow in Settings to enable asset generation."
+        emptyAction={
+          <Link
+            href="/settings/workflows"
+            className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+          >
+            Manage Workflows
+          </Link>
+        }
+        renderActions={(wf) => (
+          <Link
+            href={`/projects/${pid}/assets/${aid}/workflows/${wf.id}/generate`}
+            className="inline-block rounded border border-[#5b93d6]/50 text-[#5b93d6] px-3 py-1.5 text-sm text-center hover:border-[#5b93d6] hover:text-[#8fbbe8] hover:bg-[#5b93d6]/10 transition-colors"
+          >
+            Generate →
+          </Link>
+        )}
+      />
 
       <div className="mt-8 pt-4 border-t border-[#232629]">
         <Link

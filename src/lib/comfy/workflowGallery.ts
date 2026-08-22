@@ -1,0 +1,123 @@
+// ---------------------------------------------------------------------------
+// workflowGallery.ts — WF.GALLERY.1 §4
+//
+// Pure module: no "use server", no database access, no React import, no
+// network. The gallery's selection and grouping, extracted so it is testable
+// without a DOM (see `.claude/skills/mikai-method` §5 — there is no jsdom
+// harness in this repo, by decision).
+//
+// `isWorkflowOfferedIn` already is, and stays, the single definition of
+// "is this workflow offered here" (WF.CATALOG.1 §2.4). This module composes
+// it — OR-ing it across every context a page passes, so a page like the Shot
+// workflow picker (offered in `shot-keyframe` OR `shot-video`) does not need
+// to hand-roll that OR itself — and adds the two things `isWorkflowOfferedIn`
+// was never meant to do: free-text search, and grouping into gallery
+// sections ordered by `WORKFLOW_CATEGORY_IDS`.
+// ---------------------------------------------------------------------------
+
+import {
+  isWorkflowOfferedIn,
+  isWorkflowCategoryId,
+  parseWorkflowContexts,
+  parseWorkflowTags,
+  WORKFLOW_CATEGORIES,
+  WORKFLOW_CATEGORY_IDS,
+  type WorkflowCategoryId,
+  type WorkflowContextId,
+  type WorkflowKind,
+  type WorkflowStatus,
+} from "@/lib/comfy/workflowCatalog";
+
+/**
+ * The raw shape `selectGalleryWorkflows` needs from a `comfy_workflows` row.
+ * `category`, `tags` and `contexts` are the raw, possibly corrupt, database
+ * columns — this function parses them itself (via the tolerant `parse*`
+ * readers) rather than requiring the caller to pre-parse, so a corrupt row
+ * degrades exactly once, in one place.
+ */
+export interface GalleryWorkflowRow {
+  name: string;
+  kind: WorkflowKind;
+  status: WorkflowStatus;
+  description: string | null;
+  category: string | null;
+  tags: string | null;
+  contexts: string | null;
+}
+
+export interface WorkflowGallerySection<T extends GalleryWorkflowRow> {
+  categoryId: WorkflowCategoryId | "uncategorized";
+  label: string;
+  workflows: T[];
+}
+
+export interface SelectGalleryWorkflowsOptions {
+  /**
+   * OR semantics: a workflow is kept if it is offered in *any* of these
+   * contexts. Omitted or empty means "do not context-filter" — the Settings
+   * manager's case, where `status` and context are not filters at all.
+   */
+  contexts?: readonly WorkflowContextId[];
+  /** Free text. Trimmed and matched case-insensitively. Empty filters nothing. */
+  search?: string;
+}
+
+function matchesSearch<T extends GalleryWorkflowRow>(workflow: T, searchLower: string): boolean {
+  if (searchLower.length === 0) return true;
+
+  if (workflow.name.toLowerCase().includes(searchLower)) return true;
+  if (workflow.description && workflow.description.toLowerCase().includes(searchLower)) return true;
+
+  // Tolerant read: a corrupt `tags` column must never throw here, and must
+  // never exclude the row from the result — it simply cannot match on tags.
+  const tags = parseWorkflowTags(workflow.tags);
+  return tags.some((tag) => tag.toLowerCase().includes(searchLower));
+}
+
+function isOfferedInAny<T extends GalleryWorkflowRow>(
+  workflow: T,
+  contexts: readonly WorkflowContextId[]
+): boolean {
+  const offerInput = {
+    kind: workflow.kind,
+    contexts: parseWorkflowContexts(workflow.contexts),
+    status: workflow.status,
+  };
+  return contexts.some((contextId) => isWorkflowOfferedIn(offerInput, contextId));
+}
+
+/**
+ * Selects and groups workflows for the gallery. Never throws on a corrupt
+ * `category`/`tags`/`contexts` column — a corrupt row still renders, under
+ * "Uncategorized" if its category is unreadable.
+ */
+export function selectGalleryWorkflows<T extends GalleryWorkflowRow>(
+  workflows: readonly T[],
+  options: SelectGalleryWorkflowsOptions = {}
+): WorkflowGallerySection<T>[] {
+  const contexts = options.contexts ?? [];
+  const searchLower = (options.search ?? "").trim().toLowerCase();
+
+  const filtered = workflows.filter((workflow) => {
+    if (contexts.length > 0 && !isOfferedInAny(workflow, contexts)) return false;
+    return matchesSearch(workflow, searchLower);
+  });
+
+  const sections: WorkflowGallerySection<T>[] = [];
+
+  for (const categoryId of WORKFLOW_CATEGORY_IDS) {
+    const rows = filtered.filter((workflow) => workflow.category === categoryId);
+    if (rows.length > 0) {
+      sections.push({ categoryId, label: WORKFLOW_CATEGORIES[categoryId].label, workflows: rows });
+    }
+  }
+
+  const uncategorized = filtered.filter(
+    (workflow) => workflow.category === null || !isWorkflowCategoryId(workflow.category)
+  );
+  if (uncategorized.length > 0) {
+    sections.push({ categoryId: "uncategorized", label: "Uncategorized", workflows: uncategorized });
+  }
+
+  return sections;
+}
