@@ -648,30 +648,31 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260719-001 - Manual split thumbnails must show the segment first frame
 
-- Status: `IN PROGRESS`
+- Status: `RESOLVED`
 - Date observed: 2026-07-19
 - Area: Storyboard / Sequence Video Split
 - Context: Manually cutting a Sequence Video Draft with Split at Current Frame.
-- Original observation: The thumbnail generated after a manual split does not
-  correspond to the first frame of the resulting segment.
 - Expected outcome: Each half created by a manual split uses its own exact
   first source frame as thumbnail, especially the new second half beginning at
   the selected split frame.
 - Impact: The visual review can suggest the wrong opening frame and makes
   short segments harder to identify.
 - Related ticket: `SEQGEN.SPLIT.CLEANUP.1-FIX1`
-- Resolution: Selection and seek were corrected in `b007f87`, but user
-  validation confirmed that the App Router navigation still resets the page
-  to the top after every Split at Current Frame. A focused scroll-restoration
-  fix is in progress.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-19: The current shared thumbnail helper seeks to the midpoint of
-  every segment. The retake must preserve existing automatic-detection
-  behavior unless explicitly needed, while manual Split actions request the
-  true segment start frame.
+- Resolution: the shared thumbnail helper gained an explicit
+  `ThumbnailFrameStrategy` (`src/lib/sequenceVideoSplit/detectVideoSplits.ts`):
+  automatic detection keeps `"midpoint"` as its default, while a manual split
+  regenerates **both** halves with `"segment-start"`
+  (`src/actions/sequenceVideoSplitSegments.ts`), so each shows its own real
+  first frame and the second half shows exactly the frame the cut created.
+  The scroll-reset the old resolution note described belonged to
+  `FB-20260719-002` and was closed there by a native `#split-video-player`
+  fragment.
+- Resolved or validated on: **2026-08-22 — validated by the author**, who
+  closed this entry after his own manual review. Verified in the code the same
+  day: `frameStrategy: "segment-start"` is applied to both halves, and the
+  call site cites this feedback id.
+- Condensed 2026-08-22: the quoted observation and the follow-up note were
+  removed; they are in this file’s git history.
 
 ### FB-20260719-002 - Preserve Split Workspace position and select the new segment
 
@@ -795,29 +796,27 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260715-016 - React Router update during Storyboard Assets render
 
-- Status: `IN PROGRESS`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Storyboard / Assets selection
 - Context: Selecting or rendering the expanded reference lists in Storyboard.
-- Original observation:
-
-  > Cannot update a component (`Router`) while rendering a different component
-  > (`StoryboardAssetsPanel`). `router.replace()` at
-  > `StoryboardAssetsPanel.tsx:78`.
+  React reported `Cannot update a component (Router) while rendering a
+  different component (StoryboardAssetsPanel)`.
 - Expected outcome: Storyboard Assets renders without React console errors;
   reference selection still updates `storyboardRefs` and preserves other query
   parameters.
 - Impact: React render warning may indicate unstable selection state and makes
   the Storyboard workflow unreliable.
 - Related ticket: `SEQGEN.STORYBOARD.3-FIX`
-- Resolution: In progress; remove Router updates from state updaters/render
-  paths and revalidate after a clean server restart.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: User-provided Next.js/React stack trace identified
-  `StoryboardAssetsPanel.tsx` as the failing surface.
+- Resolution: the `router.replace` call no longer runs on a render path — it
+  sits inside the `toggle(refId)` event handler
+  (`src/components/StoryboardAssetsPanel.tsx`), with `{ scroll: false }`, which
+  is exactly what the old resolution note prescribed.
+- Resolved or validated on: **2026-08-22 — validated by the author**, who
+  closed this entry after his own manual review. Verified in the code the same
+  day: no `router.*` call remains outside an event handler in that component.
+- Condensed 2026-08-22: the quoted stack trace and the follow-up note were
+  removed; they are in this file’s git history.
 
 ### FB-20260715-001 - Replace Settings anchors with real tabs
 
