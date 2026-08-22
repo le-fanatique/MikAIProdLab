@@ -97,8 +97,12 @@ category-first view without deleting or silently merging feedback.
 ### Proposed regroupings (not automatic merges)
 
 - `FB-20260716-022` through `FB-20260716-031` form one Storyboard
-  Extraction/Diagnostics epic. Keep the individual entries because they cover
-  detection, crop, upload, diagnostics, and ratio behavior separately.
+  Extraction/Diagnostics epic. ~~Keep the individual entries because they cover
+  detection, crop, upload, diagnostics, and ratio behavior separately.~~
+  **Superseded 2026-08-22, by the author's decision**: the nine entries were
+  condensed into `FB-20260716-EXTRACT`, which keeps every ID, its ticket and
+  its status. `FB-20260716-027` was excluded and keeps its own entry — it is
+  still `OPEN`, and it is about image preparation, not extraction.
 - `FB-20260717-046`, `FB-20260717-047`, `FB-20260719-001`,
   `FB-20260719-002`, `FB-20260718-003`, `FB-20260718-004`, and
   `FB-20260718-007` can later be planned as one Split Review epic, with
@@ -2537,266 +2541,48 @@ cross-cutting UI/display view.
   concurrency. Pure/DB/browser proofs green, including a real server
   restart. Awaiting user validation before `RESOLVED`.
 
-### FB-20260716-022 - Detect and crop storyboard panels automatically
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard / Sequence Storyboard
-- Context: Reviewing a generated Sequence Storyboard contact sheet and wanting
-  each vignette split out into its own Shot-level image instead of manually
-  cropping each cell.
-- Original observation:
-
-  > MikAI reçoit des images composites contenant plusieurs vignettes, vues ou
-  > sujets. L'objectif est de détecter automatiquement chaque vignette puis de
-  > produire une image cropée indépendante par vignette. [...] L'utilisateur
-  > souhaite extraire uniquement l'illustration de chaque cellule, sans le
-  > texte descriptif éventuel.
-  > (`.agents/opencv_storyboard_extraction_handoff.md`, exploratory handoff,
-  > 2026-07-16)
-
-- Expected outcome: An `Extract Storyboard Panels` action detects bordered/
-  gutter-separated cells in a chosen Sequence Storyboard image with OpenCV,
-  previews numbered rectangles with confidence, lets the user add/delete/
-  resize/reassign/skip regions, then creates draft Shot-level storyboard
-  images from the confirmed crops.
-- Impact: Removes manual per-cell cropping after every Sequence Storyboard
-  generation.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1`
-- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1` implemented — Python/OpenCV
-  worker (`scripts/opencv_storyboard_extract.py`, border/gutter-band
-  detection with a strict JSON contract), additive migration
-  (`sequence_storyboard_extractions`, `sequence_storyboard_extraction_regions`,
-  nullable `storyboard_images.extraction_region_id`), a dedicated
-  `/storyboard/extract` review page with numbered overlay + confidence,
-  per-region add/resize/reassign/skip/delete, a global inward padding option,
-  and `Confirm & Extract` as the only action that crops and creates `draft`
-  Shot-level `storyboard_images` rows (never approved, never touching
-  `shots.approvedVideoPath` or existing references). Unassigned regions and
-  Shots without a region are flagged, never silently paired. Awaiting
-  hands-on confirmation.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Codex arbitration captured in
-  `.agents/opencv_storyboard_extraction_handoff.md` and
-  `.agents/current_task.md`: OpenCV worker and the additive migration are
-  explicitly authorized for this ticket; illustration/text splitting and
-  Shot mapping require explicit user confirmation, never automatic
-  attachment; out-of-scope for this ticket: OCR, AI segmentation fallback for
-  border-less panels, automatic approval, and any change to existing Shots,
-  durations, approved videos, or references.
-
-### FB-20260716-023 - Storyboard detector misses dark separators
+### FB-20260716-EXTRACT - Storyboard panel extraction, consolidated
 
 - Status: `TO VALIDATE`
 - Date observed: 2026-07-16
 - Area: Storyboard / Sequence Storyboard extraction
-- Context: Extracting panels from a real 3840x2160 Sequence Storyboard with
-  eight Shots.
-- Original observation: OpenCV returns one region covering the entire image;
-  the separators and captions are black, while the detector mainly expects
-  near-white gutters.
-- Expected outcome: Detect dark, light, or mixed separators and propose the
-  expected 4x2 layout for eight Shots when primary detection is ambiguous.
-- Impact: The extraction tool cannot split the real storyboard contact sheet.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX1`
-- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX1` implemented — separator
-  detection is now polarity-independent (edge density plus a
-  border-sampled adaptive background-color estimate, reinforced by bounded
-  Hough long-line detection), which correctly splits the real 8-Shot dark
-  contact sheet into a clean 4x2 grid via primary detection (confidence
-  0.25, all 8 illustration/caption splits detected). When primary detection
-  is still ambiguous (0 or 1 region) and the Sequence's real Shot count is
-  passed to the worker, a low-confidence `grid-fallback` grid is proposed
-  instead — its regions are pre-filled with a proposed Shot but never
-  auto-assigned, so `Confirm & Extract` cannot include them until reviewed
-  and explicitly assigned one by one. A single Shot never gets a
-  multi-cell fallback. Illustration/caption splitting now also recognizes
-  dark caption backgrounds (white-on-black), not just light ones. No
-  migration was needed (verified: `drizzle-kit generate` produces no SQL
-  for the new `grid-fallback` enum value). Awaiting hands-on confirmation.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Codex authorized a no-migration retake using polarity-
-  independent line detection plus a low-confidence expected-Shot-count grid
-  fallback. Manual confirmation remains mandatory before extraction.
-- 2026-07-16: Verified against the real reported fixture (Sequence 32,
-  Project 4, 3840x2160, 8 Shots) via the live dev server: all 8 regions
-  detected and mapped 1:1 to Shots 81-88 in reading order; `Confirm &
-  Extract` produced 8 real crops, each correctly excluding its dark
-  caption band. Regression-tested against every previously-passing fixture
-  (1/3/6-cell synthetic, the original 6-Shot white-gutter Sequence) plus
-  two new fixtures built for this retake (an all-black-gutter sheet, and
-  an adversarial two-tone sheet where the vertical gutter is white and the
-  horizontal gutter is black within the same image) — the two-tone case
-  correctly falls back to the low-confidence grid path rather than
-  guessing, and reassigning one fallback region and confirming produced
-  exactly one crop, leaving the other seven untouched.
-
-### FB-20260716-024 - Use extracted panels as Shot thumbnails and references
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard extraction / Shots / Reference Images
-- Context: Confirming extracted Storyboard panels that have been assigned to
-  their corresponding Shots.
-- Original observation:
-
-  > pour le storyboard, j aimerai bien que les image extracted soit forcé dans
-  > les thumbnail des shots, les images extract doivent aussi se retrouver
-  > dans la parti reference image de chat shot associé
-
-- Expected outcome: After a panel extraction is confirmed for a Shot, the
-  extracted image is automatically used as that Shot's visible thumbnail and
-  is also available in the associated Shot's `Reference Images` section.
-- Impact: Extracted compositions would immediately become useful throughout
-  the Shot workflow instead of remaining isolated as Storyboard drafts.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX2`.
-- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX2` implemented — confirming an
-  extraction now creates a `shot_reference_images` row (role
-  `storyboard_frame`) in the same transaction as the `storyboard_images`
-  draft, sharing the exact same file path (no binary copy). The Storyboard
-  grid's thumbnail selection now prioritizes an extraction-sourced draft
-  over any other non-approved draft, so the extracted panel is the visible
-  thumbnail without needing approval. An approved draft (any origin) still
-  always wins. Deletion of the shared reference never removes the file
-  while the originating draft (or any other reference) still points at it
-  — verified for both the "still needed" and "genuinely orphaned" cases.
-  Awaiting hands-on confirmation.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: This changes the previous extraction boundary recorded in
-  `FB-20260716-022`, where extracted drafts deliberately did not modify Shot
-  references. A dedicated product and architecture decision is required.
-- 2026-07-16: Ticket preparation must define whether an extracted image
-  replaces an existing thumbnail, how the active thumbnail is chosen, which
-  reference role and approval state it receives, and whether `Reference
-  Images` points to the same stored file or creates a separate durable copy.
-  Provenance and deletion behavior must remain consistent.
-- 2026-07-16: Codex decision (`SEQGEN.STORYBOARD.EXTRACT.1-FIX2`): the
-  reference shares the draft's file (no copy), role `storyboard_frame`,
-  never auto-approved; a new nullable `source_storyboard_image_id` column on
-  `shot_reference_images` (additive migration) records the shared-file
-  provenance so deletion can verify the file is still needed before
-  unlinking.
-- 2026-07-16: This observation does not yet authorize automatic approval,
-  schema/migration changes, storage changes, or writes to
-  `shot_reference_images` outside a dedicated ticket.
-- 2026-07-16: Codex authorized FIX2 to add a provenance link through an
-  additive migration if needed, reuse the same crop file as storyboard draft
-  and Shot reference, prioritize the extracted crop in the Storyboard
-  thumbnail, and protect shared files from premature deletion. Interactive
-  crop editing and extraction-context-preserving redirects are included.
-
-### FB-20260716-025 - Tune detection and identify crop regions visually
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard extraction / Detection settings
-- Context: Retrying extraction on a real Sequence Storyboard whose detected
-  region count does not match its Shot count.
-- Original observation: The user wants to expose detection parameters so they
-  can rerun with different results, trigger the expected grid when the first
-  detection is wrong, and use a distinct color for each crop shared with the
-  corresponding Regions row.
-- Expected outcome: Tunable Auto/Grid detection with bounded settings,
-  versioned reruns, and unambiguous visual region mapping.
-- Impact: Current failures require code changes and make crop assignment hard
-  to read.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX3`
-- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX3` implemented — a collapsible
-  "Detection Settings" section on the active extraction page exposes Mode
-  (Auto / Grid fallback), optional Columns/Rows (with a "Use Shot count"
-  button pre-filling the aspect-ratio-matched factorization), and Sensitivity
-  (Low/Medium/High, mapped to server-side confidence-threshold profiles, not
-  raw values sent by the client). "Run Detection Again" creates a new,
-  separately-numbered extraction on the same source image — the previous
-  one is always kept, never overwritten. Auto mode's fallback trigger is no
-  longer limited to 0/1 detected regions: a wrong region count (verified
-  live: a real 6-panel sheet forced into an 8-Shot Sequence correctly
-  proposes a 4x2 grid instead of the mismatched 6) or a confidence below the
-  chosen sensitivity's threshold (verified live: the real 8-Shot fixture
-  keeps its correct primary result at Low/Medium but flips to grid-fallback
-  at High) both now trigger the same low-confidence, always-editable grid
-  proposal. All parameters actually used are persisted in the existing
-  `paramsJson` column (no migration). Each region gets a distinct, stable
-  color (by its own `orderIndex`, unaffected by sibling add/delete) shown
-  identically on its preview overlay frame+label and its Regions list row
-  swatch, always paired with the visible region number — never color alone.
-  Awaiting hands-on confirmation.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Codex authorized a UI-only parameter model using existing
-  `paramsJson`; no migration is required. Auto fallback must trigger on count
-  mismatch or low confidence, not only zero/one region.
-
-### FB-20260716-026 - Apply extraction settings and region mappings in bulk
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard extraction / Detection settings / Regions
-- Context: Rerunning detection after changing settings and editing several
-  crop regions.
-- Original observation: The user does not see the overridden Detection
-  Settings reflected by `Run Detection Again` and wants `Update All` plus
-  `Assign All` buttons.
-- Expected outcome: Rerun uses and displays the submitted settings; all valid
-  region rectangles can be saved together; all regions can be assigned in
-  reading order to Shots with explicit confirmation.
-- Impact: Repeated per-region actions make tuning and mapping slow and unclear.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX4`
-- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX4` implemented — root cause of
-  the "settings not taken into account" perception: the Mode/Sensitivity/
-  Columns/Rows fields always rendered their hard-coded defaults regardless
-  of the active extraction's actual `paramsJson`, and the panel was
-  collapsed by default, so a just-submitted override was never visibly
-  reflected even though it WAS being applied correctly (verified again in
-  FIX3). Now the Detection Settings panel opens by default and every field
-  is pre-filled from the current extraction's own recorded parameters —
-  verified live: an extraction run with Grid/4×2/High sensitivity shows
-  exactly those values pre-selected when revisited. `Update All` (new
-  `resizeAllExtractionRegions` action) reads every editable region's
-  currently-displayed x/y/width/height and applies them in one transaction;
-  a single invalid entry aborts the whole batch (verified live: a negative
-  width in one of two regions left BOTH untouched, including the otherwise-
-  valid one). `Assign All` (new `assignAllExtractionRegions` action)
-  reapplies the reading-order-to-Shot-order mapping to every editable,
-  non-skipped region — verified live: turns pending grid-fallback regions
-  into `assigned` in one click, correctly skips a region the user had
-  explicitly marked `skipped` (excluded from the reading-order recount, its
-  own assignment left untouched), leaves Shots beyond the mappable region
-  count flagged as still needing a region, and creates zero crops/drafts/
-  references (row counts confirmed unchanged). Both bulk actions are
-  idempotent and cleanly refuse once the extraction is no longer `ready`
-  (e.g. already confirmed). No migration.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Codex authorized atomic server-side bulk actions without schema
-  changes. `Assign All` must never extract files or create drafts/references.
-- 2026-07-16: Bug found and fixed during validation of this ticket (unrelated
-  to FIX3's own new logic, but only surfaced by testing an explicit
-  Columns/Rows mismatch for the first time): `wrapWorkerFailure` in
-  `src/lib/storyboardExtraction/opencvWorker.ts` threw its recovered worker
-  error message from inside the very `try` block whose `catch` swallowed it,
-  so every worker-side validation failure (e.g. "Columns x Rows does not
-  match the expected Shot count") surfaced only as a generic "OpenCV worker
-  failed to run." instead of the specific, actionable message. Fixed by
-  moving the throw outside the parsing `try`.
-- 2026-07-16: `SEQGEN.STORYBOARD.EXTRACT.1-FIX4` also switched the Detection
-  Settings `Collapsible` to `defaultOpen` — verified via SSR HTML that the
-  panel's fields (and their pre-filled values) are otherwise entirely absent
-  from the rendered page until a client-side click, which is the direct
-  cause of the "seems not applied" perception this feedback describes.
+- Context: Nine separate observations made on 2026-07-16 while exercising
+  panel extraction, all shipped by the same `SEQGEN.STORYBOARD.EXTRACT.1`
+  family. Condensed into this single entry on 2026-08-22 at the author's
+  request: the nine full write-ups had become ~430 lines describing work that
+  is done, and were crowding the observations that still need a decision.
+  Their detail lives in the git history of this file and in the tickets named
+  below.
+- Consolidated IDs and what each asked for:
+  - `FB-20260716-022` — detect and crop storyboard panels automatically ·
+    `SEQGEN.STORYBOARD.EXTRACT.1`
+  - `FB-20260716-023` — the detector missed dark separators ·
+    `SEQGEN.STORYBOARD.EXTRACT.1-FIX1`
+  - `FB-20260716-024` — use extracted panels as Shot thumbnails and
+    references · `SEQGEN.STORYBOARD.EXTRACT.1-FIX2`
+  - `FB-20260716-025` — tune detection and identify crop regions visually ·
+    `SEQGEN.STORYBOARD.EXTRACT.1-FIX3`
+  - `FB-20260716-026` — apply extraction settings and region mappings in
+    bulk · `SEQGEN.STORYBOARD.EXTRACT.1-FIX4`
+  - `FB-20260716-028` — crop the illustration without the storyboard text ·
+    `SEQGEN.STORYBOARD.EXTRACT.1-FIX5`
+  - `FB-20260716-029` — expose advanced detection diagnostics ·
+    `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
+  - `FB-20260716-030` — upload and delete Sequence Storyboard Drafts ·
+    `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
+  - `FB-20260716-031` — ratio-aware cropboxes ·
+    `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
+- Expected outcome: unchanged — each item above shipped under its named
+  ticket. This entry does not reopen any of them.
+- Impact: the extraction workspace exists, detects, crops, maps regions to
+  Shots and pushes the crops. Everything since builds on it, including
+  `SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1` (2026-08-22, commit `868869f`).
+- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1` and its FIX1 to FIX6 retakes.
+- Resolved or validated on: Implemented 2026-07-16. **Author's manual
+  validation still pending** — these were never marked validated, and
+  condensing them did not validate them. `FB-20260716-027` (Crop/Fit tool
+  with aspect-ratio presets) is deliberately NOT part of this group: it is
+  still `OPEN` and keeps its own entry below.
 
 ### FB-20260716-027 - Crop/Fit image tool with aspect-ratio presets
 
@@ -2830,141 +2616,6 @@ cross-cutting UI/display view.
   original, preview the result, and save or apply explicitly with clear
   provenance. This observation alone does not authorize storage, schema,
   migration, image-processing dependency, or generation-runtime changes.
-
-### FB-20260716-028 - Crop illustration without storyboard text
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard / Extraction
-- Context: Reviewing generated contact sheets with image panels and optional
-  title or caption bands.
-- Original observation: The user reports that extraction also crops the
-  description below each illustration and wants to tune the result from the
-  interface using several generated examples.
-- Expected outcome: Bounded presets for full cell, bottom-caption removal,
-  top-header removal, and both, plus a manual mode and bulk application to
-  editable regions.
-- Impact: Text bands contaminate Shot storyboard thumbnails and require
-  repeated manual correction.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX5`
-- Resolution: `SEQGEN.STORYBOARD.EXTRACT.1-FIX5` implemented — a "Content
-  Crop" control (Mode: Full cell / Remove bottom caption / Remove top
-  header / Remove top and bottom text / Manual, plus bounded 0-45% Header/
-  Caption inputs, presets pre-filling adjustable starting values) previews
-  new rectangles for every editable, non-skipped, non-extracted region via
-  `Apply to all regions` — a client-only preview, no DB write — and `Update
-  All` (existing, unchanged) remains the sole, atomic persistence step.
-  Verified live against the real 8-Shot fixture: `Remove bottom caption`
-  produces a crop with the full illustration and the caption band fully
-  excluded; `Remove top header` and `Remove top and bottom text` verified
-  numerically and visually. Skipped and already-extracted regions are
-  provably untouched by both the bulk preview and `Update All`. Settings
-  persist in the existing `paramsJson` (no migration) and correctly
-  pre-fill the controls (including the exact selected mode and percentages)
-  on reload. Invalid mode/percentage values reject the whole batch with a
-  clear error, same atomicity guarantee as an invalid rectangle.
-  Awaiting hands-on confirmation.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Codex authorized a no-migration implementation using existing
-  region rectangles plus extraction `paramsJson`; the worker and generation
-  runtime remain out of scope.
-- 2026-07-16: Bug found and fixed during validation of this ticket:
-  `confirmStoryboardExtraction` (from `SEQGEN.STORYBOARD.EXTRACT.1`) silently
-  overrode a region's current height with the auto-detected
-  `illustrationHeight` whenever a valid split existed — which is true for
-  most real regions — meaning Content Crop's explicit choice was ignored at
-  the final extraction step for any region FIX1's heuristic had already
-  analyzed. Fixed by skipping that auto-override entirely once an
-  extraction's `paramsJson` shows Content Crop has ever been used (a
-  `contentCrop` key present, any mode) — the current rectangle then always
-  wins. Extractions that have never touched Content Crop keep the original
-  auto-detection behavior unchanged. Verified live: a `Remove top header`
-  crop produced the exact configured height (832px) instead of the
-  pre-existing auto-detected illustration height (715px) it would have used
-  before this fix.
-
-### FB-20260716-029 - Expose advanced storyboard detection diagnostics
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard / Extraction / Detection
-- Context: Comparing Auto and Grid reruns on several generated contact sheets.
-- Original observation: Auto and Grid appear to return the same result; the
-  user wants to choose Otsu, Canny or Grid and directly tune raw thresholds,
-  including values such as 0.8, with an explanation for every parameter.
-- Expected outcome: Advanced Diagnostics exposes bounded raw parameters,
-  accessible tooltips, the primary result, fallback reason and final engine.
-- Impact: Detection quality cannot currently be understood or tuned reliably.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
-- Resolution: `Detection engine` now offers Otsu (Legacy, reintroduced from
-  commit `4bc3db5`), Canny + Hough, and Exact Grid, plus a collapsed
-  `Advanced Diagnostics` panel exposing every bounded raw worker parameter
-  with English hover/focus tooltips and a `Custom threshold` overriding the
-  Low/Medium/High presets. The worker's JSON contract now carries a
-  structured `diagnostics` object (primary engine, detected count,
-  confidence, threshold, fallback reason, final engine).
-- Resolved or validated on: Implemented 2026-07-16, pending Codex review.
-
-#### Follow-up notes
-
-- 2026-07-16: Otsu and Canny/Hough are OpenCV algorithms, not AI models. They
-  add no model weights or meaningful binary storage. Grid is geometric.
-
-### FB-20260716-030 - Upload and delete Sequence Storyboard Drafts
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard / Sequence Storyboard Drafts
-- Context: Testing extraction settings against several different contact
-  sheets for the same Sequence.
-- Original observation: The user wants to upload or delete Storyboards from
-  Sequence Storyboard Drafts in order to keep several visuals for testing.
-- Expected outcome: Validated local upload, visible independent drafts, and
-  safe deletion that never breaks an existing extraction.
-- Impact: Testing currently depends only on generated drafts already stored.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
-- Resolution: `Upload storyboard` and `Delete` added to Sequence Storyboard
-  Drafts. Upload accepts PNG/JPEG/WebP only (extension AND magic-byte
-  checked), 10MB max; each upload is a new file plus a new `draft` row with
-  null job/workflow/prompt/references provenance. Delete requires
-  confirmation, Sequence ownership, strict path containment, and is blocked
-  with a clear error when the draft is already an extraction's source.
-- Resolved or validated on: Implemented 2026-07-16, pending Codex review.
-
-#### Follow-up notes
-
-- 2026-07-16: Codex authorized storage writes only under the existing Sequence
-  Storyboard upload root. No migration is needed; uploaded files consume their
-  real file size, while detection reruns reuse the source image.
-
-### FB-20260716-031 - Ratio-aware storyboard cropboxes
-
-- Status: `TO VALIDATE`
-- Date observed: 2026-07-16
-- Area: Storyboard / Extraction / Content Crop
-- Context: Normalizing extracted storyboard panels to production framing.
-- Original observation: Add ratio presets 19:9, 2:35 and 2:38, Apply Ratio
-  All, Lock ratio for homothetic resize, and a size multiplier.
-- Expected outcome: Deterministic, idempotent ratio/scale previews calculated
-  from stable cell bounds and persisted only through Update All.
-- Impact: Manual crops cannot currently preserve a common framing ratio.
-- Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
-- Resolution: `Free`/`19:9`/`2.35:1`/`2.38:1` ratio presets and a `Size
-  multiplier` (0.10-1.00) added to Content Crop, computed via a new pure
-  pipeline (Content Crop -> ratio -> multiplier -> clamp) always from the
-  same stable base rect. `Apply Ratio All` previews on eligible regions;
-  `Update All` remains the only persistence. `Lock ratio` on the crop box
-  keeps all 4 resize handles active but constrains resizing to the selected
-  ratio, anchored on the opposite corner, without leaving source bounds.
-- Resolved or validated on: Implemented 2026-07-16, pending Codex review.
-
-#### Follow-up notes
-
-- 2026-07-16: Product wording `19:9` is retained literally. Ratios `2:35` and
-  `2:38` are interpreted as `2.35:1` and `2.38:1`.
 
 ### FB-20260716-032 - Unify Edit-page text-field colors with API Key
 
