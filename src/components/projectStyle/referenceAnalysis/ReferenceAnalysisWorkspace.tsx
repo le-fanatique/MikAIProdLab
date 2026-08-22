@@ -15,6 +15,7 @@ import {
 import type { ProjectStyleReferenceView } from "@/actions/projectStyleReferences";
 import type { ReferenceAnalysisProfile } from "@/lib/projectStyle/referenceAnalysis/contracts";
 import { REFERENCE_ANALYSIS_LIMITS } from "@/lib/projectStyle/referenceAnalysis/contracts";
+import { resolvePendingSync, retrySync, type SyncNeed } from "@/lib/projectStyle/referenceAnalysis/syncPhase";
 import RunHistoryPanel from "./RunHistoryPanel";
 
 // ── Shared style tokens ──────────────────────────────────────────────────
@@ -42,8 +43,6 @@ function Badge({ tone, children }: { tone: "muted" | "ok" | "warn" | "error" | "
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type ReadModel = ReferenceAnalysisReadModel;
-
-type SyncNeed = "none" | "analysis" | "draft" | "both";
 
 type AnalysisPhase =
   | { kind: "idle" }
@@ -206,8 +205,9 @@ export default function ReferenceAnalysisWorkspace({
       setOpenRunId(result.runId);
       const refresh = await fetchReadModel();
       if (attemptCounterRef.current !== attemptId) return;
-      if (!refresh.ok) {
-        setPhase({ kind: "pending-sync", syncNeed: "analysis", message: "Analysis completed but the result could not be loaded." });
+      const pending = resolvePendingSync("analysisLaunched", { analysis: refresh.ok });
+      if (pending) {
+        setPhase({ kind: "pending-sync", ...pending });
       }
     } catch {
       if (attemptCounterRef.current === attemptId) {
@@ -295,8 +295,9 @@ export default function ReferenceAnalysisWorkspace({
       setOpenRunId(result.runId);
       const refresh = await fetchReadModel();
       if (attemptCounterRef.current !== attemptId) return;
-      if (!refresh.ok) {
-        setPhase({ kind: "pending-sync", syncNeed: "analysis", message: "Analysis completed but the result could not be loaded." });
+      const pending = resolvePendingSync("analysisConfirmed", { analysis: refresh.ok });
+      if (pending) {
+        setPhase({ kind: "pending-sync", ...pending });
       }
     } catch {
       if (attemptCounterRef.current === attemptId) {
@@ -316,28 +317,12 @@ export default function ReferenceAnalysisWorkspace({
 
   // ── Retry sync: re-read exactly what failed (never replays Approve) ─
   const handleRetrySync = useCallback(async () => {
-    const currentSyncNeed = phase.kind === "pending-sync" ? phase.syncNeed : "both";
-    let analysisOk = true;
-    let draftOk = true;
-
-    if (currentSyncNeed === "analysis" || currentSyncNeed === "both") {
-      const r = await fetchReadModel();
-      analysisOk = r.ok;
-    }
-    if (currentSyncNeed === "draft" || currentSyncNeed === "both") {
-      const r = await onDraftRulesReconciled();
-      draftOk = r.ok;
-    }
-
-    if (analysisOk && draftOk) {
-      setPhase({ kind: "idle" });
-    } else {
-      const remaining: SyncNeed[] = [];
-      if (!analysisOk) remaining.push("analysis");
-      if (!draftOk) remaining.push("draft");
-      const newNeed = remaining.length === 2 ? "both" : remaining[0];
-      setPhase({ kind: "pending-sync", syncNeed: newNeed, message: "Sync still incomplete. Retry when ready." });
-    }
+    const currentSyncNeed: SyncNeed = phase.kind === "pending-sync" ? phase.syncNeed : "both";
+    const pending = await retrySync(currentSyncNeed, {
+      readAnalysis: fetchReadModel,
+      readDraft: onDraftRulesReconciled,
+    });
+    setPhase(pending ? { kind: "pending-sync", ...pending } : { kind: "idle" });
   }, [phase, fetchReadModel, onDraftRulesReconciled]);
 
   // ── Mutation callbacks from cards ───────────────────────────────────
@@ -354,8 +339,9 @@ export default function ReferenceAnalysisWorkspace({
     });
     const refresh = await fetchReadModel();
     setPendingMutations((prev) => { const n = new Set(prev); n.delete(`obs:${observationId}`); return n; });
-    if (!refresh.ok) {
-      setPhase({ kind: "pending-sync", syncNeed: "analysis", message: "Observation saved but analysis state could not be refreshed." });
+    const pending = resolvePendingSync("observationMutated", { analysis: refresh.ok });
+    if (pending) {
+      setPhase({ kind: "pending-sync", ...pending });
     }
   }, [fetchReadModel]);
 
@@ -384,8 +370,9 @@ export default function ReferenceAnalysisWorkspace({
     });
     const refresh = await fetchReadModel();
     setPendingMutations((prev) => { const n = new Set(prev); n.delete(`cr:${ruleId}`); return n; });
-    if (!refresh.ok) {
-      setPhase({ kind: "pending-sync", syncNeed: "analysis", message: "Candidate rule saved but analysis state could not be refreshed." });
+    const pending = resolvePendingSync("candidateRuleMutated", { analysis: refresh.ok });
+    if (pending) {
+      setPhase({ kind: "pending-sync", ...pending });
     }
   }, [fetchReadModel]);
 
@@ -409,12 +396,9 @@ export default function ReferenceAnalysisWorkspace({
     ]);
     setPendingMutations((prev) => { const n = new Set(prev); n.delete(`cr:${ruleId}`); return n; });
 
-    if (!analysisRefresh.ok && !draftRefresh.ok) {
-      setPhase({ kind: "pending-sync", syncNeed: "both", message: "Rule approved but analysis state and Working Draft could not be refreshed." });
-    } else if (!analysisRefresh.ok) {
-      setPhase({ kind: "pending-sync", syncNeed: "analysis", message: "Rule approved but analysis state could not be refreshed." });
-    } else if (!draftRefresh.ok) {
-      setPhase({ kind: "pending-sync", syncNeed: "draft", message: "Rule approved but Working Draft could not be refreshed." });
+    const pending = resolvePendingSync("ruleApproved", { analysis: analysisRefresh.ok, draft: draftRefresh.ok });
+    if (pending) {
+      setPhase({ kind: "pending-sync", ...pending });
     }
   }, [fetchReadModel, onDraftRulesReconciled]);
 
