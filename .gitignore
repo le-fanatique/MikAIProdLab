@@ -98,6 +98,9 @@ next-env.d.ts
 .agents/project_style_retake_buffer.md
 .agents/style_1_c_architecture_context.md
 .agents/style_1_c_architecture_prompt.md
+# Notes de travail de l'auteur sur ses propres retours d'usage — décidé hors
+# git le 2026-08-22. Ce qui doit survivre est dans docs/ROADMAP.md §2.
+.agents/user_feedback_pending.md
 .agents/design-references/
 .agents/skills/
 
