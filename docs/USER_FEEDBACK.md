@@ -272,12 +272,13 @@ reference — including the ones in the historical category indexes above, and i
 `docs/PROJECT_STYLE_MVP_SPEC.md` — still resolves by a plain search. The full
 write-ups remain in this file's git history.
 
-- `FB-20260716-EXTRACT` — storyboard panel extraction, 9 ids, still
-  `TO VALIDATE`.
+- `FB-20260716-EXTRACT` — storyboard panel extraction, 9 ids.
 - `FB-20260715-STORYBOARDGEN` — Sequence Storyboard generation and package,
-  13 ids, still `TO VALIDATE`.
-- `FB-20260717-SEQVIDEO` — Sequence video generation and Split review, 4 ids,
-  **`RESOLVED`, validated by the author on 2026-08-22**.
+  13 ids.
+- `FB-20260717-SEQVIDEO` — Sequence video generation and Split review, 4 ids.
+
+All three are `RESOLVED`: the author validated every open `TO VALIDATE` entry
+on 2026-08-22 after his own manual review, and they were closed in that batch.
 
 Entries that were physically inside those clusters but carried a different
 status were deliberately left alone: `FB-20260716-027` (`OPEN`),
@@ -285,7 +286,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260811-001 - Randomize Seed must stay within 0-99999
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-11
 - Date fixed (implementation): 2026-08-11
 - Area: Generate Content / seed scalar input / `WorkflowScalarInputsForm`
@@ -304,33 +305,31 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   `src/components/WorkflowScalarInputsForm.tsx` — the single component shared
   by all Asset/Shot/Sequence generate surfaces. No other seed generator
   existed elsewhere in the app.
-- Resolved or validated on: Implemented 2026-08-11; user manual validation
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
   still pending.
 
 ### FB-20260811-002 - Opt out of automatic Project Style during generation
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-11
 - Area: Asset / Shot / Generate Content
 - Context: Editing an image with an image-to-image workflow when the source
   image already carries the desired visual identity.
-- Original observation: Add a default-on `Append Project Style` checkbox in
-  Generate Content so automatic Project Style injection can be disabled when
-  it is not needed.
 - Expected outcome: The checkbox is enabled by default on Asset and Shot
   generation surfaces. When disabled, no Project Style is automatically added
   to the queued prompt or job provenance, and retry preserves that choice.
 - Impact: Image-to-image editing can preserve an intentional source look
   without unwanted Project Style prompt composition.
 - Related ticket: `GEN.PROJECT_STYLE.APPEND.TOGGLE.1`
-- Resolution note (2026-08-11): implemented on all four Asset/Shot Generate
-  Content surfaces (embedded panels and dedicated workflow pages). The
-  checkbox is checked by default on every mount; unchecking it is enforced
-  server-side (fail-closed form parsing), skips Project Style resolution
-  entirely, and is preserved exactly on Shot retry. Awaiting Codex review and
-  user validation before closing.
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: shipped under the ticket named above.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 9 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260810-003 - Push an explicit speed-adjusted Shot target duration from OpenReel
 
@@ -544,13 +543,11 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260722-004 - Correct Gaussian depth and wheel precision
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-22
 - Area: Shot / Camera Lab / Gaussian Viewer
 - Context: Framing real SHARP Gaussian Splats before capturing a Shot camera
   reference.
-- Original observation: Some wide shots look excessively stretched in depth,
-  and one mouse-wheel step moves the camera too far for precise framing.
 - Expected outcome: The viewer provides a reversible `Depth scale` control
   affecting only local Z, plus normalized Fine/Normal/Fast wheel sensitivity
   and `Alt + Wheel` for temporary ultra-fine dolly. Reset Camera must frame the
@@ -573,42 +570,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   calculation), covered by 69 deterministic unit tests. No schema,
   migration, dependency, or ComfyUI/PLY change. Awaiting Codex review and
   user validation checklist before this is marked resolved.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-22: Product decision: `depthScale` remains local to the loaded PLY
-  and resets to `1.00`; only the validated zoom-sensitivity preset persists in
-  localStorage. No migration, dependency, PLY rewrite or ComfyUI runtime change
-  is authorized.
-- 2026-07-22: Codex review round 1 returned `REVISE` (3D engine and captures
-  compliant, 3 targeted findings confined to `GaussianViewerPanel.tsx`): the
-  depth numeric field clamped on every keystroke instead of allowing natural
-  typing; the Fine/Normal/Fast control used an incomplete `role="radio"`
-  pattern with a hover-only `title` tooltip; `preventDefault()` on wheel ran
-  after the orbit-readiness guard, allowing page scroll during PLY loading.
-  Claude applied the retake: depth field now separates a free-typing draft
-  from the clamped committed value (clamp only on Enter/blur, Escape
-  discards); Fine/Normal/Fast are real `<button aria-pressed>` elements
-  reusing the existing `FieldTooltip` component (hover and keyboard focus
-  both show the tooltip); `preventDefault()` is now unconditional at handler
-  entry, before the orbit guard. `viewerControls.ts` untouched (re-verified
-  byte-for-byte). Re-validated: 11/11 pure regression, 19/19 real-browser
-  checks (production server, real completed PLY job #298), `tsc`/`build`/
-  `db:generate`/`git diff --check` all clean. Full detail in
-  `.agents/claude_report.md` (retake section). Awaiting fresh Codex verdict.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 25 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260722-001 - Camera Lab needs a guided three-stage workspace
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-22
 - Area: Shot / Camera Lab / Generation
 - Context: Continuing the Gaussian Camera MVP after PLY retrieval, viewer and
   Shot-reference capture were delivered.
-- Original observation: Camera Lab should show three columns above Setup: a
-  preloaded Gaussian PLY generation workflow, the Gaussian viewer with Refresh
-  and Capture Snapshot, and a preloaded Gaussian-to-image workflow receiving
-  the snapshot first and the original source image second.
 - Expected outcome: The user can complete the image -> PLY -> camera snapshot
   -> Gaussian-to-image flow without leaving Camera Lab or manually remapping
   the intermediate media.
@@ -664,32 +639,12 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   retake, cache-clearing hardening, then this feedback/compensation fix).
   Awaiting Codex review and user validation checklist before this is
   marked resolved.
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-22: During hands-on validation, the user configured `gaussianPLY`
-  and `GaussianQwen`. Column 1 still needs the standard visual source picker:
-  selectable thumbnails with the existing enlarged hover preview.
-- 2026-07-22: Clicking `Generate Gaussian PLY` first returned `fetch failed`
-  because the runtime/key configuration was incomplete. The user then confirmed
-  Cloud generation works after entering the API key. Accepted retake: expose
-  one canonical Comfy.org key and use it for both Cloud auth and Partner Nodes,
-  while preserving legacy saved-key compatibility without rendering secrets.
-- 2026-07-22: Add `Upload Source` beside the visual picker in Column 1, and an
-  explicit `Add to Shot references` action directly below a completed Column 3
-  image output. Neither action may create an implicit approval.
-- 2026-07-22: Additional Camera Lab retake requested before approval: Column 3
-  must allow a local uploaded snapshot override while preserving the captured
-  draft; legacy Setup must be collapsed by default and read-only; the user
-  needs a safe Shot-scoped action to clear all cached PLY artifacts; and every
-  non-image workflow node marked `(Input)` in Column 1 must be editable through
-  the canonical text/scalar override pipeline. The Load Image input remains
-  exclusively represented by the existing visual source picker.
-- 2026-07-22: User validation found that the `Gaussian Camera` shortcut still
-  appears only on a Shot that already owns an eligible PLY. Since Camera Lab
-  can now create that PLY itself, the shortcut must be present on every Shot
-  Detail; PLY eligibility remains enforced inside the workspace and actions.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 29 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260719-001 - Manual split thumbnails must show the segment first frame
 
@@ -809,7 +764,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260715-STORYBOARDGEN - Sequence Storyboard generation and package, consolidated
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15 to 2026-08-04
 - Area: Storyboard / Sequence Generation / Sequence Generation Package
 - Context: Thirteen observations made while exercising Sequence Storyboard
@@ -818,33 +773,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   request, for the same reason as `FB-20260716-EXTRACT`: they described
   delivered work and were crowding the observations that still need a
   decision. Their full write-ups live in this file's git history.
-- Consolidated IDs and what each asked for:
-  - `FB-20260715-015` — a storyboard contact sheet at Sequence level ·
-    `SEQGEN.STORYBOARD.3`
-  - `FB-20260715-011` — make the generation action explicit ·
-    `SEQGEN.STORYBOARD.2-FIX`
-  - `FB-20260715-012` — expand Asset reference lists by default ·
-    `SEQGEN.STORYBOARD.2-FIX`
-  - `FB-20260716-017` — GPT Image 2 needs direct repeatable image inputs ·
-    `SEQGEN.STORYBOARD.3-FIX2`
-  - `FB-20260716-018` — those inputs started with zero images selected ·
-    `SEQGEN.STORYBOARD.3-FIX3`
-  - `FB-20260716-019` — clear a stale generation error when changing
-    Sequence · `SEQGEN.STORYBOARD.3-FIX4`
-  - `FB-20260716-020` — the first Generate click submitted zero images ·
-    `SEQGEN.STORYBOARD.3-FIX5`
-  - `FB-20260722-006` — collapse the package, reduce its warnings ·
-    `UX.PRODUCTIVITY.POLISH.1`
-  - `FB-20260803-001` — remove warnings from the Shot-by-shot detail ·
-    `UX.SEQUENCE.STYLE.POLISH.1`
-  - `FB-20260804-005` — remove Storyboard diagnostics ·
-    `SEQGEN.STORYBOARD.CASTING.FIX1`
-  - `FB-20260804-006` — keep internal Reference metadata out of the prompt ·
-    `SEQGEN.STORYBOARD.CASTING.FIX1`
-  - `FB-20260804-007` — initialize Dynamic Inputs from Storyboard Assets ·
-    `SEQGEN.STORYBOARD.CASTING.FIX1`
-  - `FB-20260804-008` — edit casting references inline ·
-    `SEQGEN.STORYBOARD.CASTING.FIX1`
 - Expected outcome: unchanged — each item shipped under its named ticket.
   This entry reopens none of them.
 - Impact: Sequence Storyboard generation exists end to end — package, prompt,
@@ -853,12 +781,17 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Related ticket: the `SEQGEN.STORYBOARD.2`/`.3` families, their FIX retakes,
   `SEQGEN.STORYBOARD.CASTING.FIX1`, `UX.PRODUCTIVITY.POLISH.1` and
   `UX.SEQUENCE.STYLE.POLISH.1`.
-- Resolved or validated on: Implemented between 2026-07-15 and 2026-08-04.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
   **Author's manual validation still pending** — condensing these did not
   validate them. Two neighbours of this cluster are deliberately excluded and
   keep their own entries: `FB-20260715-010` (Seedance package size limit,
   still `OPEN`) and `FB-20260715-016` (React Router warning, still
   `IN PROGRESS`).
+- Condensed 2026-08-22: 27 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-016 - React Router update during Storyboard Assets render
 
@@ -888,19 +821,11 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260715-001 - Replace Settings anchors with real tabs
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Settings
 - Context: Navigating between the Settings categories from the shortcuts at
   the top of the page.
-- Original observation:
-
-  > je trouve que la navigation dans les settings n est pas bonne, j ai
-  > actuellement des raccourci anchor en faut de page mais cela ne me convient
-  > pas. Je voudrait un system d'onget, pour chaque parti on ne verrait que ce
-  > qui est dedié à cette parti, et pas juste un jump dans la zone dédidé au
-  > sein d'une grande liste
-
 - Expected outcome: Replace the anchor shortcuts with actual tabs. Selecting a
   tab displays only the settings belonging to that category and hides the
   other categories, instead of scrolling within one long page.
@@ -910,63 +835,47 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Related ticket: `UX.SETTINGS.CHAT.1` (shipped in commit `c0cf81e` on
   `origin/main`) implemented real ARIA tabs (roving
   tabindex, Arrow/Home/End) replacing `UX.2.SETTINGS.NAV.1`'s anchor
-  shortcuts; awaiting user validation.
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Captured as a request for real content-switching tabs, not a
-  visual restyling of the existing anchor links.
-- 2026-08-03: `UX.SETTINGS.CHAT.1` replaced the anchor nav in
+  shortcuts
+- Resolution: 2026-08-03: `UX.SETTINGS.CHAT.1` replaced the anchor nav in
   `src/app/settings/page.tsx` with `SettingsTabs.tsx`, a real ARIA tabs
   widget (single visible tabpanel, roving tabindex, Arrow/Home/End,
-  `defaultsSaved=1` opens `Generation Defaults` directly). Status moved to
-  `TO VALIDATE` pending user confirmation.
+  `defaultsSaved=1` opens `Generation Defaults` directly).
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 16 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-002 - Use Text Primary for the LLM Chat logo
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: LLM Chat / Theme
 - Context: Viewing the LLM Chat logo or icon in the application interface.
-- Original observation:
-
-  > la couleur du logo de llm chat devrait etre sur text promary et non basé
-  > sur text secondary
-
 - Expected outcome: The LLM Chat logo or icon uses the `Text Primary` theme
   token instead of `Text Secondary`.
 - Impact: The current secondary color gives the LLM Chat identity less visual
   emphasis than intended and does not match the desired text hierarchy.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Interpreted `text promary` as the existing `Text Primary` theme
-  token. The exact LLM Chat logo/icon component should be located during
-  ticket preparation.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` changed the Right Context Panel
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` changed the Right Context Panel
   launcher/close icon (`ResizableRightPanelShell.tsx`) from `text-[#a4abb2]`
   (Text Secondary) to `text-[#e7e9ec]` (Text Primary), preserving hover,
-  collapse/reopen and viewport behavior. Status moved to `TO VALIDATE`
-  pending user confirmation.
+  collapse/reopen and viewport behavior.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 14 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-003 - Fit the expanded chat column to the browser viewport
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Right panel / LLM Chat
 - Context: Using the expanded column on the right side of the application.
-- Original observation:
-
-  > j aimerai que la fenetre depliable de droite, où se trouve le chat, fit à
-  > la hauteur de la fenetre webrowser. Actuellement je dois scroller pour tout
-  > voir.
-
 - Expected outcome: The expanded right column fits within the visible browser
   viewport. The user should not need to scroll the whole page to reach part of
   the chat; overflowing conversation content should be handled inside the chat
@@ -976,32 +885,25 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Related ticket: `UX.SETTINGS.CHAT.1` (shipped in commit `c0cf81e` on
   `origin/main`) bounded the expanded panel to the
   viewport height under TopBar/ContextStrip and made only the conversation
-  area scroll internally; awaiting user validation.
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Captured as viewport-height behavior for the expanded column,
-  not merely a request to make the chat content shorter.
-- 2026-08-03: `UX.SETTINGS.CHAT.1` removed the legacy `chatHeight`
+  area scroll internally
+- Resolution: 2026-08-03: `UX.SETTINGS.CHAT.1` removed the legacy `chatHeight`
   px-height/drag-resize mechanism from `SidebarLLMChat.tsx` and made the
   aside (`ResizableRightPanelShell.tsx`) a full-height flex column; header,
   mode tabs, model/system-prompt selectors and the input area stay fixed,
-  only the message list scrolls. Status moved to `TO VALIDATE` pending user
-  confirmation.
+  only the message list scrolls.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 15 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-004 - Keep only LLM Chat in the right column
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Right panel / LLM Chat
 - Context: Reviewing the content displayed in the expandable right column.
-- Original observation:
-
-  > de plus je voudrais enlevé de cette colonne, la partie sequence, actions
-  > et shots, ou tout autre element à part la parti llm chat
-
 - Expected outcome: Remove `Sequence`, `Actions`, `Shots`, and every other
   non-chat section from this column so it is dedicated exclusively to LLM
   Chat.
@@ -1012,63 +914,48 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   only `SidebarLLMChat` (Project/Sequence/Shot/Assets context, quick links
   and `Coming later` placeholders removed) and made a single click on the
   launcher reveal the full Chat interface, removing the prior second
-  disclosure; awaiting user validation.
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: This is a product-content request, not only a disclosure or
-  default-collapsed-state adjustment.
-- 2026-08-03: `UX.SETTINGS.CHAT.1` rewrote `RightPanel.tsx` to
+  disclosure
+- Resolution: 2026-08-03: `UX.SETTINGS.CHAT.1` rewrote `RightPanel.tsx` to
   `ResizableRightPanelShell` -> `SidebarLLMChat` only; the `tree` prop was
   dropped since no context-derived content remains. `SidebarLLMChat`'s own
   `isOpen` closed-disclosure state was removed so opening the panel shows
-  the full Chat immediately. Status moved to `TO VALIDATE` pending user
-  confirmation.
+  the full Chat immediately.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 14 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-005 - Use Text Primary for the LLM Chat title
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Right panel / LLM Chat / Theme
 - Context: Viewing the `LLM Chat` heading inside the right column.
-- Original observation:
-
-  > le text "**LLM Chat**"dans cette colonne devrait etre en couleur text
-  > primary
-
 - Expected outcome: The `LLM Chat` heading uses the `Text Primary` theme token.
 - Impact: The title should carry primary emphasis and remain clearly legible
   as the identity of the dedicated chat column.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: This targets the heading text and is distinct from
-  `FB-20260715-002`, which targets the LLM Chat logo or icon.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` changed the `LLM Chat` heading in
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` changed the `LLM Chat` heading in
   `SidebarLLMChat.tsx` from a hard-coded `text-[#e0e4e8]` (not a mapped
   theme token) to `text-[#e7e9ec]` (Text Primary), preserving the provider
-  badge's existing secondary hierarchy. Status moved to `TO VALIDATE`
-  pending user confirmation.
+  badge's existing secondary hierarchy.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 13 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-006 - Expose typography controls in Custom Appearance
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Settings / Custom Appearance / Typography
 - Context: Customizing the application's appearance and reviewing the fonts
   used across the interface.
-- Original observation:
-
-  > dans les custom apparence, j aimerai bien avoir d exposé les differentes
-  > font utilisé, et pouvoir driver la taille et si c est en bold, italic ou
-  > autre.
-
 - Expected outcome: Custom Appearance exposes the different typography roles
   used by the application and lets the user control relevant font properties,
   including size, weight such as bold, and style such as italic.
@@ -1076,34 +963,25 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   system for the user to tune hierarchy and visual identity.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Ticket preparation must define which typography roles are safe
-  to expose, how inheritance and reset work, and what limits preserve layout
-  and readability. No specific implementation or dependency is authorized by
-  this observation alone.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` extended the two existing typography
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` extended the two existing typography
   roles (Display -> h1, Body/UI -> body) with bounded size (18-48px / 12-20px),
   weight (400/500/600/700) and style (normal/italic) controls in
   `ThemeModeToggle.tsx`, backed by a centralized clamp/validate contract in
   `src/lib/mikrosTheme.ts` and mirrored in the `layout.tsx` anti-flash script.
   Legacy themes without these fields load with the documented defaults.
-  Status moved to `TO VALIDATE` pending user confirmation.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 18 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-007 - Fix the unreadable New Project button color
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Projects / Theme / Buttons
 - Context: Viewing the `New Project` action in the project interface.
-- Original observation:
-
-  > la couleur du bouton "new project" est illisible, elle n'est pas réglé
-  > comme la couleur des autres bouton du meme genre
-
 - Expected outcome: In the left column, the `New Project` label uses the
   `Text Secondary` theme token while the button remains consistent with
   equivalent actions and preserves readable contrast.
@@ -1111,28 +989,15 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   difficult to read and creates an inconsistent button hierarchy.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Ticket preparation should identify the intended shared button
-  variant and verify contrast in every supported appearance mode, rather than
-  applying an isolated hard-coded color.
-- 2026-07-16: User refinement:
-
-  > le mot "new project" de la colonne de gauche devrait avoir la couleur de
-  > la text secondary
-
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` changed the `New Project` label in
-  `Sidebar.tsx` from `text-[#4b5158]` (Text Disabled) to `text-[#a4abb2]`
-  (Text Secondary), with a `hover:text-[#e7e9ec]` state; the `+` icon keeps
-  its existing dimmer hierarchy since the audit found no shared treatment
-  with the label. Status moved to `TO VALIDATE` pending user confirmation.
-
-- 2026-07-16: `Text Secondary` is now the explicit desired token for the
+- Resolution: 2026-07-16: `Text Secondary` is now the explicit desired token for the
   left-column label; implementation should still use the shared theme token,
   not a hard-coded color.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 23 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-008 - Custom thumbnail backgrounds for Project and Sequence rows
 
@@ -1185,7 +1050,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260715-009 - Show the video name as a frame player overlay
 
-- Status: `TO VALIDATE` — implemented in UX.MEDIA.PREVIEW.1 (2026-08-05).
+- Status: `RESOLVED` — implemented in UX.MEDIA.PREVIEW.1 (2026-08-05).
   `VideoFrameReviewPlayer` gained an optional `mediaLabel` prop rendered as a
   persistent, truncated, non-interactive overlay top-left of the video. All 8
   real callers now pass a durable name (Result/Draft/Candidate label or
@@ -1194,26 +1059,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Date observed: 2026-07-15
 - Area: Video frame player / Overlay
 - Context: Reviewing a video in the frame-aware player.
-- Original observation:
-
-  > je me demande si dans le frameplayer on pourrait afficher le nom de la
-  > video en overlay
-
 - Expected outcome: Display the current video's name as a readable,
   non-obstructive overlay in the frame player so the viewed media remains
   identifiable during playback and review.
 - Impact: An on-player label could reduce ambiguity when comparing or reviewing
   several videos.
-- Related ticket: None
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Ticket preparation must identify the intended player surfaces,
-  define whether the label is a filename, result title, or version name, and
-  decide whether the overlay is persistent, temporary, or user-toggleable.
-  This observation does not authorize changes to `SequencePreviewPlayer`.
+- Related ticket: `UX.MEDIA.PREVIEW.1`
+- Resolution: shipped by `UX.MEDIA.PREVIEW.1` on 2026-08-05 — the video name
+  is shown as a frame-player overlay.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 10 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260715-010 - Keep the Seedance package below its prompt-size limit
 
@@ -1320,43 +1179,31 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260715-014 - ComfyUI port presets in Render Settings
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-15
 - Area: Settings / Render Settings / ComfyUI
 - Context: Switching between the ComfyUI instances or ports used for rendering.
-- Original observation:
-
-  > j aimerai bien avoir une list de presset de mes port comfyui dans les
-  > render setting
-
 - Expected outcome: Add a preset list in `Render Settings` for the user's
   ComfyUI ports, allowing an existing connection target to be selected quickly
   instead of entering it again for each switch.
 - Impact: Presets would reduce repetitive configuration and mistakes when
   working with multiple ComfyUI instances.
 - Related ticket: `UX.PRODUCTIVITY.POLISH.1`
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-15: Ticket preparation must clarify whether a preset stores only a
-  port or a complete named endpoint including protocol and host, where presets
-  persist, how the active preset is selected, and how connectivity is tested.
-  This observation alone does not authorize changes to the ComfyUI protocol,
-  generation runtime, job runner, polling, schema, or dependencies.
-- 2026-08-03: Assigned to `UX.PRODUCTIVITY.POLISH.1`. The ticket defines
-  bounded named Local ComfyUI endpoint presets persisted in `app_settings`;
-  selecting one only edits the Base URL draft until `Save Changes`.
-- 2026-08-03: Implemented under `UX.PRODUCTIVITY.POLISH.1` (Lot A). Named
+- Resolution: 2026-08-03: Implemented under `UX.PRODUCTIVITY.POLISH.1` (Lot A). Named
   Local ComfyUI endpoint presets (Settings > ComfyUI), max 20, durable in
   `app_settings` key `comfyui_local_endpoint_presets_v1` with optimistic
   concurrency. Pure/DB/browser proofs green, including a real server
-  restart. Awaiting user validation before `RESOLVED`.
+  restart. before `RESOLVED`.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 19 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-EXTRACT - Storyboard panel extraction, consolidated
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Storyboard / Sequence Storyboard extraction
 - Context: Nine separate observations made on 2026-07-16 while exercising
@@ -1366,36 +1213,22 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   is done, and were crowding the observations that still need a decision.
   Their detail lives in the git history of this file and in the tickets named
   below.
-- Consolidated IDs and what each asked for:
-  - `FB-20260716-022` — detect and crop storyboard panels automatically ·
-    `SEQGEN.STORYBOARD.EXTRACT.1`
-  - `FB-20260716-023` — the detector missed dark separators ·
-    `SEQGEN.STORYBOARD.EXTRACT.1-FIX1`
-  - `FB-20260716-024` — use extracted panels as Shot thumbnails and
-    references · `SEQGEN.STORYBOARD.EXTRACT.1-FIX2`
-  - `FB-20260716-025` — tune detection and identify crop regions visually ·
-    `SEQGEN.STORYBOARD.EXTRACT.1-FIX3`
-  - `FB-20260716-026` — apply extraction settings and region mappings in
-    bulk · `SEQGEN.STORYBOARD.EXTRACT.1-FIX4`
-  - `FB-20260716-028` — crop the illustration without the storyboard text ·
-    `SEQGEN.STORYBOARD.EXTRACT.1-FIX5`
-  - `FB-20260716-029` — expose advanced detection diagnostics ·
-    `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
-  - `FB-20260716-030` — upload and delete Sequence Storyboard Drafts ·
-    `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
-  - `FB-20260716-031` — ratio-aware cropboxes ·
-    `SEQGEN.STORYBOARD.EXTRACT.1-FIX6`
 - Expected outcome: unchanged — each item above shipped under its named
   ticket. This entry does not reopen any of them.
 - Impact: the extraction workspace exists, detects, crops, maps regions to
   Shots and pushes the crops. Everything since builds on it, including
   `SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1` (2026-08-22, commit `868869f`).
 - Related ticket: `SEQGEN.STORYBOARD.EXTRACT.1` and its FIX1 to FIX6 retakes.
-- Resolved or validated on: Implemented 2026-07-16. **Author's manual
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
   validation still pending** — these were never marked validated, and
   condensing them did not validate them. `FB-20260716-027` (Crop/Fit tool
   with aspect-ratio presets) is deliberately NOT part of this group: it is
   still `OPEN` and keeps its own entry below.
+- Condensed 2026-08-22: 19 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-027 - Crop/Fit image tool with aspect-ratio presets
 
@@ -1432,16 +1265,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260716-032 - Unify Edit-page text-field colors with API Key
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Forms / Edit pages / Theme
 - Context: Editing Projects, Assets, Shots, and other application entities.
-- Original observation:
-
-  > tout les text field des pages d'edit (exemple asset, shot, projet...)
-  > devrait avoir la meme couleur que la couleur du text field "API KEY" par
-  > exemple
-
 - Expected outcome: Text fields across Edit pages use the same canonical color
   treatment as the `API Key` field, producing a consistent form appearance for
   Project, Asset, Shot, and equivalent editors.
@@ -1449,27 +1276,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   which controls are editable or part of the same design system.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Ticket preparation must audit the shared and one-off input
-  components, identify the exact `API Key` reference styles or theme tokens,
-  and clarify whether the requested consistency includes background, border,
-  entered text, placeholder, disabled, error, hover, and focus states.
-- 2026-07-16: Prefer a shared field variant or design token over per-page
-  hard-coded colors. Confirm separately whether textareas, selects, numeric
-  fields, and other form controls should follow the same treatment.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` converged the shared `FormField.tsx`
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` converged the shared `FormField.tsx`
   (used by Project, Asset, Sequence, Shot, and Segment new/edit pages) onto
   the exact `API Key` reference classes (`bg-[#0d0e10]`, `border-[#2c3035]`,
   `text-[#e7e9ec]`, `placeholder-[#3a4046]`, `focus:border-[#3a4046]`),
   replacing legacy `neutral-*` utilities. The two one-off reference-image
   Edit pages (`.../reference-images/[imageId]/edit/page.tsx`, Asset and Shot)
   used a divergent `bg-[#1a1d20]`/`placeholder-[#4b5158]` and were corrected
-  to the same canonical treatment. Status moved to `TO VALIDATE` pending
-  user confirmation.
+  to the same canonical treatment.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 23 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-033 - Make Edit Project text fields translatable
 
@@ -1511,36 +1331,29 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260716-034 - Match Apply to Story with Save Changes button colors
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Story / Buttons / Theme
 - Context: Applying edited or generated content to the Story.
-- Original observation:
-
-  > le bouton "apply to story" n'a pas la bonne couleur et devrait avoir la
-  > meme couleur que les bouton "save changes"
-
 - Expected outcome: The `Apply to Story` button uses the same color treatment
   and shared visual variant as `Save Changes` buttons.
 - Impact: Matching equivalent confirmation actions would improve readability
   and make the application's action hierarchy more consistent.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Ticket preparation should identify the canonical `Save Changes`
-  button variant and reuse it for default, hover, focus, disabled, and loading
-  states rather than copying hard-coded colors.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` migrated `Apply to Story`
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` migrated `Apply to Story`
   (`StoryGenerationPanel.tsx`) from the divergent
   `bg-[#e7e9ec] text-[#141618] hover:bg-white` treatment to the shared
   `LLM_APPLY_ACTION_CLASS` (`src/lib/uiClasses.ts`), matching the canonical
   `Save Changes` colors/hover/disabled states in `OllamaSettingsForm.tsx`
   byte for byte. The handler, confirmation flow, and mutation sequence are
-  unchanged. Status moved to `TO VALIDATE` pending user confirmation.
+  unchanged.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 16 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-035 - Add an extra system prompt to Story LLM Assist
 
@@ -1626,16 +1439,11 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260716-037 - Unify colors for LLM Apply buttons
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Story / LLM Assist / Buttons / Theme
 - Context: Applying LLM-generated content, including the `Apply Outline`
   action.
-- Original observation:
-
-  > "Apply Outline" a aussi un probleme de couleur, je pense que cela va etre
-  > redondant à tout les boutons "Apply" relatif au llm
-
 - Expected outcome: All LLM-related `Apply` buttons, including `Apply Outline`
   and `Apply to Story`, use one consistent action color and shared button
   variant across their default, hover, focus, disabled, and loading states.
@@ -1643,16 +1451,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   recognizable and prevent repeated per-button color fixes.
 - Related ticket: `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on
   `origin/main`); related feedback: `FB-20260716-034`
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Ticket preparation should inventory every LLM-driven `Apply`
-  action and identify the canonical existing variant (for example, the
-  `Save Changes` treatment) before changing individual buttons. Prefer a shared
-  component or theme token over hard-coded per-page colors.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` added the shared
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` added the shared
   `LLM_APPLY_ACTION_CLASS` (`src/lib/uiClasses.ts`) and migrated the full
   inventoried set: `Apply Outline`, `Apply to Story`, `Apply to Shot Prompt`
   (Prompt Composer), `Apply to Asset Bible`, `Replace/Append Description` and
@@ -1662,51 +1461,41 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   canonical `Save Changes` colors/hover/disabled states. Generate, Save
   Details, Cancel/Discard, and other non-LLM-Apply controls were left
   untouched. Every existing handler, confirmation gate, disabled condition,
-  and mutation sequence is unchanged; only the class source changed. Status
-  moved to `TO VALIDATE` pending user confirmation.
+  and mutation sequence is unchanged; only the class source changed.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 22 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-038 - Split Asset Description and Notes enhancement
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Asset / LLM Assist / Editing
 - Context: Using the enhancement action on the Asset Detail page.
-- Original observation:
-
-  > j ai un probleme avec le enhance description, il faudrait splité enhance
-  > description et enhance notres , pour les lancé un par un dans la page de
-  > l'asset
-
 - Expected outcome: The Asset page exposes separate `Enhance Description` and
   `Enhance Notes` actions that can be run independently, with each result shown
   in its own preview before the user explicitly applies it.
 - Impact: Independent generation avoids unwanted coupling between fields and
   lets the user improve only the content that needs work.
 - Related ticket: `UX.PRODUCTIVITY.POLISH.1`
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Preserve the existing preview/apply safeguards for each field;
-  one action must not overwrite or regenerate the other field silently. Keep
-  the two prompts and loading/error states distinguishable in the UI.
-- 2026-07-16: Ticket preparation should verify whether the current combined
-  enhancement also feeds Asset Bible fields, and document that behavior before
-  splitting the actions. This observation alone does not authorize schema,
-  migration, provider, or dependency changes.
-- 2026-08-03: Assigned to `UX.PRODUCTIVITY.POLISH.1`. The single-Asset UI and
-  LLM calls will be split into independent Description and Notes drafts while
-  the existing batch flow remains compatible.
-- 2026-08-03: Implemented under `UX.PRODUCTIVITY.POLISH.1` (Lot C). Asset
+- Resolution: 2026-08-03: Implemented under `UX.PRODUCTIVITY.POLISH.1` (Lot C). Asset
   Detail now shows two independent `Enhance Description` / `Enhance Notes`
   panels, each with its own state, prompt, strict single-field parser, and
   anti-double-submit lock; the batch Story flow is untouched. DB + mock-LLM
-  proofs and browser double-click proofs green. Awaiting user validation.
+  proofs and browser double-click proofs green.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 22 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-039 - Include Visual Identity in Generate Content Fill
 
-- Status: `TO VALIDATE` — implemented in
+- Status: `RESOLVED` — implemented in
   `ASSET.GENERATION.FILL.VISUAL.IDENTITY.1` (2026-08-11). The `Fill` menu on
   Asset Generate Content now adds `Visual Identity` (Asset Bible text alone)
   and `Asset Context` (Description + Notes + Visual Identity, `\n\n`-joined),
@@ -1722,10 +1511,6 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Area: Asset / Generate Content / Prompt composition
 - Context: Using the `Fill` action in the `Generate Content` workflow for an
   Asset.
-- Original observation:
-
-  > ajouter visual idnetity dans le bouton Fill de generate content
-
 - Expected outcome: The `Fill` action can include the Asset's `Visual Identity`
   content in the generated prompt/context, alongside the currently supported
   Asset information, so visual consistency is preserved during generation.
@@ -1734,18 +1519,16 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Related ticket: `ASSET.GENERATION.FILL.VISUAL.IDENTITY.1`
 - Resolution: Added `Visual Identity` and `Asset Context` to the Fill menu via
   a shared pure helper; behavior unchanged when Visual Identity is empty.
-- Resolved or validated on: Implemented 2026-08-11; awaiting user validation.
-
-#### Follow-up notes
-
-- 2026-07-16: Ticket preparation should confirm whether `Visual Identity` is
-  appended, merged, or mapped to a dedicated prompt segment, and show the
-  resulting text in the existing prompt preview before generation. Empty or
-  missing values should leave the current behavior unchanged.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 9 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-040 - Show an image zoom popup on hover
 
-- Status: `TO VALIDATE` — implemented in UX.MEDIA.PREVIEW.1 (2026-08-05).
+- Status: `RESOLVED` — implemented in UX.MEDIA.PREVIEW.1 (2026-08-05).
   `ThumbnailHoverPreview` now also opens on keyboard focus (closes on blur,
   pointer leave or Escape), in addition to the pre-existing mouse hover. 17
   previously-unwrapped small thumbnails across the app were migrated to it
@@ -1755,39 +1538,28 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Date observed: 2026-07-16
 - Area: Images / Preview / UX
 - Context: Viewing image thumbnails throughout the application.
-- Original observation:
-
-  > lorsque je met le curseur au dessus d une image, toujours me faire un
-  > popup zoon
-
 - Expected outcome: Hovering an image thumbnail opens a consistent zoom popup
   or enlarged preview, allowing the user to inspect the image without leaving
   the current page.
 - Impact: Small thumbnails are difficult to evaluate and currently require
   extra navigation or manual opening to inspect visual details.
-- Related ticket: None
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-16: Ticket preparation should inventory image surfaces and define
-  one shared preview behavior, including delay, placement, viewport clamping,
-  keyboard/focus access, and mobile/touch fallback. Avoid blocking the use of
-  image action buttons underneath the thumbnail.
+- Related ticket: `UX.MEDIA.PREVIEW.1`
+- Resolution: shipped by `UX.MEDIA.PREVIEW.1` on 2026-08-05 — images show a
+  zoom popup on hover.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 10 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260716-041 - Prefill workflow Duration from Shot duration
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-16
 - Area: Shot / Generate Content / Workflow inputs
 - Context: Generating content from a Shot workflow that exposes a `Duration`
   input.
-- Original observation:
-
-  > injecter par defaut la duration du shot dans l'imput "Duration" des
-  > workflow dans generate content
-
 - Expected outcome: When `Generate Content` opens for a Shot, the workflow
   `Duration` input is prefilled from that Shot's configured duration whenever
   the workflow exposes a compatible duration field.
@@ -1804,32 +1576,19 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   DB or the URL. Two candidates, no candidate, a non-duration kind, an
   invalid/out-of-range Shot duration, or a non-integer duration into an
   integer input all retain today's workflow-default behavior unchanged.
-- Resolved or validated on: Implemented 2026-08-10; pending user validation.
-
-#### Follow-up notes
-
-- 2026-07-16: The injected value should be a default only: preserve an
-  explicit user edit during the current generation flow and validate units and
-  bounds against the selected workflow. If the Shot has no duration or the
-  workflow has no compatible input, retain the current behavior.
-- 2026-08-10: Implemented as a UI-only default (no server/schema change).
-  Verified with pure-helper tests and a disposable isolated-worktree browser
-  proof (integer 5s, decimal 5.5s into integer/float inputs, URL override
-  8 surviving reload, no-candidate/two-candidate passthrough); see
-  `.agents/claude_report.md` for full evidence and the manual validation
-  checklist.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 16 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260717-042 - Add Shot video references management
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-17
 - Area: Shot / References / Video
 - Context: Managing reference media attached to an individual Shot.
-- Original observation:
-
-  > il faudrait une section video pour les shots comme la sections image
-  > reference, pour pouvoir les supprimer ou en uploader au besoin
-
 - Expected outcome: Shot Detail exposes a dedicated video reference section,
   parallel to `Image References`, where the user can upload supported reference
   videos and delete existing ones explicitly.
@@ -1847,24 +1606,12 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   "reference_copy"`; it is excluded from Editorial "Latest generation" but
   can be explicitly approved and then read by "Approved only", identically
   to any other library entry.
-- Resolved or validated on: None (implemented, pending user validation)
-
-#### Follow-up notes
-
-- 2026-07-17: Ticket preparation should define supported formats, size and
-  duration limits, storage ownership, preview behavior, and safe deletion. A
-  deletion must not remove a video that is referenced by another entity or
-  workflow record; provenance should remain visible where the video is used.
-- 2026-07-17: Reuse the existing reference-media conventions where possible,
-  but keep video references distinct from approved Shot outputs and from
-  editorial media. This observation alone does not authorize schema,
-  migration, provider, or generation-runtime changes.
-- 2026-08-11: `SHOT.VIDEO.REFERENCES.1` implemented by Claude/Sonnet: additive
-  `shot_reference_videos` table (own root
-  `uploads/shot-reference-videos/shot-<id>/`), magic-byte + FFprobe upload
-  validation (500 MiB cap), quarantine/transaction/restore-safe delete, and
-  the same discipline extended to Shot/Sequence/Project cascade-delete file
-  cleanup. No existing `videoNode_*`/generation contract changed.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 20 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260717-045 - Configure project format ratio and FPS
 
@@ -1931,12 +1678,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260718-001 - Enrich pushed clips with duration and first frame
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-18
 - Area: Storyboard / Split Workspace / Shot
 - Context: Pushing a validated Split Plan to its mapped Shots.
-- Original observation: Add an optional `Push durations` checkbox and generate
-  a first frame for every pushed clip so the Storyboard thumbnail is updated.
 - Expected outcome: When explicitly enabled, Shot durations use the produced
   clip durations. Every pushed clip creates a durable `first_frame` reference
   and updates the Shot's explicit Storyboard thumbnail.
@@ -1954,29 +1699,19 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   (never approved-for-generation, exact provenance to its Shot Video
   Candidate), which becomes the Shot's explicit Storyboard thumbnail unless
   a manual choice already exists.
-- Resolved or validated on: Implemented 2026-07-18; awaiting user validation.
-
-#### Follow-up notes
-
-- 2026-07-18: `Push durations` should default to off. Duration changes must be
-  atomic with the push and invalidate dependent Sequence/Film Results when a
-  value actually changes; Editorial timing remains separate.
-- 2026-07-18: An additive migration for an explicit Storyboard-thumbnail source
-  of truth is authorized if confirmed by the implementation audit.
-- 2026-07-18: Implemented and validated live via `SEQGEN.PUSH.2` — probed
-  durations confirmed to match ffprobe output (not segment boundaries) on
-  real pushed clips of Sequence 50; Sequence/Film Results confirmed outdated
-  only on a real duration change (a no-op re-push and an unchecked push both
-  left durations/Results/Editorial byte-identical).
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 15 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260718-002 - Choose a Storyboard thumbnail from Shot references
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-18
 - Area: Shot / Reference Images / Storyboard
 - Context: Reviewing reference images on Shot Detail.
-- Original observation: Add `Make Storyboard Thumbnail` beside a Shot reference
-  image so the Storyboard grid can use that image explicitly.
 - Expected outcome: One explicit thumbnail selection per Shot, with the
   Storyboard grid preferring it over legacy fallback heuristics.
 - Impact: Lets the user correct or art-direct the visual used in the Storyboard
@@ -1993,7 +1728,12 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   Reference Image auto-clears the selection in the same transaction
   (documented policy choice — a presentation preference, not a content
   approval, so blocking the delete would be unnecessary friction).
-- Resolved or validated on: Implemented 2026-07-18; awaiting user validation.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 2 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260718-003 - Clear unused past Split runs
 
@@ -2086,11 +1826,12 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   context. The unrelated `SEQGEN.SPLIT.CLEANUP.1` work must not be treated as
   resolving this limitation.
 
-- Status: `TO VALIDATE`
+### FB-20260718-006 - Pushed first frame is not a valid PNG file
+
+- Status: `RESOLVED`
 - Date observed: 2026-07-18
 - Area: Storyboard / Split Workspace / Shot
 - Context: Pushing a validated Split Plan after `SEQGEN.PUSH.2`.
-- Original observation: `First frame produced for segment #776 is not a valid PNG file.`
 - Expected outcome: Every pushed candidate produces a real, decodable PNG
   first frame and the push completes without weakening image validation.
 - Impact: Blocking; the entire push batch currently fails before candidates,
@@ -2102,29 +1843,23 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   (`<name>.png.tmp.png` instead of `<name>.png.tmp`) as a second, defensive
   layer. Both existing validations (PNG signature, ffprobe dimensions) are
   unchanged and unweakened.
-- Resolved or validated on: Implemented and reproduced fixed 2026-07-18;
-  awaiting user validation.
-
-#### Follow-up notes
-
-- 2026-07-18: Codex confirmed the producer writes to `*.png.tmp` with the
-  generic `image2` muxer but no explicit PNG codec. The consumer correctly
-  rejects the resulting non-PNG signature. The fix must correct production,
-  not relax validation.
-- 2026-07-18: Fixed via `SEQGEN.PUSH.2-FIX1`. The exact originally-failing
-  Split Plan (run #68, segment #776) was re-pushed live and now succeeds;
-  the produced first frame for that exact segment was inspected byte-for-
-  byte (`89 50 4E 47 0D 0A 1A 0A` PNG signature) and via ffprobe
-  (`codec_name: "png"`, real positive dimensions).
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review. Reproduced fixed on 2026-07-18: the originally-failing Split Plan
+  (run #68, segment #776) was re-pushed live and its first frame verified
+  byte-for-byte (`89 50 4E 47 0D 0A 1A 0A`) and by ffprobe (`codec_name:
+  "png"`).
+- Recovered 2026-08-22: this entry had lost its `### FB-` heading and was
+  buried inside `FB-20260718-005`, invisible to every listing of this file.
+  `FB-20260718-006` was the only id missing from the 2026-07-18 run, so the
+  heading is restored under it.
 
 ### FB-20260718-007 - Allow very short frame-exact split segments
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-18
 - Area: Storyboard / Split Workspace
 - Context: Correcting cuts between very short adjacent Shots.
-- Original observation: Split boundaries do not land correctly and a segment
-  as short as three frames must remain valid.
 - Expected outcome: For a reliable CFR source, manual and detected boundaries
   may create segments down to one source frame; the UI and server reason in
   frames rather than imposing the current 0.1-second floor.
@@ -2144,25 +1879,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   a manually created exactly-1-frame segment via Split at Current Frame, a
   successful Split Plan validation containing it, and a real FFmpeg push
   producing a genuine `nb_frames: 1` clip for that segment.
-- Resolved or validated on: 2026-07-18 (implementation + live proofs; awaiting
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
   user validation)
-
-#### Follow-up notes
-
-- 2026-07-18: The current implementation exposes a 0.1-second minimum and
-  converts it to a multi-frame gap at common frame rates. Codex keeps the
-  one-frame safety invariant so zero/negative segments remain impossible;
-  no larger arbitrary duration floor should remain for reliable CFR media.
+- Condensed 2026-08-22: 9 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260718-008 - Treat Shot videos as reusable media
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-18
 - Area: Shot / Generation / OpenReel
 - Context: Reviewing clips pushed from a Sequence Video Split Plan.
-- Original observation: Pushed clips can only be previewed as Sequence Video
-  Candidates; they cannot be listed and reused like Shot media, selected for
-  ComfyUI workflows, or exported reliably to OpenReel.
 - Expected outcome: A Shot has a durable, provenance-aware video library with
   explicit list/preview/delete/approve/reuse controls. Eligible videos can be
   mapped into compatible ComfyUI video inputs and explicitly sent to OpenReel
@@ -2188,61 +1918,37 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   real sidecar code: the export produces clips carrying all 5 MikAI metadata
   fields the Bridge requires (fixing "No MikAI clips detected" for this
   flow) and write-back is cleanly refused.
-- Resolved or validated on: 2026-07-19 (implementation + live proofs;
-  awaiting user validation)
-
-#### Follow-up notes
-
-- 2026-07-18: `shot_video_candidates` currently stores split provenance and
-  review state, while ComfyUI runtime options are built only from image
-  references. The OpenReel editorial export currently exposes only
-  `shots.approvedVideoPath` for editorial items. Codex authorizes an additive
-  migration if the ticket audit confirms a dedicated Shot-video relation is
-  the clean model; do not overload image references or generation jobs.
-- 2026-07-18: The OpenReel message `No MikAI clips detected` means the current
-  OpenReel project contains no imported editorial clips carrying the required
-  MikAI metadata. Candidate storage alone cannot satisfy that bridge contract.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.)
+- Condensed 2026-08-22: 15 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260721-001 - Preserve custom presets across server restarts
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-21
 - Area: Settings / Presets / Persistence
 - Context: Using custom presets, then restarting the MikAI server.
-- Original observation:
-
-  > je ne comprend pas pourquoi mais je perd mes presset custom save, a croire
-  > qu ils ne sont plus enregistré quand je redemarre mon server
-
 - Expected outcome: A custom preset saved by the user remains available after
   stopping and restarting the server, with the same values and name.
 - Impact: Losing presets makes the configuration unreliable and forces the
   user to recreate saved work after each server restart.
 - Related ticket: `UX.PRODUCTIVITY.POLISH.1`
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-21: Investigation should trace the complete save/load path, confirm
-  whether the preset is written to durable server storage or only browser
-  state, and check startup errors, path/permission issues, and environment
-  differences. The UI should distinguish `Saved` from merely edited or
-  session-only state.
-- 2026-07-21: Any fix must preserve existing presets, avoid silently resetting
-  invalid entries, and provide a clear error when persistence fails. No schema,
-  migration, or dependency change is authorized by this observation alone.
-- 2026-08-03: The repository audit identifies Custom Appearance's
-  `Save as custom` as the user-facing custom-preset workflow. Assigned to
-  `UX.PRODUCTIVITY.POLISH.1` for durable `app_settings` persistence with a
-  backward-compatible localStorage cache and import path.
-- 2026-08-03: Implemented under `UX.PRODUCTIVITY.POLISH.1` (Lot B). Custom
+- Resolution: 2026-08-03: Implemented under `UX.PRODUCTIVITY.POLISH.1` (Lot B). Custom
   Appearance presets (save/edit/delete) are now durable in `app_settings` key
   `mikros_custom_theme_presets_v1` with optimistic concurrency; localStorage
   remains only the per-browser active-choice cache and anti-flash source.
   Legacy localStorage-only themes are imported idempotently on first load.
   Verified surviving a real server restart in browser. Awaiting user
   validation.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 25 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260722-002 - Rework the Shot video section into a compact workspace
 
@@ -2356,49 +2062,35 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260723-002 - Correct the Camera Lab Additional Prompt label
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-23
 - Area: Camera Lab / UI copy
 - Context: Reading the label for the additional prompt input in Camera Lab.
-- Original observation:
-
-  > Il y a une erreur d'orthograph à "Additonal Prompy" dans la camera-lab .
-  > ca devrait etre "Additonal Prompt"
-
 - Expected outcome: The label is displayed as `Additional Prompt`.
 - Impact: The current typo reduces interface quality and makes the workflow
   UI look unfinished.
 - Related ticket: `CAMLAB.POLISH.1` / Gaussian Camera workflow inputs;
   `UX.VISUAL.CONSISTENCY.1` (shipped in commit `8fb1f75` on `origin/main`)
-- Resolution: None
-- Resolved or validated on: None
-
-#### Follow-up notes
-
-- 2026-07-23: The user's quoted target omits the second `i` in `Additional`;
-  the canonical English UI spelling is `Additional Prompt`.
-- 2026-08-03: `UX.VISUAL.CONSISTENCY.1` corrected the display only, in
+- Resolution: 2026-08-03: `UX.VISUAL.CONSISTENCY.1` corrected the display only, in
   `CameraLabPolishWorkspace.tsx`'s `displayInputLabel()` helper: the exact
   stored workflow node title `"Additional Prompy"` renders as
   `"Additional Prompt"`; every other label passes through byte-identical.
   The ComfyUI workflow JSON, node id, and nodeId-keyed override transport
-  (`textOverrideByNodeId`/`scalarOverrideByNodeId`) are untouched. Status
-  moved to `TO VALIDATE` pending user confirmation.
+  (`textOverrideByNodeId`/`scalarOverrideByNodeId`) are untouched.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 15 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260724-001 - Do not inject phantom promptText workflow inputs
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-07-24
 - Area: Workflows / ComfyUI mapping / Generate Content
 - Context: Inspecting the JSON payload sent to ComfyUI and the inputs exposed
   in the `Generate Content` panel.
-- Original observation:
-
-  > j ai une erreur dans les workflow envoyé a comfyui. le json inject toujour
-  > un promptText dans le json, meme lorsque 'il n y a pas de prompt text avec
-  > (Input) dans le nom du node, pour le flager comme une input a afficher dans
-  > le generate content panel
-
 - Expected outcome: `promptText` is injected and exposed as a Generate Content
   input only when the actual workflow contains a matching prompt-text `(Input)`
   node. Workflows without that node must not receive a synthetic `promptText`
@@ -2423,38 +2115,12 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   this workflow shape in the first place (`parseWorkflow.ts` only extracts
   `(Input)`-marked nodes) — Lot C additionally adds an explicit mutation
   summary sentence next to the payload preview.
-- Resolved or validated on: Implemented 2026-08-04, pending user validation.
-
-#### Follow-up notes
-
-- 2026-07-24: Detection must be derived from the real parsed workflow
-  structure, not from a generic default or from the presence of another input
-  type. The mapping, injected keys, and displayed controls must remain aligned
-  for workflows with and without a prompt-text `(Input)` node.
-- 2026-07-24: Ticket preparation should prove the absence case with the exact
-  payload sent to ComfyUI and confirm that existing workflow values remain
-  untouched when no matching prompt input exists. No schema, migration,
-  dependency, or unrelated generation-runtime change is authorized by this
-  observation alone.
-- 2026-08-04 (Round 2): Codex review found `promptText` could still be wrong
-  when the Advanced Payload Editor changed the real queued text — the fix
-  now reads the value back from the actually-queued payload
-  (`deriveQueuedPromptText`) instead of a separately precomputed string.
-  Re-proven end-to-end with a real `runAssetGeneration` call against a
-  disposable DB + mock ComfyUI, and in a real browser via `next start`: the
-  durable snapshot has no `promptText` for the image-only fixture, and a
-  workflow with a real text `(Input)` node shows `promptText` exactly equal
-  to `queuedWorkflow`'s own text field.
-- 2026-08-04 (Round 3): Codex review found the derivation still accepted a
-  partial result — if an Advanced Override removed one of two real text
-  inputs (deleted its node/key, or turned its value into a number/null/
-  object) the OTHER input's text was still published as if it described the
-  whole queued prompt. Now every real text patch's exact final value must
-  resolve to a string and all must match, or the field is omitted, no
-  exceptions. Re-proven with the full fault matrix (node deleted, key
-  deleted, number/null/object value, duplicate path) plus a real
-  `runAssetGeneration` run through an Advanced Override via the actual
-  action.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 36 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260731-001 - Project Style and Look Development polish retakes
 
@@ -2482,13 +2148,10 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260803-002 - Use Border color for primary Project Style headings
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-03
 - Area: Project / Project Style
 - Context: Reading and editing the main Project Style workspace.
-- Original observation: "dans project style, la couleur des elements:
-  Direction Brief, World & Design Language, Visual Treatment, Style Rules (2)
-  devrait etre de la couleur de Border"
 - Expected outcome: Those four workspace headings use the theme's canonical
   Border color while all fields, content, badges and nested headings retain
   their existing colors.
@@ -2503,35 +2166,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   to keep in sync. Verified byte-exact against the real `MikBright` preset
   (panel background `#C9D3D2`, title `#08232C`). No inline style, new CSS
   variable or token duplication introduced.
-- Resolved or validated on: Implemented 2026-08-04, pending user validation.
-
-#### Follow-up notes
-
-- 2026-08-03: Reuse `text-[#2c3035]`, already mapped to
-  `var(--mikros-border)` by the theme layer; no new CSS token is required.
-- 2026-08-04 (Retake Round 1): user validation showed the titles still
-  dark — `text-[#2c3035]` relied on a hand-written `globals.css` selector
-  matching Tailwind's generated class exactly, an unreliable indirection.
-  Replaced with a direct `[color:var(--mikros-border,#2c3035)]` arbitrary
-  property class on the titles.
-- 2026-08-04 (Retake Round 2): request clarified — the reported "large
-  black masses" were the four PANELS' literal `bg-[#101214]` background,
-  not the title glyph color. Panels now use
-  `[background-color:var(--mikros-border,#2c3035)]`; titles switched to
-  `[color:var(--mikros-text-primary,#e7e9ec)]` for legibility against that
-  background (Border is a light color in the user's `MikBright` preset).
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 19 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260804-001 - Theme the remaining Project Style panels
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-04
 - Area: Project / Project Style
 - Context: Reviewing the full Project Style workspace and Reference
   Analysis after the FB-20260803-002 panel fix.
-- Original observation: The same "large black mass" pattern also affects
-  `Reference Analysis`, `Analysis History`, `Compiled preview` and
-  `Versions & Publish`, plus the dark structural background shown when an
-  Analysis History Run is opened.
 - Expected outcome: The same Border-background / Text-Primary-title
   treatment applies to these four surfaces, and opening a Run under a
   light theme no longer reveals a literal dark background.
@@ -2549,17 +2197,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   against the real `MikBright` preset (panel background `#C9D3D2`, titles
   `#08232C`, opened Run `#FFFDF8`). Status badges, thumbnails, fields and
   business content untouched.
-- Resolved or validated on: Implemented 2026-08-04, pending user validation.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 4 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260804-002 - Align the Look Development Image/Video mode control
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-04
 - Area: Project / Project Style / Look Development
 - Context: Testing the Look Development Bench's Mode control under a light
   Custom Appearance preset.
-- Original observation: The active Image/Video button's background is a
-  literal dark navy (`bg-[#14202e]`), unrelated to the active theme.
 - Expected outcome: The active button's background follows the theme's
   Raised token; both buttons keep identical, stable dimensions; the active
   state stays visible via the existing accent border and `aria-pressed`.
@@ -2577,18 +2228,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   Border/accent and `aria-pressed` are unchanged; verified the active
   state transfers correctly on click and on keyboard (Enter) in both
   directions.
-- Resolved or validated on: Implemented 2026-08-04, pending user validation.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 2 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260804-003 - Dynamic Batch leaves stale template LoadImage nodes
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-04
 - Area: Shot / Generate Content / ComfyUI Dynamic Batch
 - Context: On Shot 103, selecting workflow `GPT2 Multi` (#11), adding two
   Dynamic Batch images, then clicking `Generate Keyframe`.
-- Original observation: ComfyUI refuses generation because the workflow's
-  original `LoadImage` filename (`ComfyUI_00304_.png`, node 3) does not exist,
-  even though two replacement images were selected.
 - Expected outcome: Dynamic Batch/Repeatable expansion sends only active
   image chains whose LoadImage inputs were replaced and uploaded. Superseded
   template nodes must not remain in the queued graph.
@@ -2607,50 +2260,20 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   `ComfyUI_00304_.png` no longer appear in the queued payload for 1/2/3
   selections, through the real `expandDynamicBatchWorkflow` and the real
   `prepareComfyPayloadForQueue` HTTP boundary (mocked transport).
-- Resolved or validated on: Implemented 2026-08-04, pending user validation.
-
-#### Follow-up notes
-
-- 2026-08-04: Job 467 proves the selected images were correctly cloned,
-  uploaded and connected as nodes 14/15, but original node 3 remained in
-  `queuedWorkflow` with `ComfyUI_00304_.png`. The fix belongs to the canonical
-  expansion builder, not to the Shot UI or the saved workflow.
-- 2026-08-04: Fix implemented and proved at the pure-function and real-HTTP-
-  boundary level (see `.agents/claude_report.md`).
-- 2026-08-04 (Retake Round 1): Fix additionally proved through the real
-  `runShotGenerationCore` Shot action (single job, single `/prompt` call,
-  durable `payload_snapshot` and the real wire payload both free of node 3 /
-  `ComfyUI_00304_.png`) and through a live Playwright pass in an isolated
-  `git worktree` (own DB, uploads, `.next`, port 3902 — real port 3000 never
-  touched): Add Image x2 on Shot 103 / workflow `GPT2 Multi`, `Generate
-  Keyframe`, job reaches `Running` with no node-3 error, exact bug URL
-  (`batchImages_10=asset-44-41%2Casset-48-42`) reproduced. Remaining step is
-  the user's own confirmation in their real environment.
-- 2026-08-04 (Retake Round 2): The Round 1 browser proof surfaced a separate
-  real bug — a genuine double-click on `Generate Keyframe` created two
-  `generation_jobs` and sent two `/prompt` calls (double-cost risk on Cloud).
-  Fixed with a synchronous submission lock in the shared
-  `PartnerNodeConfirmForm` (used by all 7 real generation forms), proved with
-  a real `dblclick()` and a same-tick double `requestSubmit()` against Shot
-  103 / `GPT2 Multi`: exactly one job per genuine submission, node 3 /
-  `ComfyUI_00304_.png` still absent. Unrelated to the Dynamic Batch graph fix
-  itself, which stayed byte-identical across this retake.
-- 2026-08-04 (Retake Round 3): A submission rejection was being caught and
-  logged raw to the console without informing the user. Now shows a fixed,
-  generic "Generation could not be submitted. Please try again." under the
-  Generate button, clears on the next valid attempt, and never logs the raw
-  error. Graph fix and double-submit lock unchanged and re-verified.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 35 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260804-004 - Verify Asset workflow input isolation
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-04
 - Area: Asset / Generate Content / ComfyUI workflow mapping
 - Context: Asset 44, workflow `Gemini_CharacterSheet` (#6), reference
   `asset-44-43`, generation job #472.
-- Original observation: The generated image repeatedly looked incorrect, and
-  the user suspected MikAI was editing more than the selected LoadImage source
-  even though no other workflow node is marked `(Input)`.
 - Expected outcome: With no Advanced Payload Override, MikAI changes only the
   inputs explicitly exposed by the stored workflow. For this workflow, only
   `node 3.inputs.image` may change; prompt, system prompt, model, seed, ratio,
@@ -2701,45 +2324,12 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   MikAI mutation (already the Lot D conclusion) — it validates that
   specific diagnosis, not this ticket's full contract, which still needs
   the manual checklist below run against the real app.
-- Resolved or validated on: Implemented 2026-08-04, pending user validation.
-
-#### Follow-up notes
-
-- 2026-08-04: Codex compared stored workflow #6 with job #472 read-only. The
-  queued graph kept node 1's prompt, system prompt, model, seed, aspect ratio,
-  resolution and response modalities byte-identical; only node 3's image was
-  rewritten to the Cloud filename. The selected source and generated result
-  depict the same character, while the model retained much of the source
-  environment despite the stored prompt requesting a neutral background.
-- 2026-08-04: A real provenance defect remains: job #472 stores the compiled
-  Asset description in top-level `promptText` although no text `(Input)` was
-  patched and that text is absent from `queuedWorkflow`. The active ticket
-  must correct this phantom claim and add fail-closed mutation verification,
-  without silently changing the saved Gemini prompt.
-- 2026-08-04 (Round 2): Codex REVISE found the mutation diff only compared
-  `inputs` (missed `class_type`/`_meta`/whole-node mutations) and that
-  `promptText` could still show a stale compiled string once an Advanced
-  Payload Override changed the real queued text. Both fixed and re-proven
-  end-to-end (real `runAssetGeneration` + disposable DB/mock provider + real
-  browser session) — see `.agents/claude_report.md` Round 2 for full
-  evidence, including an unrelated pre-existing UI artifact observed and
-  reported but out of this ticket's scope (`PartnerNodeConfirmForm.tsx`
-  submission-error banner appearing despite a successful redirect).
-- 2026-08-04 (Round 3): the "unrelated artifact" from Round 2 turned out to
-  be a real bug, not a mock/UI quirk: `redirect()` deliberately throws a
-  `NEXT_REDIRECT` control-flow error (documented Next 16.2.9 behavior), and
-  `PartnerNodeConfirmForm.tsx`'s bare `catch` (introduced by the prior
-  anti-double-submit retake) was swallowing it as a real failure on every
-  one of the 7 shared generation surfaces. Fixed with `unstable_rethrow`
-  (the real `next/navigation` export) — proven directly against that real
-  function plus a real browser session with no false error banner after a
-  successful queue. Also tightened `promptText` to never publish a partial
-  result when an Advanced Override removes/corrupts one of several real
-  text inputs, and reworded the UI summary to explicitly scope it to the
-  automatic mapping step. The user's satisfying new generation confirms the
-  job #472 visual issue was Gemini's own prompt adherence — a distinct,
-  already-expected finding, not proof that this ticket's contract is fully
-  validated end-to-end by a human yet.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 41 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260806-001 - Select Approved or Latest Shot videos for a Basic Sequence Result
 
@@ -2781,18 +2371,13 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 
 ### FB-20260810-001 - Approve every eligible Latest generation video in one action
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-09
 - Area: Editorial / Shot Video Library / Sequence Approvals
 - Context: After validating the compact Latest-generation playback timeline
   (`EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1`), the user wanted to turn a
   reviewed Latest-generation cut into the normal Approved-only workflow
   without opening every Shot Video Library one by one.
-- Original observation:
-
-  > un bouton explicite dans Editorial qui approuve la derniere video
-  > generation durable pour chaque Shot eligible de la Sequence, avec
-  > confirmation, sans toucher aux Shots sans source utilisable.
 - Expected outcome: A `Latest Approved` control in the Editorial video source
   area, visible only in `Latest generation` mode, showing the eligible count,
   disabled with an honest message at zero, requiring a native confirmation
@@ -2814,55 +2399,21 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   latest source is skipped and its existing approval is left untouched,
   never cleared. Returns only bounded counts (approved / already approved /
   skipped) — never paths or raw DB errors.
-- Resolved or validated on: Pending Codex review and user validation.
-
-#### Follow-up notes
-
-- 2026-08-09: Codex retake (`REVISE`, `safeToCommit: false`) found two P1s:
-  the write transaction did not re-verify the Sequence/Shot snapshot or the
-  deterministic Latest winner against a concurrent mutation, and a
-  post-commit `revalidatePath` throw could report an already-committed
-  approval as a failure. Both fixed — the transaction now re-reads
-  Project → Sequence → ordered Shot ids and every eligible candidate's
-  `shot_videos` winner fresh before writing anything, refusing the whole
-  batch on any mismatch; `revalidatePath` failures are now best-effort and
-  never turn a committed result into `ok:false`.
-- 2026-08-09: Explicitly scoped MikAI-only — does not promote, alter, or
-  stage the pending cross-repository `compact-real-duration` timing contract
-  from `EDITORIAL.LATEST.GENERATION.REAL.DURATIONS.1`.
-- 2026-08-09: Codex retake round 2 (`REVISE`, `safeToCommit: false`) found a
-  P1 and a P2: the transaction's stale-winner check only compared Shots
-  already classified eligible, so a previously-skipped Shot could gain a
-  durable winner concurrently and be silently omitted from an otherwise
-  committing batch; and the revalidation-failure log line still passed the
-  raw caught `Error` object to `console.error`. Both fixed — the
-  transaction now freezes and compares the deterministic Latest winner
-  identity for every Shot in the snapshot, not only the eligible ones, and
-  any change (including absent-to-present) refuses the whole batch; the
-  revalidation log line is now a fixed string with no interpolated error
-  content.
-- 2026-08-09: Codex retake round 3 (`REVISE`, `safeToCommit: false`) found
-  one remaining P1: the all-Shot winner-id comparison did not also compare
-  an originally-eligible Shot's fresh `videoPath` against the exact path
-  frozen at resolution — an existing `shot_videos` row updated in place
-  (same id, changed path) between resolution and commit could still write
-  a stale/changed path. Fixed — every originally eligible Shot's fresh
-  winner path is now required to still equal `EligibleLatestApproval
-  .videoPath` before the first write, alongside the existing all-Shot id
-  comparison.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 39 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260811-001 - Choose Shot or Asset destination for Sequence Result frame capture
 
-- Status: `TO VALIDATE`
+- Status: `RESOLVED`
 - Date observed: 2026-08-11
 - Date fixed (implementation): 2026-08-11
 - Area: Sequence / Sequence Result / Frame Capture
 - Context: Capturing a frame from the active Sequence Result player or a
   Shot's Approved Output player.
-- Original observation: Allow choosing the current Sequence's Shot list or
-  the Project Asset list as the capture destination. In Asset mode, provide a
-  `Sequence casting only` checkbox to pre-filter Assets assigned to the
-  current Sequence.
 - Expected outcome: The same clear destination mode selector on both players.
   `Shots` contains only the current Sequence's ordered Shots (the current Shot
   is first on Shot Detail). `Project Assets` defaults to Assets in that
@@ -2872,22 +2423,13 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
 - Impact: Captured editorial frames can be routed to the right creative
   resource without navigating away from the Sequence Result.
 - Related ticket: `SEQRESULT.FRAME.CAPTURE.DESTINATIONS.1`
-- Resolution note: implemented additively in `VideoFrameReviewPlayer` (a
-  `destinationScopes` prop; every other caller is unaffected) and used on
-  both the Sequence Result player and the Shot Detail Approved Output
-  player. `Shots` is bounded server-side to the current Sequence's ordered
-  Shots only (current Shot first on Shot Detail); `Project Assets` defaults
-  to `Sequence casting only` (checked on every mount), which unchecks to
-  reveal the full Project Asset list. Switching mode/filter always
-  reconciles the selection to a visible destination or disables capture with
-  a message. Verified in a disposable worktree/DB/browser: real captures
-  landed in `shot_reference_images`/`asset_reference_images` via the
-  unchanged `captureVideoFrame` action, cross-Sequence Shots and
-  cross-casting Assets stayed out of their respective lists by default, and
-  no ticket-attributable console/hydration errors appeared. Awaiting
-  hands-on user validation.
-- Resolution: None
-- Resolved or validated on: None
+- Resolution: shipped under the ticket named above.
+- Resolved or validated on: **2026-08-22 — validated by the author**,
+  in the batch closure of every `TO VALIDATE` entry after his own manual
+  review.
+- Condensed 2026-08-22: 18 lines of quoted observation and
+  follow-up notes were removed. They are in this file’s git history; the
+  ticket named above is the live reference.
 
 ### FB-20260811-003 - Add Director Input and intermediate Shot numbering
 
