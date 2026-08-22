@@ -27,11 +27,26 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Les deux derniers chantiers, `SEQGEN.STORYBOARD.SHOTRANGE.1` et
+**Chantier « Galerie de templates de génération »**, ouvert le 2026-08-22 à la
+demande de l'auteur, après l'étude du catalogue `Comfy-Org/workflow_templates`.
+Aucun workflow n'est importé de ce projet : seul le design du catalogue sert de
+référence.
+
+Le problème : choisir un workflow pour générer, c'est lire une liste plate,
+dupliquée dans cinq pages, où tout apparaît partout — le seul filtre existant
+est `kind === "image"`.
+
+| Ticket | État | Ce qu'il fait |
+| --- | --- | --- |
+| `WF.CATALOG.1` | **clos** — `cf5e5a8`, migration `0061` appliquée | le module pur `workflowCatalog.ts` (six contextes, huit catégories, `isWorkflowOfferedIn`) et six colonnes additives sur `comfy_workflows` |
+| `WF.CATALOG.2` | à venir | l'écriture : upload de vignette, validation stricte, formulaires du manager |
+| `WF.GALLERY.1` | à venir | la vitrine : composant partagé, adoption par les cinq pages, filtrage par contexte |
+
+Les deux chantiers précédents, `SEQGEN.STORYBOARD.SHOTRANGE.1` et
 `SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1`, sont clos — voir la section 6.
 
-Tout ce qui reste demande une décision de l'auteur (section 2) ou attend ses
-données réelles. Aucun ticket n'est prêt à être exécuté.
+Le reste demande une décision de l'auteur (section 2) ou attend ses données
+réelles.
 
 **Deux traces laissées par la conversion caméra**, mesurées après coup et
 détaillées dans `docs/PROJECT_STATE.md` : six plans ont perdu leur angle de

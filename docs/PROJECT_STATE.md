@@ -2,6 +2,46 @@
 
 Last updated: 2026-08-22
 
+## Workflow template gallery — `WF.CATALOG.1` shipped (2026-08-22)
+
+`cf5e5a8`, migration `0061` generated here and applied by the author. Six
+additive columns on `comfy_workflows` (`category`, `tags`, `contexts`,
+`thumbnail_path`, `thumbnail_source_filename`, `status`) and one new pure
+module, `src/lib/comfy/workflowCatalog.ts`. Nothing is visible yet: no page,
+component or action was touched.
+
+Opened after the author asked for a study of `Comfy-Org/workflow_templates`.
+**No workflow is imported from that project** — only its design principle:
+presentation metadata lives beside the workflow, never inside its JSON.
+
+What it cost to learn:
+
+- **the six contexts are what the code proves, not what the domain suggests.**
+  Camera Lab looks like a seventh, and is not: its page reads two defaults by
+  id (`workflowDefaults.gaussianPlyId` / `gaussianToImageId`) and offers no
+  choice. A context with no selection surface does not exist. Its workflows
+  still need a category, which is why `gaussian-camera` is a category without
+  being a context;
+- **`contexts = NULL` means "offered everywhere the `kind` allows", never
+  "nowhere".** That is the pre-migration behaviour, and it is the only reason a
+  six-column migration changed nothing visible for 33 existing rows. Inverting
+  that check silently empties every gallery;
+- **the categories had to be read off the real library, not inferred.** The
+  first list (`keyframe`/`video`/`storyboard`/`look`/`utility`) was derived from
+  the context registry, and did not survive contact with the author's 33
+  workflows: "Look" matched nothing, "Keyframe" would have swallowed twenty
+  unrelated files. The eight shipped categories come from the real names;
+- **a review caught the module's one real defect**: a `contexts` column holding
+  only unknown ids returned `[]`, which `isWorkflowOfferedIn` reads as
+  "offered nowhere" — the row would have vanished from all five galleries with
+  no error. Corruption now degrades to `null` ("unspecified"), never to `[]`.
+
+Tests: 1585 → 1626.
+
+Known debt, deliberately left: `WORKFLOW_KINDS` now exists three times — the
+new module, `src/actions/comfyWorkflows.ts:8`, and the schema enum. Closed in
+`WF.CATALOG.2`, where that action file is in scope anyway.
+
 ## Chantier 1 and Chantier 2 — COMPLETE (2026-08-20)
 
 **Everything the sections below describe as upcoming has shipped.** This
