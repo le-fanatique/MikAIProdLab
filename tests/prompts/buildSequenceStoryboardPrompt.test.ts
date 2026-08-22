@@ -75,4 +75,47 @@ describe("buildSequenceStoryboardPrompt", () => {
     });
     expect(result).toMatchSnapshot();
   });
+
+  it("without shotRange, the text is unchanged from the existing default (non-regression)", () => {
+    const withoutRange = buildSequenceStoryboardPrompt({
+      projectId: 1,
+      sequenceId: 2,
+      sequenceTitle: "The Standoff",
+      sequenceCode: "SEQ010",
+      shotCount: 3,
+      references: [],
+      packageText: "=== Shot 1/3 ===\nMara stands.",
+    });
+    const withUndefinedRange = buildSequenceStoryboardPrompt({
+      projectId: 1,
+      sequenceId: 2,
+      sequenceTitle: "The Standoff",
+      sequenceCode: "SEQ010",
+      shotCount: 3,
+      references: [],
+      packageText: "=== Shot 1/3 ===\nMara stands.",
+      shotRange: undefined,
+    });
+    expect(withoutRange.text).toBe(withUndefinedRange.text);
+    expect(withoutRange).toMatchSnapshot();
+  });
+
+  it("with shotRange present, adds a Shot range line naming the bounds, the retained/total count, and the no-inference instruction", () => {
+    const result = buildSequenceStoryboardPrompt({
+      projectId: 1,
+      sequenceId: 2,
+      sequenceTitle: "The Standoff",
+      sequenceCode: "SEQ010",
+      shotCount: 2,
+      references: [],
+      packageText: "=== Shot 2/2 ===\nMara stands.",
+      shotRange: { fromLabel: "SH020", toLabel: "SH030", totalShotCount: 5 },
+    });
+    expect(result.text).toContain("Shot range:");
+    expect(result.text).toContain("SH020");
+    expect(result.text).toContain("SH030");
+    expect(result.text).toContain("2 of the 5 Shots");
+    expect(result.text).toMatch(/do not infer, add or summarise them/i);
+    expect(result).toMatchSnapshot();
+  });
 });

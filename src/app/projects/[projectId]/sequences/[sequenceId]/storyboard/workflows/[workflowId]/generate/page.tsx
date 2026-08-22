@@ -26,6 +26,7 @@ import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
 import { resolveSequenceCastReferences } from "@/lib/prompts/resolveSequenceCastReferences";
+import { selectStoryboardShotRange } from "@/lib/prompts/selectStoryboardShotRange";
 import {
   buildGenerationPayload,
   detectDynamicBatchUiInfo,
@@ -61,6 +62,7 @@ import {
 } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
 import StoryboardCompositionChoice from "@/components/StoryboardCompositionChoice";
+import StoryboardShotRangeChoice from "@/components/StoryboardShotRangeChoice";
 
 // ---------------------------------------------------------------------------
 // LLMW.STORYBOARD.COMPOSE.2 (B14b) — same two helpers as
@@ -78,6 +80,24 @@ async function resolveProjectStyleTextForComposition(projectId: number): Promise
     .filter((segment) => segment.length > 0)
     .join("\n\n");
   return joined.length > 0 ? joined : null;
+}
+
+// SEQGEN.STORYBOARD.SHOTRANGE.1 — `shotFrom`/`shotTo` carry a Shot id (never
+// a position), parsed exactly like `jobId` already is above: string |
+// string[] | undefined from Next's searchParams, `null` when absent or not
+// an integer. selectStoryboardShotRange itself never trusts a raw string.
+function parseShotBoundaryParam(raw: string | string[] | undefined): number | null {
+  const value = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  if (value === undefined || value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+// Same "shotCode, else title, else Shot {id}" convention used by
+// StoryboardShotRangeChoice's own option labels below — never a bare id
+// shown to the user/LLM when a real label exists.
+function shotDisplayLabel(shot: { id: number; shotCode: string | null; title: string | null }): string {
+  return shot.shotCode?.trim() || shot.title?.trim() || `Shot ${shot.id}`;
 }
 
 function SectionLabel({ label }: { label: string }) {
@@ -219,7 +239,18 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     .from(shots)
     .where(eq(shots.sequenceId, sid))
     .orderBy(asc(shots.orderIndex));
+  // Casting stays on the full Sequence (decision 1 of the ticket): `shotIds`
+  // is never filtered by the Shot range and is what feeds
+  // resolveSequenceCastReferences below.
   const shotIds = shotList.map((s) => s.id);
+
+  // SEQGEN.STORYBOARD.SHOTRANGE.1 — the inclusive Shot range only ever
+  // narrows `shotInputs`/`shotCount`/`resolveStoryboardLighting`'s input
+  // below, never `shotIds`/casting.
+  const shotFromId = parseShotBoundaryParam(resolvedSearchParams["shotFrom"]);
+  const shotToId = parseShotBoundaryParam(resolvedSearchParams["shotTo"]);
+  const shotRangeResult = selectStoryboardShotRange(shotList, shotFromId, shotToId);
+  const rangedShots = shotRangeResult.shots;
 
   const {
     castByShot,
@@ -350,7 +381,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     shotRefsByShot.set(row.shotId, list);
   }
 
-  const shotInputs: SequenceGenerationPackageShotInput[] = shotList.map((s) => {
+  const shotInputs: SequenceGenerationPackageShotInput[] = rangedShots.map((s) => {
     const segments = segmentsByShot.get(s.id) ?? [];
     const hasPromptSegments = segments.length > 0;
     const compiledSegments = compilePromptSegments(segments);
@@ -467,7 +498,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
 
     const lighting = await resolveStoryboardLighting(
       sid,
-      shotList.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
+      rangedShots.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
     );
     storyboardComposition = { projectStyle, lighting };
 
@@ -503,9 +534,22 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     sequenceId: sid,
     sequenceTitle: sequence.title,
     sequenceCode: sequence.sequenceCode,
-    shotCount: shotList.length,
+    shotCount: rangedShots.length,
     references: referenceInputs,
     packageText,
+    ...(shotRangeResult.isFullSequence
+      ? {}
+      : {
+          shotRange: {
+            fromLabel: shotDisplayLabel(
+              shotList.find((s) => s.id === shotRangeResult.fromShotId) ?? { id: shotRangeResult.fromShotId!, shotCode: null, title: null }
+            ),
+            toLabel: shotDisplayLabel(
+              shotList.find((s) => s.id === shotRangeResult.toShotId) ?? { id: shotRangeResult.toShotId!, shotCode: null, title: null }
+            ),
+            totalShotCount: shotList.length,
+          },
+        }),
   });
 
   const basePath = `/projects/${pid}/sequences/${sid}/storyboard/workflows/${wid}/generate`;
@@ -581,6 +625,12 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   if (storyboardRefsParam) storyboardPreserveParamsEntries.push(["storyboardRefs", storyboardRefsParam]);
   // Only the non-default choice needs carrying through a round trip.
   if (!useGuideComposition) storyboardPreserveParamsEntries.push(["storyboardComposition", "legacy"]);
+  // SEQGEN.STORYBOARD.SHOTRANGE.1 — same discipline: only carried when
+  // actually set, otherwise the Image Inputs "Update Preview" GET form and
+  // the Generate redirect's returnTo would silently drop the chosen range
+  // (the exact bug already fixed twice on storyboardRefs).
+  if (shotFromId !== null) storyboardPreserveParamsEntries.push(["shotFrom", String(shotFromId)]);
+  if (shotToId !== null) storyboardPreserveParamsEntries.push(["shotTo", String(shotToId)]);
   const storyboardPreserveParams: Record<string, string> | undefined =
     storyboardPreserveParamsEntries.length > 0 ? Object.fromEntries(storyboardPreserveParamsEntries) : undefined;
 
@@ -715,6 +765,31 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
           </div>
         )}
 
+        {/* SEQGEN.STORYBOARD.SHOTRANGE.1 — narrows the Storyboard's shot
+            content (shotInputs/shotCount/lighting) to an inclusive [From,
+            To] sub-range of this Sequence's Shots. Casting is never
+            filtered by this control — the pool of casting references above
+            is always computed on the whole Sequence (a deliberate product
+            decision, not an oversight). */}
+        <Card title="Storyboard Shot Range">
+          <StoryboardShotRangeChoice
+            basePath={basePath}
+            currentSearchParams={currentSearchParams}
+            shots={shotList.map((s) => ({ id: s.id, label: shotDisplayLabel(s) }))}
+            currentFromValue={shotFromId !== null ? String(shotFromId) : ""}
+            currentToValue={shotToId !== null ? String(shotToId) : ""}
+          />
+          {shotRangeResult.warnings.length > 0 && (
+            <ul className="mt-3 pt-3 border-t border-[#1e2124] flex flex-col gap-1">
+              {shotRangeResult.warnings.map((warning, i) => (
+                <li key={i} className="text-xs text-[#a4abb2]">
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
         {/* LLMW.STORYBOARD.COMPOSE.2 (B14b) — the choice between the legacy
             Shot-Prompt-only body and composeStoryboardShot's six-part
             composition (§5.5). The chosen text is visible below in
@@ -775,7 +850,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               // joined into the same key: the composition choice changes
               // `mapping.suggestedText` exactly like the casting/batch order
               // does, and must remount this panel for the same reason.
-              key={`${orderedReferenceIds.join(",")}|${storyboardCompositionParam}`}
+              key={`${orderedReferenceIds.join(",")}|${storyboardCompositionParam}|${shotFromId}|${shotToId}`}
               mappings={mappings}
               scalarValueByNodeId={scalarValueByNodeId}
               textOverrideByNodeId={textOverrideByNodeId}
@@ -912,6 +987,10 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
                   <input type="hidden" name="returnTo" value={returnTo} />
                   <input type="hidden" name="storyboardRefs" value={storyboardRefsParam} />
                   <input type="hidden" name="storyboardComposition" value={storyboardCompositionParam} />
+                  {shotFromId !== null && (
+                    <input type="hidden" name="shotFrom" value={String(shotFromId)} />
+                  )}
+                  {shotToId !== null && <input type="hidden" name="shotTo" value={String(shotToId)} />}
                   {Object.entries(selectedImageByNodeId).map(([nodeId, imageId]) => (
                     <input key={nodeId} type="hidden" name={`imageNode_${nodeId}`} value={String(imageId)} />
                   ))}

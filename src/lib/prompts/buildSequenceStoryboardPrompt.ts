@@ -43,6 +43,18 @@ export type SequenceStoryboardPromptInput = {
   references: SequenceStoryboardReferenceInput[];
   /** formatSequenceGenerationPackageText(...) output — included verbatim inside a clearly delimited block. */
   packageText: string;
+  /**
+   * SEQGEN.STORYBOARD.SHOTRANGE.1 — set only when the caller narrowed this
+   * Storyboard to an inclusive sub-range of the Sequence's Shots (via
+   * `selectStoryboardShotRange`). Absent = full sequence: the produced text
+   * is then unchanged, byte-for-byte, from before this field existed.
+   */
+  shotRange?: {
+    fromLabel: string;
+    toLabel: string;
+    /** Number of Shots in the whole Sequence, to situate the range. */
+    totalShotCount: number;
+  };
 };
 
 export type SequenceStoryboardImageMapping = {
@@ -124,6 +136,16 @@ export function buildSequenceStoryboardPrompt(
       input.shotCount !== 1 ? "s" : ""
     }, one per Shot, arranged in Sequence order (left to right, top to bottom). Each thumbnail must depict that Shot's framing, composition, staging and continuity as described in the Sequence Generation Package below. Do not merge, skip, duplicate or reorder Shots.`,
   ];
+
+  // SEQGEN.STORYBOARD.SHOTRANGE.1 — only when the caller narrowed the
+  // Sequence to a sub-range: absent `shotRange` must never add this line, so
+  // the full-sequence text stays byte-for-byte identical to before this
+  // field existed.
+  if (input.shotRange) {
+    goalLines.push(
+      `Shot range: this Storyboard covers Shots ${input.shotRange.fromLabel} to ${input.shotRange.toLabel} only — ${input.shotCount} of the ${input.shotRange.totalShotCount} Shots in this Sequence. Shots outside this range are deliberately absent; do not infer, add or summarise them.`
+    );
+  }
 
   // Lot B (SEQGEN.STORYBOARD.CASTING.FIX1) — the LLM-facing line is exactly
   // `@ImageN — {assetName} ({assetType})`, never `roleLabel`, `variantState`

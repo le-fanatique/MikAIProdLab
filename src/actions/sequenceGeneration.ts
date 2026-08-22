@@ -70,6 +70,7 @@ import {
   resolveStoryboardLighting,
   type StoryboardLighting,
 } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
+import { selectStoryboardShotRange } from "@/lib/prompts/selectStoryboardShotRange";
 
 // ---------------------------------------------------------------------------
 // LLMW.STORYBOARD.COMPOSE.2 (B14b) — the two per-Shot compositions. The
@@ -171,6 +172,13 @@ type SequenceStoryboardGenerationContext =
       shotCount: number;
       availableImages: RuntimeImageOption[];
       packageText: string;
+      /**
+       * SEQGEN.STORYBOARD.SHOTRANGE.1 — set only when `shotFromId`/`shotToId`
+       * actually narrowed this Sequence's Shots, mirroring the page's own
+       * `shotRange` field on buildSequenceStoryboardPrompt. Absent means the
+       * full Sequence, and the queued text stays byte-for-byte unchanged.
+       */
+      shotRange?: { fromLabel: string; toLabel: string; totalShotCount: number };
     }
   | { ok: false; error: string };
 
@@ -178,7 +186,9 @@ async function buildSequenceStoryboardGenerationContext(
   projectId: number,
   sequenceId: number,
   selectedRefIds: string[],
-  useGuideComposition: boolean
+  useGuideComposition: boolean,
+  shotFromId: number | null,
+  shotToId: number | null
 ): Promise<SequenceStoryboardGenerationContext> {
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
   if (!project) return { ok: false, error: "Project not found." };
@@ -193,7 +203,15 @@ async function buildSequenceStoryboardGenerationContext(
     .from(shots)
     .where(eq(shots.sequenceId, sequenceId))
     .orderBy(asc(shots.orderIndex));
+  // Casting stays on the full Sequence (decision 1 of the ticket): `shotIds`
+  // is never filtered by the Shot range.
   const shotIds = shotList.map((s) => s.id);
+
+  // SEQGEN.STORYBOARD.SHOTRANGE.1 — same helper, same two consumers
+  // (shotInputs/lighting) as the page's own copy, so preview and queue can
+  // never diverge on which Shots are covered.
+  const shotRangeResult = selectStoryboardShotRange(shotList, shotFromId, shotToId);
+  const rangedShots = shotRangeResult.shots;
 
   // --- Cast Assets across every Shot of the Sequence (unique) ---
   const castRows =
@@ -315,7 +333,7 @@ async function buildSequenceStoryboardGenerationContext(
     shotRefsByShot.set(row.shotId, list);
   }
 
-  const shotInputs: SequenceGenerationPackageShotInput[] = shotList.map((s) => {
+  const shotInputs: SequenceGenerationPackageShotInput[] = rangedShots.map((s) => {
     const segments = segmentsByShot.get(s.id) ?? [];
     const hasPromptSegments = segments.length > 0;
     const compiledSegments = compilePromptSegments(segments);
@@ -429,7 +447,7 @@ async function buildSequenceStoryboardGenerationContext(
 
     const lighting = await resolveStoryboardLighting(
       sequenceId,
-      shotList.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
+      rangedShots.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
     );
     storyboardComposition = { projectStyle, lighting };
   }
@@ -448,10 +466,37 @@ async function buildSequenceStoryboardGenerationContext(
     projectId,
     sequenceTitle: sequence.title,
     sequenceCode: sequence.sequenceCode,
-    shotCount: shotList.length,
+    shotCount: rangedShots.length,
     availableImages,
     packageText,
+    ...(shotRangeResult.isFullSequence
+      ? {}
+      : {
+          shotRange: {
+            fromLabel: shotDisplayLabel(
+              shotList.find((s) => s.id === shotRangeResult.fromShotId) ?? {
+                id: shotRangeResult.fromShotId!,
+                shotCode: null,
+                title: null,
+              }
+            ),
+            toLabel: shotDisplayLabel(
+              shotList.find((s) => s.id === shotRangeResult.toShotId) ?? {
+                id: shotRangeResult.toShotId!,
+                shotCode: null,
+                title: null,
+              }
+            ),
+            totalShotCount: shotList.length,
+          },
+        }),
   };
+}
+
+// Same "shotCode, else title, else Shot {id}" convention as the generate
+// page's own copy — never a bare id shown when a real label exists.
+function shotDisplayLabel(shot: { id: number; shotCode: string | null; title: string | null }): string {
+  return shot.shotCode?.trim() || shot.title?.trim() || `Shot ${shot.id}`;
 }
 
 /**
@@ -561,6 +606,14 @@ export async function runSequenceGeneration(input: {
    * byte-identical.
    */
   storyboardComposition?: string;
+  /**
+   * SEQGEN.STORYBOARD.SHOTRANGE.1 — inclusive Shot id bounds, read straight
+   * from the same `shotFrom`/`shotTo` hidden form fields the generate
+   * page's own choice control writes. Both absent (the default) means the
+   * full Sequence, byte-for-byte unchanged. Never filters casting.
+   */
+  shotFromId?: number | null;
+  shotToId?: number | null;
 }): Promise<RunSequenceGenerationResult> {
   const { projectId, sequenceId, workflowId } = input;
 
@@ -602,7 +655,9 @@ export async function runSequenceGeneration(input: {
     projectId,
     sequenceId,
     input.selectedRefIds,
-    isGuideComposition(input.storyboardComposition)
+    isGuideComposition(input.storyboardComposition),
+    input.shotFromId ?? null,
+    input.shotToId ?? null
   );
   if (!context.ok) return { ok: false, error: context.error };
 
@@ -670,6 +725,7 @@ export async function runSequenceGeneration(input: {
     shotCount: context.shotCount,
     references: referenceInputs,
     packageText: context.packageText,
+    ...(context.shotRange ? { shotRange: context.shotRange } : {}),
   });
 
   // STYLE.1.E.SURFACES.2 — the fixed "sequence-storyboard" consumer, never
@@ -957,6 +1013,14 @@ export async function runSequenceGenerationFromForm(formData: FormData): Promise
   // other source.
   const storyboardComposition = (formData.get("storyboardComposition") as string | null) ?? undefined;
 
+  // SEQGEN.STORYBOARD.SHOTRANGE.1 — re-read server-side from the two hidden
+  // fields the page's own choice control writes, `null` when absent or not
+  // an integer (same discipline as every other numeric form field here).
+  const rawShotFromId = (formData.get("shotFrom") as string | null)?.trim();
+  const shotFromId = rawShotFromId && /^-?\d+$/.test(rawShotFromId) ? parseInt(rawShotFromId, 10) : null;
+  const rawShotToId = (formData.get("shotTo") as string | null)?.trim();
+  const shotToId = rawShotToId && /^-?\d+$/.test(rawShotToId) ? parseInt(rawShotToId, 10) : null;
+
   const result = await runSequenceGeneration({
     projectId,
     sequenceId,
@@ -969,6 +1033,8 @@ export async function runSequenceGenerationFromForm(formData: FormData): Promise
     batchImagesByNodeId,
     confirmPartnerNodeCost,
     storyboardComposition,
+    shotFromId,
+    shotToId,
   });
 
   const sep = returnTo.includes("?") ? "&" : "?";
