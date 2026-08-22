@@ -144,6 +144,15 @@ entry keeps `FB-20260722-004`; the later Sequence Generation Package
 presentation entry is uniquely named `FB-20260722-006`. Its content and
 history are unchanged.
 
+Two entries had also received `FB-20260811-001`. The `Randomize Seed` range
+entry keeps `FB-20260811-001`; the later Sequence Result frame-capture
+destination entry is uniquely named `FB-20260811-005` (`002`, `003` and `004`
+were already taken that day). Its content and history are unchanged. Renamed
+2026-08-22, after the collision was found while inventorying this file — it had
+made every reference to `FB-20260811-001` ambiguous, including the one in
+`.agents/codex_handoff.md`, which points at the frame-capture entry and now
+names it correctly.
+
 Two entries also received `FB-20260811-002`. The Project Style generation
 entry keeps `FB-20260811-002`; the Insert Shot / Director Input entry is
 uniquely named `FB-20260811-003`. Its content and history are unchanged.
@@ -2382,7 +2391,7 @@ status were deliberately left alone: `FB-20260716-027` (`OPEN`),
   follow-up notes were removed. They are in this file’s git history; the
   ticket named above is the live reference.
 
-### FB-20260811-001 - Choose Shot or Asset destination for Sequence Result frame capture
+### FB-20260811-005 - Choose Shot or Asset destination for Sequence Result frame capture
 
 - Status: `RESOLVED`
 - Date observed: 2026-08-11
