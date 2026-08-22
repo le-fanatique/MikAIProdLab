@@ -20,6 +20,21 @@ import AutoSubmitSelect from "@/components/AutoSubmitSelect";
 
 type ShotOption = { id: number; label: string };
 
+/**
+ * REVISE (2026-08-22) — this control is shared by more than one page, and
+ * what the range actually DOES differs between them (narrows the generation
+ * prompt's shot content on the generate page; decides thumbnail-to-Shot
+ * matching on the Extract page). The explanatory sentence is therefore an
+ * injectable prop rather than fixed text, so a caller never inherits a
+ * claim (e.g. about casting) that is false on its own page. Defaults to the
+ * generate page's original sentence byte-for-byte, so that page needs no
+ * change.
+ */
+const DEFAULT_HELP_TEXT =
+  "By default this Storyboard covers every Shot of the Sequence. Pick a From/To Shot to narrow " +
+  "it to an inclusive range — both endpoints are included. Casting references stay computed on " +
+  "the whole Sequence regardless of this choice.";
+
 type Props = {
   basePath: string;
   currentSearchParams: Record<string, string>;
@@ -28,6 +43,8 @@ type Props = {
   /** "" when no bound is set (the default: the sequence's own border). */
   currentFromValue: string;
   currentToValue: string;
+  /** What this range actually does on the calling page. Defaults to the generate page's original sentence. */
+  helpText?: string;
 };
 
 export default function StoryboardShotRangeChoice({
@@ -36,6 +53,7 @@ export default function StoryboardShotRangeChoice({
   shots,
   currentFromValue,
   currentToValue,
+  helpText = DEFAULT_HELP_TEXT,
 }: Props) {
   const passthroughParams = Object.entries(currentSearchParams).filter(
     ([key]) => key !== "shotFrom" && key !== "shotTo"
@@ -55,11 +73,7 @@ export default function StoryboardShotRangeChoice({
       {passthroughParams.map(([key, value]) => (
         <input key={key} type="hidden" name={key} value={value} />
       ))}
-      <p className="text-xs text-[#4b5158]">
-        By default this Storyboard covers every Shot of the Sequence. Pick a From/To Shot to narrow
-        it to an inclusive range — both endpoints are included. Casting references stay computed on
-        the whole Sequence regardless of this choice.
-      </p>
+      <p className="text-xs text-[#4b5158]">{helpText}</p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <AutoSubmitSelect
           name="shotFrom"

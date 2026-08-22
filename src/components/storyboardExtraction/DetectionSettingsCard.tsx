@@ -44,6 +44,9 @@ type Props = {
   detectionParamsSummary: DetectionParamsSummary;
   suggestedGrid: { columns: number; rows: number } | null;
   sequenceShotsCount: number;
+  /** SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — the currently selected explicit Shot range (from the page's own `shotFrom`/`shotTo` search params), carried into "Run Detection Again" so the new extraction resolves against the same range instead of silently reverting to the inherited/full-Sequence default. */
+  shotFromValue: string | null;
+  shotToValue: string | null;
 };
 
 /** "Detection Settings" collapsible — the "Run Detection Again" form or its unavailable-source fallback (IND.CLIENTSPLIT.1, moved verbatim from extract/page.tsx). */
@@ -56,6 +59,8 @@ export default function DetectionSettingsCard({
   detectionParamsSummary,
   suggestedGrid,
   sequenceShotsCount,
+  shotFromValue,
+  shotToValue,
 }: Props) {
   return (
     <Collapsible label="Detection Settings" defaultOpen>
@@ -66,6 +71,9 @@ export default function DetectionSettingsCard({
             <input type="hidden" name="sequenceId" value={String(sequenceId)} />
             <input type="hidden" name="sourceStoryboardImageId" value={String(sourceStoryboardImageId)} />
             <input type="hidden" name="returnTo" value={basePath} />
+            {/* SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — carries this page's currently selected explicit Shot range into the new extraction. */}
+            <input type="hidden" name="shotFrom" value={shotFromValue ?? ""} />
+            <input type="hidden" name="shotTo" value={shotToValue ?? ""} />
 
             <div className="flex flex-wrap gap-4">
               <fieldset className="flex flex-col gap-1">

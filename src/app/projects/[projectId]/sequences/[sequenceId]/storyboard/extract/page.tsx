@@ -7,6 +7,7 @@ import {
   sequenceStoryboardImages,
   sequenceStoryboardExtractions,
   sequenceStoryboardExtractionRegions,
+  generationJobs,
 } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -21,6 +22,7 @@ import BulkRegionControls from "@/components/storyboardExtraction/BulkRegionCont
 import RegionCard from "@/components/storyboardExtraction/RegionCard";
 import AddRegionForm from "@/components/storyboardExtraction/AddRegionForm";
 import ConfirmExtractCard from "@/components/storyboardExtraction/ConfirmExtractCard";
+import StoryboardShotRangeCard from "@/components/storyboardExtraction/StoryboardShotRangeCard";
 import { computeGridFactorization, type DetectionDiagnostics } from "@/lib/storyboardExtraction/workerContract";
 import {
   isContentCropMode,
@@ -28,6 +30,8 @@ import {
   type ContentCropBaseRects,
 } from "@/lib/storyboardExtraction/contentCrop";
 import { isRatioPreset, type RatioPreset } from "@/lib/storyboardExtraction/ratioCrop";
+import { parseGenerationSnapshot } from "@/lib/comfy/generationSnapshot";
+import { resolveExtractionShotRange } from "@/lib/storyboardExtraction/resolveExtractionShotRange";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +44,12 @@ function sp(raw: string | string[] | undefined): string | null {
   if (typeof raw === "string") return raw;
   if (Array.isArray(raw)) return raw[0] ?? null;
   return null;
+}
+
+// Same "shotCode, else title, else Shot {id}" convention as the generate
+// page's own copy and StoryboardShotRangeChoice's option labels.
+function shotDisplayLabel(shot: { id: number; shotCode: string | null; title: string | null }): string {
+  return shot.shotCode?.trim() || shot.title?.trim() || `Shot ${shot.id}`;
 }
 
 export default async function StoryboardExtractPage({ params, searchParams }: Props) {
@@ -136,13 +146,56 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
     .where(eq(shots.sequenceId, sid))
     .orderBy(asc(shots.orderIndex));
 
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — the inherited Shot range, read
+  // independently of `startStoryboardExtraction`'s own copy (same convention
+  // as this repository's other pages recomputing their own canonical data —
+  // see the generate page's header comment). Every link can be missing: a
+  // manually uploaded source image has no `jobId` at all, the job may since
+  // have been deleted, or the snapshot may lack the field — all fall through
+  // to `null` ("no inherited range"), never an error.
+  let inheritedShotIds: number[] | null = null;
+  if (extraction.sourceStoryboardImageId !== null) {
+    const [sourceImage] = await db
+      .select({ jobId: sequenceStoryboardImages.jobId })
+      .from(sequenceStoryboardImages)
+      .where(eq(sequenceStoryboardImages.id, extraction.sourceStoryboardImageId));
+    if (sourceImage?.jobId !== null && sourceImage?.jobId !== undefined) {
+      const [job] = await db
+        .select({ payloadSnapshot: generationJobs.payloadSnapshot })
+        .from(generationJobs)
+        .where(eq(generationJobs.id, sourceImage.jobId));
+      const snapshot = job ? parseGenerationSnapshot(job.payloadSnapshot) : null;
+      inheritedShotIds = snapshot?.sequenceStoryboardShotRange?.shotIdsInOrder ?? null;
+    }
+  }
+
+  // The user's own explicit override — read straight from this page's own
+  // `shotFrom`/`shotTo` search params, the same GET form contract
+  // `StoryboardShotRangeChoice` already uses on the generate page. Both
+  // facultative: absent means "no explicit choice", never mandatory.
+  const rawShotFrom = sp(resolvedSearchParams["shotFrom"]);
+  const rawShotTo = sp(resolvedSearchParams["shotTo"]);
+  const explicitShotFromId = rawShotFrom && /^-?\d+$/.test(rawShotFrom) ? parseInt(rawShotFrom, 10) : null;
+  const explicitShotToId = rawShotTo && /^-?\d+$/.test(rawShotTo) ? parseInt(rawShotTo, 10) : null;
+  const explicitShotRange =
+    explicitShotFromId !== null || explicitShotToId !== null
+      ? { fromShotId: explicitShotFromId, toShotId: explicitShotToId }
+      : null;
+
+  const resolvedShotRange = resolveExtractionShotRange(sequenceShots, inheritedShotIds, explicitShotRange);
+  const resolvedShotIdSet = new Set(resolvedShotRange.shotIdsInOrder);
+  const effectiveShotCount = resolvedShotRange.shotIdsInOrder.length;
+
   // Every action below (Update/Reassign/Skip/Add/Delete) must return to this
   // same active extraction, not the bare source-selection page — the outer
   // `returnTo` (state A only) deliberately omits extractionId.
   const returnToActive = `${basePath}?extractionId=${extractionId}`;
 
   const assignedShotIds = new Set(regions.filter((r) => r.status !== "skipped" && r.targetShotId !== null).map((r) => r.targetShotId!));
-  const shotsWithoutRegion = sequenceShots.filter((s) => !assignedShotIds.has(s.id));
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — scoped to the resolved range: a
+  // Shot outside the current range was never expected to have a region, so
+  // it is not a deficit.
+  const shotsWithoutRegion = sequenceShots.filter((s) => resolvedShotIdSet.has(s.id) && !assignedShotIds.has(s.id));
   const unassignedRegions = regions.filter((r) => r.status === "pending");
   const isEditable = extraction.status === "ready";
   const assignedCount = regions.filter((r) => r.status === "assigned").length;
@@ -161,8 +214,8 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
   // inserts a fresh, separately-numbered one via startStoryboardExtraction).
   const canRerun = extraction.sourceStoryboardImageId !== null;
   const suggestedGrid =
-    sequenceShots.length > 0 && extraction.sourceWidth > 0 && extraction.sourceHeight > 0
-      ? computeGridFactorization(sequenceShots.length, extraction.sourceWidth / extraction.sourceHeight)
+    effectiveShotCount > 0 && extraction.sourceWidth > 0 && extraction.sourceHeight > 0
+      ? computeGridFactorization(effectiveShotCount, extraction.sourceWidth / extraction.sourceHeight)
       : null;
 
   let detectionParamsSummary: {
@@ -205,7 +258,7 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
     ? diagnostics.finalEngine === "grid"
     : detectionParamsSummary?.engine === "grid" || detectionParamsSummary?.mode === "grid";
   const isAmbiguousSingleRegion =
-    isEditable && regions.length <= 1 && sequenceShots.length > 1 && !isRealAutoFallback && !isExplicitGrid;
+    isEditable && regions.length <= 1 && effectiveShotCount > 1 && !isRealAutoFallback && !isExplicitGrid;
 
   // FIX5 — pre-fill Content Crop from whatever was last persisted for this
   // extraction; a non-destructive "Full cell" default when nothing was
@@ -233,10 +286,23 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
         errorMessage={extraction.errorMessage}
         isRealAutoFallback={isRealAutoFallback}
         diagnostics={diagnostics}
-        sequenceShotsCount={sequenceShots.length}
+        sequenceShotsCount={effectiveShotCount}
         isExplicitGrid={isExplicitGrid}
         isAmbiguousSingleRegion={isAmbiguousSingleRegion}
         detectionParamsSummary={detectionParamsSummary}
+      />
+
+      <StoryboardShotRangeCard
+        basePath={basePath}
+        currentSearchParams={{ extractionId: String(extractionId) }}
+        shots={sequenceShots.map((s) => ({ id: s.id, label: shotDisplayLabel(s) }))}
+        currentFromValue={rawShotFrom ?? ""}
+        currentToValue={rawShotTo ?? ""}
+        source={resolvedShotRange.source}
+        shotCount={effectiveShotCount}
+        totalShotCount={sequenceShots.length}
+        droppedShotIds={resolvedShotRange.droppedShotIds}
+        warnings={resolvedShotRange.warnings}
       />
 
       <DetectionSettingsCard
@@ -247,7 +313,9 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
         extractionStatus={extraction.status}
         detectionParamsSummary={detectionParamsSummary}
         suggestedGrid={suggestedGrid}
-        sequenceShotsCount={sequenceShots.length}
+        sequenceShotsCount={effectiveShotCount}
+        shotFromValue={rawShotFrom}
+        shotToValue={rawShotTo}
       />
 
       {(extraction.status === "ready" || extraction.status === "confirmed") && (
@@ -290,6 +358,8 @@ export default async function StoryboardExtractPage({ params, searchParams }: Pr
               sourceWidth={extraction.sourceWidth}
               sourceHeight={extraction.sourceHeight}
               editableRegionIds={editableRegionIds}
+              shotFromValue={rawShotFrom}
+              shotToValue={rawShotTo}
             />
           )}
           {regions.length === 0 ? (

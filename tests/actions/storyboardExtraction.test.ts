@@ -10,11 +10,45 @@ import {
   insertSequenceStoryboardImage,
   insertStoryboardExtraction,
   insertExtractionRegion,
+  insertComfyWorkflow,
+  insertGenerationJob,
   readExtraction,
   readExtractionRegions,
   readStoryboardImagesByShot,
   readShotReferenceImages,
 } from "./helpers/fixtures";
+import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
+
+// ---------------------------------------------------------------------------
+// SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — a minimal, legacy-shaped snapshot
+// to build a real job's payloadSnapshot from, same convention as
+// tests/lib/comfy/generationSnapshot.test.ts's own fixture.
+// ---------------------------------------------------------------------------
+const BASE_SNAPSHOT: GenerationSnapshot = {
+  workflowId: 1,
+  contextType: "sequence",
+  contextId: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  selections: {
+    selectedImageByNodeId: {},
+    scalarOverrideByNodeId: {},
+    textOverrideByNodeId: {},
+    batchSelectedImageIds: [],
+  },
+  dynamicBatch: {
+    active: false,
+    batchNodeId: null,
+    templateChainNodeIds: [],
+    expandedNodeIds: [],
+    batchInputKeys: [],
+    selectedImageCount: 0,
+    clonedNodeCount: 0,
+  },
+  overrideUsed: false,
+  warnings: [],
+  uploadedImages: [],
+  queuedWorkflow: {},
+};
 
 // ---------------------------------------------------------------------------
 // storyboardExtraction — IND.STORYBOARD.1. Characterization tests: they lock
@@ -749,6 +783,140 @@ describe("assignAllExtractionRegions", () => {
 
     expect(target).toContain(encodeURIComponent("This extraction can no longer be edited."));
   });
+
+  // -------------------------------------------------------------------
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1
+  // -------------------------------------------------------------------
+
+  it("reads paramsJson.shotRange.shotIdsInOrder and maps against that narrowed range instead of every Shot of the Sequence", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, seqId, { title: "Shot C", orderIndex: 2 });
+    const extractionId = await insertStoryboardExtraction(ctx, seqId, {
+      paramsJson: JSON.stringify({
+        shotRange: { shotIdsInOrder: [shotB, shotC], source: "inherited", droppedShotIds: [] },
+      }),
+    });
+    const region0 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 0 });
+    const region1 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 1 });
+
+    await captureRedirect(() => actions.assignAllExtractionRegions(form({ extractionId: String(extractionId), returnTo: "/x" })));
+
+    const regions = await readExtractionRegions(ctx, extractionId);
+    const byId = new Map(regions.map((r) => [r.id, r]));
+    expect(byId.get(region0)!.targetShotId).toBe(shotB); // range's first Shot, never shotA
+    expect(byId.get(region1)!.targetShotId).toBe(shotC);
+  });
+
+  it("an extraction with no shotRange in paramsJson (every extraction that predates this ticket) still maps against every Shot of the Sequence — unchanged", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const extractionId = await insertStoryboardExtraction(ctx, seqId, {
+      paramsJson: JSON.stringify({ engine: "canny" }), // real legacy shape, no shotRange field
+    });
+    const region0 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 0 });
+    const region1 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 1 });
+
+    await captureRedirect(() => actions.assignAllExtractionRegions(form({ extractionId: String(extractionId), returnTo: "/x" })));
+
+    const regions = await readExtractionRegions(ctx, extractionId);
+    const byId = new Map(regions.map((r) => [r.id, r]));
+    expect(byId.get(region0)!.targetShotId).toBe(shotA);
+    expect(byId.get(region1)!.targetShotId).toBe(shotB);
+  });
+
+  it("an explicit shotFrom/shotTo in Assign All's own FormData overrides the persisted shotRange, and rewrites paramsJson.shotRange so a reload doesn't revert it", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, seqId, { title: "Shot C", orderIndex: 2 });
+    const extractionId = await insertStoryboardExtraction(ctx, seqId, {
+      paramsJson: JSON.stringify({
+        engine: "canny",
+        shotRange: { shotIdsInOrder: [shotB, shotC], source: "inherited", droppedShotIds: [] },
+      }),
+    });
+    const region0 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 0 });
+
+    await captureRedirect(() =>
+      actions.assignAllExtractionRegions(
+        form({ extractionId: String(extractionId), shotFrom: String(shotA), shotTo: String(shotA), returnTo: "/x" })
+      )
+    );
+
+    const [region] = await readExtractionRegions(ctx, extractionId);
+    expect(region.targetShotId).toBe(shotA); // the explicit correction, not the persisted shotB/shotC
+
+    const extraction = await readExtraction(ctx, extractionId);
+    const params = JSON.parse(extraction.paramsJson!);
+    expect(params.engine).toBe("canny"); // untouched sibling field
+    expect(params.shotRange).toEqual({ shotIdsInOrder: [shotA], source: "explicit", droppedShotIds: [] });
+  });
+
+  // REVISE — the coordinator reproduced this with a throwaway test on the
+  // real DB harness: a persisted `shotRange.shotIdsInOrder` naming a Shot
+  // deleted since detection was used RAW, so `proposeShotMapping` assigned a
+  // region to a dead id and the `targetShotId` write violated the
+  // `shots.id` foreign key — thrown out of any redirect, the action simply
+  // exploded, and the whole transaction rolled back (both regions stayed
+  // "pending"). This is a regression this ticket introduced: before it,
+  // Assign All always queried the live Shots of the Sequence, so a dead id
+  // could never reach `proposeShotMapping`. The fix routes the persisted
+  // branch through the same `resolveExtractionShotRange` helper used by the
+  // explicit branch, which already filters dead ids and reports them.
+  it("a persisted Shot range naming a Shot deleted since detection never throws — Assign All maps survivors in Sequence order and leaves the rest pending", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, seqId, { title: "Shot C", orderIndex: 2 });
+    const extractionId = await insertStoryboardExtraction(ctx, seqId, {
+      paramsJson: JSON.stringify({
+        shotRange: { shotIdsInOrder: [shotA, shotB, shotC], source: "inherited", droppedShotIds: [] },
+      }),
+    });
+    const region0 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 0 });
+    const region1 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 1 });
+    const region2 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 2 });
+
+    // shotB is deleted AFTER detection persisted it into paramsJson.shotRange
+    // — exactly the scenario the coordinator reproduced.
+    await ctx.db.delete(ctx.schema.shots).where(eq(ctx.schema.shots.id, shotB));
+
+    await captureRedirect(() => actions.assignAllExtractionRegions(form({ extractionId: String(extractionId), returnTo: "/x" })));
+
+    const regions = await readExtractionRegions(ctx, extractionId);
+    const byId = new Map(regions.map((r) => [r.id, r]));
+    expect(byId.get(region0)!.targetShotId).toBe(shotA);
+    expect(byId.get(region0)!.status).toBe("assigned");
+    expect(byId.get(region1)!.targetShotId).toBe(shotC); // survivor, in Sequence order — never shotB
+    expect(byId.get(region1)!.status).toBe("assigned");
+    expect(byId.get(region2)!.targetShotId).toBeNull(); // beyond the 2 surviving Shots — pending, not invented
+    expect(byId.get(region2)!.status).toBe("pending");
+  });
+
+  it("a persisted Shot range whose every Shot id is gone falls back to the full Sequence, without throwing", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const extractionId = await insertStoryboardExtraction(ctx, seqId, {
+      paramsJson: JSON.stringify({
+        // Neither id exists in this fresh Sequence at all — the "every Shot
+        // of the inherited range is gone" case.
+        shotRange: { shotIdsInOrder: [999901, 999902], source: "inherited", droppedShotIds: [] },
+      }),
+    });
+    const region0 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 0 });
+    const region1 = await insertExtractionRegion(ctx, extractionId, { orderIndex: 1 });
+
+    await captureRedirect(() => actions.assignAllExtractionRegions(form({ extractionId: String(extractionId), returnTo: "/x" })));
+
+    const regions = await readExtractionRegions(ctx, extractionId);
+    const byId = new Map(regions.map((r) => [r.id, r]));
+    expect(byId.get(region0)!.targetShotId).toBe(shotA);
+    expect(byId.get(region1)!.targetShotId).toBe(shotB);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -925,6 +1093,160 @@ describe("startStoryboardExtraction", () => {
     expect(region.detectionMode).toBe("grid-fallback");
     expect(region.targetShotId).toBe(shotA); // pre-filled
     expect(region.status).toBe("pending"); // but NOT "assigned"
+  });
+
+  // ---------------------------------------------------------------------
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1
+  // ---------------------------------------------------------------------
+
+  it("a source image with NO jobId (a manually uploaded storyboard) behaves EXACTLY as before this ticket — expectedShotCount and the mapping cover the full Sequence, no block, no warning", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    // insertSequenceStoryboardImage never sets jobId unless asked — this is
+    // exactly the manually-uploaded-image shape the user's constraint protects.
+    const uploadedImageId = await insertSequenceStoryboardImage(ctx, seqId);
+
+    mockRunDetect.mockResolvedValueOnce({
+      sourceWidth: 1000,
+      sourceHeight: 400,
+      regions: [
+        { x: 0, y: 0, width: 500, height: 400, confidence: 0.9, detectionMode: "border", illustrationHeight: null, textSeparationDetected: false },
+        { x: 500, y: 0, width: 500, height: 400, confidence: 0.9, detectionMode: "border", illustrationHeight: null, textSeparationDetected: false },
+      ],
+      diagnostics: {
+        primaryEngine: "canny",
+        detectedCount: 2,
+        confidence: 0.9,
+        threshold: null,
+        fallbackTriggered: false,
+        fallbackReason: null,
+        finalEngine: "canny",
+      },
+    });
+
+    const target = await captureRedirect(() =>
+      actions.startStoryboardExtraction(
+        form({ sequenceId: String(seqId), sourceStoryboardImageId: String(uploadedImageId), returnTo: "/x" })
+      )
+    );
+    const extractionId = Number(new URL(target, "http://x").searchParams.get("extractionId"));
+
+    const extraction = await readExtraction(ctx, extractionId);
+    expect(extraction.status).toBe("ready");
+    const params = JSON.parse(extraction.paramsJson!);
+    expect(params.expectedShotCount).toBe(2); // the full Sequence, never blocked for lacking provenance
+    expect(params.shotRange).toEqual({ shotIdsInOrder: [shotA, shotB], source: "full-sequence", droppedShotIds: [] });
+
+    const regions = await readExtractionRegions(ctx, extractionId);
+    expect(regions[0].targetShotId).toBe(shotA);
+    expect(regions[1].targetShotId).toBe(shotB);
+  });
+
+  it("inherits a Shot range from the source image's own generation job (GenerationSnapshot.sequenceStoryboardShotRange) — expectedShotCount and the mapping follow the narrowed range, not the full Sequence", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, seqId, { title: "Shot C", orderIndex: 2 });
+
+    const workflowId = await insertComfyWorkflow(ctx);
+    const snapshot: GenerationSnapshot = {
+      ...BASE_SNAPSHOT,
+      sequenceStoryboardShotRange: { fromShotId: shotB, toShotId: shotC, shotIdsInOrder: [shotB, shotC] },
+    };
+    const jobId = await insertGenerationJob(ctx, workflowId, {
+      payloadSnapshot: serializeGenerationSnapshot(snapshot),
+    });
+    const sourceImageId = await insertSequenceStoryboardImage(ctx, seqId, { jobId });
+
+    mockRunDetect.mockResolvedValueOnce({
+      sourceWidth: 1000,
+      sourceHeight: 400,
+      regions: [
+        { x: 0, y: 0, width: 500, height: 400, confidence: 0.9, detectionMode: "border", illustrationHeight: null, textSeparationDetected: false },
+        { x: 500, y: 0, width: 500, height: 400, confidence: 0.9, detectionMode: "border", illustrationHeight: null, textSeparationDetected: false },
+      ],
+      diagnostics: {
+        primaryEngine: "canny",
+        detectedCount: 2,
+        confidence: 0.9,
+        threshold: null,
+        fallbackTriggered: false,
+        fallbackReason: null,
+        finalEngine: "canny",
+      },
+    });
+
+    const target = await captureRedirect(() =>
+      actions.startStoryboardExtraction(
+        form({ sequenceId: String(seqId), sourceStoryboardImageId: String(sourceImageId), returnTo: "/x" })
+      )
+    );
+    const extractionId = Number(new URL(target, "http://x").searchParams.get("extractionId"));
+
+    const extraction = await readExtraction(ctx, extractionId);
+    const params = JSON.parse(extraction.paramsJson!);
+    expect(params.expectedShotCount).toBe(2); // narrowed to shotB/shotC, not the Sequence's 3 Shots
+    expect(params.shotRange).toEqual({ shotIdsInOrder: [shotB, shotC], source: "inherited", droppedShotIds: [] });
+
+    const regions = await readExtractionRegions(ctx, extractionId);
+    expect(regions[0].targetShotId).toBe(shotB); // region 0 maps to the range's first Shot, not shotA
+    expect(regions[1].targetShotId).toBe(shotC);
+  });
+
+  it("an explicit shotFrom/shotTo in the FormData overrides an inherited range", async () => {
+    const seqId = await freshSequence();
+    const shotA = await insertShot(ctx, seqId, { title: "Shot A", orderIndex: 0 });
+    const shotB = await insertShot(ctx, seqId, { title: "Shot B", orderIndex: 1 });
+    const shotC = await insertShot(ctx, seqId, { title: "Shot C", orderIndex: 2 });
+
+    const workflowId = await insertComfyWorkflow(ctx);
+    const snapshot: GenerationSnapshot = {
+      ...BASE_SNAPSHOT,
+      sequenceStoryboardShotRange: { fromShotId: shotB, toShotId: shotC, shotIdsInOrder: [shotB, shotC] },
+    };
+    const jobId = await insertGenerationJob(ctx, workflowId, {
+      payloadSnapshot: serializeGenerationSnapshot(snapshot),
+    });
+    const sourceImageId = await insertSequenceStoryboardImage(ctx, seqId, { jobId });
+
+    mockRunDetect.mockResolvedValueOnce({
+      sourceWidth: 500,
+      sourceHeight: 400,
+      regions: [
+        { x: 0, y: 0, width: 500, height: 400, confidence: 0.9, detectionMode: "border", illustrationHeight: null, textSeparationDetected: false },
+      ],
+      diagnostics: {
+        primaryEngine: "canny",
+        detectedCount: 1,
+        confidence: 0.9,
+        threshold: null,
+        fallbackTriggered: false,
+        fallbackReason: null,
+        finalEngine: "canny",
+      },
+    });
+
+    const target = await captureRedirect(() =>
+      actions.startStoryboardExtraction(
+        form({
+          sequenceId: String(seqId),
+          sourceStoryboardImageId: String(sourceImageId),
+          shotFrom: String(shotA),
+          shotTo: String(shotA),
+          returnTo: "/x",
+        })
+      )
+    );
+    const extractionId = Number(new URL(target, "http://x").searchParams.get("extractionId"));
+
+    const extraction = await readExtraction(ctx, extractionId);
+    const params = JSON.parse(extraction.paramsJson!);
+    expect(params.expectedShotCount).toBe(1);
+    expect(params.shotRange).toEqual({ shotIdsInOrder: [shotA], source: "explicit", droppedShotIds: [] });
+
+    const [region] = await readExtractionRegions(ctx, extractionId);
+    expect(region.targetShotId).toBe(shotA); // the explicit choice, not the inherited shotB/shotC
   });
 });
 

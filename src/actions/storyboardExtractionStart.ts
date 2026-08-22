@@ -16,6 +16,7 @@ import {
   sequenceStoryboardImages,
   sequenceStoryboardExtractions,
   sequenceStoryboardExtractionRegions,
+  generationJobs,
   shots,
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
@@ -38,6 +39,8 @@ import {
 } from "@/lib/storyboardExtraction/workerContract";
 import { type ContentCropBaseRects } from "@/lib/storyboardExtraction/contentCrop";
 import { errRedirectTo, resolveSourceImageAbsolutePath } from "@/lib/storyboardExtraction/actionHelpers";
+import { parseGenerationSnapshot } from "@/lib/comfy/generationSnapshot";
+import { resolveExtractionShotRange } from "@/lib/storyboardExtraction/resolveExtractionShotRange";
 
 // ---------------------------------------------------------------------------
 // Start a new extraction (detection)
@@ -128,6 +131,21 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
   // count to build a shape from — validated once that count is known below;
   // the worker itself refuses with a clear error if neither is available.
 
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — the user's own explicit Shot
+  // range override, same field names/ids as the generation-time feature.
+  // Both facultative: absent means "no explicit choice", never mandatory —
+  // an uploaded storyboard image (no job, no inherited range) must reach
+  // `resolveExtractionShotRange` with both inputs null and get the full
+  // Sequence back, exactly as before this ticket.
+  const rawShotFromId = (formData.get("shotFrom") as string | null)?.trim();
+  const explicitShotFromId = rawShotFromId && /^-?\d+$/.test(rawShotFromId) ? parseInt(rawShotFromId, 10) : null;
+  const rawShotToId = (formData.get("shotTo") as string | null)?.trim();
+  const explicitShotToId = rawShotToId && /^-?\d+$/.test(rawShotToId) ? parseInt(rawShotToId, 10) : null;
+  const explicitShotRange =
+    explicitShotFromId !== null || explicitShotToId !== null
+      ? { fromShotId: explicitShotFromId, toShotId: explicitShotToId }
+      : null;
+
   const [sequence] = await db.select({ id: sequences.id }).from(sequences).where(eq(sequences.id, sequenceId));
   if (!sequence) errRedirectTo(returnTo, "extractError", "Sequence not found.");
 
@@ -150,13 +168,48 @@ export async function startStoryboardExtraction(formData: FormData): Promise<voi
     .from(shots)
     .where(eq(shots.sequenceId, sequenceId))
     .orderBy(asc(shots.orderIndex));
-  const shotIdsInOrder = sequenceShots.map((s) => s.id);
+
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — the inherited Shot range, read
+  // from the source image's own generation job when one exists. Every link
+  // in this chain can be missing — a manually uploaded image has no jobId
+  // at all (nullable, `onDelete: "set null"`), the job row may since have
+  // been deleted, the snapshot may be unparsable, or the field may simply
+  // predate this ticket. Every one of those falls through to `null`
+  // ("no inherited range"), never an error — this is the exact path the
+  // user's constraint protects.
+  let inheritedShotIds: number[] | null = null;
+  if (source.jobId !== null) {
+    const [job] = await db
+      .select({ payloadSnapshot: generationJobs.payloadSnapshot })
+      .from(generationJobs)
+      .where(eq(generationJobs.id, source.jobId));
+    const snapshot = job ? parseGenerationSnapshot(job.payloadSnapshot) : null;
+    inheritedShotIds = snapshot?.sequenceStoryboardShotRange?.shotIdsInOrder ?? null;
+  }
+
+  const resolvedShotRange = resolveExtractionShotRange(sequenceShots, inheritedShotIds, explicitShotRange);
+  const shotIdsInOrder = resolvedShotRange.shotIdsInOrder;
   const expectedShotCount = shotIdsInOrder.length;
 
   // Persisted verbatim below as paramsJson — the params actually used for
   // this extraction, not just what was requested (mirrors what padding
-  // already does at confirm time).
-  const detectionParams = { engine, columns, rows, sensitivity, customThreshold, advancedParams, expectedShotCount };
+  // already does at confirm time). `shotRange` records what
+  // `resolveExtractionShotRange` actually decided, re-read verbatim by
+  // Assign All rather than re-derived from a stale job lookup.
+  const detectionParams = {
+    engine,
+    columns,
+    rows,
+    sensitivity,
+    customThreshold,
+    advancedParams,
+    expectedShotCount,
+    shotRange: {
+      shotIdsInOrder: resolvedShotRange.shotIdsInOrder,
+      source: resolvedShotRange.source,
+      droppedShotIds: resolvedShotRange.droppedShotIds,
+    },
+  };
 
   const [extraction] = await db
     .insert(sequenceStoryboardExtractions)

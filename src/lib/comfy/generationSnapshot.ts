@@ -154,6 +154,17 @@ export type GenerationSnapshot = {
    * `retryGenerationJob` in src/actions/generationJobs.ts.
    */
   appendProjectStyle?: boolean;
+  /**
+   * SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — only ever set for a Sequence
+   * Storyboard job that was narrowed to a Shot sub-range. Absent means the
+   * full Sequence, exactly as every job queued before this field existed.
+   */
+  sequenceStoryboardShotRange?: {
+    fromShotId: number;
+    toShotId: number;
+    /** Ordered Shot ids actually covered, inclusive — read directly, never re-derived by a consumer. */
+    shotIdsInOrder: number[];
+  };
 };
 
 export function serializeGenerationSnapshot(snapshot: GenerationSnapshot): string {

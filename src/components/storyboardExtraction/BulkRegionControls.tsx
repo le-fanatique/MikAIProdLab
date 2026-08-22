@@ -20,6 +20,9 @@ type Props = {
   sourceWidth: number;
   sourceHeight: number;
   editableRegionIds: number[];
+  /** SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — the currently selected explicit Shot range (from the page's own `shotFrom`/`shotTo` search params), carried into "Assign All" so a corrected range can be re-applied without re-running detection. */
+  shotFromValue: string | null;
+  shotToValue: string | null;
 };
 
 /** Content Crop + Ratio bulk-edit form, plus Update All / Assign All (IND.CLIENTSPLIT.1, moved verbatim from extract/page.tsx). */
@@ -35,6 +38,8 @@ export default function BulkRegionControls({
   sourceWidth,
   sourceHeight,
   editableRegionIds,
+  shotFromValue,
+  shotToValue,
 }: Props) {
   return (
     <div className="flex flex-col gap-3 mb-3">
@@ -143,6 +148,9 @@ export default function BulkRegionControls({
         <form action={assignAllExtractionRegions}>
           <input type="hidden" name="extractionId" value={String(extractionId)} />
           <input type="hidden" name="returnTo" value={returnToActive} />
+          {/* SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — carries this page's currently selected explicit Shot range so a corrected range applies without re-running detection. */}
+          <input type="hidden" name="shotFrom" value={shotFromValue ?? ""} />
+          <input type="hidden" name="shotTo" value={shotToValue ?? ""} />
           <button
             type="submit"
             className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"

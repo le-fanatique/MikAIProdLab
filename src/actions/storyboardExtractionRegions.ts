@@ -22,6 +22,10 @@ import {
 } from "@/lib/storyboardExtraction/workerContract";
 import { parseRegionEdits, type RegionEdit } from "@/lib/storyboardExtraction/regionEdits";
 import {
+  resolveExtractionShotRange,
+  type ExtractionShotRangeSource,
+} from "@/lib/storyboardExtraction/resolveExtractionShotRange";
+import {
   isContentCropMode,
   parseStrictContentCropPercent,
   type ContentCropMode,
@@ -446,6 +450,20 @@ export async function assignAllExtractionRegions(formData: FormData): Promise<vo
     errRedirectTo(returnTo, "extractError", "Invalid request.");
   }
 
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — an explicit correction, own
+  // FormData, same field names as everywhere else in this feature. Lets the
+  // user fix a decided-wrong Shot range and re-apply the mapping without
+  // re-running detection. Both facultative: absent means "use whatever
+  // paramsJson already recorded", never mandatory.
+  const rawShotFromId = (formData.get("shotFrom") as string | null)?.trim();
+  const explicitShotFromId = rawShotFromId && /^-?\d+$/.test(rawShotFromId) ? parseInt(rawShotFromId, 10) : null;
+  const rawShotToId = (formData.get("shotTo") as string | null)?.trim();
+  const explicitShotToId = rawShotToId && /^-?\d+$/.test(rawShotToId) ? parseInt(rawShotToId, 10) : null;
+  const explicitShotRange =
+    explicitShotFromId !== null || explicitShotToId !== null
+      ? { fromShotId: explicitShotFromId, toShotId: explicitShotToId }
+      : null;
+
   const [extraction] = await db
     .select()
     .from(sequenceStoryboardExtractions)
@@ -470,7 +488,55 @@ export async function assignAllExtractionRegions(formData: FormData): Promise<vo
     .from(shots)
     .where(eq(shots.sequenceId, extraction.sequenceId))
     .orderBy(asc(shots.orderIndex));
-  const shotIdsInOrder = sequenceShots.map((s) => s.id);
+
+  // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — `paramsJson.shotRange` is what
+  // `startStoryboardExtraction` actually resolved and used for THIS
+  // extraction (§5's `ResolvedExtractionShotRange`, minus warnings). Absent,
+  // illegible, or missing the field (every extraction that predates this
+  // ticket) falls back to the full Sequence — the exact unchanged behavior.
+  let existingParams: Record<string, unknown> = {};
+  try {
+    existingParams = extraction.paramsJson ? JSON.parse(extraction.paramsJson) : {};
+  } catch {
+    existingParams = {};
+  }
+  const persistedShotRange = existingParams.shotRange as
+    | { shotIdsInOrder?: unknown; source?: ExtractionShotRangeSource; droppedShotIds?: unknown }
+    | undefined;
+  const persistedShotIdsInOrder =
+    persistedShotRange && Array.isArray(persistedShotRange.shotIdsInOrder)
+      ? (persistedShotRange.shotIdsInOrder as number[])
+      : null;
+
+  // REVISE — a Shot named by `persistedShotIdsInOrder` may have been deleted
+  // AFTER detection persisted it (a live, ordinary occurrence: nothing here
+  // pins the Sequence's Shots at detection time). Using that list raw let
+  // `proposeShotMapping` hand a dead Shot id to `targetShotId`, and the
+  // write threw `FOREIGN KEY constraint failed` — uncaught, out of any
+  // redirect, rolling back the whole transaction. Every branch now goes
+  // through the same `resolveExtractionShotRange`, which already filters
+  // dead ids, reports them, and falls back to the full Sequence when none
+  // survive — exactly what the explicit branch already relied on.
+  const resolved = explicitShotRange
+    ? resolveExtractionShotRange(sequenceShots, null, explicitShotRange)
+    : persistedShotIdsInOrder
+      ? resolveExtractionShotRange(sequenceShots, persistedShotIdsInOrder, null)
+      : null;
+
+  const shotIdsInOrder = resolved ? resolved.shotIdsInOrder : sequenceShots.map((s) => s.id);
+  // An explicit override, or a persisted range that needed re-resolving
+  // against the live Shots (dead ids filtered, or a full fallback), is
+  // written back so a page reload never reverts to a stale/dead mapping.
+  const paramsJsonToPersist = resolved
+    ? JSON.stringify({
+        ...existingParams,
+        shotRange: {
+          shotIdsInOrder: resolved.shotIdsInOrder,
+          source: resolved.source,
+          droppedShotIds: resolved.droppedShotIds,
+        },
+      })
+    : null;
 
   const mapping = proposeShotMapping(
     mappableRegions.map((r) => ({ orderIndex: r.orderIndex })),
@@ -488,6 +554,12 @@ export async function assignAllExtractionRegions(formData: FormData): Promise<vo
           updatedAt: now,
         })
         .where(eq(sequenceStoryboardExtractionRegions.id, region.id))
+        .run();
+    }
+    if (paramsJsonToPersist !== null) {
+      tx.update(sequenceStoryboardExtractions)
+        .set({ paramsJson: paramsJsonToPersist, updatedAt: now })
+        .where(eq(sequenceStoryboardExtractions.id, extractionId))
         .run();
     }
   });

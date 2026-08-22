@@ -179,6 +179,17 @@ type SequenceStoryboardGenerationContext =
        * full Sequence, and the queued text stays byte-for-byte unchanged.
        */
       shotRange?: { fromLabel: string; toLabel: string; totalShotCount: number };
+      /**
+       * SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — the same narrowing as
+       * `shotRange` above, in the shape `GenerationSnapshot` needs (real
+       * Shot ids, not display labels). Absent under the exact same condition
+       * as `shotRange` (full Sequence) — never set independently of it.
+       */
+      sequenceStoryboardShotRange?: {
+        fromShotId: number;
+        toShotId: number;
+        shotIdsInOrder: number[];
+      };
     }
   | { ok: false; error: string };
 
@@ -488,6 +499,11 @@ async function buildSequenceStoryboardGenerationContext(
               }
             ),
             totalShotCount: shotList.length,
+          },
+          sequenceStoryboardShotRange: {
+            fromShotId: shotRangeResult.fromShotId!,
+            toShotId: shotRangeResult.toShotId!,
+            shotIdsInOrder: rangedShots.map((s) => s.id),
           },
         }),
   };
@@ -894,6 +910,13 @@ export async function runSequenceGeneration(input: {
       // STYLE.1.E.SURFACES.2 — recorded only when a non-empty Style was
       // actually injected into at least one queued text input.
       ...(styleActuallyInjected && preparedStyle.provenanceCandidate ? { styleProvenance: preparedStyle.provenanceCandidate } : {}),
+      // SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1 — same condition as the
+      // prompt's own `shotRange` field: only set when the Shot range
+      // actually narrowed the Sequence. Absent for a full-Sequence
+      // generation, so every existing snapshot stays byte-for-byte.
+      ...(context.sequenceStoryboardShotRange
+        ? { sequenceStoryboardShotRange: context.sequenceStoryboardShotRange }
+        : {}),
     };
     await db
       .update(generationJobs)
