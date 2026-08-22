@@ -171,6 +171,112 @@ be named in index order. Both were rewritten to isolate what they claim.
 database — no paid Cloud call — then confirmed by the author on a real
 generation.
 
+## `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` — a debt closed by measuring, 2026-08-22
+
+One commit, `e418865`. No migration. Open since 2026-08-02.
+
+### The roadmap's own description of it was wrong
+
+It said the ticket had to apply Look Development's `pending sync` pattern to
+Reference Analysis, and that "the pattern already exists elsewhere, this ticket
+applies it, it invents nothing".
+
+Reading the file said otherwise: `ReferenceAnalysisWorkspace.tsx` already
+carried the `pending-sync` phase on **six sites** and a read-only `Retry sync`,
+shipped with `STYLE.1.B.ANALYSIS.UI`. Nothing was missing from the product.
+**What was missing was the proof** — and the roadmap had been describing a
+feature gap for twenty days when the real gap was a test gap.
+
+Worth keeping: a roadmap line written at ticket-deferral time describes the
+plan, not the code. It had never been re-read against the file.
+
+### Why the proof had been impossible
+
+The decision was written inline, in `async` callbacks that also call Server
+Actions. Testing it meant intercepting a Server Action, and that had already
+been tried on 2026-08-01: 15/42 proofs, because `tsx` resolves `@/` imports
+before ESM `load` hooks can rewrite them. `mikai-method` §5 forbids installing a
+DOM harness — the user's decision, reconfirmed.
+
+The way out was not a better harness. It was to make the decision testable
+**without a DOM and without a Server Action**.
+
+### What shipped
+
+`src/lib/projectStyle/referenceAnalysis/syncPhase.ts` — two pure functions, no
+state, no React, on the shape `restoreLookTestSnapshotSelections.ts` had already
+set:
+
+- `resolvePendingSync(origin, outcome)` — the eight decisions as one total
+  function;
+- `retrySync(need, { readAnalysis, readDraft })` — replays reads only.
+
+No hook and no handler body left the component. Every `handleXxx` still owns its
+`setPhase`, `setReadModel` and `setPendingMutations`; only the branching and the
+message literals moved. That line matters: §5 forbids moving **state**, and a
+pure calculation is not state. The precedent was already in the repository, and
+this is recorded so the next session does not re-litigate it.
+
+**The property the 2026-08-02 spec asked to confirm is now true by
+construction.** `retrySync` receives readers and nothing else — it *cannot*
+replay a mutation, and a change that would make it possible has to add a
+parameter, which is visible in review.
+
+### Proven twice, and the browser half is the one that had never been done
+
+**Unit** — 22 tests over the eight decisions, `syncNeed` *and* `message`
+asserted. Seven mutations run: five by the executor, two more by the supervisor.
+Every one broke at least one test. The supervisor's second mutation swapped two
+messages, and it matters on its own: a net asserting only `syncNeed` would have
+passed it silently and let any future reword through.
+
+**Browser** — `next start`, real project, real data. `window.fetch` patched to
+let the first POST through and fail the next: POST #1 is the commit, POST #2 is
+the read, because `ObservationCard.handleStatusChange` calls the read **only
+after** a known `result.ok`.
+
+| Step | Network | Screen | DB |
+| --- | --- | --- | --- |
+| Reject, injection armed | `PASSED #1`, `FAILED #2` | `Observation saved but analysis state could not be refreshed.` + `Needs: analysis` | `revision` 2 → 3 |
+| `Retry sync` ×3 | 3 read POSTs | `Sync still incomplete. Retry when ready.` | **unchanged** |
+| injection lifted, `Retry sync` | `PASSED #6` | banner gone, card reconciled from a real read | unchanged |
+
+`updated_at` stayed frozen at the instant of the commit across four retries.
+That is a measurement, not an observation, and it is what Playwright alone could
+never have given — Playwright shows that no mutation happened *in one run*; the
+signature shows it cannot happen at all.
+
+### What it cost, and what it left
+
+A backup was taken and verified before touching anything
+(`mikai-backup-2026-08-22T00-51-18-448Z`). The observation was restored to
+`accepted` through the product's own path, but **its `revision` is 4 where it was
+2**, and `updated_at` moved. A revision counter does not walk backwards through
+the UI, and writing it by hand was not worth the risk. Injecting a failure into
+real data always leaves a counter behind — take the backup first and say what
+moved.
+
+Two paths were **not** exercised in the browser: `analysisLaunched` and
+`analysisConfirmed`, each of which needs a real provider call. A cost decision,
+not a technical limit; both are covered by the unit net.
+
+### Left alone on purpose
+
+The same `pending sync` pattern is hand-written in **five other components** —
+`SequenceStylePanel.tsx`, `LookDevelopmentBench.tsx`,
+`LookDevelopmentReviewControls.tsx`, `LookDevelopmentRecentTests.tsx`,
+`InfluenceResearchWorkspace.tsx`. Unifying them was ruled opportunistic and
+excluded from the ticket. `syncPhase.ts` is written so a later generalisation
+needs no rewrite. This is a real observation awaiting the author, not a defect.
+
+One behaviour frozen as-is and worth knowing: `resolvePendingSync` tests
+`outcome.analysis === false`, not `!outcome.analysis`, so an omitted field reads
+as success. Every call site passes a real boolean today.
+
+**Tests: 1 527 → 1 549.**
+
+---
+
 ## What the `camera_pitch` drop cost, measured 2026-08-22
 
 Migration `0060` (`ALTER TABLE shots DROP COLUMN camera_pitch`) is **applied**;

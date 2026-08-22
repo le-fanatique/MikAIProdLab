@@ -143,12 +143,10 @@ précédent datait du 2 août et a été écrit avant deux chantiers.
 
 - `STYLE.2.LOOK.CORRECTIONS.CORE.1` puis `.UI.1` — propositions de correction du
   Working Draft depuis les Look Tests, sans mutation automatique ni modification
-  des versions publiées ;
-- `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` — état `pending sync` et preuve
-  que `Retry` ne rejoue aucune mutation. **Le motif existe déjà ailleurs** :
-  Look Development le porte dans `LookDevelopmentReviewControls.tsx`. Ce ticket
-  l'applique à Reference Analysis, il n'invente rien. Dette de résilience
-  bornée, pas un blocage fonctionnel.
+  des versions publiées.
+
+`STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` **est clos le 2026-08-22**
+(`e418865`) — voir la section 6.
 
 **Narration et assistance**
 
@@ -214,6 +212,30 @@ avec leur raison.
 ---
 
 ## 6. Clos — où le retrouver
+
+**`STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` — clos le 2026-08-22**, un commit :
+`e418865`. Aucune migration.
+
+Ouvert depuis le 2026-08-02, et **sa description dans cette roadmap était
+fausse** : elle disait qu'il fallait appliquer à Reference Analysis le motif
+`pending sync` de Look Development. Le motif y était déjà — six sites et un
+`Retry sync` en lecture seule, livrés avec `STYLE.1.B.ANALYSIS.UI`. Ce qui
+manquait était la preuve.
+
+Elle était bloquée depuis le 2026-08-01 : la décision était écrite en ligne dans
+des callbacks qui appellent aussi des Server Actions, donc la tester voulait dire
+intercepter une Server Action — 15/42 preuves en jsdom, parce que `tsx` résout
+les imports `@/` avant les hooks ESM, et la méthode interdit d'installer un
+harnais DOM. La décision est donc sortie en deux fonctions pures
+(`src/lib/projectStyle/referenceAnalysis/syncPhase.ts`), sans état et sans React,
+sur la forme qu'avait déjà `restoreLookTestSnapshotSelections.ts`.
+
+`retrySync(need, { readAnalysis, readDraft })` ne reçoit que des lecteurs : elle
+**ne peut pas** rejouer une mutation. La spec demandait de le confirmer ; c'est
+désormais vrai par construction. Prouvé aussi en vrai navigateur, panne de
+relecture injectée après un commit réel. Le détail est dans
+`docs/PROJECT_STATE.md`.
+
 
 **B19 — refonte du vocabulaire caméra. Clos le 2026-08-22**, huit tickets :
 `5a89ef2`, `17986f9`, `65261e2`, `8bc467b`, `ec711f6`, `2ba4ac8`, `b5a8ce2`,
