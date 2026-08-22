@@ -43,10 +43,14 @@ export interface GalleryWorkflowRow {
   category: string | null;
   tags: string | null;
   contexts: string | null;
+  /** WF.FAVORITE.1 — an independent display flag, not part of `category`.
+   * See `groupGalleryWorkflowsWithFavorites` below for what it does to
+   * grouping. */
+  isFavorite: boolean;
 }
 
 export interface WorkflowGallerySection<T extends GalleryWorkflowRow> {
-  categoryId: WorkflowCategoryId | "uncategorized";
+  categoryId: WorkflowCategoryId | "uncategorized" | "favorites";
   label: string;
   workflows: T[];
 }
@@ -123,6 +127,30 @@ export function selectGalleryWorkflows<T extends GalleryWorkflowRow>(
 }
 
 // ---------------------------------------------------------------------------
+// groupGalleryWorkflowsWithFavorites — WF.FAVORITE.1 §5
+//
+// Layered on top of `selectGalleryWorkflows`, never duplicating its
+// filtering/grouping rules. A favorite is deliberately kept in its own
+// category section AND copied into a synthetic "Favorites" section placed
+// first — the ticket's own decision (§0/§5): a favorite is a flag, not a
+// category, so it must not lose its real place while still standing out.
+// Hidden entirely when there is no favorite in the filtered set, so an
+// author who has starred nothing never sees an empty "Favorites" header.
+// ---------------------------------------------------------------------------
+
+export function groupGalleryWorkflowsWithFavorites<T extends GalleryWorkflowRow>(
+  workflows: readonly T[],
+  options: SelectGalleryWorkflowsOptions = {}
+): WorkflowGallerySection<T>[] {
+  const sections = selectGalleryWorkflows(workflows, options);
+  const favorites = sections.flatMap((section) => section.workflows).filter((wf) => wf.isFavorite);
+
+  if (favorites.length === 0) return sections;
+
+  return [{ categoryId: "favorites", label: "Favorites", workflows: favorites }, ...sections];
+}
+
+// ---------------------------------------------------------------------------
 // buildLibraryCategories — WF.LIBRARY.1 §5
 //
 // The workflow library's sidebar. Pure, and deliberately built on top of
@@ -140,8 +168,10 @@ export function selectGalleryWorkflows<T extends GalleryWorkflowRow>(
 // ---------------------------------------------------------------------------
 
 export interface LibraryCategoryEntry {
-  /** "all" is synthetic — not a `WorkflowCategoryId` — and always first. */
-  id: WorkflowCategoryId | "uncategorized" | "all";
+  /** "favorites" and "all" are synthetic — not `WorkflowCategoryId`s.
+   * "favorites" (WF.FAVORITE.1 §5), when present, is always first — even
+   * before "all". */
+  id: WorkflowCategoryId | "uncategorized" | "all" | "favorites";
   label: string;
   count: number;
 }
@@ -153,7 +183,22 @@ export function buildLibraryCategories<T extends GalleryWorkflowRow>(
   const sections = selectGalleryWorkflows(workflows, { contexts });
   const total = sections.reduce((n, s) => n + s.workflows.length, 0);
 
-  const entries: LibraryCategoryEntry[] = [{ id: "all", label: "All", count: total }];
+  const entries: LibraryCategoryEntry[] = [];
+
+  // WF.FAVORITE.1 §5/§6 — "Favorites" comes before "All" itself, counted
+  // from the same context-filtered `sections` "All" already uses (never the
+  // unfiltered library), and appended only when there is at least one — a
+  // permanently empty "Favorites" row would be noise, and is exactly
+  // today's state for all 33 workflows.
+  const favoritesCount = sections.reduce(
+    (n, s) => n + s.workflows.filter((wf) => wf.isFavorite).length,
+    0
+  );
+  if (favoritesCount > 0) {
+    entries.push({ id: "favorites", label: "Favorites", count: favoritesCount });
+  }
+
+  entries.push({ id: "all", label: "All", count: total });
 
   let uncategorizedEntry: LibraryCategoryEntry | null = null;
   for (const section of sections) {

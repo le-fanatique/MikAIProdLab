@@ -55,6 +55,7 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
         tags: comfyWorkflows.tags,
         contexts: comfyWorkflows.contexts,
         thumbnailPath: comfyWorkflows.thumbnailPath,
+        isFavorite: comfyWorkflows.isFavorite,
       })
       .from(comfyWorkflows)
       .orderBy(desc(comfyWorkflows.id)),
@@ -167,6 +168,7 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
               renderBadges={(wf) => <DefaultBadges workflow={wf} defaults={defaults} />}
               renderSearchForm={false}
               sizable
+              favoritePagePath="/settings/workflows"
             />
           </div>
 
@@ -181,6 +183,7 @@ export default async function WorkflowsListPage({ searchParams }: Props) {
                 renderBadges={(wf) => <DefaultBadges workflow={wf} defaults={defaults} />}
                 renderSearchForm={false}
                 sizable
+                favoritePagePath="/settings/workflows"
               />
             </div>
           )}

@@ -242,6 +242,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             tags: comfyWorkflows.tags,
             contexts: comfyWorkflows.contexts,
             thumbnailPath: comfyWorkflows.thumbnailPath,
+            isFavorite: comfyWorkflows.isFavorite,
           })
           .from(comfyWorkflows)
           .orderBy(desc(comfyWorkflows.updatedAt))

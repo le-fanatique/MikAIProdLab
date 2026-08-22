@@ -1,0 +1,1 @@
+ALTER TABLE `comfy_workflows` ADD `is_favorite` integer DEFAULT false NOT NULL;

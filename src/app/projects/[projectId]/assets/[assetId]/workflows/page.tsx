@@ -46,6 +46,7 @@ export default async function AssetWorkflowListPage({ params, searchParams }: Pr
       tags: comfyWorkflows.tags,
       contexts: comfyWorkflows.contexts,
       thumbnailPath: comfyWorkflows.thumbnailPath,
+      isFavorite: comfyWorkflows.isFavorite,
     })
     .from(comfyWorkflows)
     .orderBy(desc(comfyWorkflows.updatedAt));
@@ -96,6 +97,7 @@ export default async function AssetWorkflowListPage({ params, searchParams }: Pr
             Generate →
           </Link>
         )}
+        favoritePagePath={`/projects/${pid}/assets/${aid}/workflows`}
       />
 
       <div className="mt-8 pt-4 border-t border-[#232629]">

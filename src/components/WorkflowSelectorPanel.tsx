@@ -31,6 +31,7 @@ import { type ReactNode } from "react";
 import EmptyState from "@/components/EmptyState";
 import WorkflowTemplateCard from "@/components/WorkflowTemplateCard";
 import WorkflowLibraryGrid from "@/components/WorkflowLibraryGrid";
+import WorkflowFavoriteButton from "@/components/WorkflowFavoriteButton";
 import { type WorkflowGalleryEntry } from "@/components/WorkflowTemplateGallery";
 import { parseWorkflowTags, isWorkflowCategoryId, type WorkflowContextId } from "@/lib/comfy/workflowCatalog";
 import { selectGalleryWorkflows, buildLibraryCategories } from "@/lib/comfy/workflowGallery";
@@ -145,15 +146,23 @@ function LibraryBody({
   const categories = buildLibraryCategories(workflows, contexts);
 
   const selectedCategoryId =
-    category && (isWorkflowCategoryId(category) || category === "uncategorized") ? category : null;
+    category && (isWorkflowCategoryId(category) || category === "uncategorized" || category === "favorites")
+      ? category
+      : null;
 
   // Context + search filtered, then narrowed to the selected sidebar
   // category (if any) — "All" shows every section flattened, without
   // sub-headers, since the sidebar is already the category navigation.
+  // WF.FAVORITE.1 §5 — "Favorites" is not one of `selectGalleryWorkflows`'s
+  // sections (it is a flag, not a category — §0), so it is filtered
+  // separately rather than by matching a `section.categoryId`.
   const sections = selectGalleryWorkflows(workflows, { contexts, search });
-  const visibleWorkflows = sections
-    .filter((section) => selectedCategoryId === null || section.categoryId === selectedCategoryId)
-    .flatMap((section) => section.workflows);
+  const visibleWorkflows =
+    selectedCategoryId === "favorites"
+      ? sections.flatMap((section) => section.workflows).filter((wf) => wf.isFavorite)
+      : sections
+          .filter((section) => selectedCategoryId === null || section.categoryId === selectedCategoryId)
+          .flatMap((section) => section.workflows);
 
   const trimmedSearch = search.trim();
 
@@ -218,19 +227,33 @@ function LibraryBody({
           />
         ) : (
           visibleWorkflows.map((wf) => (
-            <Link
-              key={wf.id}
-              href={workflowHref(wf.id)}
-              className="block rounded-lg transition-colors hover:ring-1 hover:ring-[#3a4046]"
-            >
-              <WorkflowTemplateCard
-                name={wf.name}
-                kind={wf.kind}
-                description={wf.description}
-                tags={parseWorkflowTags(wf.tags)}
-                thumbnailPath={wf.thumbnailPath}
+            // WF.FAVORITE.1 §4 — the trap this ticket names: the card below
+            // is wrapped in a `<Link>` that selects the workflow on click. A
+            // `<form>` (the favorite button) nested inside that `<a>` would
+            // be invalid HTML and would navigate instead of toggling. The
+            // button is therefore a SIBLING of the `<Link>` here, absolutely
+            // positioned over it from this `relative` wrapper — never a
+            // child of the anchor.
+            <div key={wf.id} className="relative">
+              <Link
+                href={workflowHref(wf.id)}
+                className="block rounded-lg transition-colors hover:ring-1 hover:ring-[#3a4046]"
+              >
+                <WorkflowTemplateCard
+                  name={wf.name}
+                  kind={wf.kind}
+                  description={wf.description}
+                  tags={parseWorkflowTags(wf.tags)}
+                  thumbnailPath={wf.thumbnailPath}
+                />
+              </Link>
+              <WorkflowFavoriteButton
+                workflowId={wf.id}
+                isFavorite={wf.isFavorite}
+                path={basePath}
+                className="absolute top-4 left-4 z-10"
               />
-            </Link>
+            </div>
           ))
         )}
       </WorkflowLibraryGrid>

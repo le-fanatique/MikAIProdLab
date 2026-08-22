@@ -36,6 +36,14 @@ export const comfyWorkflows = sqliteTable("comfy_workflows", {
   status: text("status", { enum: ["active", "archived"] })
     .notNull()
     .default("active"),
+  // WF.FAVORITE.1 — an independent display flag, not a category: `category`
+  // stays unique per workflow, so a favorite keeps its real category and
+  // additionally appears in the "Favorites" section (twice on screen — see
+  // src/lib/comfy/workflowGallery.ts). Additive, backfills to false for all
+  // 33 existing rows: nothing changes visually until the author checks one.
+  isFavorite: int("is_favorite", { mode: "boolean" })
+    .notNull()
+    .default(false),
 });
 
 export type ComfyWorkflow = typeof comfyWorkflows.$inferSelect;

@@ -305,6 +305,7 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             contexts: comfyWorkflows.contexts,
             thumbnailPath: comfyWorkflows.thumbnailPath,
             updatedAt: comfyWorkflows.updatedAt,
+            isFavorite: comfyWorkflows.isFavorite,
           })
           .from(comfyWorkflows)
           .orderBy(desc(comfyWorkflows.updatedAt))

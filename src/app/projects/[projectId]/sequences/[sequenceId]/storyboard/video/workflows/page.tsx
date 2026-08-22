@@ -90,6 +90,7 @@ export default async function SequenceVideoWorkflowListPage({ params, searchPara
       tags: comfyWorkflows.tags,
       contexts: comfyWorkflows.contexts,
       thumbnailPath: comfyWorkflows.thumbnailPath,
+      isFavorite: comfyWorkflows.isFavorite,
     })
     .from(comfyWorkflows)
     .orderBy(desc(comfyWorkflows.updatedAt));
@@ -155,6 +156,7 @@ export default async function SequenceVideoWorkflowListPage({ params, searchPara
             Generate →
           </Link>
         )}
+        favoritePagePath={`/projects/${pid}/sequences/${sid}/storyboard/video/workflows`}
       />
 
       <div className="mt-8 pt-4 border-t border-[#232629]">

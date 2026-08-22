@@ -2,8 +2,13 @@ import { type ReactNode } from "react";
 import EmptyState from "@/components/EmptyState";
 import SectionLabel from "@/components/SectionLabel";
 import WorkflowTemplateCard from "@/components/WorkflowTemplateCard";
+import WorkflowFavoriteButton from "@/components/WorkflowFavoriteButton";
 import { parseWorkflowTags, type WorkflowContextId } from "@/lib/comfy/workflowCatalog";
-import { selectGalleryWorkflows, type GalleryWorkflowRow } from "@/lib/comfy/workflowGallery";
+import {
+  selectGalleryWorkflows,
+  groupGalleryWorkflowsWithFavorites,
+  type GalleryWorkflowRow,
+} from "@/lib/comfy/workflowGallery";
 import { THUMBNAIL_SIZE_CSS_VAR, THUMBNAIL_SIZE_DEFAULT } from "@/lib/thumbnailSize";
 
 /** What a caller's row needs on top of `GalleryWorkflowRow` to render as a card. */
@@ -47,6 +52,10 @@ type Props<T extends WorkflowGalleryEntry> = {
    * video) are out of this ticket's scope and keep the fixed grid. Default
    * `false`. */
   sizable?: boolean;
+  /** WF.FAVORITE.1 §3 — the path `toggleWorkflowFavorite` revalidates after
+   * flipping a favorite from one of this gallery's cards. The caller's own
+   * page path (query string not needed — `revalidatePath` ignores it). */
+  favoritePagePath: string;
 };
 
 export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>({
@@ -62,6 +71,7 @@ export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>(
   hiddenFields,
   renderSearchForm = true,
   sizable = false,
+  favoritePagePath,
 }: Props<T>) {
   // Search-independent: is there anything at all to show here? If not, a
   // search box over an empty context is not useful — show the "no workflow"
@@ -73,7 +83,7 @@ export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>(
     return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
   }
 
-  const sections = selectGalleryWorkflows(workflows, { contexts, search });
+  const sections = groupGalleryWorkflowsWithFavorites(workflows, { contexts, search });
   const resultCount = sections.reduce((n, s) => n + s.workflows.length, 0);
   const trimmedSearch = search.trim();
 
@@ -128,6 +138,13 @@ export default function WorkflowTemplateGallery<T extends WorkflowGalleryEntry>(
                     thumbnailPath={workflow.thumbnailPath}
                     actions={renderActions?.(workflow)}
                     badges={renderBadges?.(workflow)}
+                    favoriteButton={
+                      <WorkflowFavoriteButton
+                        workflowId={workflow.id}
+                        isFavorite={workflow.isFavorite}
+                        path={favoritePagePath}
+                      />
+                    }
                   />
                 ))}
               </div>

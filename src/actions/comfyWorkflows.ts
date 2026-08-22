@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { comfyWorkflows } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { validateComfyWorkflowJson } from "@/lib/comfy/parseWorkflow";
 import {
   WORKFLOW_KINDS,
@@ -313,6 +314,35 @@ export async function updateComfyWorkflow(workflowId: number, formData: FormData
   }
 
   redirect(`/settings/workflows/${workflowId}`);
+}
+
+/**
+ * WF.FAVORITE.1 §3 — flips `is_favorite` for one workflow. A display flag,
+ * not an edit of the workflow itself: touches no other column, in
+ * particular never `updated_at` (that would reorder "recently edited"
+ * lists for a click on a star) and never `category`/`contexts`/`status`.
+ *
+ * Reads the current value inside this same call rather than trusting a
+ * value the client sent — a stale read from a second open tab must not
+ * silently reverse a favorite the user just set elsewhere.
+ *
+ * An unknown id is a no-op: the page the star was clicked from simply
+ * re-renders unchanged, no error thrown.
+ */
+export async function toggleWorkflowFavorite(workflowId: number, path: string) {
+  const [existing] = await db
+    .select({ id: comfyWorkflows.id, isFavorite: comfyWorkflows.isFavorite })
+    .from(comfyWorkflows)
+    .where(eq(comfyWorkflows.id, workflowId));
+
+  if (!existing) return;
+
+  await db
+    .update(comfyWorkflows)
+    .set({ isFavorite: !existing.isFavorite })
+    .where(eq(comfyWorkflows.id, workflowId));
+
+  revalidatePath(path);
 }
 
 export async function deleteComfyWorkflow(workflowId: number) {

@@ -10,6 +10,7 @@ function row(overrides: Partial<GalleryWorkflowRow> = {}): GalleryWorkflowRow {
     category: null,
     tags: null,
     contexts: null,
+    isFavorite: false,
     ...overrides,
   };
 }

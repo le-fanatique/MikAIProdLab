@@ -11,6 +11,7 @@ function row(overrides: Partial<GalleryWorkflowRow> = {}): GalleryWorkflowRow {
     category: null,
     tags: null,
     contexts: null,
+    isFavorite: false,
     ...overrides,
   };
 }
@@ -72,5 +73,45 @@ describe("buildLibraryCategories — corrupt data never throws", () => {
     const entries = buildLibraryCategories(workflows, ["shot-keyframe", "shot-video"]);
     const byId = Object.fromEntries(entries.map((e) => [e.id, e.count]));
     expect(byId["video"]).toBe(1);
+  });
+});
+
+// WF.FAVORITE.1 §5/§6 — the sidebar "Favorites" entry.
+describe("buildLibraryCategories — Favorites entry", () => {
+  it("is absent when no workflow is a favorite — today's state for all 33", () => {
+    const workflows = [row({ category: "video" }), row({ category: "text-to-image" })];
+    const entries = buildLibraryCategories(workflows, ["shot-keyframe", "shot-video"]);
+    expect(entries.map((e) => e.id)).not.toContain("favorites");
+  });
+
+  it("appears before All, with the correct count, when at least one workflow is a favorite", () => {
+    const workflows = [
+      row({ category: "video", isFavorite: true }),
+      row({ category: "text-to-image" }),
+      row({ category: "utility", isFavorite: true }),
+    ];
+    const entries = buildLibraryCategories(workflows, ["shot-keyframe", "shot-video"]);
+    expect(entries.map((e) => e.id)).toEqual([
+      "favorites",
+      "all",
+      "text-to-image",
+      "video",
+      "utility",
+    ]);
+    const byId = Object.fromEntries(entries.map((e) => [e.id, e.count]));
+    expect(byId["favorites"]).toBe(2);
+    // The favorite keeps its place in its own category count too — it is a
+    // flag, not a category (§0), so it is never removed from either count.
+    expect(byId["video"]).toBe(1);
+    expect(byId["utility"]).toBe(1);
+  });
+
+  it("counts favorites after context filtering, like every other entry", () => {
+    // asset-only favorite, requested with a shot context — must not count.
+    const workflows = [
+      row({ category: "video", isFavorite: true, contexts: JSON.stringify(["asset"]) }),
+    ];
+    const entries = buildLibraryCategories(workflows, ["shot-keyframe", "shot-video"]);
+    expect(entries.map((e) => e.id)).not.toContain("favorites");
   });
 });

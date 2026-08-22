@@ -71,6 +71,7 @@ export default async function WorkflowPickerPage({ params, searchParams }: Props
       tags: comfyWorkflows.tags,
       contexts: comfyWorkflows.contexts,
       thumbnailPath: comfyWorkflows.thumbnailPath,
+      isFavorite: comfyWorkflows.isFavorite,
     })
     .from(comfyWorkflows)
     .orderBy(desc(comfyWorkflows.updatedAt));
@@ -142,6 +143,7 @@ export default async function WorkflowPickerPage({ params, searchParams }: Props
             </Link>
           </div>
         )}
+        favoritePagePath={`/projects/${pid}/sequences/${sid}/shots/${shid}/workflows`}
       />
 
       <div className="mt-8 pt-4 border-t border-[#232629]">

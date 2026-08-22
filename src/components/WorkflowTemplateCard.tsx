@@ -19,6 +19,13 @@ type Props = {
   /** Default-workflow pastilles (Asset Default, Shot Keyframe Default, Shot
    * Video Default) — Settings-only, filled by the caller. */
   badges?: ReactNode;
+  /** WF.FAVORITE.1 §4 — the favorite star, top-left over the thumbnail.
+   * Only safe to pass here when this card is NOT itself wrapped in a
+   * `<Link>` by the caller (a `<form>` nested inside an `<a>` is invalid
+   * HTML and would navigate instead of toggling) — every caller that does
+   * wrap the card in a `<Link>` (`WorkflowSelectorPanel`) renders the
+   * button itself, as a sibling of that link, instead of passing it here. */
+  favoriteButton?: ReactNode;
 };
 
 export default function WorkflowTemplateCard({
@@ -29,12 +36,14 @@ export default function WorkflowTemplateCard({
   thumbnailPath,
   actions,
   badges,
+  favoriteButton,
 }: Props) {
   return (
     <Card className="flex flex-col h-full">
       {/* Fixed ratio regardless of whether a thumbnail exists, so the grid
           never deforms depending on which cards have one. */}
       <div className="relative w-full aspect-video bg-[#0d0e10] rounded overflow-hidden mb-3 shrink-0">
+        {favoriteButton && <div className="absolute top-2 left-2 z-10">{favoriteButton}</div>}
         {thumbnailPath ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
