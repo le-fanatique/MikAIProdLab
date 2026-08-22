@@ -27,8 +27,8 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Le dernier chantier, `SEQGEN.STORYBOARD.SHOTRANGE.1`, est clos —
-voir la section 6.
+**Rien.** Les deux derniers chantiers, `SEQGEN.STORYBOARD.SHOTRANGE.1` et
+`SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1`, sont clos — voir la section 6.
 
 Tout ce qui reste demande une décision de l'auteur (section 2) ou attend ses
 données réelles. Aucun ticket n'est prêt à être exécuté.
