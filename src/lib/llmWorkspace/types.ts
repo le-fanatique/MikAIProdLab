@@ -88,8 +88,17 @@
 
 /**
  * Closed set of anchor / target entity kinds (§3.1's full registry).
+ *
+ * STYLE.LLM.LOOKFEEDBACK.CORE.1 adds `"lookResult"` — the first entity in
+ * this union with no place in the Project → Sequence → Shot / Asset chain:
+ * a `look_test_results` row belongs directly to a Project
+ * (`look_test_results.project_id`, denormalized on purpose — see
+ * `src/db/schema/lookDevelopment.ts`'s own comment on that column), never to
+ * a Sequence, Shot or Asset. Its ownership chain is therefore a two-level
+ * comparison (`projectId`, `lookResultId`), the same shape `asset` already
+ * uses, not a join through an intermediate level.
  */
-export type EntityKind = "project" | "sequence" | "shot" | "asset";
+export type EntityKind = "project" | "sequence" | "shot" | "asset" | "lookResult";
 
 /**
  * The closed variable registry (§3.1) — all thirteen entries, covering the
@@ -187,7 +196,16 @@ export type VariableId =
   // must read what it is going to adjust, not a frozen snapshot of it — see
   // `variables/registry.ts` for the resolver, placed right after
   // `resolveProjectStyle` so the two read together.
-  | "PROJECT.STYLE.DRAFT";
+  | "PROJECT.STYLE.DRAFT"
+  // STYLE.LLM.LOOKFEEDBACK.CORE.1 — the `lookResult` anchor's own data: the
+  // Look Test result the director is looking at, and the parent `look_tests`
+  // row's own definition (mode, source, subject, action, styleSourceKind,
+  // and the style text actually used — the immutable snapshot captured at
+  // creation, never re-read from the mutable Working Draft). Deliberately
+  // NEVER the file path or the image itself — see `variables/registry.ts`
+  // for why, and `images.source` (`lighting.fromImage`) for where an image
+  // input belongs instead.
+  | "LOOK.RESULT";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque

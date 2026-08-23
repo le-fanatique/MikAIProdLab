@@ -46,6 +46,9 @@ export function anchorEntityForVariable(id: VariableId): EntityKind {
       return "shot";
     case "ASSET":
       return "asset";
+    // STYLE.LLM.LOOKFEEDBACK.CORE.1 — `LOOK.RESULT`'s own prefix.
+    case "LOOK":
+      return "lookResult";
     default:
       // Unreachable for any id actually typed `VariableId` — thrown loudly
       // rather than silently guessed at, same discipline as
@@ -70,6 +73,15 @@ function anchorIdForEntity(entity: EntityKind, ids: AnchorIds): number | undefin
       return ids.shotId;
     case "asset":
       return ids.assetId;
+    // STYLE.LLM.LOOKFEEDBACK.CORE.1 — neither the Variable Library page nor
+    // the bench (`src/app/settings/llm-workflows/[templateId]/page.tsx`) has
+    // a Look Result selector (no ticket in this chantier adds one — §"Ce que
+    // le ticket ne fait pas"), so `ids.lookResultId` is never set by either
+    // caller today. `LOOK.RESULT` therefore always resolves to `undefined`
+    // here, which `resolveVariableLibraryRows` already renders as its
+    // honest "unresolved" row — never a crash, never a silently wrong id.
+    case "lookResult":
+      return ids.lookResultId;
   }
 }
 

@@ -310,6 +310,91 @@ export function renderStyleAdjustDirectorRuleLine(freeText: string | undefined):
 }
 
 // ---------------------------------------------------------------------------
+// LOOK.RESULT — anchor: lookResult. STYLE.LLM.LOOKFEEDBACK.CORE.1. What a
+// director needs to judge a Look Test result and phrase style feedback about
+// it: the result itself (kind/status/notes) and its parent `look_tests`
+// row's own definition (mode, source, subject, action, styleSourceKind, and
+// the style text actually used).
+//
+// `styleCompiledText` is read off `look_tests` directly — the row's own
+// immutable snapshot, captured once at creation (`src/db/schema/lookDevelopment.ts:20-28`)
+// — never re-derived from the current, mutable Working Draft
+// (`PROJECT.STYLE.DRAFT` above). A test that was run against last week's
+// draft must keep describing last week's style text, or the director's
+// feedback would be judging the wrong prompt.
+//
+// **Deliberately never `filePath`, never the image itself.** An image input
+// travels through `images.source` (`ImageSourceId`, `types.ts`), which this
+// ticket does not add a `lookResult`-anchored entry to (out of scope — see
+// `.agents/executor_report.md`); the director's own note (`notes` above, and
+// the operation's `intent.freeText`) is what describes the result here. This
+// is a decision, not an oversight — the same discipline `runner.ts`'s
+// `{images}` block header already states for pixels never reaching a block.
+// ---------------------------------------------------------------------------
+
+export type LookResultData = {
+  result: {
+    kind: "image" | "video";
+    status: "candidate" | "rejected" | "look-target";
+    notes: string | null;
+  };
+  test: {
+    mode: "image" | "video";
+    source: "from-story" | "neutral-benchmark" | "custom";
+    subject: string;
+    action: string;
+    styleSourceKind: "working-draft" | "published-version";
+    styleCompiledText: string;
+  };
+};
+
+export async function resolveLookResult(lookResultId: number): Promise<LookResultData> {
+  const { db } = await import("@/db");
+  const { lookTestResults, lookTests } = await import("@/db/schema");
+
+  const [result] = await db.select().from(lookTestResults).where(eq(lookTestResults.id, lookResultId));
+  if (!result) {
+    throw new Error(`resolveLookResult: look test result ${lookResultId} not found.`);
+  }
+  const [test] = await db.select().from(lookTests).where(eq(lookTests.id, result.lookTestId));
+  if (!test) {
+    throw new Error(`resolveLookResult: parent look test ${result.lookTestId} not found.`);
+  }
+
+  return {
+    result: { kind: result.kind, status: result.status, notes: result.notes },
+    test: {
+      mode: test.mode,
+      source: test.source,
+      subject: test.subject,
+      action: test.action,
+      styleSourceKind: test.styleSourceKind,
+      styleCompiledText: test.styleCompiledText,
+    },
+  };
+}
+
+/**
+ * `lookFeedback.resultLines` — the Look Test result rendered as plain lines
+ * for an assistant operation's context. `notes` disappears entirely when
+ * blank (matches every other optional-note render form in this file), never
+ * rendered as an empty "Notes:" line.
+ */
+export function renderLookResultLines(data: LookResultData): string {
+  const lines: string[] = [];
+  lines.push(`Result kind: ${data.result.kind}`);
+  lines.push(`Result status: ${data.result.status}`);
+  if (data.result.notes?.trim()) lines.push(`Director's notes on this result: ${data.result.notes.trim()}`);
+  lines.push(`Test mode: ${data.test.mode}`);
+  lines.push(`Test source: ${data.test.source}`);
+  lines.push(`Subject: ${data.test.subject}`);
+  lines.push(`Action: ${data.test.action}`);
+  lines.push(`Style source: ${data.test.styleSourceKind}`);
+  lines.push(`Style text used for this test:\n${data.test.styleCompiledText}`);
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // SEQ.CONTEXT — anchors: sequence
 // ---------------------------------------------------------------------------
 
@@ -2834,6 +2919,9 @@ export const VARIABLE_RENDER_FORMS = {
   "SEQ.LIGHTING": {
     "sequenceLightingDirected.currentLine": renderSequenceLightingDirectedCurrentLine,
   },
+  "LOOK.RESULT": {
+    "lookFeedback.resultLines": renderLookResultLines,
+  },
 } as const;
 
 /**
@@ -2991,6 +3079,7 @@ export const VARIABLE_REGISTRY = {
   "SHOT.LIGHTING": resolveShotLighting,
   "ASSET.LIGHTING": resolveAssetLighting,
   "SEQ.LIGHTING": resolveSeqLighting,
+  "LOOK.RESULT": resolveLookResult,
 } as const satisfies Record<VariableId, (anchorId: number) => Promise<unknown>>;
 
 // ---------------------------------------------------------------------------

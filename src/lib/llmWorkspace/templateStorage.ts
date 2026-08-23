@@ -59,7 +59,14 @@ import { ACTION_REGISTRY } from "./actions/registry";
 // both `satisfies Record<...>` against their type so they cannot drift. This
 // mirrors the type literally, on the same precedent as `WORKFLOW_KINDS` in
 // `src/actions/comfyWorkflows.ts:8`.
-const ENTITY_KINDS = ["project", "sequence", "shot", "asset"] as const;
+// STYLE.LLM.LOOKFEEDBACK.CORE.1 widens `EntityKind` (`./types.ts`) with
+// `"lookResult"` — not compiler-forced here (this is a runtime mirror, not a
+// `satisfies` check), but left out of sync it would silently reject a
+// stored/imported `style.adjustFromLookResult` template at
+// `validateLlmTemplateJson`'s `anchor.entity` / `output.target.entity`
+// check, with no compiler to catch the omission. Reported in
+// `.agents/executor_report.md` as a file the ticket did not name.
+const ENTITY_KINDS = ["project", "sequence", "shot", "asset", "lookResult"] as const;
 
 function isEntityKind(value: unknown): value is EntityKind {
   return typeof value === "string" && (ENTITY_KINDS as readonly string[]).includes(value);

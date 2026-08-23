@@ -25,8 +25,18 @@ export const llmTemplates = sqliteTable("llm_templates", {
   id: int("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   description: text("description"),
+  // STYLE.LLM.LOOKFEEDBACK.CORE.1 widens `EntityKind` (`../lib/llmWorkspace/types.ts`)
+  // with `"lookResult"`. This `enum` option is TypeScript-only — drizzle-kit
+  // emits a plain `text NOT NULL` column for it (verified against
+  // `drizzle/0050_mighty_lockheed.sql`, and re-verified with `db:generate`
+  // producing no new migration for this change) — so widening it here is not
+  // a schema change and needs no migration, unlike a real `CHECK` constraint
+  // would. Left out of sync it would only break `tsc` at the two call sites
+  // that duplicate/import a built-in descriptor into this table
+  // (`src/actions/llmTemplates.ts`), not silently accept a bad value at
+  // runtime.
   anchorKind: text("anchor_kind", {
-    enum: ["project", "sequence", "shot", "asset"],
+    enum: ["project", "sequence", "shot", "asset", "lookResult"],
   }).notNull(),
   projectId: int("project_id").references(() => projects.id, { onDelete: "set null" }),
   templateJson: text("template_json").notNull(),

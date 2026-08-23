@@ -74,6 +74,33 @@ export async function insertLookTest(
   return row.id;
 }
 
+// STYLE.LLM.LOOKFEEDBACK.CORE.1 — look_test_results builder, same "insert
+// only NOT NULL columns plus whatever the caller wants to observe"
+// convention as every builder above. `projectId` is denormalized on the row
+// itself (see `src/db/schema/lookDevelopment.ts`'s own comment) and is NOT
+// derived from `lookTestId` here — a caller proving the ownership-chain
+// refusal passes a deliberately mismatched `projectId`.
+export async function insertLookTestResult(
+  { db, schema }: TempDb,
+  lookTestId: number,
+  projectId: number,
+  generationJobId: number,
+  values: Partial<typeof schema.lookTestResults.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.lookTestResults)
+    .values({
+      lookTestId,
+      projectId,
+      generationJobId,
+      kind: "image",
+      filePath: "look-dev/fixture.png",
+      ...values,
+    })
+    .returning({ id: schema.lookTestResults.id });
+  return row.id;
+}
+
 export async function insertShotVideo(
   { db, schema }: TempDb,
   shotId: number,

@@ -70,6 +70,9 @@ export type AnchorIds = {
   sequenceId?: number;
   shotId?: number;
   assetId?: number;
+  // STYLE.LLM.LOOKFEEDBACK.CORE.1 — the `lookResult` anchor's own id, a
+  // `look_test_results` row.
+  lookResultId?: number;
 };
 
 export type OperationIntentInput = {
@@ -175,6 +178,10 @@ export function requiredAnchorIdKeys(entity: EntityKind): Array<keyof AnchorIds>
       return ["projectId", "sequenceId", "shotId"];
     case "asset":
       return ["projectId", "assetId"];
+    // STYLE.LLM.LOOKFEEDBACK.CORE.1 — same two-level shape as `asset`: the
+    // owning Project plus the entity's own id, no intermediate level.
+    case "lookResult":
+      return ["projectId", "lookResultId"];
   }
 }
 
@@ -207,7 +214,7 @@ async function loadAndVerifyChain(
   chainNotFound: OperationDescriptor["messages"]["chainNotFound"]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { db } = await import("@/db");
-  const { projects, sequences, shots, assets } = await import("@/db/schema");
+  const { projects, sequences, shots, assets, lookTestResults } = await import("@/db/schema");
   const { eq } = await import("drizzle-orm");
 
   const [project] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, ids.projectId as number));
@@ -230,6 +237,22 @@ async function loadAndVerifyChain(
       .where(eq(shots.id, ids.shotId as number));
     if (!shot || shot.sequenceId !== ids.sequenceId) {
       return { ok: false, error: chainNotFound.shot ?? "Shot not found." };
+    }
+    return { ok: true };
+  }
+
+  // STYLE.LLM.LOOKFEEDBACK.CORE.1 — same two-level shape as `asset` below,
+  // but against `look_test_results.project_id`: a deliberately denormalized
+  // column (§ of `src/db/schema/lookDevelopment.ts`), so this is a straight
+  // comparison, never a join through `look_tests`. This is the check that
+  // refuses a `lookResultId` belonging to another project.
+  if (entity === "lookResult") {
+    const [lookResult] = await db
+      .select({ id: lookTestResults.id, projectId: lookTestResults.projectId })
+      .from(lookTestResults)
+      .where(eq(lookTestResults.id, ids.lookResultId as number));
+    if (!lookResult || lookResult.projectId !== ids.projectId) {
+      return { ok: false, error: chainNotFound.lookResult ?? "Look Test result not found." };
     }
     return { ok: true };
   }
@@ -269,7 +292,10 @@ function anchorIdForVariable(variableId: VariableId, ids: AnchorIds): number {
           ? ids.shotId
           : prefix === "ASSET"
             ? ids.assetId
-            : undefined;
+            // STYLE.LLM.LOOKFEEDBACK.CORE.1 — `LOOK.RESULT`'s own prefix.
+            : prefix === "LOOK"
+              ? ids.lookResultId
+              : undefined;
   if (value == null) {
     throw new Error(`anchorIdForVariable: no id available for variable ${variableId}`);
   }
