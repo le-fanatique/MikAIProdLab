@@ -63,6 +63,23 @@
 // value. Not yet wired to a descriptor's `commit` (`casting.fromSequence` is
 // B7h-b) — declared ahead of being reachable, the same discipline B7c-w
 // applied to its own three entries.
+//
+// STYLE.LLM.ACTIONS.1 adds `addRuleAction` — the write side ticket 3
+// (`STYLE.LLM.ADJUST.1`) needs. Unlike every `"insert"` entry above, a single
+// call writes TWO tables in the same transaction: it `INSERT`s one row into
+// `project_style_rules` (`status` forced to `"approved"`) AND `UPDATE`s
+// `project_style_drafts.revision`/`updatedAt` on the same call — the format
+// has no field for "insert here, bump revision there", so the created row's
+// own columns go in `columns.written` and the draft-side effect is declared
+// explicitly in `notes` instead of being folded silently into `columns`. It
+// also has a particularity no earlier entry has: on `expectedRevision ===
+// null` it CREATES the Working Draft row itself when none exists yet
+// (every other action either always requires a draft or never creates one);
+// on any other mismatch — including `expectedRevision: null` against an
+// EXISTING draft — it refuses as stale. Not yet wired to a descriptor's
+// `commit` (its own descriptor is STYLE.LLM.ADJUST.1) — declared ahead of
+// being reachable, the same discipline B7c-w's and B7h-a's own entries
+// followed.
 // ---------------------------------------------------------------------------
 
 import type { ActionId, EntityKind } from "../types";
@@ -116,15 +133,22 @@ export type ActionRegistryEntry = {
          * source citation, not by a race test; see `registry.test.ts`'s
          * structural assertion.
          *
-         * `true` for exactly one entry, `createShotAtPosition`
+         * `true` for two entries. `createShotAtPosition`
          * (LLMW.ACTION.INSERT_AT.1, B11-a): its own `orderIndex` shift and
          * insert run inside one real `db.transaction`, not a separate
          * `SELECT` and `UPDATE`/`INSERT` — widened from the literal `false`
          * to `boolean` for this one fact, the same way `columns.writesUpdatedAt`
-         * is widened below for `applySelectedCastingSuggestions`. Every
-         * other entry keeps `false` unchanged. See that entry's own `notes`
-         * for why this action cannot share B7c-w2's untransacted-loop
-         * reasoning. */
+         * is widened below for `applySelectedCastingSuggestions`.
+         * `addRuleAction` (STYLE.LLM.ACTIONS.1): its own draft
+         * lookup/creation, rule insert, and `project_style_drafts.revision`
+         * bump all run inside one real `db.transaction`
+         * (`src/actions/projectStyle.ts`) — same shape, different reason:
+         * not an ordering hazard like `createShotAtPosition`'s shift, but
+         * the optimistic-concurrency check (`expectedRevision` against the
+         * real row) must be read and acted on without a window for a
+         * concurrent write to land in between. Every other entry keeps
+         * `false` unchanged. See each entry's own `notes` for why it cannot
+         * share B7c-w2's untransacted-loop reasoning. */
         transactional: boolean;
       }
     | {
@@ -656,6 +680,55 @@ export const ACTION_REGISTRY = {
     notes: [
       "Same shape as `updateAssetDescriptionFieldInline` (src/actions/assets.ts) — a caller-supplied object, not FormData; ownership check (SELECT) and mutation (UPDATE) as two separate statements, no db.transaction; `{ ok: true } | { ok: false; error }` — narrowed to one field with no append/replace mode: always a full replacement, and a blank/whitespace-only value clears the column to null. Proven by tests/actions/updateAssetLightingInline.test.ts, including a read-after-write assertion that `description`/`notes` stay unchanged.",
       "Ownership check (src/actions/assets.ts, SELECT) and mutation (UPDATE) are two separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+    ],
+  },
+
+  // STYLE.LLM.ACTIONS.1 — the write side ticket 3 of "L'assistant de Project
+  // Style" (STYLE.LLM.ADJUST.1) needs. Not yet reachable from a descriptor's
+  // `commit` — declared and proven against a real database ahead of that
+  // consumer, the same discipline every earlier action declared before its
+  // own descriptor.
+  addRuleAction: {
+    id: "addRuleAction",
+    operation: "insert",
+    source: { module: "@/actions/projectStyle", export: "addRuleAction" },
+    target: { entity: "project" },
+    response: "returnValue",
+    ownership: { checked: true, transactional: true },
+    columns: {
+      // The columns of the newly-created `project_style_rules` row
+      // (`src/lib/projectStyle/insertDraftRule.ts:66-82`, the shared insert
+      // step `addRuleAction` calls). `draftId` (the anchor foreign key) is
+      // listed because the action itself supplies its value on every call,
+      // same convention as `sequenceId`/`projectId` on the insert entries
+      // above; the primary key is not (schema-assigned). `status` IS listed
+      // even though its value never varies (always `"approved"`) — unlike
+      // `createdAt`/the primary key, it is not schema-assigned: the action
+      // itself sets it on every insert, and `RuleFields`
+      // (`src/actions/projectStyle.ts:459-467`) has no field the caller
+      // could use to request anything else, so a disabled rule can never be
+      // proposed through this action.
+      written: [
+        "draftId",
+        "instruction",
+        "pillar",
+        "section",
+        "category",
+        "strength",
+        "applicability",
+        "provenanceNotes",
+        "status",
+        "orderIndex",
+      ],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "insertPerItem",
+    notes: [
+      "`status` forced to `\"approved\"` on every insert (src/lib/projectStyle/insertDraftRule.ts:77) — `RuleFields` (src/actions/projectStyle.ts:459-467) has no `status` field at all, so nothing a caller submits can produce a `\"disabled\"` row through this action. Proven by tests/actions/registry.test.ts.",
+      "Writes a SECOND table in the same call: `project_style_drafts.revision` is bumped by exactly 1 and `updatedAt` rewritten (src/lib/projectStyle/insertDraftRule.ts:84-88), inside the same `db.transaction` as the rule insert (src/actions/projectStyle.ts:517-568). No field of this format expresses \"insert here, bump revision there\" — the created row's own columns are declared in `columns.written` above, this draft-side effect is declared here instead of being folded silently into it. Proven by tests/actions/registry.test.ts.",
+      "Creates the Working Draft itself, but ONLY when `expectedRevision === null` and no draft row exists yet (src/actions/projectStyle.ts:521-535) — a particularity no entry above has (every `insertPerItem` entry above either always requires its anchor to pre-exist, or, per behaviour 5, never verifies it and no-ops on a missing one; this one actively creates a row of its own). When a draft already exists, `expectedRevision: null` does NOT reach that creation branch — it falls to the `else if` below and is refused as stale, the row is left untouched. Proven by tests/actions/registry.test.ts.",
+      "Optimistic concurrency: `expectedRevision` is compared against the draft's real `revision`, read inside the same transaction (src/actions/projectStyle.ts:536-538), and a mismatch is refused with `{ ok: false, error, currentRevision }` — never merged, no row written. A caller applying N rules in one Approve step (STYLE.LLM.ADJUST.1, ticket 3) must therefore make N sequential calls, each one's `expectedRevision` taken from the previous call's own returned `revision` — a batch call passing one fixed `expectedRevision` for every item would have every item after the first refused as stale. Proven by tests/actions/registry.test.ts.",
+      "Ownership check: `assertProjectExists` (src/actions/projectStyle.ts:507) runs BEFORE `db.transaction` opens (src/actions/projectStyle.ts:517) — a separate statement from every write that follows, the same `checked: true` shape every other entry declares. `ownership.transactional: true` here describes a different fact: unlike `checked`, which is about the existence check, `transactional` (widened for `createShotAtPosition`, LLMW.ACTION.INSERT_AT.1) is about whether the action's OWN write steps are atomic with each other — and here the draft lookup/creation, the rule insert, and the revision bump all run inside the one `db.transaction` at src/actions/projectStyle.ts:517-568, never as separate statements. Proven by tests/actions/registry.test.ts's structural assertion.",
     ],
   },
 } as const satisfies Record<ActionId, ActionRegistryEntry>;

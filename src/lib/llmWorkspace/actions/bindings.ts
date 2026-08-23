@@ -49,6 +49,11 @@ import { applySelectedCastingSuggestions } from "@/actions/llm/castingSuggestion
 // module's own `satisfies Record<ActionId, …>` (below) forces every member
 // to resolve to a real callable.
 import { createShotAtPosition } from "@/actions/llm/shotInsertion";
+// STYLE.LLM.ACTIONS.1 — same reason ActionId grew (types.ts) and this
+// module's own `satisfies Record<ActionId, …>` (below) forces every member
+// to resolve to a real callable. Unlike every action above, `addRuleAction`
+// answers `{ ok }` directly (no FormData, no redirect).
+import { addRuleAction } from "@/actions/projectStyle";
 import type { ActionId } from "../types";
 
 export const ACTION_BINDINGS = {
@@ -69,4 +74,5 @@ export const ACTION_BINDINGS = {
   updateShotLighting,
   updateSequenceLighting,
   updateAssetLightingInline,
+  addRuleAction,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

@@ -295,7 +295,18 @@ export type ActionId =
   // declared before its own descriptor.
   | "updateShotLighting"
   | "updateSequenceLighting"
-  | "updateAssetLightingInline";
+  | "updateAssetLightingInline"
+  // STYLE.LLM.ACTIONS.1 — the write side ticket 3 of "L'assistant de Project
+  // Style" (STYLE.LLM.ADJUST.1) needs: `addRuleAction` inserts one atomic
+  // rule into the Working Draft's `project_style_rules`, `status` forced to
+  // `"approved"` — the caller cannot propose a disabled rule. Unlike every
+  // entry above, it also writes a SECOND table in the same transaction
+  // (`project_style_drafts.revision`/`updatedAt`) — see `actions/registry.ts`
+  // for how `columns`/`notes` carry that split. Not yet reachable from a
+  // descriptor's `commit` (its own descriptor is STYLE.LLM.ADJUST.1) —
+  // declared and proven against a real database ahead of that consumer, the
+  // same discipline every earlier action declared before its own descriptor.
+  | "addRuleAction";
 
 /**
  * Names a field on the operation's anchor entity, for a `messages.chainNotFound`

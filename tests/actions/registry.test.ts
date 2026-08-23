@@ -65,6 +65,7 @@ let assetExtractionActions: typeof import("@/actions/llm/assetExtraction");
 let sequenceGenerationActions: typeof import("@/actions/llm/sequenceGeneration");
 let castingSuggestionsActions: typeof import("@/actions/llm/castingSuggestions");
 let shotInsertionActions: typeof import("@/actions/llm/shotInsertion");
+let projectStyleActions: typeof import("@/actions/projectStyle");
 let projectId: number;
 
 beforeAll(async () => {
@@ -79,6 +80,7 @@ beforeAll(async () => {
   sequenceGenerationActions = await import("@/actions/llm/sequenceGeneration");
   castingSuggestionsActions = await import("@/actions/llm/castingSuggestions");
   shotInsertionActions = await import("@/actions/llm/shotInsertion");
+  projectStyleActions = await import("@/actions/projectStyle");
   projectId = await insertProject(ctx, "Registry project");
 });
 
@@ -1234,5 +1236,283 @@ describe("UC1 end to end — buildShotJsonPayload feeds createShotAtPosition (LL
       .where(eq(ctx.schema.shots.sequenceId, sequenceId));
     expect(row.title).toBe("No duration given");
     expect(row.durationSeconds).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// STYLE.LLM.ACTIONS.1 — addRuleAction, ticket 2 of "L'assistant de Project
+// Style". No dedicated tests/actions/addRuleAction.test.ts exists yet (the
+// action itself predates this ticket and was never brought under the
+// registry's proof discipline before now) — every particularity this
+// entry's `notes` declares is proven here, in full, rather than referenced.
+// ---------------------------------------------------------------------------
+
+describe("action registry — addRuleAction (STYLE.LLM.ACTIONS.1)", () => {
+  async function readDraftById(draftId: number) {
+    const [row] = await ctx.db
+      .select()
+      .from(ctx.schema.projectStyleDrafts)
+      .where(eq(ctx.schema.projectStyleDrafts.id, draftId));
+    return row;
+  }
+
+  async function readDraftByProject(styleProjectId: number) {
+    const [row] = await ctx.db
+      .select()
+      .from(ctx.schema.projectStyleDrafts)
+      .where(eq(ctx.schema.projectStyleDrafts.projectId, styleProjectId));
+    return row;
+  }
+
+  async function readRulesByDraft(draftId: number) {
+    return ctx.db
+      .select()
+      .from(ctx.schema.projectStyleRules)
+      .where(eq(ctx.schema.projectStyleRules.draftId, draftId));
+  }
+
+  it("insertion nominale on an existing draft — declared columns only, status forced to approved, draft revision moves +1", async () => {
+    const styleProjectId = await insertProject(ctx, "Style project — nominal insert");
+    const [draftRow] = await ctx.db
+      .insert(ctx.schema.projectStyleDrafts)
+      .values({ projectId: styleProjectId, revision: 1 })
+      .returning();
+
+    const result = await projectStyleActions.addRuleAction({
+      projectId: styleProjectId,
+      expectedRevision: 1,
+      instruction: "Always shoot on 35mm.",
+      pillar: "visual",
+      section: "Lens language",
+      category: "Lens",
+      strength: "Required",
+      applicability: "All exterior shots",
+      provenanceNotes: "From the DP's notes",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok:true");
+    expect(result.revision).toBe(2);
+    expect(result.rule.status).toBe("approved");
+
+    const draftAfter = await readDraftById(draftRow.id);
+    expect(draftAfter.revision).toBe(2);
+
+    const rules = await readRulesByDraft(draftRow.id);
+    expect(rules).toHaveLength(1);
+    const created = rules[0];
+    expect(created.draftId).toBe(draftRow.id);
+    expect(created.instruction).toBe("Always shoot on 35mm.");
+    expect(created.pillar).toBe("visual");
+    expect(created.section).toBe("Lens language");
+    expect(created.category).toBe("Lens");
+    expect(created.strength).toBe("Required");
+    expect(created.applicability).toBe("All exterior shots");
+    expect(created.provenanceNotes).toBe("From the DP's notes");
+    expect(created.status).toBe("approved");
+    expect(created.orderIndex).toBe(0);
+
+    // Full-row column correspondence with ACTION_REGISTRY.addRuleAction.columns.written:
+    // every declared column carries the supplied value (asserted above); every
+    // OTHER column of this table (besides the primary key and the two
+    // timestamps, neither of which columns.written lists) has no further
+    // column to be silently written — project_style_rules' own schema has no
+    // column outside this declared set.
+    expect([...ACTION_REGISTRY.addRuleAction.columns.written].sort()).toEqual(
+      [
+        "draftId",
+        "instruction",
+        "pillar",
+        "section",
+        "category",
+        "strength",
+        "applicability",
+        "provenanceNotes",
+        "status",
+        "orderIndex",
+      ].sort()
+    );
+  });
+
+  it("a second insertion on the same draft continues orderIndex rather than restarting at 0", async () => {
+    const styleProjectId = await insertProject(ctx, "Style project — orderIndex continuation");
+    const [draftRow] = await ctx.db
+      .insert(ctx.schema.projectStyleDrafts)
+      .values({ projectId: styleProjectId, revision: 1 })
+      .returning();
+
+    const first = await projectStyleActions.addRuleAction({
+      projectId: styleProjectId,
+      expectedRevision: 1,
+      instruction: "Rule one",
+      pillar: null,
+      section: null,
+      category: null,
+      strength: null,
+      applicability: null,
+      provenanceNotes: null,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("expected ok:true");
+
+    const second = await projectStyleActions.addRuleAction({
+      projectId: styleProjectId,
+      expectedRevision: first.revision,
+      instruction: "Rule two",
+      pillar: null,
+      section: null,
+      category: null,
+      strength: null,
+      applicability: null,
+      provenanceNotes: null,
+    });
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error("expected ok:true");
+    expect(second.revision).toBe(first.revision + 1);
+
+    const rules = await readRulesByDraft(draftRow.id);
+    expect(rules.map((r) => r.orderIndex).sort()).toEqual([0, 1]);
+  });
+
+  it("expectedRevision mismatch (existing draft) — refuses, writes no row, draft untouched", async () => {
+    const styleProjectId = await insertProject(ctx, "Style project — stale expectedRevision");
+    const [draftRow] = await ctx.db
+      .insert(ctx.schema.projectStyleDrafts)
+      .values({ projectId: styleProjectId, revision: 3 })
+      .returning();
+
+    const rulesBefore = await readRulesByDraft(draftRow.id);
+    expect(rulesBefore).toHaveLength(0);
+
+    const result = await projectStyleActions.addRuleAction({
+      projectId: styleProjectId,
+      expectedRevision: 1, // real revision is 3
+      instruction: "Should not land",
+      pillar: null,
+      section: null,
+      category: null,
+      strength: null,
+      applicability: null,
+      provenanceNotes: null,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected ok:false");
+    expect(result.currentRevision).toBe(3);
+
+    const rulesAfter = await readRulesByDraft(draftRow.id);
+    expect(rulesAfter).toHaveLength(0);
+    const draftAfter = await readDraftById(draftRow.id);
+    expect(draftAfter.revision).toBe(3);
+  });
+
+  it("expectedRevision: null with NO existing draft — creates the draft and inserts the rule", async () => {
+    const styleProjectId = await insertProject(ctx, "Style project — first write creates the draft");
+
+    const before = await readDraftByProject(styleProjectId);
+    expect(before).toBeUndefined();
+
+    const result = await projectStyleActions.addRuleAction({
+      projectId: styleProjectId,
+      expectedRevision: null,
+      instruction: "First rule ever on this project",
+      pillar: "world",
+      section: null,
+      category: null,
+      strength: "Preferred",
+      applicability: null,
+      provenanceNotes: null,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok:true");
+    expect(result.revision).toBe(2); // created at 1, bumped to 2 by the same insert
+
+    const draftAfter = await readDraftByProject(styleProjectId);
+    expect(draftAfter).toBeDefined();
+    expect(draftAfter.revision).toBe(2);
+
+    const rules = await readRulesByDraft(draftAfter.id);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].instruction).toBe("First rule ever on this project");
+    expect(rules[0].status).toBe("approved");
+  });
+
+  it("expectedRevision: null WITH an existing draft — refuses as stale, writes no row (verified against the ticket's own claim)", async () => {
+    const styleProjectId = await insertProject(ctx, "Style project — null expectedRevision against an existing draft");
+    const [draftRow] = await ctx.db
+      .insert(ctx.schema.projectStyleDrafts)
+      .values({ projectId: styleProjectId, revision: 1 })
+      .returning();
+
+    const result = await projectStyleActions.addRuleAction({
+      projectId: styleProjectId,
+      expectedRevision: null,
+      instruction: "Should not land either",
+      pillar: null,
+      section: null,
+      category: null,
+      strength: null,
+      applicability: null,
+      provenanceNotes: null,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected ok:false");
+    expect(result.currentRevision).toBe(1);
+
+    const rulesAfter = await readRulesByDraft(draftRow.id);
+    expect(rulesAfter).toHaveLength(0);
+    const draftAfter = await readDraftById(draftRow.id);
+    expect(draftAfter.revision).toBe(1);
+  });
+
+  it("refuses a nonexistent project and writes no row", async () => {
+    const result = await projectStyleActions.addRuleAction({
+      projectId: 9_999_999,
+      expectedRevision: null,
+      instruction: "Injected",
+      pillar: null,
+      section: null,
+      category: null,
+      strength: null,
+      applicability: null,
+      provenanceNotes: null,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected ok:false");
+    expect(result.error).toBe("Project not found.");
+  });
+
+  it("ownership.transactional: true — the draft lookup/creation, rule insert and revision bump run inside one db.transaction, not a separate SELECT and UPDATE/INSERT", async () => {
+    const entry = ACTION_REGISTRY.addRuleAction;
+    expect(entry.ownership.checked).toBe(true);
+    if (entry.ownership.checked) expect(entry.ownership.transactional).toBe(true);
+
+    const filePath = path.join(process.cwd(), "src/actions/projectStyle.ts");
+    const src = readFileSync(filePath, "utf8");
+    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true);
+    let body: string | undefined;
+    sourceFile.forEachChild((node) => {
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name?.text === "addRuleAction" &&
+        node.body
+      ) {
+        body = node.body.getFullText(sourceFile);
+      }
+    });
+    if (body === undefined) throw new Error("addRuleAction not found");
+
+    expect(body).toContain("db.transaction");
+    // assertProjectExists (the ownership check) is called before the
+    // transaction body, not inside it — confirmed by its position in the
+    // function's own source ahead of the `db.transaction` call.
+    const ownershipIndex = body.indexOf("assertProjectExists");
+    const transactionIndex = body.indexOf("db.transaction");
+    expect(ownershipIndex).toBeGreaterThan(-1);
+    expect(transactionIndex).toBeGreaterThan(-1);
+    expect(ownershipIndex).toBeLessThan(transactionIndex);
   });
 });

@@ -347,5 +347,16 @@ export async function commitBenchProposal(input: {
         lighting: requireStringValue(input.values, field),
       });
     }
+
+    // STYLE.LLM.ACTIONS.1 — added only because ActionId grew (types.ts) and
+    // this switch's own exhaustiveness (its Step 5 comment above) forces
+    // every `response: "returnValue"` id to have a branch, the same
+    // mechanical consequence every earlier ActionId addition forced onto
+    // this file too. No descriptor references `addRuleAction` yet (its own
+    // descriptor is STYLE.LLM.ADJUST.1, ticket 3) — never reachable today,
+    // refused by name like `applyBatchAssetDescriptionDraftsInline` above,
+    // not given real routing logic this ticket did not ask for.
+    case "addRuleAction":
+      return { ok: false, error: "This operation is not available from the bench yet." };
   }
 }
