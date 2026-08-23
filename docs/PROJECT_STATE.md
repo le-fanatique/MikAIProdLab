@@ -1,6 +1,71 @@
 # MikAI Project State
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
+
+## The Project Style assistant — chantier COMPLETE (2026-08-23)
+
+Nine commits, **no migration anywhere**. Asked for by the author the same
+day, after a comparison between his original story
+(`docs/PROJECT_STYLE_ORIGINAL_USER_STORY.md`) and what `STYLE.1` had actually
+delivered. Step 8 of that story — *« ou alors demandé à un assistant
+d'ajuster en conséquence toutes la data »* — existed nowhere.
+
+His framing constraint, and it decided the whole shape: **test the need
+against the LLM Workspace before designing anything.**
+
+| Ticket | Commit | What landed |
+| --- | --- | --- |
+| `STYLE.LLM.VARS.1` | `0b6aa97` | `PROJECT.STYLE.DRAFT` — the Working Draft as a readable variable |
+| `STYLE.LLM.ACTIONS.1` | `a1c3e26` | `addRuleAction` in the action registry, with its real semantics |
+| `STYLE.LLM.ADJUST.CORE.1` | `13ab839` | `style.adjustDirected` — a director's note in, atomic rules out |
+| `STYLE.LLM.ADJUST.UI.1` | `4e04933` | its panel in the Style Workspace |
+| `STYLE.LLM.LOOKFEEDBACK.CORE.1` | `804d4da` | the `lookResult` anchor, `LOOK.RESULT`, `style.adjustFromLookResult` |
+| `STYLE.LLM.LOOKFEEDBACK.UI.1` | `16fd555` | `applyProposedRules` (tested) + the Look Dev Bench panel |
+| `STYLE.LLM.ADJUST.FIX.1` | `8c2b34c` | multi-rule approval, which added exactly one rule |
+| `STYLE.ALIGN.BATCH.1` | `cd5fc14` | batch creative alignment over selected Assets |
+
+**The workspace carried almost all of it.** `PROJECT.STYLE` was already a
+registered variable; `ProposalPanel`, the runner, the registries and the
+template editor already existed. Three bricks were missing, and naming them
+was the whole design work: read the *draft* rather than the published version;
+declare a write action for Project Style, where the registry had none of its
+17 entries; and anchor an operation on something that is not a Project,
+Sequence, Shot or Asset. That last one widened `EntityKind` — the only format
+change of the chantier, on B16a's precedent.
+
+**What the author asked for and did not get, deliberately**: a general agentic
+overlay. Refused with a reason he accepted — an overlay that "acts across the
+app" needs a generic write primitive, which §3.2 forbids precisely because it
+would bypass renumbering, Shot codes, ownership checks and referential
+integrity across 60 tables. The per-pillar assistant he wanted **is** the
+descriptor registry; `intent.freeText` + `Redo` is the conversation, with
+context re-read fresh from the database each turn instead of drifting in a
+thread.
+
+**A defect no test could have seen, and the one worth keeping.** Approving
+several proposed rules at once added exactly one, then failed. `handleAddRule`
+is a `useCallback` closed over its render's `revision`; the panel captured
+that one closure at click time and reused it for every rule, so every call
+after the first sent a stale `expectedRevision` and was refused. Nothing was
+broken server-side — `addRuleAction`'s optimistic concurrency was doing its
+job — and no node test could reach it, since there is no DOM harness here by
+decision. It was found because the executor of ticket 4b **reported it instead
+of shipping around it**, and it was fixed by moving the chaining into
+`applyProposedRules`, a pure function with a real net and a real mutation,
+rather than into a `ref` no test could reach. The rule this confirms: when a
+correction has no reachable net, the fix is to move the correctness somewhere
+a net can reach.
+
+**Two tripwires fired as designed.** `commitAdvisory.test.ts` pinned "exactly
+three descriptors, all Asset" so a fourth would fail loudly; it failed twice
+during this chantier, each time forcing an explicit decision instead of a
+silent drift, and was tightened rather than dropped both times.
+
+**What is left for the author alone**: actually running a generation on any of
+the three surfaces. Every launch is a model call against his working database,
+so neither supervisor nor executor triggered one. Everything else was verified
+in a real browser — the three panels, their enabled/disabled states, their
+visual integration, the console.
 
 ## Workflow template gallery — chantier COMPLETE (2026-08-23)
 

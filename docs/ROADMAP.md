@@ -27,12 +27,20 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Le chantier « Galerie de templates de génération » est clos le
-2026-08-23, ses **huit tickets** commités, poussés et migrés — voir la section 6
-et `docs/PROJECT_STATE.md`.
+**Rien.** Deux chantiers clos le 2026-08-23 : « Galerie de templates de
+génération » (**huit tickets**, commités, poussés et migrés) puis
+« L'assistant de Project Style » (**neuf commits, aucune migration**) — voir
+la section 6 et `docs/PROJECT_STATE.md`.
 
-Il reste **une vérification que l'auteur seul peut faire** : générer réellement
-une image et une vidéo depuis la galerie. Ni le superviseur ni l'exécuteur ne
+Il reste sur ce second chantier **une vérification que l'auteur seul peut
+faire** : lancer réellement une génération de règles, sur l'une des trois
+surfaces. Chaque lancement est un appel modèle sur sa base de travail, donc ni
+le superviseur ni l'exécuteur ne l'ont déclenché. Tout le reste est prouvé
+dans un vrai navigateur : les trois panneaux, leurs états activé/désactivé,
+leur intégration visuelle, la console.
+
+Sur la galerie, il reste de même **une vérification que l'auteur seul peut
+faire** : générer réellement une image et une vidéo depuis la galerie. Ni le superviseur ni l'exécuteur ne
 l'ont lancée, parce que mettre un job en file engage ComfyUI et d'éventuels
 appels payants. Tout le chemin en amont est prouvé dans un vrai navigateur,
 jusqu'à l'ouverture de la page de génération incluse.
@@ -229,6 +237,29 @@ avec leur raison.
 ---
 
 ## 6. Clos — où le retrouver
+
+**Chantier « L'assistant de Project Style » — clos le 2026-08-23**, sept
+commits, `0b6aa97` → `2e0be3d`. **Aucune migration.**
+
+Demandé par l'auteur le jour même, après une comparaison entre sa vision
+d'origine (`docs/PROJECT_STYLE_ORIGINAL_USER_STORY.md`) et ce qui était
+livré : l'étape 8 de sa story — « demander à un assistant d'ajuster en
+conséquence » — n'existait nulle part. Sa consigne de cadrage : toute
+proposition commence par tester si le LLM Workspace peut la porter.
+
+Il la portait presque entièrement. Ce qui manquait tenait en trois briques —
+lire le Working Draft (`PROJECT.STYLE.DRAFT`), pouvoir y écrire
+(`addRuleAction` au registre d'actions), et ancrer une opération sur un
+résultat de Look Test (`EntityKind` élargi, la seule brique de format du
+chantier, sur le précédent de B16a). Le reste est deux descripteurs, trois
+surfaces, et un helper testé.
+
+Ce que ça a appris est dans `docs/PROJECT_STATE.md` — dont un défaut
+d'approbation multiple qu'aucun test ne pouvait voir.
+
+`STYLE.2.LOOK.CORRECTIONS.CORE.1`/`.UI.1` **restent ouverts** et ne sont pas
+remplacés par ce chantier : proposer des règles depuis une note du directeur
+n'est pas analyser un résultat pour en déduire une correction.
 
 **`SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1` — clos le 2026-08-22**, un commit :
 `868869f`. Aucune migration.
