@@ -260,6 +260,56 @@ export function renderProjectStyleDraftLines(data: ProjectStyleDraftData): strin
 }
 
 // ---------------------------------------------------------------------------
+// `style.adjustDirected` render forms — STYLE.LLM.ADJUST.CORE.1. No oracle
+// (§ of the ticket: "le prompt est écrit, pas repris"), modelled on
+// `asset.retakeDirected` (B10) for the anchor + freeText shape and on
+// `assets.fromProject` (B7f) for the `kind: "list"` output. `PROJECT.STYLE.DRAFT`
+// itself reuses `renderProjectStyleDraftLines` above (`styleAdjust.draftLines`,
+// already registered by STYLE.LLM.VARS.1 ahead of this consumer) rather than a
+// second render form — the Working Draft's "mode: none" / "empty" / "filled"
+// shape needs no operation-specific wording.
+// ---------------------------------------------------------------------------
+
+/**
+ * Template: the Project's own identity — name only. Unlike
+ * `renderShotInsertProjectLines` (pitch + story), this operation's whole
+ * subject is the Working Draft, not the narrative: pitch/story would feed the
+ * model material this operation has no use for and no instruction to ignore,
+ * so the identity block stays to the one fact that actually orients a style
+ * judgement — which project this is.
+ */
+export function renderStyleAdjustProjectLines(project: ProjectIdentityData): string {
+  return `Project: ${project.name}`;
+}
+
+const STYLE_ADJUST_FREE_TEXT_MAX_LENGTH = 500;
+
+/**
+ * Template: the director's free-text note — the same "absent/empty/blank ->
+ * empty string" contract as every other `intent.freeText` render form in this
+ * file (B9a's own).
+ */
+export function renderStyleAdjustDirectorNoteLine(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's note: ${trimmed.slice(0, STYLE_ADJUST_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+/**
+ * System: the conditional rule instructing the model to read the director's
+ * note — same defect-1 correction `asset.retakeDirected` already applies
+ * (`renderAssetRetakeDirectorRuleLine`'s own comment): this block only makes
+ * sense when a note actually exists in the prompt, so it renders empty (and
+ * is dropped by `assembleBlocks`) with no note, rather than telling the model
+ * to "respond to the note below" when there is none.
+ */
+export function renderStyleAdjustDirectorRuleLine(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return "- Respond to the director's note below: propose only the rules it asks for, never a rewrite of the existing Working Draft.";
+}
+
+// ---------------------------------------------------------------------------
 // SEQ.CONTEXT — anchors: sequence
 // ---------------------------------------------------------------------------
 
@@ -2720,6 +2770,7 @@ export const VARIABLE_RENDER_FORMS = {
     "assetsFromProject.outlineOrStoryBlock": renderAssetsFromProjectOutlineOrStoryBlock,
     "castingFromSequence.projectBackgroundLines": renderCastingFromSequenceProjectBackgroundLines,
     "shotInsert.projectLines": renderShotInsertProjectLines,
+    "styleAdjust.projectLines": renderStyleAdjustProjectLines,
   },
   "PROJECT.SEQUENCES": {
     "assetsFromProject.sequencesBlock": renderAssetsFromProjectSequencesBlock,
@@ -2908,6 +2959,8 @@ export const FREE_TEXT_RENDER_FORMS = {
   "shotInsert.directiveRuleLine": renderShotInsertDirectiveRuleLine,
   "shotLightingDirected.freeTextDirective": renderShotLightingDirectedFreeTextDirective,
   "sequenceLightingDirected.freeTextDirective": renderSequenceLightingDirectedFreeTextDirective,
+  "styleAdjust.directorNoteLine": renderStyleAdjustDirectorNoteLine,
+  "styleAdjust.directorRuleLine": renderStyleAdjustDirectorRuleLine,
 } as const;
 
 export const VARIABLE_REGISTRY = {

@@ -27,6 +27,7 @@ import { narrativePromptComposeDescriptor } from "./narrativePrompt";
 import { lightingFromImageDescriptor } from "./lightingFromImage";
 import { shotLightingDirectedDescriptor } from "./shotLightingDirected";
 import { sequenceLightingDirectedDescriptor } from "./sequenceLightingDirected";
+import { styleAdjustDirectedDescriptor } from "./styleAdjustDirected";
 
 export const DESCRIPTORS = {
   "story.generate": storyGenerateDescriptor,
@@ -48,6 +49,7 @@ export const DESCRIPTORS = {
   "lighting.fromImage": lightingFromImageDescriptor,
   "shot.lightingDirected": shotLightingDirectedDescriptor,
   "sequence.lightingDirected": sequenceLightingDirectedDescriptor,
+  "style.adjustDirected": styleAdjustDirectedDescriptor,
 } as const satisfies Record<string, OperationDescriptor>;
 
 export {
@@ -70,4 +72,5 @@ export {
   lightingFromImageDescriptor,
   shotLightingDirectedDescriptor,
   sequenceLightingDirectedDescriptor,
+  styleAdjustDirectedDescriptor,
 };
