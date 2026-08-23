@@ -13,6 +13,8 @@ import AssetsLLMExtractPanel from "@/components/AssetsLLMExtractPanel";
 import Collapsible from "@/components/Collapsible";
 import { deleteAsset } from "@/actions/assets";
 import { getLLMSettings } from "@/lib/settings";
+import AssetAlignmentBatchPanel, { type BatchAlignmentAssetItem } from "@/components/projectStyle/AssetAlignmentBatchPanel";
+import { getAssetAlignmentStatusAction } from "@/actions/assetAlignment";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +48,34 @@ export default async function AssetsPage({ params, searchParams }: Props) {
     .orderBy(asc(assets.orderIndex));
 
   const llmSettings = await getLLMSettings();
+
+  // STYLE.ALIGN.BATCH.1 — the page resolves each Asset's current Style
+  // alignment status server-side, via the frozen (read-only, ownership- and
+  // corruption-checked) `getAssetAlignmentStatusAction`, and descends it as
+  // props — same pattern as the other Project Style surfaces of this
+  // chantier. One call per Asset; the load must never take this page down.
+  const alignmentBatchItems: BatchAlignmentAssetItem[] = await Promise.all(
+    assetList.map(async (asset) => {
+      try {
+        const result = await getAssetAlignmentStatusAction(pid, asset.id);
+        return {
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          status: result.ok ? result.status : null,
+          statusError: result.ok ? null : result.error,
+        };
+      } catch {
+        return {
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          status: null,
+          statusError: "Unable to load Style alignment status. Try again.",
+        };
+      }
+    })
+  );
 
   const rawCreatedCount = resolvedSearchParams["assetsCreated"];
   const createdCountStr =
@@ -208,6 +238,22 @@ export default async function AssetsPage({ params, searchParams }: Props) {
           />
         </Collapsible>
       </div>
+
+      {/* STYLE.ALIGN.BATCH.1 — mounted here, not on the Project Style
+          Workspace: this operation is fundamentally about Assets (select a
+          subset, review a proposal per Asset, approve per Asset), and this
+          page already owns the full Asset roster with type/description at a
+          glance, so no asset list has to be duplicated onto the Style page
+          to make the selection possible. */}
+      {assetList.length > 0 && (
+        <div className="mt-6 mb-6">
+          <Collapsible label="Batch Align with Project Style">
+            <Card title="Batch Align with Project Style">
+              <AssetAlignmentBatchPanel projectId={pid} assets={alignmentBatchItems} />
+            </Card>
+          </Collapsible>
+        </div>
+      )}
 
       <div className="mt-8 pt-4 border-t border-[#232629] flex items-center gap-4">
         <Link
