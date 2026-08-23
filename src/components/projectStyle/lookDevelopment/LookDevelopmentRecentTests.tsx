@@ -22,6 +22,7 @@ import { parseGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/ge
 import { refImageUrl } from "@/lib/refImageUrl";
 import LookDevelopmentReviewControls from "./LookDevelopmentReviewControls";
 import LookDevelopmentPrerunEditor from "./LookDevelopmentPrerunEditor";
+import StyleFeedbackPanel from "./StyleFeedbackPanel";
 
 type WorkflowRow = { id: number; name: string; kind: "image" | "video"; workflowJson: string };
 type StyleSourceOption = { key: string; label: string; request: LookStyleSourceRequest; compiledText: string };
@@ -43,6 +44,10 @@ type Props = {
   onDuplicated: (lookTestId: number) => Promise<boolean>;
   onQueued: (lookTestId: number, jobId: number) => void;
   onPublished: (lookTestId: number, resultId: number, filePath: string, generationJobId: number) => void;
+  /** `style.adjustFromLookResult`'s `commitAdvisory`, resolved server-side by
+   * the Look Development page and descended as a prop — this component
+   * never imports a descriptor itself (STYLE.LLM.LOOKFEEDBACK.UI.1). */
+  styleFeedbackCommitAdvisory?: string;
 };
 
 const smallButtonClass =
@@ -87,6 +92,7 @@ export default function LookDevelopmentRecentTests({
   onDuplicated,
   onQueued,
   onPublished,
+  styleFeedbackCommitAdvisory,
 }: Props) {
   const [openedId, setOpenedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<GetLookTestResult | null>(null);
@@ -398,6 +404,10 @@ export default function LookDevelopmentRecentTests({
                 }}
                 onRefetchDetail={() => refetchDetail(lookTestId)}
               />
+              {/* STYLE.LLM.LOOKFEEDBACK.UI.1 — the only surface for
+                  `style.adjustFromLookResult`, next to this opened result's
+                  own review controls. */}
+              <StyleFeedbackPanel projectId={projectId} lookResultId={detail.result.id} commitAdvisory={styleFeedbackCommitAdvisory} />
             </>
           ) : (
             <p className="text-[#6e767d]">No durable result saved</p>

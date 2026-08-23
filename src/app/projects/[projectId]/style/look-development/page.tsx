@@ -10,6 +10,7 @@ import { listLookTestsAction, type LookTestListItem } from "@/actions/lookDevelo
 import LookDevelopmentBench from "@/components/projectStyle/lookDevelopment/LookDevelopmentBench";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { isWorkflowOfferedIn, parseWorkflowContexts } from "@/lib/comfy/workflowCatalog";
+import { styleAdjustFromLookResultDescriptor } from "@/lib/llmWorkspace/descriptors/styleAdjustFromLookResult";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -134,6 +135,7 @@ export default async function LookDevelopmentPage({ params }: Props) {
         initialTests={tests}
         initialLoadErrors={loadErrors}
         initialDefaultLookDevelopmentWorkflowId={defaultLookDevelopmentWorkflowId}
+        styleFeedbackCommitAdvisory={styleAdjustFromLookResultDescriptor.commitAdvisory}
       />
     </div>
   );

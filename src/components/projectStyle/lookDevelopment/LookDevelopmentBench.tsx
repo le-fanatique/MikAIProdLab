@@ -80,6 +80,12 @@ type Props = {
   initialLoadErrors: LoadErrors;
   /** STYLE.1.POLISH.1 — `default_workflow_look_development` (Settings > Generation Defaults). Null/absent/invalid falls back to the historical image-first default. */
   initialDefaultLookDevelopmentWorkflowId: number | null;
+  /** `style.adjustFromLookResult`'s `commitAdvisory` (STYLE.LLM.LOOKFEEDBACK.UI.1),
+   * resolved server-side by the page and passed straight through to
+   * `LookDevelopmentRecentTests`, which mounts `StyleFeedbackPanel` next to
+   * the opened result's review controls. This component never imports a
+   * descriptor itself. */
+  styleFeedbackCommitAdvisory?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -308,6 +314,7 @@ export default function LookDevelopmentBench({
   initialTests,
   initialLoadErrors,
   initialDefaultLookDevelopmentWorkflowId,
+  styleFeedbackCommitAdvisory,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<LookTestListItem[]>(initialTests);
@@ -1421,6 +1428,7 @@ export default function LookDevelopmentBench({
             onDuplicated={handleDuplicated}
             onQueued={handleRerunQueued}
             onPublished={handleRerunPublished}
+            styleFeedbackCommitAdvisory={styleFeedbackCommitAdvisory}
           />
         </div>
       </section>

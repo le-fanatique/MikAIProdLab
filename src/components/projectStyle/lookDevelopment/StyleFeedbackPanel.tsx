@@ -1,44 +1,52 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// StyleAdjustAssistPanel.tsx — STYLE.LLM.ADJUST.UI.1 (ticket 3b of
+// StyleFeedbackPanel.tsx — STYLE.LLM.LOOKFEEDBACK.UI.1 (ticket 4b of
 // "L'assistant de Project Style", 2026-08-23)
 //
-// The only surface for `style.adjustDirected` (STYLE.LLM.ADJUST.CORE.1): a
-// director's note free-text trigger, modelled on
-// `AssetRetakeDirectedPanel.tsx` (disabled-until-direction button, no
-// descriptor import — the operation is named, never imported), and a
-// checkbox review list modelled on `CastingSuggestionsPanel.tsx` (own local
-// state machine, not `ProposalPanel`) — because approval here is N
-// independent, sequential writes through `handleAddRule`, not one draft with
-// one Approve action, which is the shape `ProposalPanel`'s
-// `approveActions`/`renderDraft` contract assumes.
+// The only surface for `style.adjustFromLookResult` (STYLE.LLM.LOOKFEEDBACK.CORE.1):
+// a director's note anchored on ONE opened, durable Look Test result, not on
+// the Project's Working Draft in the abstract — "ça part trop vers le
+// photoréalisme" in front of a real render. Never imports the descriptor
+// itself; the client only names the operation
+// (`runWorkspaceOperation({ descriptorId: "style.adjustFromLookResult" })`),
+// same discipline `StyleAdjustAssistPanel.tsx` and `AssetRetakeDirectedPanel`
+// both state in their own headers.
 //
-// Reuses `ProjectStyleWorkspace.tsx`'s own `handleAddRule` exactly as
-// written — no second write path, no `ACTION_BINDINGS`, nothing added to
-// `proposalCommit.ts`. Each approved rule is a separate `handleAddRule`
-// call, sequenced through `applyProposedRules`
-// (STYLE.LLM.LOOKFEEDBACK.UI.1) rather than a hand-written loop — the
-// tested, single implementation of "call in sequence, stop at the first
-// failure, report what was actually added" this chantier settled on.
+// Sibling of `StyleAdjustAssistPanel.tsx`, not its copy — the two panels
+// share tone and review-card presentation (duplicated here rather than
+// extracted: `StyleAdjustAssistPanel.tsx`'s own rule cards are inline JSX,
+// not an importable component, and this ticket does not force one into
+// existence — same "measured, not factored" choice
+// `styleAdjustFromLookResult.ts`'s own header already made for its sibling
+// descriptor), but differs in one structural way: `ProjectStyleWorkspace.tsx`
+// and its `revision` state do not exist on this page (STYLE.1.G.UI.1's Look
+// Dev Bench). So approval here resolves the Working Draft's current
+// `revision` itself, via `getWorkingDraft(projectId)`, then drives
+// `addRuleAction` directly through the SAME tested sequencing helper
+// (`applyProposedRules`) `StyleAdjustAssistPanel.tsx` now also uses — never a
+// second, hand-written approval loop (this ticket's own stated trap: two
+// sequential calls sharing the same `expectedRevision` make the server
+// refuse the second as stale).
 //
-// `handleAddRule`'s own signature — `(fields) => Promise<boolean>` — carries
-// no revision in or out: `ProjectStyleWorkspace.tsx` tracks
-// `expectedRevision` itself, internally, from its own `revision` state, and
-// this ticket does not touch that file. So the `TRevision` type parameter of
-// `applyProposedRules` is inert for this caller (always `null`, ignored by
-// `handleAddRule`) — only the helper's sequencing, stop-on-first-failure and
-// bookkeeping are exercised here. See `applyProposedRules.ts`'s own comment
-// for why `TRevision` is generic rather than always the real DB revision.
+// Honest failure discipline, modelled on `LookDevelopmentReviewControls.tsx`,
+// its immediate neighbour: a transport exception is never reported as a
+// commit. `addRuleAction`'s own `{ ok: false }` refusal and a thrown
+// exception both stop `applyProposedRules` at that rule (its contract makes
+// no distinction between "the server said no" and "we don't know") — but
+// only a `{ ok: true }` return from `addRuleAction` is ever counted in
+// `addedCount`.
 //
-// No persistence: the proposal is client state only (§2.3 of the
-// architecture), discarded on Discard or on leaving the page — the approved
-// rules are the only durable trace, already written through
-// `addRuleAction`.
+// The Working Draft this operation writes into is not visible from this
+// page: after a successful approval, a link to
+// `/projects/{projectId}/style` is shown so the director is not left unable
+// to see what was just written.
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
+import Link from "next/link";
 import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
+import { getWorkingDraft, addRuleAction } from "@/actions/projectStyle";
 import { applyProposedRules, type AddRuleFn } from "@/lib/projectStyle/applyProposedRules";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
@@ -55,31 +63,15 @@ type ProposedRule = {
   provenanceNotes: string;
 };
 
-/** Structurally identical to `Omit<RuleRow, "id" | "status" | "orderIndex">`
- * — `handleAddRule`'s own parameter type in `ProjectStyleWorkspace.tsx`.
- * Not imported: `RuleRow` isn't exported there, and this ticket does not
- * touch that file's exports. TypeScript's structural typing makes the two
- * interchangeable at the call site below. */
-type ApprovedRuleFields = {
-  instruction: string;
-  pillar: StylePillar | null;
-  section: string | null;
-  category: string | null;
-  strength: StyleRuleStrength | null;
-  applicability: string | null;
-  provenanceNotes: string | null;
-};
-
 type Props = {
   projectId: number;
-  handleAddRule: (fields: ApprovedRuleFields) => Promise<boolean>;
-  submitting: boolean;
-  /** `style.adjustDirected` resolved server-side by the Project Style page —
-   * this client component never imports a descriptor itself, same rule
-   * `AssetRetakeDirectedPanel` states in its own props comment. Unlike the
-   * Asset Bible case, this descriptor's advisory is not conditioned on a
-   * staleness flag: it states a permanent fact ("lives in the Working Draft
-   * until published"), so it is always defined. */
+  /** The opened, durable Look Test result this feedback is anchored on. */
+  lookResultId: number;
+  /** `style.adjustFromLookResult` resolved server-side by the Look
+   * Development page — this client component never imports a descriptor
+   * itself. Always defined in practice (states a permanent fact about the
+   * Working Draft, not a staleness condition), optional only to mirror
+   * `StyleAdjustAssistPanel`'s own prop contract. */
   commitAdvisory?: string;
 };
 
@@ -99,13 +91,11 @@ function isStyleRuleStrength(v: unknown): v is StyleRuleStrength {
   return typeof v === "string" && (STYLE_RULE_STRENGTH_VALUES as string[]).includes(v);
 }
 
-/** Presentation only, mirrors `CastingSuggestionsPanel.tsx`'s own
- * `toSuggestion`. The runner's `readEnumField`/`readStringField`
- * (`src/lib/llmWorkspace/runner.ts`) already guarantee `pillar`/`strength`
- * are one of the descriptor's declared values and every string field is
- * present (possibly `""`) — this is a straight field-by-field read, never a
- * decision, so it stays inline rather than becoming a tested `src/lib/`
- * module (see the executor report for why no test was added for it). */
+/** Presentation only — see this file's header for why it is duplicated
+ * rather than shared with `StyleAdjustAssistPanel.tsx`'s own `toProposedRule`.
+ * The runner's `readEnumField`/`readStringField` already guarantee
+ * `pillar`/`strength` are one of the descriptor's declared values and every
+ * string field is present (possibly `""`). */
 function toProposedRule(item: Record<string, string | number | boolean>): ProposedRule {
   return {
     instruction: typeof item.instruction === "string" ? item.instruction : "",
@@ -124,17 +114,12 @@ const STRENGTH_CHIP: Record<StyleRuleStrength, string> = {
   Avoid: "text-[#cda24f] border-[#cda24f]/40",
 };
 
-export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submitting, commitAdvisory }: Props) {
+export default function StyleFeedbackPanel({ projectId, lookResultId, commitAdvisory }: Props) {
   const [freeText, setFreeText] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isApproving, setIsApproving] = useState(false);
-  // `failedInstruction` identifies which rule stopped the sequence; the
-  // failure's own message is not duplicated here — `handleAddRule` already
-  // routes it into `ProjectStyleWorkspace`'s top-level `error` banner
-  // (`setError(result.error)`), which this panel points to rather than
-  // re-deriving a message `handleAddRule`'s boolean return does not carry.
-  const [approveNotice, setApproveNotice] = useState<{ addedCount: number; failedInstruction: string | null } | null>(null);
+  const [approveNotice, setApproveNotice] = useState<{ addedCount: number; failedInstruction: string | null; failedMessage: string | null } | null>(null);
   const [showAdvisory, setShowAdvisory] = useState(false);
 
   const hasDirection = Boolean(freeText.trim());
@@ -144,8 +129,8 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
     setApproveNotice(null);
     setShowAdvisory(false);
     const result = await runWorkspaceOperation({
-      descriptorId: "style.adjustDirected",
-      ids: { projectId },
+      descriptorId: "style.adjustFromLookResult",
+      ids: { projectId, lookResultId },
       intent: { freeText: freeText || undefined },
     });
     if (!result.ok) {
@@ -185,36 +170,53 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
     setIsApproving(true);
     setApproveNotice(null);
 
-    // `TRevision = null` throughout: `handleAddRule` neither takes nor
-    // returns a revision (`ProjectStyleWorkspace.tsx` tracks its own
-    // `expectedRevision` internally, untouched by this ticket) — only
-    // `applyProposedRules`' sequencing, stop-on-first-failure and
-    // bookkeeping are exercised here, per this file's header comment.
-    const addRule: AddRuleFn<ProposedRule, null> = async (rule) => {
-      const ok = await handleAddRule({
-        instruction: rule.instruction,
-        pillar: rule.pillar,
-        section: rule.section,
-        category: rule.category,
-        strength: rule.strength,
-        applicability: rule.applicability,
-        provenanceNotes: rule.provenanceNotes,
-      });
-      // The message below is never rendered: `approveNotice` points readers
-      // to `ProjectStyleWorkspace`'s own top-level `error` banner instead
-      // (`setError(result.error)`, already set by `handleAddRule` itself),
-      // which is the only place `handleAddRule`'s real failure text ends up.
-      return ok ? { ok: true as const, revision: null } : { ok: false as const, error: "see the error above" };
+    // The draft may not exist yet — `expectedRevision: null` — and
+    // `addRuleAction` knows how to create it in that case (its own registry
+    // entry declares this; STYLE.1.A's `addRuleAction`).
+    let initialRevision: number | null;
+    try {
+      const draftView = await getWorkingDraft(projectId);
+      initialRevision = draftView?.draft.revision ?? null;
+    } catch {
+      setIsApproving(false);
+      setApproveNotice({ addedCount: 0, failedInstruction: null, failedMessage: "Could not read the current Working Draft — check your connection and try again." });
+      return;
+    }
+
+    const addRule: AddRuleFn<ProposedRule, number | null> = async (rule, expectedRevision) => {
+      try {
+        const result = await addRuleAction({
+          projectId,
+          expectedRevision,
+          instruction: rule.instruction,
+          pillar: rule.pillar,
+          section: rule.section || null,
+          category: rule.category || null,
+          strength: rule.strength,
+          applicability: rule.applicability || null,
+          provenanceNotes: rule.provenanceNotes || null,
+        });
+        return result.ok ? { ok: true as const, revision: result.revision } : { ok: false as const, error: result.error };
+      } catch {
+        // A transport exception before a known CORE success is never
+        // reported as a commit — never "added", always an uncertain
+        // failure that stops the sequence here.
+        return { ok: false as const, error: "This rule may not have been added — check your connection." };
+      }
     };
 
-    const outcome = await applyProposedRules(toApprove, null, addRule);
+    const outcome = await applyProposedRules(toApprove, initialRevision, addRule);
     // Order is preserved and the sequence stops at the first failure, so the
     // first `addedCount` entries of `toApprove` are exactly the ones that
     // succeeded.
     const addedRules = new Set(toApprove.slice(0, outcome.addedCount));
 
     setIsApproving(false);
-    setApproveNotice({ addedCount: outcome.addedCount, failedInstruction: outcome.failed?.rule.instruction ?? null });
+    setApproveNotice({
+      addedCount: outcome.addedCount,
+      failedInstruction: outcome.failed?.rule.instruction ?? null,
+      failedMessage: outcome.failed?.message ?? null,
+    });
 
     const stillPending = state.rules.filter((r) => !addedRules.has(r));
     if (stillPending.length > 0) {
@@ -229,35 +231,41 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
 
   return (
     <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
-      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Adjust Style (Directed)</h3>
+      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Style Feedback (From This Result)</h3>
       <p className="text-xs text-[#6e767d] leading-relaxed">
-        Describe what you want to change in the Working Draft — medium, texture, palette, tone — and the assistant proposes atomic Style Rules to review and approve.
+        Describe what is wrong with this render — medium, texture, palette, tone — and the assistant proposes atomic Style Rules to review and approve, judged against this exact result.
       </p>
 
       {showAdvisory && commitAdvisory && <p className="text-xs text-[#b89a5a]">{commitAdvisory}</p>}
 
       {approveNotice && (
-        <p className={`text-xs ${approveNotice.failedInstruction ? "text-[#cf7b6b]" : "text-[#6b9e72]"}`}>
-          {approveNotice.addedCount > 0
-            ? `Added ${approveNotice.addedCount} rule${approveNotice.addedCount !== 1 ? "s" : ""}.`
-            : "No rule was added."}
-          {approveNotice.failedInstruction && ` Failed to add "${approveNotice.failedInstruction}" — see the error above for details.`}
-        </p>
+        <div className={`text-xs ${approveNotice.failedInstruction ? "text-[#cf7b6b]" : "text-[#6b9e72]"} flex flex-col gap-1`}>
+          <p>
+            {approveNotice.addedCount > 0
+              ? `Added ${approveNotice.addedCount} rule${approveNotice.addedCount !== 1 ? "s" : ""}.`
+              : "No rule was added."}
+            {approveNotice.failedInstruction && ` Failed to add "${approveNotice.failedInstruction}"${approveNotice.failedMessage ? ` — ${approveNotice.failedMessage}` : "."}`}
+          </p>
+          {approveNotice.addedCount > 0 && (
+            <Link href={`/projects/${projectId}/style`} className="text-[#5b93d6] hover:text-[#e7e9ec] transition-colors underline w-fit">
+              View added rules in Project Style
+            </Link>
+          )}
+        </div>
       )}
 
       {(state.status === "idle" || state.status === "error") && (
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
-            <label htmlFor="styleAdjustFreeText" className="text-[10px] uppercase tracking-wide text-[#6e767d]">
+            <label htmlFor="styleFeedbackFreeText" className="text-[10px] uppercase tracking-wide text-[#6e767d]">
               Director&apos;s note
             </label>
             <textarea
-              id="styleAdjustFreeText"
+              id="styleFeedbackFreeText"
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
               rows={3}
-              placeholder="e.g. the render leans too photoreal, I want something more painted, with visible textures, and stop giving me blue skies"
-              disabled={submitting}
+              placeholder="e.g. this render leans too photoreal, I want something more painted, with visible textures, and stop giving me blue skies"
               className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] resize-y focus:outline-none focus:border-[#3a4046] transition-colors leading-relaxed"
             />
           </div>
@@ -265,9 +273,9 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={!hasDirection || submitting}
+              disabled={!hasDirection}
               className={
-                !hasDirection || submitting
+                !hasDirection
                   ? "rounded border border-[#2c3035] text-[#4b5158] px-3 py-1.5 text-sm cursor-not-allowed"
                   : "rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
               }
@@ -276,7 +284,7 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
             </button>
           </div>
           {!hasDirection && (
-            <p className="text-xs text-[#4b5158]">Add a director&apos;s note above to propose rules — a directed adjustment with no direction is not this operation.</p>
+            <p className="text-xs text-[#4b5158]">Add a director&apos;s note above to propose rules — feedback with no direction is not this operation.</p>
           )}
           {state.status === "error" && <p className="text-xs text-[#cf7b6b]">{state.message}</p>}
         </div>
@@ -325,7 +333,7 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
             <button
               type="button"
               onClick={handleApproveSelected}
-              disabled={isApproving || submitting || selected.size === 0}
+              disabled={isApproving || selected.size === 0}
               className={`px-3 py-1.5 text-sm font-medium ${LLM_APPLY_ACTION_CLASS}`}
             >
               {isApproving
