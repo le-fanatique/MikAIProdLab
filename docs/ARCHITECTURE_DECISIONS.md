@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-Last updated: 2026-08-13
+Last updated: 2026-08-23
 
 ## Codex Migration Arbitration
 
@@ -461,3 +461,39 @@ that cannot be varied there defeats the surface's purpose.
 **Decided: leave them, never stage them, and do not `.gitignore` them** —
 ignoring would make them invisible and therefore forgettable. Every ticket's
 baseline names them as excluded, and that stays the convention.
+
+## The LLM Workspace Is Tested Before A Bespoke Solution Is Designed
+
+Decided by the user on 2026-08-23. Recorded here because it changes what a
+ticket is allowed to be, not merely how it is written.
+
+Any need involving an LLM-assisted operation — proposing, drafting, analysing
+or adjusting a field — is tested against the LLM Workspace **before** a
+technical solution is drawn. The ticket carries one of three answers: covered
+as is by an existing descriptor; covered by adding one named brick to the
+format or the registries; or out of scope, with the reason.
+
+The third answer is legitimate and must stay legitimate. A rule that only
+accepts "yes" becomes a shoehorn, and a workflow forced into a descriptor it
+does not fit costs more than the bespoke screen it replaced. What the rule
+forbids is not answering no — it is not asking.
+
+**What it fixes.** `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §8 already stated the
+target ("adding a new assistant requires creating a template, not writing an
+action, a prompt builder and a panel") and invited challenging any ticket that
+moves away from it. But that is a success criterion evaluated after the fact,
+and the UC1/UC2/UC3 obligation in `AGENTS.md` and `CLAUDE.md` only fires once a
+ticket is already known to be a workspace ticket. Nothing asked the question
+earlier, so a need arriving as a button or a screen could receive a bespoke
+solution without anyone checking whether a descriptor, a variable and an action
+would have covered it.
+
+**The precedent for the second answer is B16a.** The multimodal capability
+already existed and was hardened, but the descriptor format could not declare
+an image input. The format grew; the operation was not dropped for want of a
+format.
+
+Written in `CLAUDE.md` § Start Here (the obligation) and `mikai-method` §10
+(how the test is run). `AGENTS.md` is deliberately untouched while Codex is
+dormant: the rule must be carried there the day Codex prepares tickets again,
+or tickets will be prepared without the test.

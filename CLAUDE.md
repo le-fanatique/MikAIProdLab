@@ -41,11 +41,19 @@ generate, show the user the SQL, and wait for him to run `db:migrate`.
    review, migration, refactor or bug fix, and before spawning
    `mikai-executor`. This section says who does what; the skill says how.
    Its body is not resident, so loading it costs nothing until it is needed.
-1. Read `.agents/supervised_task.md`.
-2. Read only the permanent documents required by `AGENTS.md`.
-3. Follow ticket-specific links from the ticket; do not scan all `docs/`.
-4. Use `docs/AGENT_CONTEXT_STRATEGY.md` for context and token discipline.
-5. If the active ticket is already recorded as committed and pushed, stop and
+1. **Avant de concevoir quoi que ce soit : tester le besoin contre le LLM
+   Workspace.** Tout besoin qui implique une opération assistée par LLM —
+   proposer, rédiger, analyser, ajuster un champ — se teste d'abord contre le
+   workspace, et le ticket porte la réponse : couvert tel quel par un
+   descripteur existant ; couvert en ajoutant une brique nommée ; ou hors
+   périmètre, avec la raison. Le troisième cas est une réponse légitime : la
+   règle interdit de ne pas poser la question, pas de répondre non. Le skill
+   `mikai-method` §10 dit comment mener le test.
+2. Read `.agents/supervised_task.md`.
+3. Read only the permanent documents required by `AGENTS.md`.
+4. Follow ticket-specific links from the ticket; do not scan all `docs/`.
+5. Use `docs/AGENT_CONTEXT_STRATEGY.md` for context and token discipline.
+6. If the active ticket is already recorded as committed and pushed, stop and
    wait for a replacement ticket. Never re-run a closed ticket.
 
 ## After `/clear`
@@ -70,11 +78,9 @@ Do not commit or push before an explicit user go.
 
 - Product state and roadmap: `docs/PROJECT_STATE.md`, `docs/ROADMAP.md`
 - **LLM Workspace user vision: `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 and
-  §5 — the three founding use cases, and the prompt mechanics (ingredients,
-  jars, recipes; assembly vs generation; who owns the formatting). Mandatory reading for any LLM Workspace ticket, and
-  the acceptance reference: a design that cannot express all three is the wrong
-  design. Every such ticket states which of UC1/UC2/UC3 it brings closer, which
-  it constrains, and which it leaves untouched.**
+  §5 — mandatory reading for any LLM Workspace ticket, and the acceptance
+  reference: a design that cannot express all three founding use cases is the
+  wrong design. Terms in `AGENTS.md` § Context policy.**
 - Architecture and durable decisions: `docs/ARCHITECTURE_DECISIONS.md`
 - Supervision workflow: `docs/DEVELOPMENT_WORKFLOW.md`
 - User observations: `docs/USER_FEEDBACK.md` — **idea box, not a development
@@ -112,18 +118,7 @@ Run targeted tests first. Broaden validation according to risk and the ticket.
   (`.agents/executor_report.md` under the Opus protocol);
 - no staging, commit, or push before a fresh approval — an explicit user go
   under the Opus protocol, a Codex verdict under the Codex protocol;
-- **after the push, the ticket's status is updated in the same breath.** A
-  commit is not the end of a ticket — a ticket whose status still says "in
-  progress" after it shipped will be re-run by the next session, and that
-  session has no way to know better. Three files carry that status and all
-  three go stale together:
-  - `.agents/supervised_task.md` — a shipped ticket is replaced by the next
-    one, or by an explicit "no active ticket". Never left as-is: `CLAUDE.md`
-    already forbids re-running a closed ticket, and a stale file is exactly how
-    it happens anyway;
-  - `docs/ROADMAP.md` — the item leaves "En cours". If nothing replaces it, that
-    section says so plainly rather than describing finished work;
-  - `docs/PROJECT_STATE.md` — what shipped, and what it cost to learn.
-
-  This was written on 2026-08-22, after all three were found describing work
-  that had been committed, pushed and migrated hours earlier.
+- **after the push, the ticket's status is closed in the same breath** — in
+  `.agents/supervised_task.md`, `docs/ROADMAP.md` and `docs/PROJECT_STATE.md`.
+  All three go stale together, and a stale ticket file gets the work re-run.
+  Why, and what each one must say: `mikai-method` §9.

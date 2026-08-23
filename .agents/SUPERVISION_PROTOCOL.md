@@ -20,8 +20,10 @@ raise with the user, not to implement.
 
 ## 1. Boundary With The Codex Protocol
 
-This protocol **does not replace** the Codex protocol defined in `AGENTS.md`.
-It runs beside it, on its own files, so the two never collide.
+This protocol **does not replace** the Codex protocol, which moved on
+2026-08-23 from `AGENTS.md` to `docs/CODEX_SUPERVISOR_STRATEGY.md`, section
+"Dormant — the Codex supervision protocol". It runs beside it, on its own
+files, so the two never collide.
 
 | Concern | Codex protocol | This protocol |
 | --- | --- | --- |

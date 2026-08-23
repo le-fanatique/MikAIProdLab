@@ -175,7 +175,34 @@ Written on 2026-08-22, after all three were found describing a ticket that had
 been committed, pushed and migrated hours earlier. Nothing in the repository
 would have caught it: no test reads a roadmap.
 
-## 10. Where things are
+## 10. The workspace is tested before a bespoke solution is designed
+
+A need that involves an LLM-assisted operation is tested against the LLM
+Workspace **before** any technical solution is drawn. Three answers, and the
+ticket carries the one that applies:
+
+- **covered as is** — an existing descriptor, an existing variable, an existing
+  action. The work is authoring, not development;
+- **covered by adding one named brick** — the format cannot express something
+  the need requires. That brick is the ticket. `B16a` is the precedent: the
+  multimodal capability already existed and was hardened, but the descriptor
+  format could not declare an image input, so the format grew. The operation
+  was never dropped for want of a format;
+- **out of scope** — with the reason stated. This is a legitimate answer and
+  must stay one. A rule that only accepts "yes" turns into a shoehorn, and a
+  workflow forced into a descriptor it does not fit costs more than the bespoke
+  screen it replaced.
+
+The reference for the test is `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §4 and §5,
+already binding on any workspace ticket. §8 states the target this rule serves:
+adding an assistant should mean writing a template, not an action plus a prompt
+builder plus a panel.
+
+This does not replace the UC1/UC2/UC3 question — that one fires once a ticket
+is known to be a workspace ticket. This one fires earlier, and decides whether
+it is.
+
+## 11. Where things are
 
 - the active ticket, under the Opus protocol: `.agents/supervised_task.md`
 - the executor's report: `.agents/executor_report.md`

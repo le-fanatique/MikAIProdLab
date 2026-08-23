@@ -1,6 +1,6 @@
 # Codex Supervisor Context Strategy
 
-Last updated: 2026-07-24
+Last updated: 2026-08-23
 
 ## Goal
 
@@ -157,3 +157,78 @@ Update `.agents/codex_handoff.md` when:
 
 The checkpoint should describe the present and the next action. Completed
 details remain in Git history, reports, feedback, and durable documentation.
+
+---
+
+## Dormant — the Codex supervision protocol
+
+Moved here from `AGENTS.md` on 2026-08-23, verbatim in substance. Nothing was
+deleted: it was resident in every conversation while applying to nothing,
+because Codex supervision is dormant. It becomes binding again the day the user
+switches back, which requires updating the `Status` section of `AGENTS.md`,
+`CLAUDE.md` § `Active Supervision Protocol`, and section 0 of
+`.agents/SUPERVISION_PROTOCOL.md` together.
+
+Codex is the user's main supervisor for product, UX, architecture, roadmap,
+ticket preparation, review, and final arbitration.
+
+### Context policy, Codex-side
+
+- always read `.agents/codex_handoff.md` when present;
+- read `.agents/current_task.md` for ticket preparation, implementation
+  supervision, or review;
+- read `.agents/claude_report.md`, `.agents/codex_review.md`, and
+  `.agents/codex_verdict.json` only for active review or closure.
+
+At meaningful ticket boundaries, Codex updates `.agents/codex_handoff.md` with
+only current state, decisions, risks, pending validation, and the next action.
+Do not copy historical implementation narratives or raw command output into
+that handoff.
+
+### The commit gate
+
+Never commit unless `.agents/codex_verdict.json` has:
+
+```json
+{
+  "verdict": "APPROVED",
+  "safeToCommit": true
+}
+```
+
+### The five-check review pass
+
+Review every implementation with separate checks for:
+
+- `git status`
+- `git diff --cached --stat`
+- `git diff --cached`
+- `git diff --stat`
+- `git diff`
+
+The zero-debt checklist that follows these five checks is **not** dormant and
+stays in `AGENTS.md`: it binds every implementation agent under every protocol.
+
+### Closure
+
+After an `APPROVED` verdict with `safeToCommit: true`, Codex must ask Claude to
+commit and push in the same follow-up instruction. Do not request a commit-only
+step and wait for a separate push request, unless the user explicitly asks to
+keep the commit local.
+
+For simple Claude staging, commit, and push tasks, explicitly tell Claude not
+to use extended thinking: execute the prescribed git workflow directly and
+report the result. Reserve deeper reasoning for implementation, debugging, or
+review tasks where it materially helps.
+
+Codex must replace a closed ticket in `.agents/current_task.md` before asking
+Claude to implement again.
+
+### Carried forward when Codex returns
+
+The **workspace test** (`CLAUDE.md` § Start Here, `mikai-method` §10,
+`docs/ARCHITECTURE_DECISIONS.md` 2026-08-23) fires before a technical solution
+is designed. Under the Opus protocol the main thread runs it. Under Codex it is
+ticket preparation, so this section must carry it — otherwise tickets will be
+prepared without the test, which is the exact gap the rule was written to
+close.
