@@ -314,7 +314,9 @@ function RulesPanel({
   /** Caller-sorted by orderIndex — this component renders and indexes (idx for Up/Down disabling) the array exactly as given, never re-sorts it itself. */
   rules: RuleRow[];
   disabled: boolean;
-  onAdd: (fields: Omit<RuleRow, "id" | "status" | "orderIndex">) => Promise<boolean>;
+  onAdd: (
+    fields: Omit<RuleRow, "id" | "status" | "orderIndex">
+  ) => Promise<{ ok: true; revision: number } | { ok: false; error: string }>;
   onUpdate: (ruleId: number, fields: Omit<RuleRow, "id" | "status" | "orderIndex">) => Promise<boolean>;
   onToggle: (ruleId: number) => Promise<void>;
   onDelete: (ruleId: number) => Promise<void>;
@@ -492,8 +494,8 @@ function RulesPanel({
                 // Codex retake 2 (P1) — only clear the draft form on a real
                 // success; a stale/invalid/failed add keeps the typed
                 // fields so the user can retry without retyping.
-                const ok = await onAdd(form);
-                if (ok) setForm(emptyForm);
+                const result = await onAdd(form);
+                if (result.ok) setForm(emptyForm);
               }}
             >
               Add rule
@@ -719,12 +721,24 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
   );
 
   const handleAddRule = useCallback(
-    async (fields: Omit<RuleRow, "id" | "status" | "orderIndex">): Promise<boolean> => {
+    async (
+      fields: Omit<RuleRow, "id" | "status" | "orderIndex">,
+      // STYLE.LLM.ADJUST.FIX.1 — optional second argument. Absent (the
+      // default, single-add path), the handler uses the component's own
+      // `revision` state exactly as before. A caller that adds several rules
+      // in sequence (`StyleAdjustAssistPanel` via `applyProposedRules`) must
+      // instead pass the exact revision the PREVIOUS call in that sequence
+      // returned — this handler is a `useCallback` closed over the render's
+      // `revision`, so without this parameter every call in a batch would
+      // send the same stale `expectedRevision` and every call after the
+      // first would be refused as stale.
+      expectedRevision?: number | null
+    ): Promise<{ ok: true; revision: number } | { ok: false; error: string }> => {
       setSubmitting(true);
       setError(null);
       const result = await addRuleAction({
         projectId,
-        expectedRevision: revision,
+        expectedRevision: expectedRevision === undefined ? revision : expectedRevision,
         instruction: fields.instruction,
         pillar: fields.pillar,
         section: fields.section || null,
@@ -741,10 +755,10 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         setRevision(result.revision);
         setHasDraft(true);
         setRules((prev) => sortByOrderIndex([...prev, result.rule]));
-        return true;
+        return { ok: true, revision: result.revision };
       }
       setError(result.error);
-      return false;
+      return { ok: false, error: result.error };
     },
     [projectId, revision]
   );
@@ -1052,6 +1066,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
       <StyleAdjustAssistPanel
         projectId={projectId}
         handleAddRule={handleAddRule}
+        revision={revision}
         submitting={submitting}
         commitAdvisory={styleAdjustCommitAdvisory}
       />

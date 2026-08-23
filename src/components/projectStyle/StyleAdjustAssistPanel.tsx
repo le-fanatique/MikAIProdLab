@@ -22,14 +22,14 @@
 // tested, single implementation of "call in sequence, stop at the first
 // failure, report what was actually added" this chantier settled on.
 //
-// `handleAddRule`'s own signature — `(fields) => Promise<boolean>` — carries
-// no revision in or out: `ProjectStyleWorkspace.tsx` tracks
-// `expectedRevision` itself, internally, from its own `revision` state, and
-// this ticket does not touch that file. So the `TRevision` type parameter of
-// `applyProposedRules` is inert for this caller (always `null`, ignored by
-// `handleAddRule`) — only the helper's sequencing, stop-on-first-failure and
-// bookkeeping are exercised here. See `applyProposedRules.ts`'s own comment
-// for why `TRevision` is generic rather than always the real DB revision.
+// STYLE.LLM.ADJUST.FIX.1 corrected what the first version of this file got
+// wrong. `handleAddRule` used to return a bare boolean and to read
+// `expectedRevision` from its own closure — so every call of a multi-rule
+// approval sent the SAME revision, and every rule after the first was
+// refused as stale. It now takes an optional `expectedRevision` and returns
+// the revision the server committed, and this panel chains them through
+// `applyProposedRules`, which is tested. `TRevision` is the real draft
+// revision here, not an inert `null`.
 //
 // No persistence: the proposal is client state only (§2.3 of the
 // architecture), discarded on Discard or on leaving the page — the approved
@@ -72,7 +72,14 @@ type ApprovedRuleFields = {
 
 type Props = {
   projectId: number;
-  handleAddRule: (fields: ApprovedRuleFields) => Promise<boolean>;
+  handleAddRule: (
+    fields: ApprovedRuleFields,
+    expectedRevision?: number | null
+  ) => Promise<{ ok: true; revision: number } | { ok: false; error: string }>;
+  /** STYLE.LLM.ADJUST.FIX.1 — the Working Draft's current revision, the
+   * starting point of a multi-rule approval's chain. `null` when no draft
+   * exists yet: a nominal case, `addRuleAction` creates the draft itself. */
+  revision: number | null;
   submitting: boolean;
   /** `style.adjustDirected` resolved server-side by the Project Style page —
    * this client component never imports a descriptor itself, same rule
@@ -124,7 +131,7 @@ const STRENGTH_CHIP: Record<StyleRuleStrength, string> = {
   Avoid: "text-[#cda24f] border-[#cda24f]/40",
 };
 
-export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submitting, commitAdvisory }: Props) {
+export default function StyleAdjustAssistPanel({ projectId, handleAddRule, revision, submitting, commitAdvisory }: Props) {
   const [freeText, setFreeText] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -185,29 +192,36 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, submi
     setIsApproving(true);
     setApproveNotice(null);
 
-    // `TRevision = null` throughout: `handleAddRule` neither takes nor
-    // returns a revision (`ProjectStyleWorkspace.tsx` tracks its own
-    // `expectedRevision` internally, untouched by this ticket) — only
-    // `applyProposedRules`' sequencing, stop-on-first-failure and
-    // bookkeeping are exercised here, per this file's header comment.
-    const addRule: AddRuleFn<ProposedRule, null> = async (rule) => {
-      const ok = await handleAddRule({
-        instruction: rule.instruction,
-        pillar: rule.pillar,
-        section: rule.section,
-        category: rule.category,
-        strength: rule.strength,
-        applicability: rule.applicability,
-        provenanceNotes: rule.provenanceNotes,
-      });
+    // STYLE.LLM.ADJUST.FIX.1 — `TRevision` is the real
+    // `project_style_drafts.revision`, not an inert `null`. Each call passes
+    // the revision the PREVIOUS call committed, because `handleAddRule` is a
+    // `useCallback` closed over its render's `revision`: without this
+    // chaining every call in a batch sent the same stale `expectedRevision`
+    // and every rule after the first was refused. The chaining itself lives
+    // in `applyProposedRules`, which is tested — never re-implemented here.
+    const addRule: AddRuleFn<ProposedRule, number | null> = async (rule, expectedRevision) => {
+      const result = await handleAddRule(
+        {
+          instruction: rule.instruction,
+          pillar: rule.pillar,
+          section: rule.section,
+          category: rule.category,
+          strength: rule.strength,
+          applicability: rule.applicability,
+          provenanceNotes: rule.provenanceNotes,
+        },
+        expectedRevision
+      );
       // The message below is never rendered: `approveNotice` points readers
       // to `ProjectStyleWorkspace`'s own top-level `error` banner instead
       // (`setError(result.error)`, already set by `handleAddRule` itself),
       // which is the only place `handleAddRule`'s real failure text ends up.
-      return ok ? { ok: true as const, revision: null } : { ok: false as const, error: "see the error above" };
+      return result.ok
+        ? { ok: true as const, revision: result.revision }
+        : { ok: false as const, error: "see the error above" };
     };
 
-    const outcome = await applyProposedRules(toApprove, null, addRule);
+    const outcome = await applyProposedRules(toApprove, revision, addRule);
     // Order is preserved and the sequence stops at the first failure, so the
     // first `addedCount` entries of `toApprove` are exactly the ones that
     // succeeded.
