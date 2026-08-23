@@ -58,10 +58,32 @@ export default function WorkflowTemplateCard({
         )}
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap mb-1">
-        <WorkflowKindBadge kind={kind} />
-        <span className="text-sm font-medium text-[#e7e9ec] truncate">{name}</span>
-        {badges}
+      <div className="mb-1">
+        {/* Badge and default-workflow pastilles get their own row instead of
+            sharing it with the name (as before): at the smallest card width
+            (140px, ~100px of content after the card's padding) a badge plus
+            gap already claims ~50px, leaving too little for the name to stay
+            distinguishable over two lines. Stacking gives the name the full
+            card width at every size. */}
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <WorkflowKindBadge kind={kind} />
+          {badges}
+        </div>
+        {/* `min-h` reserves 2 lines (text-sm line-height 1.25rem × 2) so a
+            row of cards stays the same height whether a given name wraps or
+            not. `break-words` (overflow-wrap: break-word) allows the browser
+            to break inside a word — the author's names have no spaces
+            (`Seedance_25_multi_img_Enhancer`) — but only when a line has no
+            other break opportunity, instead of breaking eagerly like
+            `break-all` would. `line-clamp-2` caps it at 2 lines and never
+            lets the name overflow the card. `title` keeps the full name
+            available (e.g. on hover) once it's abridged. */}
+        <p
+          title={name}
+          className="text-sm font-medium text-[#e7e9ec] leading-5 line-clamp-2 break-words min-h-[2.5rem]"
+        >
+          {name}
+        </p>
       </div>
 
       {description && (
