@@ -497,3 +497,57 @@ Written in `CLAUDE.md` § Start Here (the obligation) and `mikai-method` §10
 (how the test is run). `AGENTS.md` is deliberately untouched while Codex is
 dormant: the rule must be carried there the day Codex prepares tickets again,
 or tickets will be prepared without the test.
+
+## No General Agentic Overlay — 2026-08-23
+
+The first application of the rule above, and the reason it was written the
+same day. The user asked whether an assistant per pillar should become **a
+general agentic overlay over the app** rather than a panel per surface.
+
+**Decided: no overlay.** Two structural reasons, neither stylistic:
+
+- an agent that acts "across the app" needs a generic write primitive. §3.2
+  of `docs/LLM_WORKSPACE_ARCHITECTURE.md` forbids exactly that, because it
+  bypasses renumbering, Shot codes, ownership checks and referential
+  integrity across 60 tables. Every write goes through a named, reviewed
+  Server Action or it does not go;
+- a chat overlay is multi-turn persistent state. §2.3 (proposals are
+  ephemeral) and §8 (no proposal persistence, no run history) exclude it, and
+  those exclusions are what make `Cancel`, `Redo` and `Approve` need no
+  compensation logic.
+
+**What the user actually wanted already exists.** The per-pillar assistant is
+the descriptor registry: each descriptor is a specialist, anchored on an
+entity, with its role, its knowledge documents and its declared write rights.
+The conversation is `intent.freeText` + `Redo` — each turn re-reads context
+fresh from the database instead of letting a thread drift. Since E1, the user
+can author such assistants himself.
+
+Revisit only if real branching appears (an Assist Director coordinating
+specialists, fan-out across Shots, cross-critique loops). The answer then is
+the node canvas of §7, over the same template format — not an overlay.
+
+## An Assistant Adjusting Project Style Proposes Atomic Rules — 2026-08-23
+
+Decided by the user. When an assistant adjusts the Project Style Working
+Draft, its output is **a list of atomic rules to approve one by one**, never
+a rewrite of the pillar fields.
+
+The reason is continuity of gesture, not implementation convenience:
+Reference Analysis already taught the user to review Candidate Rules one by
+one, and a rule is small enough to judge, reversible, and traceable to the
+direction that produced it. A pillar rewrite would put a paragraph he wrote
+himself at risk on every run.
+
+Two consequences that any later ticket in this area inherits:
+
+- **a negative constraint is expressed by `strength: "Avoid"`**, never by a
+  negation inside the instruction text ("textured brushwork", not "not
+  photorealistic") — the compiled style is read by generators that handle
+  negation badly;
+- **nothing is written before approval**, and a batch is a review queue, not
+  an automatic application. `STYLE.ALIGN.BATCH.1` follows this: it proposes
+  per Asset and applies per Asset, with no "Apply All", and its writes go
+  through `applyAssetAlignmentAction` so the `asset_style_alignments` marker
+  is never bypassed — an Asset aligned without its marker row would keep
+  displaying "Not reviewed", a durable lie in the database.

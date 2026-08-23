@@ -301,6 +301,26 @@ The following are not required to complete the accepted MVP:
 These items may reuse the MVP foundations later, but must receive their own
 product arbitration and tickets.
 
+### What the 2026-08-23 chantier changed in this list, and what it did not
+
+« L'assistant de Project Style » (nine commits, no migration — see
+`docs/PROJECT_STATE.md`) added three surfaces where the user states an
+adjustment in plain language and reviews proposed atomic rules: the Style
+Workspace, the Look Development bench in front of a saved result, and a
+batch creative alignment over selected Assets.
+
+**It does not close any line above.** In particular, *"Look Development
+proposals that turn result feedback into suggested Style corrections"*
+(`STYLE.2.LOOK.CORRECTIONS.*`) stays deferred and stays a distinct need:
+proposing rules from a director's note is not analysing a result to deduce a
+correction from it. The two will meet, but one is not the other.
+
+Everything the chantier delivered is built on the LLM Workspace — its
+descriptors, variables and action registry — not on Project Style-specific
+LLM plumbing. A later ticket in this area extends those registries; it does
+not add a second assistant mechanism. See
+`docs/LLM_WORKSPACE_ARCHITECTURE.md` §3.1 and §3.2.
+
 ## 13. Technical Gates Already Identified
 
 ### Web research

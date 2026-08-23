@@ -234,6 +234,36 @@ Thirteen, not the ten first written: the three `ASSET.*_APPEARANCES` /
 (`src/actions/llm/assetDescription.ts`) actually loads before B1b-2 was
 written, rather than by blocking that ticket.
 
+**The listing above is the Phase B snapshot, not the current registry.** It
+has grown since, and `src/lib/llmWorkspace/variables/registry.ts` —
+specifically its `VARIABLE_REGISTRY` map — is the only authority on what
+exists today. Two entries were added by the Project Style assistant chantier
+on 2026-08-23:
+
+```
+PROJECT.STYLE.DRAFT    the Working Draft: revision,
+                       directionBrief, compiled text   anchors: project
+LOOK.RESULT            a Look Test result + its parent
+                       test, incl. the style text that
+                       actually produced it            anchors: lookResult
+```
+
+`PROJECT.STYLE.DRAFT` exists **beside** `PROJECT.STYLE`, not instead of it:
+the published version is what generation consumes, the draft is what an
+assistant adjusts. An operation that proposes a change must read the mutable
+matter, never a frozen copy of it.
+
+`LOOK.RESULT` forced the first widening of `EntityKind` since the format was
+written — `lookResult`, a fifth anchor beside project / sequence / shot /
+asset. The rule that widening followed, and that the next one should:
+**every compiler-forced site is handled for real** — `requiredAnchorIdKeys`,
+`loadAndVerifyChain`'s own ownership branch, `anchorIdForVariable`'s prefix
+map, `anchorEntityForVariable`, `templateStorage`'s runtime mirror — never a
+`default` case added to silence `tsc`. And a surface that cannot supply the
+new anchor says so plainly rather than half-working: the bench has no Look
+Result selector, so an operation anchored there is simply not runnable at the
+bench, and its variable resolves as the honest "unresolved" row.
+
 **Every render form is reachable by name from one lookup surface, and the
 runner imports no operation's module.** Variable forms already had a registry;
 mode and parameter forms did not, so B2a had to catalogue them in two tables
@@ -304,6 +334,31 @@ description would misrepresent: a batch that applies partially, a batch that
 answers `ok: true` having applied nothing, and a "patch" that is in fact a full
 replacement nulling every field the caller omits. See "B0 — outcome, and what
 B4 inherits" in section 11.2.
+
+**Project Style entered the write side on 2026-08-23**, with `addRuleAction`
+— until then not one of the registry's entries touched it, so no descriptor
+could write a Style rule. Its declaration is the clearest example of what
+"the action's real semantics, never an idealised one" costs and buys. Four
+facts no idealised description would have carried:
+
+- it writes **two tables** in one call — an insert into `project_style_rules`
+  and a `revision`/`updatedAt` bump on `project_style_drafts`. The format has
+  no field for that, so the created row's columns go in `columns.written` and
+  the draft-side effect is declared explicitly in `notes` rather than folded
+  in silently;
+- it **creates the Working Draft itself** when `expectedRevision` is `null`
+  and none exists — a particularity no other entry has;
+- `status` is forced to `"approved"`: nothing a caller submits can produce a
+  disabled rule through it;
+- its optimistic concurrency means a caller applying N rules must make **N
+  sequential calls, each starting from the revision the previous one
+  returned**. A batch passing one fixed `expectedRevision` would have every
+  item after the first refused as stale.
+
+That last note was written before any consumer existed — and the first
+consumer got it wrong anyway, in the one place no test could see (a React
+closure). The lesson is not that the note was useless: it is what made the
+defect legible in minutes once reported. See `docs/PROJECT_STATE.md`.
 
 ### 3.3 Knowledge document registry
 
@@ -825,6 +880,19 @@ UC1, UC2 and UC3 become three registry entries with no new code.
 ---
 
 ## 7. Growth Paths
+
+**A third exit was asked for on 2026-08-23 and refused**: a general agentic
+overlay over the whole app, one assistant per pillar, reachable from
+anywhere. Refused for a structural reason, not a stylistic one — an agent
+that "acts across the app" needs a generic write primitive, which §3.2
+forbids precisely because it bypasses renumbering, Shot codes, ownership
+checks and referential integrity across 60 tables; and a chat overlay is
+multi-turn persistent state, which §2.3 and §8 exclude. The per-pillar
+assistant the author wanted **is** the descriptor registry, and
+`intent.freeText` + `Redo` is the conversation — each turn re-reading context
+fresh from the database instead of drifting in a thread. Recorded in
+`docs/ARCHITECTURE_DECISIONS.md`; revisit only if real branching appears, in
+which case the answer is the node canvas below, not an overlay.
 
 The template describes **steps**, even though they are currently fixed. Two
 exits stay open without redesign:
