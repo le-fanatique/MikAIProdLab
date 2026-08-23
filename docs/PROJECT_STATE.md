@@ -2,9 +2,10 @@
 
 Last updated: 2026-08-22
 
-## Workflow template gallery — chantier COMPLETE (2026-08-22)
+## Workflow template gallery — chantier COMPLETE (2026-08-23)
 
-Five tickets, all committed, pushed, migration `0061` applied by the author.
+Eight tickets, all committed and pushed. Migrations `0061` to `0065` applied
+by the author, each after a verified backup.
 
 | Ticket | Commit | What landed |
 | --- | --- | --- |
@@ -15,6 +16,49 @@ Five tickets, all committed, pushed, migration `0061` applied by the author.
 | `WF.LIBRARY.1` | `8e9224f` | the overlay library behind "Change Workflow" — the path the author actually uses |
 | `WF.LIBRARY.2` | `6da112b` | the thumbnail-size control, extracted once and shared by both surfaces |
 | `WF.FAVORITE.1` | `d09d27e` | the favorite flag and its star toggle, migration `0062` applied by the author |
+| `DB.MIGRATE.1` | `a5741c9` | `db:migrate` made able to rebuild a table at all |
+| `WF.DETACH.1` | `ca3bf8a` | deleting a used workflow detaches its generations instead of failing, migrations `0063`–`0065` |
+| `WF.CARD.1` | `90227bc` | card titles that adapt to the thumbnail-size slider |
+
+**Deleting a workflow failed on `FOREIGN KEY constraint failed`** — a constraint
+older than this chantier, which surfaced once the page started being used: 369
+generations referenced 29 of the author's 33 workflows, and only 4 were
+deletable. He chose detaching over refusing or cascading, was told his history
+would become partly anonymous, and kept that choice; hence the stamp he
+accepted — the workflow's name is copied onto its generations and look tests in
+the same transaction, **before** the delete, since once the reference is `null`
+the name is gone. A detached job stays readable but can no longer re-run
+anything, refused at the three places that allowed it.
+
+**Proven by the author's own use**: he then deleted six workflows. All 369
+generations survived, the 19 that lost their workflow carry its name, none
+unstamped, no integrity violation.
+
+**`db:migrate` could not rebuild a table, and failed silently.** This is the
+finding worth keeping, and it had nothing to do with workflows. `drizzle-kit
+migrate` exited 1 with no message and an unchanged database. The cause is not
+the generated SQL: drizzle's SQLite migrator wraps every pending migration in
+one transaction, SQLite ignores `PRAGMA foreign_keys` inside a transaction, and
+this repo's `better-sqlite3` enables foreign keys by default — so **no PRAGMA
+placement in generated SQL can ever fix it**, whatever the file split, and
+`defer_foreign_keys` only moves the failure to the COMMIT (the counter the DROP
+increments is never decremented by the RENAME). `scripts/db-migrate.mjs`
+replaces the command: foreign keys off on the connection *before* the migrator
+opens its transaction, then mandatory `foreign_key_check` and `integrity_check`
+afterward, and no error is ever swallowed again.
+
+**It took the author's real data to see it.** A database rebuilt from the
+migrations has no rows referencing `look_tests`; his had 12. An executor's
+throwaway-database trial passed, and the real one failed. **Rehearse a table
+rebuild on a `db.backup()` snapshot of the real database, with the real
+command — not by reading the SQL.**
+
+**Card titles**: the thumbnail slider takes cards down to 140px, and the name
+was a single truncated line. Wrapping alone was not enough — the author's names
+are space-free blocks (`Seedance_25_multi_img_Enhancer`) that a browser will not
+break without explicit permission, and would have overflowed the card instead.
+The badge row and the name now stack, two lines maximum, intra-word breaks
+allowed but not eager.
 
 **Favorite is a flag, not a category — deliberately.** The author asked for a
 "favorite category"; `category` is single-valued, so honouring that literally
@@ -134,7 +178,7 @@ file-deletion failures silently. It is shared with the reference-image family,
 so fixing it was out of this chantier's scope — a thumbnail locked by the OS at
 replacement time stays on disk with nothing said.
 
-Tests: 1585 → 1665.
+Tests: 1585 → 1684.
 
 ## `WF.CATALOG.1` — the vocabulary (2026-08-22)
 

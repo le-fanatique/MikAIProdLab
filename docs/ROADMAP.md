@@ -28,13 +28,24 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 ## 1. En cours
 
 **Rien.** Le chantier « Galerie de templates de génération » est clos le
-2026-08-22, ses trois tickets commités, poussés et migrés — voir la section 6.
+2026-08-23, ses **huit tickets** commités, poussés et migrés — voir la section 6
+et `docs/PROJECT_STATE.md`.
 
 Il reste **une vérification que l'auteur seul peut faire** : générer réellement
-une image et une vidéo depuis la nouvelle galerie. Ni le superviseur ni
-l'exécuteur ne l'ont lancée, parce que mettre un job en file engage ComfyUI et
-d'éventuels appels payants. Tout le chemin en amont est prouvé dans un vrai
-navigateur, jusqu'à l'ouverture de la page de génération incluse.
+une image et une vidéo depuis la galerie. Ni le superviseur ni l'exécuteur ne
+l'ont lancée, parce que mettre un job en file engage ComfyUI et d'éventuels
+appels payants. Tout le chemin en amont est prouvé dans un vrai navigateur,
+jusqu'à l'ouverture de la page de génération incluse.
+
+**Les vignettes appartiennent à l'auteur**, et ce n'est pas une dette : choisir
+l'image qui représente ce qu'un workflow produit n'est pas un travail d'agent.
+Il en avait posé une sur 27 au moment de la clôture. La galerie fonctionne sans.
+
+Un défaut d'affichage connu et assumé, signalé à l'auteur qui n'a pas demandé sa
+correction : sur `/settings/workflows` seulement, à la plus petite taille de
+vignette, les pastilles de workflow par défaut passent sur deux lignes et
+décalent les titres jusqu'à 44 px les uns des autres. Les cartes gardent la même
+hauteur.
 
 Le reste demande une décision de l'auteur (section 2) ou attend ses données
 réelles.
