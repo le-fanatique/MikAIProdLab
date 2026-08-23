@@ -32,12 +32,12 @@ génération » (**huit tickets**, commités, poussés et migrés) puis
 « L'assistant de Project Style » (**neuf commits, aucune migration**) — voir
 la section 6 et `docs/PROJECT_STATE.md`.
 
-Il reste sur ce second chantier **une vérification que l'auteur seul peut
-faire** : lancer réellement une génération de règles, sur l'une des trois
-surfaces. Chaque lancement est un appel modèle sur sa base de travail, donc ni
-le superviseur ni l'exécuteur ne l'ont déclenché. Tout le reste est prouvé
-dans un vrai navigateur : les trois panneaux, leurs états activé/désactivé,
-leur intégration visuelle, la console.
+**L'assistant de Project Style est validé de bout en bout par l'auteur le
+2026-08-24**, sur six scénarios écrits pour lui — dont les trois qu'aucun
+agent ne pouvait exécuter, parce que chacun est un appel modèle sur sa base
+de travail : l'approbation multi-règles, la réaction à un vrai rendu depuis
+le bench, et l'alignement par lot avec son refus « changed elsewhere ». Rien
+à reprendre.
 
 Sur la galerie, il reste de même **une vérification que l'auteur seul peut
 faire** : générer réellement une image et une vidéo depuis la galerie. Ni le superviseur ni l'exécuteur ne

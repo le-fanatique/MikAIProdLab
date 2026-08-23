@@ -61,11 +61,20 @@ three descriptors, all Asset" so a fourth would fail loudly; it failed twice
 during this chantier, each time forcing an explicit decision instead of a
 silent drift, and was tightened rather than dropped both times.
 
-**What is left for the author alone**: actually running a generation on any of
-the three surfaces. Every launch is a model call against his working database,
-so neither supervisor nor executor triggered one. Everything else was verified
-in a real browser — the three panels, their enabled/disabled states, their
-visual integration, the console.
+**Verified end to end by the author on 2026-08-24.** The panels, their
+enabled/disabled states, their visual integration and the console had been
+checked in a real browser during the chantier; what no agent could run — a
+model call against his working database — he ran himself, against six written
+scenarios: the multi-rule approval (the one the fix exists for, deliberately
+tested with three rules and not one), the reaction to a real render from the
+bench, the batch alignment including its "changed elsewhere" refusal, the
+deliberate two-tab concurrency case, and the empty-project path where
+`addRuleAction` creates the Working Draft on the way. Nothing came back.
+
+The lesson worth keeping from that split: the scenarios were written naming
+the exact on-screen strings read from the components, not paraphrased — so a
+divergence would have been reportable as "step 6 says X, I see Y" instead of
+a discussion about what was meant.
 
 ## Workflow template gallery — chantier COMPLETE (2026-08-23)
 
