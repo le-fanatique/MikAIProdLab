@@ -180,7 +180,14 @@ export type VariableId =
   // for the three resolvers and `SeqLightingData`'s own type.
   | "SHOT.LIGHTING"
   | "ASSET.LIGHTING"
-  | "SEQ.LIGHTING";
+  | "SEQ.LIGHTING"
+  // STYLE.LLM.VARS.1 — the Project Style Working Draft, read fresh at
+  // resolution time rather than the active published version `PROJECT.STYLE`
+  // reads. An assistant operation that proposes a Working Draft adjustment
+  // must read what it is going to adjust, not a frozen snapshot of it — see
+  // `variables/registry.ts` for the resolver, placed right after
+  // `resolveProjectStyle` so the two read together.
+  | "PROJECT.STYLE.DRAFT";
 
 /**
  * Identifier of a specialisation knowledge document (§3.3, `KB.*`). Opaque

@@ -191,6 +191,75 @@ export async function resolveProjectStyle(projectId: number): Promise<ProjectSty
 }
 
 // ---------------------------------------------------------------------------
+// PROJECT.STYLE.DRAFT — anchor: project. STYLE.LLM.VARS.1. Unlike
+// `PROJECT.STYLE` above (the active *published* version), this reads the
+// Working Draft — the mutable matter an assistant operation proposing a
+// Style adjustment (`STYLE.LLM.ADJUST.1`, ticket 3 of "L'assistant de
+// Project Style") reads and will adjust.
+//
+// Reads the three rows itself (`project_style_drafts`,
+// `project_style_sections`, `project_style_rules`) rather than importing
+// `getWorkingDraft` from `src/actions/projectStyle.ts`: that file is
+// `"use server"`, and every export of a Server Actions file must be an
+// async function — `buildStyleSnapshotFromRows` exists precisely so a
+// synchronous helper can live outside it (see its own header). Composition
+// goes through that same pure helper plus `compileStyleSnapshot`, the exact
+// pair `getWorkingDraft` itself calls, so there is exactly one way a
+// Working Draft becomes a `StyleSnapshot` and exactly one way that snapshot
+// compiles to text.
+// ---------------------------------------------------------------------------
+
+export type ProjectStyleDraftData =
+  | { mode: "none" }
+  | { mode: "draft"; revision: number; directionBrief: string | null; compiledText: string };
+
+export async function resolveProjectStyleDraft(projectId: number): Promise<ProjectStyleDraftData> {
+  const { db } = await import("@/db");
+  const { projectStyleDrafts, projectStyleSections, projectStyleRules } = await import("@/db/schema");
+  const { buildStyleSnapshotFromRows } = await import("@/lib/projectStyle/buildStyleSnapshot");
+  const { compileStyleSnapshot } = await import("@/lib/projectStyle/compileStyleSnapshot");
+
+  const [draft] = await db.select().from(projectStyleDrafts).where(eq(projectStyleDrafts.projectId, projectId));
+  if (!draft) {
+    return { mode: "none" };
+  }
+  const sections = await db
+    .select()
+    .from(projectStyleSections)
+    .where(eq(projectStyleSections.draftId, draft.id))
+    .orderBy(asc(projectStyleSections.orderIndex));
+  const rules = await db
+    .select()
+    .from(projectStyleRules)
+    .where(eq(projectStyleRules.draftId, draft.id))
+    .orderBy(asc(projectStyleRules.orderIndex));
+
+  const snapshot = buildStyleSnapshotFromRows(draft, sections, rules);
+  return {
+    mode: "draft",
+    revision: draft.revision,
+    directionBrief: draft.directionBrief,
+    compiledText: compileStyleSnapshot(snapshot),
+  };
+}
+
+/**
+ * `styleAdjust.draftLines` — the Working Draft rendered as plain lines for
+ * an assistant operation's context. `mode: "none"` renders a single
+ * explicit line rather than an empty string, so a consumer never has to
+ * special-case "no draft yet" separately from "an empty compiled draft".
+ */
+export function renderProjectStyleDraftLines(data: ProjectStyleDraftData): string {
+  if (data.mode === "none") {
+    return "No Working Draft exists yet for this project.";
+  }
+  const lines: string[] = [];
+  if (data.directionBrief?.trim()) lines.push(`Direction brief: ${data.directionBrief}`);
+  lines.push(data.compiledText ? `Current Working Draft:\n${data.compiledText}` : "Current Working Draft: (empty)");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // SEQ.CONTEXT — anchors: sequence
 // ---------------------------------------------------------------------------
 
@@ -2677,6 +2746,9 @@ export const VARIABLE_RENDER_FORMS = {
     "assetBible.styleBlock": renderProjectStyleBibleBlock,
     "assetBible.finalRuleLine": renderProjectStyleBibleFinalRule,
   },
+  "PROJECT.STYLE.DRAFT": {
+    "styleAdjust.draftLines": renderProjectStyleDraftLines,
+  },
   "ASSET.CORE": {
     "assetContext.coreLines": renderAssetCoreAssetContextLines,
     "assetDescription.closingLine": renderAssetCoreClosingDescriptionOnly,
@@ -2841,6 +2913,7 @@ export const FREE_TEXT_RENDER_FORMS = {
 export const VARIABLE_REGISTRY = {
   "PROJECT.IDENTITY": resolveProjectIdentity,
   "PROJECT.STYLE": resolveProjectStyle,
+  "PROJECT.STYLE.DRAFT": resolveProjectStyleDraft,
   "SEQ.CONTEXT": resolveSeqContext,
   "SEQ.CURRENT_PROMPT": resolveSeqCurrentPrompt,
   "SHOT.CORE": resolveShotCore,
