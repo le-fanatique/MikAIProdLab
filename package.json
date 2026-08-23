@@ -10,7 +10,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/db-migrate.mjs",
     "db:studio": "drizzle-kit studio",
     "start:linux": "bash ./start-dev.sh",
     "setup:linux": "bash ./setup-linux.sh",
