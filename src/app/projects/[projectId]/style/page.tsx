@@ -8,6 +8,7 @@ import { getWorkingDraft, getVersionHistory } from "@/actions/projectStyle";
 import { listProjectStyleReferences } from "@/actions/projectStyleReferences";
 import { listProjectStyleInfluences } from "@/actions/projectStyleInfluences";
 import ProjectStyleWorkspace from "@/components/projectStyle/ProjectStyleWorkspace";
+import { styleAdjustDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/styleAdjustDirected";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -44,6 +45,7 @@ export default async function ProjectStylePage({ params }: Props) {
         initialVersions={versionView}
         initialReferences={references}
         initialInfluences={influences}
+        styleAdjustCommitAdvisory={styleAdjustDirectedDescriptor.commitAdvisory}
       />
     </div>
   );

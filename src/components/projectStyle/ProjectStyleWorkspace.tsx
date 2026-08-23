@@ -49,6 +49,7 @@ import type { ProjectStyleInfluenceView } from "@/actions/projectStyleInfluences
 import ReferenceBoardSection from "@/components/projectStyle/ReferenceBoardSection";
 import InfluenceSection from "@/components/projectStyle/InfluenceSection";
 import ReferenceAnalysisWorkspace from "@/components/projectStyle/referenceAnalysis/ReferenceAnalysisWorkspace";
+import StyleAdjustAssistPanel from "@/components/projectStyle/StyleAdjustAssistPanel";
 
 type SectionRow = { id: number; pillar: StylePillar; heading: string; content: string; orderIndex: number };
 type RuleRow = {
@@ -75,6 +76,11 @@ type Props = {
   initialVersions: ActiveVersionView;
   initialReferences: ProjectStyleReferenceView[];
   initialInfluences: ProjectStyleInfluenceView[];
+  /** STYLE.LLM.ADJUST.UI.1 — `style.adjustDirected`'s `commitAdvisory`,
+   * resolved server-side by the Project Style page and passed down as a
+   * plain string, same pattern as Asset Detail for `asset.retakeDirected`.
+   * This component never imports a descriptor itself. */
+  styleAdjustCommitAdvisory?: string;
 };
 
 function StateBadge({ tone, children }: { tone: "muted" | "warn" | "info" | "ok" | "error"; children: React.ReactNode }) {
@@ -499,7 +505,7 @@ function RulesPanel({
   );
 }
 
-export default function ProjectStyleWorkspace({ projectId, initialDraft, initialVersions, initialReferences, initialInfluences }: Props) {
+export default function ProjectStyleWorkspace({ projectId, initialDraft, initialVersions, initialReferences, initialInfluences, styleAdjustCommitAdvisory }: Props) {
   const [hasDraft, setHasDraft] = useState<boolean>(initialDraft !== null);
   const [references, setReferences] = useState<ProjectStyleReferenceView[]>(initialReferences);
   const [influences, setInfluences] = useState<ProjectStyleInfluenceView[]>(initialInfluences);
@@ -1039,6 +1045,16 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
           onReorderSection={handleReorderSection}
         />
       </div>
+
+      {/* STYLE.LLM.ADJUST.UI.1 — the only surface for `style.adjustDirected`,
+          next to the Working Draft's Style Rules it feeds through the same
+          `handleAddRule`, called sequentially per approved rule. */}
+      <StyleAdjustAssistPanel
+        projectId={projectId}
+        handleAddRule={handleAddRule}
+        submitting={submitting}
+        commitAdvisory={styleAdjustCommitAdvisory}
+      />
 
       <RulesPanel
         rules={rules}
