@@ -47,6 +47,33 @@ export async function insertGenerationJob(
   return row.id;
 }
 
+// WF.DETACH.1 — look_tests builder, same "insert only NOT NULL columns plus
+// whatever the caller wants to observe" convention as every builder above.
+export async function insertLookTest(
+  { db, schema }: TempDb,
+  projectId: number,
+  workflowId: number,
+  values: Partial<typeof schema.lookTests.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.lookTests)
+    .values({
+      projectId,
+      source: "custom",
+      mode: "image",
+      subject: "Test subject",
+      action: "Test action",
+      styleSourceKind: "working-draft",
+      styleSnapshot: "{}",
+      styleCompiledText: "compiled",
+      workflowId,
+      workflowKind: "image",
+      ...values,
+    })
+    .returning({ id: schema.lookTests.id });
+  return row.id;
+}
+
 export async function insertShotVideo(
   { db, schema }: TempDb,
   shotId: number,

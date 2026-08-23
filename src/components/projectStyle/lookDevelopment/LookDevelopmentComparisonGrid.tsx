@@ -28,6 +28,14 @@ type Props = {
 
 type Entry = { loading: boolean; error: string | null; detail: GetLookTestResult | null };
 
+// WF.DETACH.1 — mirrors `workflowLabel` in `LookDevelopmentRecentTests.tsx`:
+// a live workflow resolves through the current catalog, a detached test
+// falls back to the name stamped at deletion time.
+function workflowLabel(workflowId: number | null, workflowName: string | null, workflowNameById: Map<number, string>): string {
+  if (workflowId !== null) return workflowNameById.get(workflowId) ?? `#${workflowId}`;
+  return workflowName ? `${workflowName} (deleted)` : "Unknown workflow";
+}
+
 export default function LookDevelopmentComparisonGrid({ lookTestIds, onOpen, workflowNameById, refreshToken, onClear, onRemove }: Props) {
   const [entries, setEntries] = useState<Record<number, Entry>>({});
   const seqRef = useRef<Record<number, number>>({});
@@ -119,7 +127,7 @@ export default function LookDevelopmentComparisonGrid({ lookTestIds, onOpen, wor
                         {test.styleVersionId !== null ? ` (v#${test.styleVersionId})` : ""}
                       </p>
                       <p className="truncate">
-                        <span className="text-[#6e767d]">Workflow:</span> {workflowNameById.get(test.workflowId) ?? `#${test.workflowId}`}
+                        <span className="text-[#6e767d]">Workflow:</span> {workflowLabel(test.workflowId, test.workflowName, workflowNameById)}
                       </p>
                       {references.length > 0 && (
                         <p className="truncate">

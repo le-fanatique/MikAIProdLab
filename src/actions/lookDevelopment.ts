@@ -78,7 +78,11 @@ export type LookTestListItem = {
   mode: LookMode;
   subject: string;
   action: string;
-  workflowId: number;
+  // WF.DETACH.1 — null once this test's workflow has been deleted
+  // (detached, never cascaded). `workflowName` then carries the name
+  // stamped at deletion time (see deleteComfyWorkflow), for display only.
+  workflowId: number | null;
+  workflowName: string | null;
   createdAt: string;
   job: { id: number; status: string } | null;
   result: { id: number; status: LookResultStatus; filePath: string } | null;
@@ -107,6 +111,7 @@ export async function listLookTestsAction(projectId: number): Promise<ListLookTe
       subject: test.subject,
       action: test.action,
       workflowId: test.workflowId,
+      workflowName: test.workflowName,
       createdAt: test.createdAt,
       job: job ?? null,
       result: result ? { id: result.id, status: result.status as LookResultStatus, filePath: result.filePath } : null,

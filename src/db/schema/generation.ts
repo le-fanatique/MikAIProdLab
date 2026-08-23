@@ -83,8 +83,15 @@ export const generationJobs = sqliteTable(
     lookTestId: int("look_test_id")
       .references(() => lookTests.id, { onDelete: "no action" }),
     workflowId: int("workflow_id")
-      .notNull()
-      .references(() => comfyWorkflows.id),
+      .references(() => comfyWorkflows.id, { onDelete: "set null" }),
+    // WF.DETACH.1 — stamped with the workflow's name at deletion time, and
+    // only then (see deleteComfyWorkflow in src/actions/comfyWorkflows.ts).
+    // Never written at creation, never backfilled retroactively: NULL means
+    // "workflow still exists" for every job created before or after this
+    // ticket whose workflow was never deleted. Once workflowId is NULL the
+    // name is otherwise unrecoverable, which is why the stamp precedes the
+    // delete inside the same transaction.
+    workflowName: text("workflow_name"),
     status: text("status", {
       enum: ["pending", "uploading", "queued", "running", "done", "failed", "timeout"],
     })

@@ -1,6 +1,6 @@
 "use server";
 import { db } from "@/db";
-import { comfyWorkflows } from "@/db/schema";
+import { comfyWorkflows, generationJobs, lookTests } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -345,16 +345,44 @@ export async function toggleWorkflowFavorite(workflowId: number, path: string) {
   revalidatePath(path);
 }
 
+/**
+ * WF.DETACH.1 — deleting a workflow no longer fails with a FOREIGN KEY
+ * violation: generations that reference it are DETACHED, not cascaded.
+ * `generation_jobs.workflow_id` / `look_tests.workflow_id` are `ON DELETE
+ * SET NULL`, so once the row is gone those references simply become NULL —
+ * but the workflow's NAME would then be unrecoverable. So, in a single
+ * transaction:
+ *   1. stamp `workflow_name` (the name, right now) on every generation_jobs
+ *      and look_tests row that still references this workflow;
+ *   2. only then delete the workflow row itself.
+ * The stamp MUST precede the delete — reversing the order would let the
+ * `set null` fire first, leaving nothing to stamp the name from. This is
+ * the ONLY site that ever writes `workflow_name`: never at creation, never
+ * backfilled retroactively for a row detached before this ticket shipped.
+ */
 export async function deleteComfyWorkflow(workflowId: number) {
   const [existing] = await db
-    .select({ id: comfyWorkflows.id, thumbnailPath: comfyWorkflows.thumbnailPath })
+    .select({ id: comfyWorkflows.id, name: comfyWorkflows.name, thumbnailPath: comfyWorkflows.thumbnailPath })
     .from(comfyWorkflows)
     .where(eq(comfyWorkflows.id, workflowId));
 
   if (!existing) redirect("/settings/workflows?error=not_found");
 
-  await db.delete(comfyWorkflows).where(eq(comfyWorkflows.id, workflowId));
+  db.transaction((tx) => {
+    tx.update(generationJobs)
+      .set({ workflowName: existing.name })
+      .where(eq(generationJobs.workflowId, workflowId))
+      .run();
+    tx.update(lookTests)
+      .set({ workflowName: existing.name })
+      .where(eq(lookTests.workflowId, workflowId))
+      .run();
+    tx.delete(comfyWorkflows).where(eq(comfyWorkflows.id, workflowId)).run();
+  });
 
+  // Outside the transaction, after its success — row first, file second is
+  // already the correct order: an orphaned file is repairable, a row
+  // pointing at a missing file is not.
   if (existing.thumbnailPath) await deleteStoredReferenceImage(existing.thumbnailPath);
 
   redirect("/settings/workflows");

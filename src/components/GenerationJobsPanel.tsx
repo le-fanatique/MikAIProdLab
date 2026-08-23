@@ -7,7 +7,10 @@ import { generatedOutputUrl } from "@/lib/getOutputUrl";
 export type GenerationJobItem = {
   id: number;
   status: string;
-  workflowId: number;
+  // WF.DETACH.1 — null once the job's workflow has been deleted (detached,
+  // never cascaded). `workflowName` still carries the stamped name for
+  // display; a null workflowId is the signal nothing can be relaunched.
+  workflowId: number | null;
   outputPath: string | null;
   errorMessage: string | null;
   startedAt: string | null;
@@ -136,7 +139,13 @@ export default function GenerationJobsPanel({
               job.workflowKind === "image" || job.workflowKind === "video"
                 ? job.workflowKind
                 : null;
-            const statusMapHref = `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}/workflows/${job.workflowId}/map?jobId=${job.id}`;
+            // WF.DETACH.1 — a detached job (workflowId null) has no workflow
+            // page left to open: never build a link pointing at a deleted
+            // workflow's id.
+            const statusMapHref =
+              job.workflowId !== null
+                ? `/projects/${projectId}/sequences/${sequenceId}/shots/${shotId}/workflows/${job.workflowId}/map?jobId=${job.id}`
+                : null;
 
             return (
               <div key={job.id} className="py-3 flex flex-col gap-2">
@@ -172,14 +181,21 @@ export default function GenerationJobsPanel({
 
                   {/* Open Status link + Retry + Delete */}
                   <div className="shrink-0 flex flex-col items-end gap-1.5">
-                    <Link
-                      href={statusMapHref}
-                      className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors whitespace-nowrap"
-                    >
-                      Open Status ↗
-                    </Link>
+                    {statusMapHref ? (
+                      <Link
+                        href={statusMapHref}
+                        className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors whitespace-nowrap"
+                      >
+                        Open Status ↗
+                      </Link>
+                    ) : (
+                      <span className="text-[10px] text-[#4b5158] whitespace-nowrap">
+                        Workflow deleted
+                      </span>
+                    )}
 
-                    {(job.status === "failed" || job.status === "timeout") &&
+                    {job.workflowId !== null &&
+                      (job.status === "failed" || job.status === "timeout") &&
                       Number.isFinite(projectId) &&
                       Number.isFinite(sequenceId) &&
                       Number.isFinite(shotId) &&

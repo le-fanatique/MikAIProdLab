@@ -74,6 +74,12 @@ export async function retryGenerationJob(formData: FormData): Promise<void> {
   if (job.status !== "failed" && job.status !== "timeout") {
     errRedirect("Only failed or timed out jobs can be retried.");
   }
+  // WF.DETACH.1 — a deleted workflow detaches the job (workflowId set to
+  // NULL, see deleteComfyWorkflow). Nothing can be relaunched from it: there
+  // is no workflow left to queue against.
+  if (job.workflowId === null) {
+    errRedirect("This job's workflow was deleted and can no longer be retried.");
+  }
 
   // Verify ownership chain: shot → sequence → project
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));

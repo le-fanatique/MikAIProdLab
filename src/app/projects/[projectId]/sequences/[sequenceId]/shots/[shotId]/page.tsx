@@ -322,7 +322,12 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
       completedAt: generationJobs.completedAt,
       createdAt: generationJobs.createdAt,
       updatedAt: generationJobs.updatedAt,
-      workflowName: comfyWorkflows.name,
+      // WF.DETACH.1 — the live workflow's name when it still exists, else the
+      // name stamped at deletion time (`generationJobs.workflowName`, see
+      // deleteComfyWorkflow). Never both null except for a detached job whose
+      // workflow was deleted before this ticket shipped — none exist today.
+      liveWorkflowName: comfyWorkflows.name,
+      stampedWorkflowName: generationJobs.workflowName,
       workflowKind: comfyWorkflows.kind,
     })
     .from(generationJobs)
@@ -336,7 +341,16 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   // reachable via the Approved Output section (shots.approvedVideoPath /
   // reference images), and active/actionable jobs (queued, running,
   // pending, uploading, failed, timeout) are never filtered here.
-  const visibleGenerationJobRows = generationJobRows.filter((j) => j.status !== "done");
+  const visibleGenerationJobRows = generationJobRows
+    .filter((j) => j.status !== "done")
+    .map((j) => ({
+      ...j,
+      workflowName: j.liveWorkflowName
+        ? j.liveWorkflowName
+        : j.stampedWorkflowName
+          ? `${j.stampedWorkflowName} (deleted)`
+          : null,
+    }));
 
   const assignAction = assignAssetToShot.bind(null, shid, sid, pid);
 

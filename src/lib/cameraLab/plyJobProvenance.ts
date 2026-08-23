@@ -61,6 +61,14 @@ export async function resolvePlyJobProvenance(shotId: number, jobId: number): Pr
     };
   }
 
+  // WF.DETACH.1 — a deleted workflow detaches the job (workflowId set to
+  // NULL). There is nothing left to re-parse or re-verify a Gaussian PLY's
+  // provenance against, so refuse cleanly here rather than reach the query
+  // below with a null id.
+  if (job.workflowId === null) {
+    return { ok: false, error: "This job's workflow no longer exists — its provenance cannot be revalidated." };
+  }
+
   // The workflow actually used to queue THIS job — never the current
   // Settings default. A later Default change must never invalidate an old,
   // legitimate job's provenance.

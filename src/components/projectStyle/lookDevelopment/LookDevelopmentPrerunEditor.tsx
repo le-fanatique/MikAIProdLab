@@ -64,7 +64,10 @@ function buildRerunFingerprint(request: RunExistingLookTestInput): string {
 type Props = {
   projectId: number;
   lookTestId: number;
-  frozen: { source: LookTestSource; mode: LookMode; subject: string; action: string; workflowId: number };
+  // WF.DETACH.1 — null once this Look Test's workflow has been deleted
+  // (detached). `workflow` is then also null (see the caller's lookup by
+  // this id), and `diagnostics` below already refuses Run in that case.
+  frozen: { source: LookTestSource; mode: LookMode; subject: string; action: string; workflowId: number | null };
   workflow: WorkflowRow | null;
   allReferences: ProjectStyleReferenceView[];
   initialReferenceIds: number[];
@@ -226,7 +229,11 @@ export default function LookDevelopmentPrerunEditor({
     const restored = restoreLookTestSnapshotSelections({
       snapshot: restoreSourceContext.snapshot,
       expectedContextId: restoreSourceContext.sourceLookTestId,
-      expectedWorkflowId: frozen.workflowId,
+      // `workflow` is non-null here (guarded above), which is exactly the
+      // "still exists" case where `frozen.workflowId` is guaranteed
+      // non-null too — reading it off `workflow` itself sidesteps that
+      // without a redundant null check.
+      expectedWorkflowId: workflow.id,
       availableReferenceIds: selectedReferenceIds,
       workflowInputs: parsedWorkflow?.inputs ?? [],
       batchInfo,
@@ -250,7 +257,7 @@ export default function LookDevelopmentPrerunEditor({
     setTextOverrideValue(restored.selections.textOverrideByNodeId ?? {});
     setScalarOverrideValue(restored.selections.scalarOverrideByNodeId ?? {});
     setRestoreMessage("Prior settings restored.");
-  }, [restoreSourceContext, workflow, frozen.workflowId, selectedReferenceIds, parsedWorkflow, batchInfo]);
+  }, [restoreSourceContext, workflow, selectedReferenceIds, parsedWorkflow, batchInfo]);
 
   const compiledPrompt = useMemo(() => {
     if (!selectedStyleOption) return null;
@@ -445,7 +452,7 @@ export default function LookDevelopmentPrerunEditor({
         <span>Mode: {frozen.mode}</span>
         <span>Subject: {frozen.subject}</span>
         <span>Action: {frozen.action}</span>
-        <span>Workflow: {workflow?.name ?? `#${frozen.workflowId}`}</span>
+        <span>Workflow: {workflow?.name ?? (frozen.workflowId !== null ? `#${frozen.workflowId}` : "deleted")}</span>
       </div>
 
       {restoreSourceContext && (

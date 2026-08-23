@@ -60,6 +60,17 @@ function resultStateLabel(result: LookTestListItem["result"]): string {
   return result.status;
 }
 
+// WF.DETACH.1 — a live workflow resolves through the current catalog
+// (`workflowNameById`, only active/known workflows); a detached test
+// (`workflowId === null`) falls back to the name stamped at deletion time
+// (`workflowName`), suffixed so it reads as history, never as a current
+// selectable workflow. Neither present is the "before this ticket" legacy
+// case — there are no such rows today, but the code must not crash on one.
+function workflowLabel(workflowId: number | null, workflowName: string | null, workflowNameById: Map<number, string>): string {
+  if (workflowId !== null) return workflowNameById.get(workflowId) ?? `#${workflowId}`;
+  return workflowName ? `${workflowName} (deleted)` : "Unknown workflow";
+}
+
 export default function LookDevelopmentRecentTests({
   projectId,
   tests,
@@ -326,7 +337,7 @@ export default function LookDevelopmentRecentTests({
       {!loading && !openError && detail?.ok && (
         <div className="flex flex-col gap-2 text-xs text-[#a4abb2]">
           <p>
-            <span className="text-[#6e767d]">Workflow:</span> {workflowNameById.get(detail.test.workflowId) ?? `#${detail.test.workflowId}`}
+            <span className="text-[#6e767d]">Workflow:</span> {workflowLabel(detail.test.workflowId, detail.test.workflowName, workflowNameById)}
           </p>
           <p>
             <span className="text-[#6e767d]">Subject:</span> {detail.test.subject}
@@ -467,7 +478,7 @@ export default function LookDevelopmentRecentTests({
                     {t.source} · {t.mode} · {t.subject}
                   </span>
                   <span className="text-[10px] text-[#6e767d]">
-                    {t.createdAt} · workflow: {workflowNameById.get(t.workflowId) ?? `#${t.workflowId}`} · job: {jobStateLabel(t.job)} · result: {resultStateLabel(t.result)}
+                    {t.createdAt} · workflow: {workflowLabel(t.workflowId, t.workflowName, workflowNameById)} · job: {jobStateLabel(t.job)} · result: {resultStateLabel(t.result)}
                   </span>
                 </div>
               </div>

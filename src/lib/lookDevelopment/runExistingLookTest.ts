@@ -79,6 +79,10 @@ export async function runExistingLookTestCore(args: RunExistingLookTestArgs): Pr
   if (existingJob) return { ok: false, error: "This Look Test already has a generation job. Duplicate it again to create a new pre-run definition.", lookTestId: args.lookTestId };
 
   // --- 2. Load the workflow ---
+  // WF.DETACH.1 — a deleted workflow detaches this pre-run Look Test
+  // (workflowId set to NULL). There is no workflow left to queue against;
+  // refuse cleanly rather than reach the query below with a null id.
+  if (test.workflowId === null) return { ok: false, error: "This Look Test's workflow was deleted and can no longer be run." };
   const [workflow] = await db.select().from(comfyWorkflows).where(eq(comfyWorkflows.id, test.workflowId));
   if (!workflow) return { ok: false, error: "Workflow not found." };
   if (workflow.kind !== test.mode) {

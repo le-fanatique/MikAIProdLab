@@ -66,8 +66,12 @@ export const lookTests = sqliteTable(
     // Exact output of compileStyleSnapshot(styleSnapshot) at creation time.
     styleCompiledText: text("style_compiled_text").notNull(),
     workflowId: int("workflow_id")
-      .notNull()
-      .references(() => comfyWorkflows.id),
+      .references(() => comfyWorkflows.id, { onDelete: "set null" }),
+    // WF.DETACH.1 — stamped with the workflow's name at deletion time, and
+    // only then (see deleteComfyWorkflow in src/actions/comfyWorkflows.ts).
+    // Same contract as generation_jobs.workflow_name — see that column's
+    // comment.
+    workflowName: text("workflow_name"),
     // Frozen at creation — the library workflow's `kind` could change
     // later; this test's own compatibility decision must never silently
     // change retroactively.
