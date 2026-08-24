@@ -53,7 +53,7 @@ import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import { refImageUrl } from "@/lib/refImageUrl";
 import LookDevelopmentRecentTests from "@/components/projectStyle/lookDevelopment/LookDevelopmentRecentTests";
 import LookDevelopmentComparisonGrid from "@/components/projectStyle/lookDevelopment/LookDevelopmentComparisonGrid";
-import StyleFeedbackPanel from "@/components/projectStyle/lookDevelopment/StyleFeedbackPanel";
+import StyleDirectorNotePanel from "@/components/projectStyle/lookDevelopment/StyleDirectorNotePanel";
 import type { LookResultStatus } from "@/lib/lookDevelopment/contracts";
 
 // ---------------------------------------------------------------------------
@@ -81,12 +81,19 @@ type Props = {
   /** STYLE.1.POLISH.1 — `default_workflow_look_development` (Settings > Generation Defaults). Null/absent/invalid falls back to the historical image-first default. */
   initialDefaultLookDevelopmentWorkflowId: number | null;
   /** `style.adjustFromLookResult`'s `commitAdvisory` (STYLE.LLM.LOOKFEEDBACK.UI.1,
-   * extended by LOOK.FEEDBACK.PLACE.1), resolved server-side by the page and
-   * passed straight through to two `StyleFeedbackPanel` mounts: this
-   * component's own, under the just-saved `publishedResult` for the
-   * generation the author is looking at right now, and the one forwarded to
-   * `LookDevelopmentRecentTests`, next to an older, reopened test's review
-   * controls. This component never imports a descriptor itself. */
+   * extended by LOOK.FEEDBACK.PLACE.1 then LOOK.FEEDBACK.DRAFT.1), resolved
+   * server-side by the page and passed straight through to THREE
+   * `StyleDirectorNotePanel` mounts: this component's own two (the Working
+   * Draft panel next to `Generate Look Test`, and the one under the
+   * just-saved `publishedResult` for the generation the author is looking at
+   * right now), and the one forwarded to `LookDevelopmentRecentTests`, next
+   * to an older, reopened test's review controls. `style.adjustDirected`
+   * carries the textually IDENTICAL advisory — pinned by
+   * `tests/llmWorkspace/commitAdvisory.test.ts` — so its own Working-Draft
+   * mount reuses this same resolved string rather than the page resolving a
+   * second, redundant constant (see `StyleDirectorNotePanel.tsx`'s own header
+   * for why that reuse is safe). This component never imports a descriptor
+   * itself. */
   styleFeedbackCommitAdvisory?: string;
 };
 
@@ -1447,6 +1454,20 @@ export default function LookDevelopmentBench({
           </button>
         )}
 
+        {/* LOOK.FEEDBACK.DRAFT.1 — a note on the Working Draft itself,
+            anchored on the Project alone (no `lookResultId`): the whole
+            point of this mount is that it needs no generation in flight and
+            no Look Test to have ever run, so it sits here rather than inside
+            any of the generation-gated blocks below. */}
+        <StyleDirectorNotePanel
+          projectId={projectId}
+          descriptorId="style.adjustDirected"
+          ids={{ projectId }}
+          title="Adjust Style (Directed)"
+          description="Describe what you want to change in the Working Draft — medium, texture, palette, tone — and the assistant proposes atomic Style Rules to review and approve."
+          commitAdvisory={styleFeedbackCommitAdvisory}
+        />
+
         {refreshWarning && (
           <div className="flex items-center gap-2">
             <p className="text-xs text-[#c9a24b]">{refreshWarning}</p>
@@ -1477,7 +1498,14 @@ export default function LookDevelopmentBench({
                         older mount in `LookDevelopmentRecentTests` still serves
                         a reopened test days later — this one saves the two
                         clicks down to it for the generation just published. */}
-                    <StyleFeedbackPanel projectId={projectId} lookResultId={publishedResult.resultId} commitAdvisory={styleFeedbackCommitAdvisory} />
+                    <StyleDirectorNotePanel
+                      projectId={projectId}
+                      descriptorId="style.adjustFromLookResult"
+                      ids={{ projectId, lookResultId: publishedResult.resultId }}
+                      title="Style Feedback (From This Result)"
+                      description="Describe what is wrong with this render — medium, texture, palette, tone — and the assistant proposes atomic Style Rules to review and approve, judged against this exact result."
+                      commitAdvisory={styleFeedbackCommitAdvisory}
+                    />
                   </div>
                 ) : (
                   <button type="button" className={buttonClass} disabled={publishing} onClick={handleSaveLookResult}>

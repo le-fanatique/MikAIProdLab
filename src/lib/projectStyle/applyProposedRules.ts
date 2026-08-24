@@ -14,9 +14,10 @@
 // Pure in the sense this repository means it: no `@/db` import, no
 // `"use server"`, no React. It knows nothing about Server Actions, HTTP, or
 // components — only about a rule list and an injected async function. Both
-// `StyleAdjustAssistPanel.tsx` and `StyleFeedbackPanel.tsx` approve rules
-// through this single implementation; this is the only place in the chantier
-// this sequencing logic exists.
+// `StyleAdjustAssistPanel.tsx` and `StyleDirectorNotePanel.tsx` (renamed from
+// `StyleFeedbackPanel.tsx` by LOOK.FEEDBACK.DRAFT.1) approve rules through
+// this single implementation; this is the only place in the chantier this
+// sequencing logic exists.
 //
 // Stops at the first failure and reports exactly what happened: how many
 // rules were actually added, which one failed and why, and which ones were

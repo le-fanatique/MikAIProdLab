@@ -22,7 +22,7 @@ import { parseGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/ge
 import { refImageUrl } from "@/lib/refImageUrl";
 import LookDevelopmentReviewControls from "./LookDevelopmentReviewControls";
 import LookDevelopmentPrerunEditor from "./LookDevelopmentPrerunEditor";
-import StyleFeedbackPanel from "./StyleFeedbackPanel";
+import StyleDirectorNotePanel from "./StyleDirectorNotePanel";
 
 type WorkflowRow = { id: number; name: string; kind: "image" | "video"; workflowJson: string };
 type StyleSourceOption = { key: string; label: string; request: LookStyleSourceRequest; compiledText: string };
@@ -410,7 +410,14 @@ export default function LookDevelopmentRecentTests({
                   looking back on an older result days later. The other lives
                   in `LookDevelopmentBench`, right under `Save Look Result`,
                   for the generation the author just published. */}
-              <StyleFeedbackPanel projectId={projectId} lookResultId={detail.result.id} commitAdvisory={styleFeedbackCommitAdvisory} />
+              <StyleDirectorNotePanel
+                projectId={projectId}
+                descriptorId="style.adjustFromLookResult"
+                ids={{ projectId, lookResultId: detail.result.id }}
+                title="Style Feedback (From This Result)"
+                description="Describe what is wrong with this render — medium, texture, palette, tone — and the assistant proposes atomic Style Rules to review and approve, judged against this exact result."
+                commitAdvisory={styleFeedbackCommitAdvisory}
+              />
             </>
           ) : (
             <p className="text-[#6e767d]">No durable result saved — save the Look Result to review it here and to request style feedback.</p>

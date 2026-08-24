@@ -41,6 +41,7 @@ import { useState } from "react";
 import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { applyProposedRules, type AddRuleFn } from "@/lib/projectStyle/applyProposedRules";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import StyleRuleProposalCards from "@/components/projectStyle/StyleRuleProposalCards";
 
 type StylePillar = "world" | "visual";
 type StyleRuleStrength = "Required" | "Preferred" | "Avoid";
@@ -124,12 +125,6 @@ function toProposedRule(item: Record<string, string | number | boolean>): Propos
     provenanceNotes: typeof item.provenanceNotes === "string" ? item.provenanceNotes : "",
   };
 }
-
-const STRENGTH_CHIP: Record<StyleRuleStrength, string> = {
-  Required: "text-[#5fa37a] border-[#5fa37a]/40",
-  Preferred: "text-[#5b93d6] border-[#5b93d6]/40",
-  Avoid: "text-[#cda24f] border-[#cda24f]/40",
-};
 
 export default function StyleAdjustAssistPanel({ projectId, handleAddRule, revision, submitting, commitAdvisory }: Props) {
   const [freeText, setFreeText] = useState("");
@@ -300,40 +295,7 @@ export default function StyleAdjustAssistPanel({ projectId, handleAddRule, revis
 
       {state.status === "success" && (
         <div className="flex flex-col gap-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
-            {state.rules.length} rule{state.rules.length !== 1 ? "s" : ""} proposed — {selected.size} selected
-          </p>
-
-          <div className="flex flex-col gap-2">
-            {state.rules.map((rule, i) => (
-              <label
-                key={i}
-                className={[
-                  "rounded border px-3 py-2.5 flex gap-3 cursor-pointer transition-colors",
-                  selected.has(i) ? "border-[#2c3035] bg-[#141618]" : "border-[#1a1d20] bg-[#0d0e10] opacity-60",
-                ].join(" ")}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(i)}
-                  onChange={() => toggleSelected(i)}
-                  disabled={isApproving}
-                  className="accent-[#5b93d6] mt-0.5 shrink-0"
-                />
-                <div className="flex flex-col gap-1.5 min-w-0">
-                  <p className="text-sm text-[#e7e9ec]">{rule.instruction}</p>
-                  <div className="flex flex-wrap gap-1 text-[9px] text-[#4b5158]">
-                    <span className="border border-[#2c3035] rounded px-1">{rule.pillar === "world" ? "World" : "Visual"}</span>
-                    <span className={`border rounded px-1 ${STRENGTH_CHIP[rule.strength]}`}>{rule.strength}</span>
-                    {rule.category && <span className="border border-[#2c3035] rounded px-1">{rule.category}</span>}
-                    {rule.section && <span className="border border-[#2c3035] rounded px-1">{rule.section}</span>}
-                  </div>
-                  {rule.applicability && <p className="text-xs text-[#6e767d]">Applies to: {rule.applicability}</p>}
-                  {rule.provenanceNotes && <p className="text-xs text-[#4b5158]">{rule.provenanceNotes}</p>}
-                </div>
-              </label>
-            ))}
-          </div>
+          <StyleRuleProposalCards rules={state.rules} selected={selected} onToggle={toggleSelected} disabled={isApproving} />
 
           <div className="flex items-center gap-4 flex-wrap">
             <button

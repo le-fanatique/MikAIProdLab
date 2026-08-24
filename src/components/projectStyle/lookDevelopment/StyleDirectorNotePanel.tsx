@@ -1,35 +1,32 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// StyleFeedbackPanel.tsx — STYLE.LLM.LOOKFEEDBACK.UI.1 (ticket 4b of
-// "L'assistant de Project Style", 2026-08-23)
+// StyleDirectorNotePanel.tsx — LOOK.FEEDBACK.DRAFT.1, generalizing
+// STYLE.LLM.LOOKFEEDBACK.UI.1 (ticket 4b of "L'assistant de Project Style",
+// 2026-08-23)
 //
-// The surface for `style.adjustFromLookResult` (STYLE.LLM.LOOKFEEDBACK.CORE.1),
-// mounted twice since LOOK.FEEDBACK.PLACE.1 — under `Save Look Result` in
-// `LookDevelopmentBench` for the generation just published, and next to a
-// reopened test's review controls in `LookDevelopmentRecentTests` for an older
-// result. One component, two anchors, no second implementation:
-// a director's note anchored on ONE opened, durable Look Test result, not on
-// the Project's Working Draft in the abstract — "ça part trop vers le
-// photoréalisme" in front of a real render. Never imports the descriptor
-// itself; the client only names the operation
-// (`runWorkspaceOperation({ descriptorId: "style.adjustFromLookResult" })`),
-// same discipline `StyleAdjustAssistPanel.tsx` and `AssetRetakeDirectedPanel`
-// both state in their own headers.
+// Renamed from `StyleFeedbackPanel.tsx`: it no longer only reacts to a saved
+// render. Same self-resolving contract as before — see below — now
+// parameterized by which operation it runs, so it can drive either surface
+// sharing that contract: `style.adjustFromLookResult` (anchored on ONE
+// opened, durable Look Test result — "ça part trop vers le photoréalisme" in
+// front of a real render) or `style.adjustDirected` (anchored on the Project
+// alone, no `lookResultId` — a note on the Working Draft itself, available
+// with no generation in flight and no Look Test ever having run). Both
+// descriptors are resolved server-side; this client component still never
+// imports either — it only names `descriptorId` and the anchor `ids` it was
+// given.
 //
 // Sibling of `StyleAdjustAssistPanel.tsx`, not its copy — the two panels
-// share tone and review-card presentation (duplicated here rather than
-// extracted: `StyleAdjustAssistPanel.tsx`'s own rule cards are inline JSX,
-// not an importable component, and this ticket does not force one into
-// existence — same "measured, not factored" choice
-// `styleAdjustFromLookResult.ts`'s own header already made for its sibling
-// descriptor), but differs in one structural way: `ProjectStyleWorkspace.tsx`
-// and its `revision` state do not exist on this page (STYLE.1.G.UI.1's Look
-// Dev Bench). So approval here resolves the Working Draft's current
-// `revision` itself, via `getWorkingDraft(projectId)`, then drives
-// `addRuleAction` directly through the SAME tested sequencing helper
-// (`applyProposedRules`) `StyleAdjustAssistPanel.tsx` now also uses — never a
-// second, hand-written approval loop (this ticket's own stated trap: two
+// share tone and (since this ticket) the rule-card presentation, extracted to
+// `StyleRuleProposalCards.tsx` (see that file's own header for the measured
+// duplication), but differ in one structural way, unchanged by this ticket:
+// `ProjectStyleWorkspace.tsx` and its `revision` state do not exist on this
+// page (STYLE.1.G.UI.1's Look Dev Bench). So approval here resolves the
+// Working Draft's current `revision` itself, via `getWorkingDraft(projectId)`,
+// then drives `addRuleAction` directly through the SAME tested sequencing
+// helper (`applyProposedRules`) `StyleAdjustAssistPanel.tsx` also uses — never
+// a second, hand-written approval loop (this ticket's own stated trap: two
 // sequential calls sharing the same `expectedRevision` make the server
 // refuse the second as stale).
 //
@@ -45,6 +42,16 @@
 // page: after a successful approval, a link to
 // `/projects/{projectId}/style` is shown so the director is not left unable
 // to see what was just written.
+//
+// `commitAdvisory` — both `style.adjustDirected` and
+// `style.adjustFromLookResult` carry the IDENTICAL text, pinned by
+// `tests/llmWorkspace/commitAdvisory.test.ts`. Callers pass down the one
+// already resolved for `style.adjustFromLookResult`
+// (`LookDevelopmentBench.tsx` / `LookDevelopmentRecentTests.tsx`'s own
+// `styleFeedbackCommitAdvisory` prop) for BOTH mounts of this panel rather
+// than resolving a second, textually identical constant — the test above is
+// exactly what keeps that reuse honest: it fails loudly the day the two
+// descriptors' texts diverge.
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
@@ -53,6 +60,8 @@ import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction
 import { getWorkingDraft, addRuleAction } from "@/actions/projectStyle";
 import { applyProposedRules, type AddRuleFn } from "@/lib/projectStyle/applyProposedRules";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
+import StyleRuleProposalCards from "@/components/projectStyle/StyleRuleProposalCards";
+import type { AnchorIds } from "@/lib/llmWorkspace/runner";
 
 type StylePillar = "world" | "visual";
 type StyleRuleStrength = "Required" | "Preferred" | "Avoid";
@@ -69,12 +78,24 @@ type ProposedRule = {
 
 type Props = {
   projectId: number;
-  /** The opened, durable Look Test result this feedback is anchored on. */
-  lookResultId: number;
-  /** `style.adjustFromLookResult` resolved server-side by the Look
-   * Development page — this client component never imports a descriptor
-   * itself. Always defined in practice (states a permanent fact about the
-   * Working Draft, not a staleness condition), optional only to mirror
+  /** The operation this mount drives — `style.adjustFromLookResult` or
+   * `style.adjustDirected`. Named, never imported (see this file's header). */
+  descriptorId: "style.adjustFromLookResult" | "style.adjustDirected";
+  /** The anchor ids `runWorkspaceOperation` needs for `descriptorId` — always
+   * includes `projectId`, plus `lookResultId` for the `lookResult`-anchored
+   * operation. */
+  ids: AnchorIds;
+  /** Panel title, shown at a glance to distinguish this mount from any other
+   * on the same page (e.g. "Style Feedback (From This Result)" vs. "Adjust
+   * Style (Directed)"). */
+  title: string;
+  /** Panel intro text, one sentence describing what this mount judges the
+   * director's note against. */
+  description: string;
+  /** `descriptorId`'s `commitAdvisory` — see this file's header for why
+   * callers may pass the same resolved string to both mounts. Always defined
+   * in practice (states a permanent fact about the Working Draft, not a
+   * staleness condition), optional only to mirror
    * `StyleAdjustAssistPanel`'s own prop contract. */
   commitAdvisory?: string;
 };
@@ -112,13 +133,7 @@ function toProposedRule(item: Record<string, string | number | boolean>): Propos
   };
 }
 
-const STRENGTH_CHIP: Record<StyleRuleStrength, string> = {
-  Required: "text-[#5fa37a] border-[#5fa37a]/40",
-  Preferred: "text-[#5b93d6] border-[#5b93d6]/40",
-  Avoid: "text-[#cda24f] border-[#cda24f]/40",
-};
-
-export default function StyleFeedbackPanel({ projectId, lookResultId, commitAdvisory }: Props) {
+export default function StyleDirectorNotePanel({ projectId, descriptorId, ids, title, description, commitAdvisory }: Props) {
   const [freeText, setFreeText] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -133,8 +148,8 @@ export default function StyleFeedbackPanel({ projectId, lookResultId, commitAdvi
     setApproveNotice(null);
     setShowAdvisory(false);
     const result = await runWorkspaceOperation({
-      descriptorId: "style.adjustFromLookResult",
-      ids: { projectId, lookResultId },
+      descriptorId,
+      ids,
       intent: { freeText: freeText || undefined },
     });
     if (!result.ok) {
@@ -235,10 +250,8 @@ export default function StyleFeedbackPanel({ projectId, lookResultId, commitAdvi
 
   return (
     <div className="rounded border border-[#232629] p-4 flex flex-col gap-3 [background-color:var(--mikros-border,#2c3035)]">
-      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">Style Feedback (From This Result)</h3>
-      <p className="text-xs text-[#6e767d] leading-relaxed">
-        Describe what is wrong with this render — medium, texture, palette, tone — and the assistant proposes atomic Style Rules to review and approve, judged against this exact result.
-      </p>
+      <h3 className="text-xs font-medium uppercase tracking-wider [color:var(--mikros-text-primary,#e7e9ec)]">{title}</h3>
+      <p className="text-xs text-[#6e767d] leading-relaxed">{description}</p>
 
       {showAdvisory && commitAdvisory && <p className="text-xs text-[#b89a5a]">{commitAdvisory}</p>}
 
@@ -261,11 +274,11 @@ export default function StyleFeedbackPanel({ projectId, lookResultId, commitAdvi
       {(state.status === "idle" || state.status === "error") && (
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
-            <label htmlFor="styleFeedbackFreeText" className="text-[10px] uppercase tracking-wide text-[#6e767d]">
+            <label htmlFor={`styleDirectorNoteFreeText-${descriptorId}`} className="text-[10px] uppercase tracking-wide text-[#6e767d]">
               Director&apos;s note
             </label>
             <textarea
-              id="styleFeedbackFreeText"
+              id={`styleDirectorNoteFreeText-${descriptorId}`}
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
               rows={3}
@@ -298,40 +311,7 @@ export default function StyleFeedbackPanel({ projectId, lookResultId, commitAdvi
 
       {state.status === "success" && (
         <div className="flex flex-col gap-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
-            {state.rules.length} rule{state.rules.length !== 1 ? "s" : ""} proposed — {selected.size} selected
-          </p>
-
-          <div className="flex flex-col gap-2">
-            {state.rules.map((rule, i) => (
-              <label
-                key={i}
-                className={[
-                  "rounded border px-3 py-2.5 flex gap-3 cursor-pointer transition-colors",
-                  selected.has(i) ? "border-[#2c3035] bg-[#141618]" : "border-[#1a1d20] bg-[#0d0e10] opacity-60",
-                ].join(" ")}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(i)}
-                  onChange={() => toggleSelected(i)}
-                  disabled={isApproving}
-                  className="accent-[#5b93d6] mt-0.5 shrink-0"
-                />
-                <div className="flex flex-col gap-1.5 min-w-0">
-                  <p className="text-sm text-[#e7e9ec]">{rule.instruction}</p>
-                  <div className="flex flex-wrap gap-1 text-[9px] text-[#4b5158]">
-                    <span className="border border-[#2c3035] rounded px-1">{rule.pillar === "world" ? "World" : "Visual"}</span>
-                    <span className={`border rounded px-1 ${STRENGTH_CHIP[rule.strength]}`}>{rule.strength}</span>
-                    {rule.category && <span className="border border-[#2c3035] rounded px-1">{rule.category}</span>}
-                    {rule.section && <span className="border border-[#2c3035] rounded px-1">{rule.section}</span>}
-                  </div>
-                  {rule.applicability && <p className="text-xs text-[#6e767d]">Applies to: {rule.applicability}</p>}
-                  {rule.provenanceNotes && <p className="text-xs text-[#4b5158]">{rule.provenanceNotes}</p>}
-                </div>
-              </label>
-            ))}
-          </div>
+          <StyleRuleProposalCards rules={state.rules} selected={selected} onToggle={toggleSelected} disabled={isApproving} />
 
           <div className="flex items-center gap-4 flex-wrap">
             <button
