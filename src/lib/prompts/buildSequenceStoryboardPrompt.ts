@@ -15,7 +15,27 @@
 // simply omits that line rather than inventing a placeholder value, and an
 // empty selection produces a real warning instead of a silently empty
 // mapping section.
+//
+// SHOTPROMPT.HEADER.1 — the header now carries what every Shot used to
+// repeat: `Casting References:` becomes `Subject Definition:` (each line
+// gains the guide's named mode for that reference's role, when it has one —
+// `conformation/profiles/guideDefault.ts`'s own `ROLE_TO_GUIDE_MODE`, never a
+// second table), and the Project Style — identical for every Shot, so
+// `composeStoryboardShot` stopped rendering it per Shot — is rendered once,
+// ahead of `Subject Definition:`.
+//
+// **No "unused references" block.** Considered and rejected: an unselected
+// reference is never uploaded at all (`resolvedBatchImages` is built from
+// `batchSelectedIds` alone — `generate/page.tsx`; `expandDynamicBatch` clones
+// the chain once per selected image only), so naming its `@ImageN` here would
+// tell the model about an image it never received. That block would only
+// have made sense if this app attached a full asset pool and let the model's
+// own request-shaping distribute roles across it — the `sd25-pe` skill's
+// world, not this one's, where selection happens before the payload exists.
+// See `docs/WHERE_THE_RULES_LIVE.md`.
 // ---------------------------------------------------------------------------
+
+import { getGuideModeForRole } from "@/lib/llmWorkspace/conformation/profiles/guideDefault";
 
 export type SequenceStoryboardReferenceInput = {
   /** Same id format as RuntimeImageOption ("asset-{assetId}-{imageId}") — the transport key, not shown to the model. */
@@ -41,6 +61,13 @@ export type SequenceStoryboardPromptInput = {
   shotCount: number;
   /** Already ordered (selection order) and deduplicated by refId — this function never reorders or dedupes beyond a defensive pass. */
   references: SequenceStoryboardReferenceInput[];
+  /**
+   * SHOTPROMPT.HEADER.1 — the Project Style text, identical for every Shot
+   * of this package, rendered once here instead of once per Shot
+   * (`composeStoryboardShot` no longer renders it). `null`/absent/blank
+   * renders nothing — never a fabricated empty `Style:` line.
+   */
+  projectStyle?: string | null;
   /** formatSequenceGenerationPackageText(...) output — included verbatim inside a clearly delimited block. */
   packageText: string;
   /**
@@ -147,22 +174,39 @@ export function buildSequenceStoryboardPrompt(
     );
   }
 
-  // Lot B (SEQGEN.STORYBOARD.CASTING.FIX1) — the LLM-facing line is exactly
-  // `@ImageN — {assetName} ({assetType})`, never `roleLabel`, `variantState`
-  // or an approval status: those stay internal metadata (still carried on
-  // `imageMappings` for the UI/snapshot/traceability below), and never
-  // become an implicit block or auto-approval signal for the model.
+  // SHOTPROMPT.HEADER.1 — the Project Style, rendered exactly once for the
+  // whole package, ahead of `Subject Definition:`. `composeStoryboardShot`
+  // no longer renders it per Shot; this is the one place it now lives.
+  // `null`/absent/blank never fabricates an empty `Style:` line.
+  const trimmedProjectStyle = input.projectStyle?.trim() || null;
+  const styleLines: string[] = [];
+  if (trimmedProjectStyle) {
+    styleLines.push("", "Style:", trimmedProjectStyle);
+  }
+
+  // Lot B (SEQGEN.STORYBOARD.CASTING.FIX1), extended by SHOTPROMPT.HEADER.1
+  // — the LLM-facing line is `{assetName} ({assetType}) — @ImageN`, plus the
+  // guide's named mode for that reference's role when it has one
+  // (`conformation/profiles/guideDefault.ts`'s own `ROLE_TO_GUIDE_MODE` —
+  // five of twenty roles have a named mode; the rest get none, never an
+  // invented one). `variantState`/approval status stay internal metadata
+  // (still carried on `imageMappings` for the UI/snapshot/traceability
+  // below), never rendered here or turned into an implicit auto-approval
+  // signal for the model.
   const castingLines: string[] = [];
   if (imageMappings.length > 0) {
-    castingLines.push("", "Casting References:");
-    for (const m of imageMappings) {
-      castingLines.push(`${m.imageLabel} — ${m.assetName} (${m.assetType})`);
+    castingLines.push("", "Subject Definition:");
+    for (let i = 0; i < references.length; i++) {
+      const ref = references[i];
+      const m = imageMappings[i];
+      const mode = getGuideModeForRole(ref.role);
+      castingLines.push(`${m.assetName} (${m.assetType}) — ${m.imageLabel}${mode ? ` ${mode}` : ""}`);
     }
   }
 
   const packageLines = ["", PACKAGE_BLOCK_START, input.packageText, PACKAGE_BLOCK_END];
 
-  const text = [...goalLines, ...castingLines, ...packageLines].join("\n");
+  const text = [...goalLines, ...styleLines, ...castingLines, ...packageLines].join("\n");
 
   return { text, imageMappings, warnings };
 }

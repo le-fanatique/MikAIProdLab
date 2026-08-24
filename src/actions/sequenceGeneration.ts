@@ -173,6 +173,16 @@ type SequenceStoryboardGenerationContext =
       availableImages: RuntimeImageOption[];
       packageText: string;
       /**
+       * SHOTPROMPT.HEADER.1 — resolved only when the guide composition is
+       * requested (same gate as `storyboardComposition` below, whose
+       * `projectStyle` field this value literally is): the header's
+       * `Style:` line reuses it, so preview and queue can never diverge on
+       * what Style text was rendered. Absent under the legacy composition,
+       * the same condition under which no Style was ever rendered before
+       * this ticket.
+       */
+      projectStyle?: string | null;
+      /**
        * SEQGEN.STORYBOARD.SHOTRANGE.1 — set only when `shotFromId`/`shotToId`
        * actually narrowed this Sequence's Shots, mirroring the page's own
        * `shotRange` field on buildSequenceStoryboardPrompt. Absent means the
@@ -469,7 +479,9 @@ async function buildSequenceStoryboardGenerationContext(
   // generation elsewhere in this action; this is presentation-only.
   const packageText = formatSequenceGenerationPackageText(pkg, {
     includeWarnings: false,
-    ...(storyboardComposition ? { storyboardComposition } : {}),
+    ...(storyboardComposition
+      ? { storyboardComposition: { lighting: storyboardComposition.lighting } }
+      : {}),
   });
 
   return {
@@ -480,6 +492,7 @@ async function buildSequenceStoryboardGenerationContext(
     shotCount: rangedShots.length,
     availableImages,
     packageText,
+    ...(storyboardComposition ? { projectStyle: storyboardComposition.projectStyle } : {}),
     ...(shotRangeResult.isFullSequence
       ? {}
       : {
@@ -740,6 +753,7 @@ export async function runSequenceGeneration(input: {
     sequenceCode: context.sequenceCode,
     shotCount: context.shotCount,
     references: referenceInputs,
+    projectStyle: context.projectStyle,
     packageText: context.packageText,
     ...(context.shotRange ? { shotRange: context.shotRange } : {}),
   });

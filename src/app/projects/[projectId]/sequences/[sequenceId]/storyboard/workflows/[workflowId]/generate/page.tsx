@@ -514,7 +514,6 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               cameraSubject: s.continuity.cameraSubject,
               cameraLens: s.continuity.cameraLens,
             },
-        projectStyle,
         lighting: lighting.byShotId[s.shotId] ?? null,
       }).findings,
     }));
@@ -526,7 +525,9 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   // action (buildSequenceStoryboardGenerationContext).
   const packageText = formatSequenceGenerationPackageText(pkg, {
     includeWarnings: false,
-    ...(storyboardComposition ? { storyboardComposition } : {}),
+    ...(storyboardComposition
+      ? { storyboardComposition: { lighting: storyboardComposition.lighting } }
+      : {}),
   });
 
   const promptResult = buildSequenceStoryboardPrompt({
@@ -536,6 +537,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     sequenceCode: sequence.sequenceCode,
     shotCount: rangedShots.length,
     references: referenceInputs,
+    projectStyle: storyboardComposition?.projectStyle,
     packageText,
     ...(shotRangeResult.isFullSequence
       ? {}

@@ -52,7 +52,12 @@ export type StoryboardCompositionPartId =
   // highest-leverage element". It is therefore its own part rather than a
   // seventh member of the formula smuggled into Environment.
   | "lighting"
-  | "style"
+  // SHOTPROMPT.HEADER.1 — Style is no longer rendered per Shot. It was
+  // identical on every Shot of a Sequence (`storyboardComposition.projectStyle`,
+  // one field for the whole package), so repeating it here was pure waste
+  // (audit §8). It is now rendered once, in the Sequence Storyboard prompt's
+  // own header, before `Subject Definition:` — see
+  // `buildSequenceStoryboardPrompt.ts`.
   | "constraints";
 
 export type StoryboardCompositionPart = {
@@ -74,15 +79,6 @@ export type StoryboardShotCompositionInput = {
     /** Secondary by design: the guide says focal length supplements, never replaces, the observable result. Printed last. */
     cameraLens: string | null;
   };
-  /**
-   * The Project Style text.
-   *
-   * **An input, never a derivation.** `PromptCompilationContext.projectContext`
-   * carries name / pitch / story, which is *not* style; treating the pitch as
-   * style would be a confusion that outlives this ticket. The caller (B14b)
-   * resolves it — the workspace already has `PROJECT.STYLE` for that.
-   */
-  projectStyle: string | null;
   /**
    * The effective lighting for this Shot — **one value, already resolved by
    * precedence** (`resolveStoryboardLighting`), not three levels to
@@ -239,7 +235,6 @@ export function composeStoryboardShot(
     // de la séquence" — the rig is read against the camera, not against the
     // look.
     { id: "lighting", label: "Lighting", text: nonEmpty(input.lighting) },
-    { id: "style", label: "Style", text: nonEmpty(input.projectStyle) },
     { id: "constraints", label: "Constraints", text: buildConstraints(context.castAssets) },
   ];
 

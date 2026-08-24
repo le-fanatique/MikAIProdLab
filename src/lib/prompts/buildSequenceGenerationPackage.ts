@@ -306,16 +306,19 @@ export type FormatSequenceGenerationPackageTextOptions = {
    * this is the ticket's own non-negotiable proof, so this field is never
    * defaulted to a non-`undefined` value here.
    *
-   * `projectStyle` and `lightingByShotId` are inputs, not derivations: this
-   * formatter has no database access (SEQGEN.1's own pure-function
-   * constraint), so the caller resolves them — `resolveProjectStyle`
-   * (`PROJECT.STYLE`) and the Shot/Sequence lighting fields — and hands them
+   * `lightingByShotId` is an input, not a derivation: this formatter has no
+   * database access (SEQGEN.1's own pure-function constraint), so the
+   * caller resolves it — the Shot/Sequence lighting fields — and hands it
    * down. See `composeStoryboardShot`'s own contract for why a resolved
    * pantry, never a re-derivation, is the rule here.
+   *
+   * SHOTPROMPT.HEADER.1 — this option no longer carries `projectStyle`.
+   * Style is identical for every Shot of a package
+   * (`storyboardComposition.projectStyle` used to be that one field,
+   * repeated into every Shot body); it is now the caller's job to render it
+   * once, in `buildSequenceStoryboardPrompt`'s own header, never here.
    */
   storyboardComposition?: {
-    /** The Project's Style text, or `null` when no Style is active. Same value for every Shot in the package. */
-    projectStyle: string | null;
     /**
      * Each Shot's effective lighting, already resolved by precedence
      * (`resolveStoryboardLighting`): the Shot's own field, else the Sequence's.
@@ -359,7 +362,6 @@ export function formatSequenceGenerationPackageText(
             cameraSubject: s.continuity.cameraSubject,
             cameraLens: s.continuity.cameraLens,
           },
-          projectStyle: storyboardComposition.projectStyle,
           lighting: storyboardComposition.lighting.byShotId[s.shotId] ?? null,
         }).text || "(no compiled prompt)"
       : s.compiledPrompt.text || "(no compiled prompt)";

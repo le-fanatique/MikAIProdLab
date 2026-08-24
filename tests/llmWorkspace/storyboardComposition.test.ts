@@ -59,14 +59,18 @@ function inputWith(
   return {
     context: contextWith(),
     continuity: { shotSize: "WS", cameraPosition: "Low Angle", cameraMovement: "static", movementSpeed: null, cameraSubject: null, cameraLens: null },
-    projectStyle: "Grainy anamorphic, muted palette.",
     lighting: "Cold blue screen glow.",
     ...overrides,
   };
 }
 
 describe("composeStoryboardShot", () => {
-  it("renders all six parts of the guide's formula when every ingredient exists", () => {
+  // SHOTPROMPT.HEADER.1 — Style is no longer one of the parts this function
+  // renders: it moved to the Sequence Storyboard prompt's own header
+  // (`buildSequenceStoryboardPrompt.ts`), rendered once for the whole
+  // package instead of once per Shot. This assertion is the filet that must
+  // fall the moment "style" reappears here.
+  it("renders the five parts left of the guide's formula when every ingredient exists — Style moved to the header", () => {
     const result = composeStoryboardShot(inputWith());
 
     expect(result.parts.map((p) => p.id)).toEqual([
@@ -75,12 +79,11 @@ describe("composeStoryboardShot", () => {
       "environment",
       "camera",
       "lighting",
-      "style",
       "constraints",
     ]);
   });
 
-  it("carries the ingredients §5.7 found missing — casting, camera, mood, style", () => {
+  it("carries the ingredients §5.7 found missing — casting, camera, mood", () => {
     const { text } = composeStoryboardShot(inputWith());
 
     expect(text).toContain("Mara");
@@ -88,7 +91,6 @@ describe("composeStoryboardShot", () => {
     expect(text).toContain("Low Angle");
     expect(text).toContain("Rooftop, dusk");
     expect(text).toContain("Tense");
-    expect(text).toContain("Grainy anamorphic, muted palette.");
   });
 
   it("keeps the Shot Prompt as an ingredient — it stops being the only one, it does not disappear", () => {
@@ -105,7 +107,6 @@ describe("composeStoryboardShot", () => {
     const result = composeStoryboardShot(
       inputWith({
         context: contextWith({ castAssets: [], assetBibles: [], sequenceContext: null }),
-        projectStyle: null,
       })
     );
 
@@ -158,11 +159,15 @@ describe("composeStoryboardShot", () => {
     expect(result.findings.map((f) => f.code)).not.toContain("lightingMissing");
   });
 
-  it("never treats the project pitch as project style", () => {
-    const result = composeStoryboardShot(inputWith({ projectStyle: null }));
-    // The pitch is in the resolved context, and must not leak into Style.
+  // SHOTPROMPT.HEADER.1 — the pitch-vs-style confusion this used to guard no
+  // longer applies here: composeStoryboardShot has no `projectStyle` input
+  // left to confuse with the pitch. `Style` itself no longer exists as one
+  // of this function's part ids (asserted above).
+  it("never renders the project pitch, and never renders a Style line", () => {
+    const result = composeStoryboardShot(inputWith());
+    // The pitch is in the resolved context, and must not leak into the text.
     expect(result.text).not.toContain("A courier runs the last mile.");
-    expect(result.parts.some((p) => p.id === "style")).toBe(false);
+    expect(result.text).not.toContain("Style:");
   });
 
   // LLMW.STORYBOARD.LIGHTING.1 — the author's model, 2026-08-19: a level is
@@ -202,7 +207,6 @@ describe("composeStoryboardShot", () => {
         sources: { ...ALL_SOURCES },
       }),
       continuity: { shotSize: null, cameraPosition: null, cameraMovement: null, movementSpeed: null, cameraSubject: null, cameraLens: null},
-      projectStyle: null,
       lighting: null,
     });
 

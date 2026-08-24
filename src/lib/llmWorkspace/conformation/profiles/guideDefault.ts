@@ -88,6 +88,19 @@ function conformReferences(request: ConformationRequest): ConformedReference[] {
   });
 }
 
+/**
+ * SHOTPROMPT.HEADER.1 — the same lookup `conformReferences` above makes,
+ * exposed for `buildSequenceStoryboardPrompt.ts`'s `Subject Definition:`
+ * line, which needs the guide's named mode for a raw stored role without
+ * duplicating this table. A role with no named mode (or no role at all)
+ * returns `null` — never an invented mode, the same rule `conformReferences`
+ * already applies.
+ */
+export function getGuideModeForRole(role: string | null): string | null {
+  const normalized = normalizeReferenceImageRoleValue(role);
+  return normalized ? ROLE_TO_GUIDE_MODE[normalized] ?? null : null;
+}
+
 // ---------------------------------------------------------------------------
 // Output discipline — LLMW.CONFORMATION.2 (B13b)
 //

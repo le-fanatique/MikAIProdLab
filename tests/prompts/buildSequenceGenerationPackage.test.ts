@@ -5,6 +5,7 @@ import {
   type SequenceGenerationPackageShotInput,
 } from "@/lib/prompts/buildSequenceGenerationPackage";
 import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
+import { buildSequenceStoryboardPrompt } from "@/lib/prompts/buildSequenceStoryboardPrompt";
 
 const meta = { projectId: 1, sequenceId: 2, sequenceTitle: "The Standoff", sequenceCode: "SEQ010" };
 
@@ -158,19 +159,21 @@ describe("formatSequenceGenerationPackageText", () => {
       const text = formatSequenceGenerationPackageText(pkg, {
         includeWarnings: false,
         storyboardComposition: {
-          projectStyle: "Grainy anamorphic, muted palette.",
           lighting: { byShotId: {} },
         },
       });
 
-      // Distribution (cast), camera, mood, style — the four §5.7 named as
-      // absent from the storyboard prompt before this ticket.
+      // Distribution (cast), camera, mood — three of the four §5.7 named as
+      // absent from the storyboard prompt before this ticket. Style is the
+      // fourth — it moved to `buildSequenceStoryboardPrompt`'s own header
+      // (SHOTPROMPT.HEADER.1) and is no longer part of this per-Shot body,
+      // so it is asserted absent instead, below.
       expect(text).toContain("Mara");
       expect(text).toContain("Cropped hair, scarred jaw.");
       expect(text).toContain("low angle");
       expect(text).toContain("slow push in");
       expect(text).toContain("Tense");
-      expect(text).toContain("Grainy anamorphic, muted palette.");
+      expect(text).not.toContain("Style:");
       // The legacy label/envelope is untouched — only the body changed.
       expect(text).toContain('=== Shot 1/1 — SH010 — "Wide establishing" (5.0s) ===');
       // The Shot Prompt is still present — it stops being the only
@@ -184,7 +187,6 @@ describe("formatSequenceGenerationPackageText", () => {
       const options = {
         includeWarnings: false as const,
         storyboardComposition: {
-          projectStyle: null,
           lighting: { byShotId: {} }, // no lighting resolved for shotOne — a `lightingMissing` finding
         },
       };
@@ -200,11 +202,42 @@ describe("formatSequenceGenerationPackageText", () => {
       const composed = composeStoryboardShot({
         context: pkg.shots[0].context,
         continuity: { shotSize: pkg.shots[0].continuity.shotSize, cameraPosition: null, cameraMovement: pkg.shots[0].continuity.cameraMovement, movementSpeed: null, cameraSubject: null, cameraLens: null},
-        projectStyle: options.storyboardComposition.projectStyle,
         lighting: null,
       });
       expect(composed.findings.map((f) => f.code)).toContain("lightingMissing");
       expect(composed.text.length).toBeGreaterThan(0);
+    });
+
+    // SHOTPROMPT.HEADER.1 — the ticket's own load-bearing assertion: Style
+    // used to be recopied into every Shot's composed body
+    // (`composeStoryboardShot`'s own "style" part, one line per Shot); it
+    // now renders once, in `buildSequenceStoryboardPrompt`'s header. This
+    // exercises the real multi-Shot pipeline (`buildSequenceGenerationPackage`
+    // -> `formatSequenceGenerationPackageText` in guide mode ->
+    // `buildSequenceStoryboardPrompt`) rather than a hand-built stand-in, so
+    // a regression that reintroduces the per-Shot Style line is actually
+    // caught here, not merely in a unit test of one function in isolation.
+    it("renders Project Style exactly once across the whole assembled Sequence Storyboard prompt for multiple Shots", () => {
+      const pkg = buildSequenceGenerationPackage(meta, [shotOne, shotTwo]);
+      const packageText = formatSequenceGenerationPackageText(pkg, {
+        includeWarnings: false,
+        storyboardComposition: { lighting: { byShotId: {} } },
+      });
+
+      const { text } = buildSequenceStoryboardPrompt({
+        projectId: meta.projectId,
+        sequenceId: meta.sequenceId,
+        sequenceTitle: meta.sequenceTitle,
+        sequenceCode: meta.sequenceCode,
+        shotCount: pkg.shotCount,
+        references: [],
+        projectStyle: "Grainy anamorphic, muted palette.",
+        packageText,
+      });
+
+      expect(pkg.shots.length).toBe(2);
+      expect(text.split("Grainy anamorphic, muted palette.").length - 1).toBe(1);
+      expect(text.split("Style:").length - 1).toBe(1);
     });
   });
 });
