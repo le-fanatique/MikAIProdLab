@@ -1,6 +1,44 @@
 # MikAI Project State
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
+
+## `LOOK.FROMSTORY.LLM.1` — a preset that cut, replaced by one that writes
+
+One commit, `0c149ab`. No migration. Asked for by the author on 2026-08-24,
+looking at his own bench: *« le subject est tronqué au lieu d'être reformulé
+avec un budget de mot »*.
+
+**What "From Story" actually did**, and it was worse than truncation: it
+selected and cut. `subject` was the Project's raw pitch (or its name) passed
+through `truncateToWords(…, 20)`; `action` was the first clause of
+`description`/`story` containing a verb from a ~130-word hard-coded list,
+truncated the same way. The outline was never read. The file's own comment
+claimed the choice — *"never from an LLM"* — and it predated the workspace.
+
+`lookTest.subjectActionFromStory` reads story **and** outline and writes: a
+subject representative of the world, an action playable in one shot, a word
+budget honoured by rewriting and guaranteed by the output bound. No style
+term, no artist, no brand — style comes from Project Style, and mixing it in
+would bias the very test the bench exists for.
+
+**First descriptor with `commit: []`**, and the executor was told to verify
+rather than assume it was legal: an operation that writes nothing, whose
+output fills two form fields the author still edits before
+`createLookTestAction` writes at launch. That the format allowed it without a
+change is the useful finding — a read-only operation was already expressible.
+
+**157 lines left in the same diff.** `deriveFromStoryText` and everything that
+served only it, symbol by symbol, plus the bench's now-unused `project` prop
+and its type. The file had **no test at all**: the deterministic path everyone
+trusted was covered by nothing, which is exactly how a "safe" derivation keeps
+a defect for months.
+
+Validated in a real browser: selecting From Story now leaves both fields
+empty, Neutral Benchmark is untouched, and the new fill goes through the same
+overwrite confirmation as the two existing ones — *"Generating from the story
+will overwrite your edited Subject/Action text. Continue?"* — with never two
+banners on screen at once. The author's own model call is the one step left to
+him.
 
 ## The Project Style assistant — chantier COMPLETE (2026-08-23)
 

@@ -238,6 +238,17 @@ avec leur raison.
 
 ## 6. Clos — où le retrouver
 
+**`LOOK.FROMSTORY.LLM.1` — clos le 2026-08-24**, un commit : `0c149ab`.
+Aucune migration.
+
+« From Story » ne découpe plus : il rédige, en lisant la story **et**
+l'outline, que l'ancienne dérivation n'ouvrait jamais. Premier descripteur à
+`commit: []` — une opération qui n'écrit rien et remplit un formulaire —, et
+157 lignes de dérivation déterministe supprimées dans le même diff.
+
+Le détail est dans `docs/PROJECT_STATE.md`, y compris le fait que le fichier
+supprimé n'avait aucun test.
+
 **Chantier « L'assistant de Project Style » — clos le 2026-08-23**, sept
 commits, `0b6aa97` → `2e0be3d`. **Aucune migration.**
 

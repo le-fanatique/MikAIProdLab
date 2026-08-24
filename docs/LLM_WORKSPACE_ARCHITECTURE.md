@@ -360,6 +360,14 @@ consumer got it wrong anyway, in the one place no test could see (a React
 closure). The lesson is not that the note was useless: it is what made the
 defect legible in minutes once reported. See `docs/PROJECT_STATE.md`.
 
+**An operation may declare `commit: []`** — first done by
+`lookTest.subjectActionFromStory` on 2026-08-24, and the format accepted it
+with no change. Such an operation writes nothing: its output fills fields of a
+form the user still edits, and an existing action writes later, on his own
+submit. Declare the empty array deliberately, with the reason in a comment —
+never invent a write to satisfy the shape. The Approve boundary of §2.1 is
+then simply the user's own next click, outside the operation.
+
 ### 3.3 Knowledge document registry
 
 Specialisation documents (for example a distilled storyboard-language
