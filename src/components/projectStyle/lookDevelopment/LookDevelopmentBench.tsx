@@ -265,6 +265,16 @@ export function buildLookTestRequestFingerprint(request: CreateLookTestInput): s
 }
 
 /**
+ * LOOK.FROMSTORY.VARY.1 — formats the last Subject/Action pair "From Story"
+ * displayed into the single string `lookTest.subjectActionFromStory`'s
+ * `intent.parameters.previousProposal` expects, so the model has an explicit
+ * referent for "propose something else" on the next click.
+ */
+export function formatLookTestPreviousProposal(subject: string, action: string): string {
+  return `Subject: ${subject}\nAction: ${action}`;
+}
+
+/**
  * Codex retake round 2 (P2, "Recent Look Tests remains stale as the active
  * job progresses") — the ONE place a polled job-status update is reconciled
  * into the `tests` list. Pure (no React state): given the current list, the
@@ -351,6 +361,20 @@ export default function LookDevelopmentBench({
   const [pendingFromStoryFill, setPendingFromStoryFill] = useState(false);
   const [fromStoryLoading, setFromStoryLoading] = useState(false);
   const [fromStoryError, setFromStoryError] = useState<string | null>(null);
+  // LOOK.FROMSTORY.VARY.1 — the optional director's note steering which
+  // moment "From Story" proposes (`intent.freeText`, orienting only — the
+  // button stays active with no note, unlike the style-feedback panels where
+  // the note IS the operation), and the anti-repetition memory: the last
+  // Subject/Action pair the operation displayed, fed back as
+  // `intent.parameters.previousProposal` on the next click. Reset to `null`
+  // on a source switch (`applyPreset` below) — the ticket's own "après un
+  // changement de source... cette mémoire repart de zéro". A "vidage des
+  // champs" (both fields cleared by hand) needs no separate reset: it is
+  // derived below (`previousProposalForNextClick`) from the CURRENT
+  // subject/action rather than stored, so an emptied pair never resends a
+  // stale memory.
+  const [fromStoryNote, setFromStoryNote] = useState("");
+  const [lastFromStoryProposal, setLastFromStoryProposal] = useState<string | null>(null);
 
   const isDirty = subject !== lastAppliedText.subject || action !== lastAppliedText.action;
 
@@ -382,6 +406,11 @@ export default function LookDevelopmentBench({
     // source switch either.
     setPendingFromStoryFill(false);
     setFromStoryError(null);
+    // LOOK.FROMSTORY.VARY.1 — a source switch also zeroes the anti-repetition
+    // memory (the ticket's own instruction): the next "From Story" click
+    // after returning to this preset must not silently reference a proposal
+    // shown under a different, now-discarded setup.
+    setLastFromStoryProposal(null);
   }, []);
 
   const handleSourceSelect = useCallback(
@@ -435,12 +464,28 @@ export default function LookDevelopmentBench({
     applyRandomized();
   }, [isDirty, applyRandomized]);
 
+  // LOOK.FROMSTORY.VARY.1 — the anti-repetition memory actually sent on the
+  // NEXT click: `null` whenever both fields are currently empty (a "vidage
+  // des champs", the ticket's own second reset trigger), regardless of what
+  // `lastFromStoryProposal` still holds — so a manually emptied pair never
+  // resends a stale proposal, with no separate effect/reset needed for that
+  // case. Also true before any successful fill (`lastFromStoryProposal` is
+  // `null`), matching the ticket's own "un premier clic ne doit pas parler
+  // d'une proposition précédente inexistante".
+  const previousProposalForNextClick = subject.trim() === "" && action.trim() === "" ? null : lastFromStoryProposal;
+
   // LOOK.FROMSTORY.LLM.1 — the LLM-backed fill for "From Story". Unlike
   // `applyRandomized` above, this is a real network call (`runWorkspaceOperation`
   // against `lookTest.subjectActionFromStory`), so it carries its own
   // loading/error state; the overwrite-confirmation shape it sits behind
   // (`pendingFromStoryFill` / `handleFromStoryFillClick`) is otherwise
   // identical to `pendingRandomize` / `handleRandomizeClick`.
+  //
+  // LOOK.FROMSTORY.VARY.1 — now threads `intent.freeText` (the optional
+  // director's note) and `intent.parameters.previousProposal`
+  // (`previousProposalForNextClick`, computed above) through the same call,
+  // and records the newly displayed pair as the memory for the click after
+  // this one (`formatLookTestPreviousProposal`).
   const applyFromStoryFill = useCallback(async () => {
     // Codex retake round 1 (P1) — defense-in-depth, same guard
     // `applyRandomized` carries: even if a stale confirmation were ever
@@ -453,7 +498,14 @@ export default function LookDevelopmentBench({
     setFromStoryLoading(true);
     setFromStoryError(null);
     try {
-      const result = await runWorkspaceOperation({ descriptorId: "lookTest.subjectActionFromStory", ids: { projectId } });
+      const result = await runWorkspaceOperation({
+        descriptorId: "lookTest.subjectActionFromStory",
+        ids: { projectId },
+        intent: {
+          freeText: fromStoryNote || undefined,
+          parameters: { previousProposal: previousProposalForNextClick ?? "" },
+        },
+      });
       if (!result.ok) {
         setFromStoryError(result.error);
         return;
@@ -470,13 +522,14 @@ export default function LookDevelopmentBench({
       setSubject(nextSubject);
       setAction(nextAction);
       setLastAppliedText({ subject: nextSubject, action: nextAction });
+      setLastFromStoryProposal(formatLookTestPreviousProposal(nextSubject, nextAction));
     } catch {
       setFromStoryError("Failed to generate a subject and action from the story. Check your connection and try again — your text was not cleared.");
     } finally {
       setFromStoryLoading(false);
       setPendingFromStoryFill(false);
     }
-  }, [source, projectId]);
+  }, [source, projectId, fromStoryNote, previousProposalForNextClick]);
 
   const handleFromStoryFillClick = useCallback(() => {
     if (isDirty) {
@@ -1107,7 +1160,10 @@ export default function LookDevelopmentBench({
                 selection; this explicit button runs the LLM operation and
                 fills Subject/Action, going through the same overwrite
                 confirmation as the two other presets when the fields were
-                edited by hand. */}
+                edited by hand. LOOK.FROMSTORY.VARY.1 — the label switches to
+                "Generate Another..." once a previous proposal exists to ask
+                for a different one from (`previousProposalForNextClick`,
+                the same value the request itself carries). */}
             {source === "from-story" && (
               <button
                 type="button"
@@ -1115,10 +1171,35 @@ export default function LookDevelopmentBench({
                 disabled={fromStoryLoading}
                 onClick={handleFromStoryFillClick}
               >
-                {fromStoryLoading ? "Generating…" : "Generate Subject & Action from Story"}
+                {fromStoryLoading
+                  ? "Generating…"
+                  : previousProposalForNextClick
+                    ? "Generate Another Subject & Action from Story"
+                    : "Generate Subject & Action from Story"}
               </button>
             )}
           </div>
+          {/* LOOK.FROMSTORY.VARY.1 — the optional director's note
+              (`intent.freeText`). Orienting only, never required: the button
+              above stays active with no note here, unlike the style-feedback
+              panels (`StyleDirectorNotePanel.tsx`) where the note IS the
+              operation. */}
+          {source === "from-story" && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="fromStoryDirectionNote" className="text-[10px] text-[#6e767d]">
+                Direction (optional)
+              </label>
+              <textarea
+                id="fromStoryDirectionNote"
+                value={fromStoryNote}
+                onChange={(e) => setFromStoryNote(e.target.value)}
+                rows={2}
+                className={smallInputClass}
+                placeholder="e.g. an interior moment, or pick a secondary character"
+                maxLength={300}
+              />
+            </div>
+          )}
           {pendingSourceSwitch && (
             <div className="rounded border border-[#4a3a1f] bg-[#1f1a10] px-3 py-2 flex items-center justify-between gap-3">
               <span className="text-xs text-[#c9a24b]">Switching presets will overwrite your edited Subject/Action text. Continue?</span>

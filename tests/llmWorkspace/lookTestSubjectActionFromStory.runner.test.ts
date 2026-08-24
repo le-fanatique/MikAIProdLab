@@ -90,6 +90,34 @@ describe("lookTest.subjectActionFromStory — preconditions proof", () => {
   });
 });
 
+describe("lookTest.subjectActionFromStory — intent.freeText / intent.parameters.previousProposal wiring (LOOK.FROMSTORY.VARY.1)", () => {
+  it("with neither supplied, the assembled prompt carries no direction and no previous proposal", async () => {
+    const projectId = await insertProject(ctx, "Vary wiring project — neither");
+    await setStoryAndOutline(projectId, { story: "A rooftop courier discovers a conspiracy." });
+
+    const result = await resolveOperationPrompt(lookTestSubjectActionFromStoryDescriptor, { projectId }, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.user).not.toContain("Direction:");
+    expect(result.prompt.user).not.toContain("Previously proposed:");
+  });
+
+  it("with a direction and a previous proposal, the runner threads both through to the assembled user prompt", async () => {
+    const projectId = await insertProject(ctx, "Vary wiring project — both");
+    await setStoryAndOutline(projectId, { story: "A rooftop courier discovers a conspiracy." });
+
+    const result = await resolveOperationPrompt(
+      lookTestSubjectActionFromStoryDescriptor,
+      { projectId },
+      { freeText: "an interior moment", parameters: { previousProposal: "Subject: Kai on a ledge.\nAction: Kai vaults a gap." } }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.prompt.user).toContain("Direction: an interior moment");
+    expect(result.prompt.user).toContain("Previously proposed:\nSubject: Kai on a ledge.\nAction: Kai vaults a gap.");
+  });
+});
+
 describe("lookTest.subjectActionFromStory — kind: \"object\" output parsing", () => {
   it("parses a valid subject/action pair", async () => {
     const projectId = await insertProject(ctx, "Parsing project");

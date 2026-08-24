@@ -3,6 +3,8 @@ import { lookTestSubjectActionFromStoryDescriptor } from "@/lib/llmWorkspace/des
 import {
   renderProjectIdentityLookTestStoryLines,
   renderProjectOutlineSectionsLookTestLines,
+  renderLookTestFreeTextDirective,
+  renderLookTestPreviousProposalLines,
   type ProjectIdentityData,
 } from "@/lib/llmWorkspace/variables/registry";
 import type { OutlineSection } from "@/lib/prompts/sequences-from-outline";
@@ -15,18 +17,41 @@ import { assembleDescriptorMessages } from "@/lib/llmWorkspace/assembleDescripto
 // test for a new, non-migrated operation: assembled prompt with story +
 // outline, with story alone, with outline alone, and the mandatory system
 // rules always present.
+//
+// LOOK.FROMSTORY.VARY.1 extends this with the two new optional blocks
+// (`intent.freeText`, `intent.parameters.previousProposal`) and their four
+// combinations — see the describe block appended at the end of this file.
 // ---------------------------------------------------------------------------
 
-function assemble(project: ProjectIdentityData, sections: OutlineSection[]) {
-  return assembleDescriptorMessages(lookTestSubjectActionFromStoryDescriptor, (variableId, render) => {
-    if (variableId === "PROJECT.IDENTITY" && render === "lookTest.storyLines") {
-      return renderProjectIdentityLookTestStoryLines(project);
+function assemble(
+  project: ProjectIdentityData,
+  sections: OutlineSection[],
+  intent: { freeText?: string; previousProposal?: string } = {}
+) {
+  return assembleDescriptorMessages(
+    lookTestSubjectActionFromStoryDescriptor,
+    (variableId, render) => {
+      if (variableId === "PROJECT.IDENTITY" && render === "lookTest.storyLines") {
+        return renderProjectIdentityLookTestStoryLines(project);
+      }
+      if (variableId === "PROJECT.OUTLINE_SECTIONS" && render === "lookTest.outlineLines") {
+        return renderProjectOutlineSectionsLookTestLines(sections);
+      }
+      throw new Error(`unexpected variable block ${variableId}::${render}`);
+    },
+    (parameterId, render) => {
+      if (parameterId === "previousProposal" && render === "lookTest.previousProposalLines") {
+        return renderLookTestPreviousProposalLines(intent.previousProposal);
+      }
+      throw new Error(`unexpected parameter block ${parameterId}::${render}`);
+    },
+    undefined,
+    undefined,
+    (render) => {
+      if (render === "lookTest.freeTextDirective") return renderLookTestFreeTextDirective(intent.freeText);
+      throw new Error(`unexpected freeText block ${render}`);
     }
-    if (variableId === "PROJECT.OUTLINE_SECTIONS" && render === "lookTest.outlineLines") {
-      return renderProjectOutlineSectionsLookTestLines(sections);
-    }
-    throw new Error(`unexpected variable block ${variableId}::${render}`);
-  });
+  );
 }
 
 const PROJECT_WITH_STORY: ProjectIdentityData = {
@@ -59,8 +84,11 @@ describe("lookTest.subjectActionFromStory descriptor — shape", () => {
     ]);
   });
 
-  it("declares intent: {} — no director's note in this ticket", () => {
-    expect(lookTestSubjectActionFromStoryDescriptor.intent).toEqual({});
+  it("declares intent.freeText (optional direction) and one previousProposal string parameter, defaulting to \"\" — LOOK.FROMSTORY.VARY.1's anti-repetition lever", () => {
+    expect(lookTestSubjectActionFromStoryDescriptor.intent).toEqual({
+      freeText: { label: "Direction (optional)" },
+      parameters: [{ id: "previousProposal", type: "string", label: "Previous proposal", default: "" }],
+    });
   });
 
   it("declares the story-or-outline precondition", () => {
@@ -119,5 +147,63 @@ describe("lookTest.subjectActionFromStory descriptor — assembled prompt", () =
     expect(assembled.system).toMatch(/Never name a visual style, an artist, or a brand/);
     expect(assembled.system).toContain("Always respond with a valid JSON object matching exactly this schema:");
     expect(assembled.system).not.toContain("```");
+  });
+
+  // LOOK.FROMSTORY.VARY.1 — the three system rules against defaulting to the
+  // obvious moment are static (not conditioned on either optional block), so
+  // they are always present; asserted once here rather than repeated in every
+  // combination case below.
+  it("the system message states the three anti-repetition rules: no default opening/obvious moment, prefer a rendering-testing moment, and propose something different from a previous proposal when one is given", () => {
+    const assembled = assemble(PROJECT_WITH_STORY, SECTIONS);
+    expect(assembled.system).toMatch(/Do not default to the opening scene or the single most obvious moment/);
+    expect(assembled.system).toMatch(/puts the render to the test/);
+    expect(assembled.system).toMatch(/propose something noticeably different/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LOOK.FROMSTORY.VARY.1 — the two new optional template blocks
+// (`intent.freeText`, `intent.parameters.previousProposal`) and their four
+// combinations, per the ticket's own "Preuve exigée" list.
+// ---------------------------------------------------------------------------
+describe("lookTest.subjectActionFromStory descriptor — freeText / previousProposal blocks", () => {
+  it("with neither: the freeText block is absent, and no direction is mentioned", () => {
+    const assembled = assemble(PROJECT_WITH_STORY, SECTIONS, {});
+    expect(assembled.user).not.toContain("Direction:");
+    expect(assembled.user).not.toContain("Previously proposed:");
+  });
+
+  it("with a note alone: no mention of a previous proposal", () => {
+    const assembled = assemble(PROJECT_WITH_STORY, SECTIONS, { freeText: "an interior moment" });
+    expect(assembled.user).toContain("Direction: an interior moment");
+    expect(assembled.user).not.toContain("Previously proposed:");
+  });
+
+  it("with a previous proposal alone: it appears, and the system's difference rule is present (it is static — see the shape test above)", () => {
+    const assembled = assemble(PROJECT_WITH_STORY, SECTIONS, {
+      previousProposal: "Subject: Kai on a rooftop ledge.\nAction: Kai vaults a gap between buildings.",
+    });
+    expect(assembled.user).toContain("Previously proposed:\nSubject: Kai on a rooftop ledge.\nAction: Kai vaults a gap between buildings.");
+    expect(assembled.user).not.toContain("Direction:");
+    expect(assembled.system).toMatch(/propose something noticeably different/);
+  });
+
+  it("with a note AND a previous proposal together: both blocks are present, in a coherent prompt", () => {
+    const assembled = assemble(PROJECT_WITH_STORY, SECTIONS, {
+      freeText: "pick a secondary character",
+      previousProposal: "Subject: Kai on a rooftop ledge.\nAction: Kai vaults a gap between buildings.",
+    });
+    expect(assembled.user).toContain("Direction: pick a secondary character");
+    expect(assembled.user).toContain("Previously proposed:\nSubject: Kai on a rooftop ledge.\nAction: Kai vaults a gap between buildings.");
+    // Coherent ordering: the previous proposal (context) precedes the
+    // director's direction (steering), both ahead of the final instruction.
+    expect(assembled.user.indexOf("Previously proposed:")).toBeLessThan(assembled.user.indexOf("Direction:"));
+    expect(assembled.user.indexOf("Direction:")).toBeLessThan(assembled.user.indexOf("Propose a Subject and an Action"));
+  });
+
+  it("blank/whitespace-only note or previous proposal renders exactly as absent", () => {
+    const assembled = assemble(PROJECT_WITH_STORY, SECTIONS, { freeText: "   ", previousProposal: "  " });
+    expect(assembled.user).not.toContain("Direction:");
+    expect(assembled.user).not.toContain("Previously proposed:");
   });
 });

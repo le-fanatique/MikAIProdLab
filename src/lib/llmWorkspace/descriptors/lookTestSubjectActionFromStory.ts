@@ -38,11 +38,40 @@
 //     `randomizeNeutralSubjectAndAction`, neither of which was ever an
 //     "Approve"-style commit either.
 //
-// `intent: {}` — no director's note in this ticket. While writing the
-// system prompt, no gap was found that a freeText consigne would close: the
-// operation already reads the whole story and outline, and "propose a
-// representative subject and a single-shot action" needs no further steering
-// for a bench field-filler. Not added.
+// LOOK.FROMSTORY.VARY.1 — "two clicks give the same moment", diagnosed and
+// scoped by `.agents/supervised_task.md`: the operation itself never varied
+// (`style`/`outline` identical, `intent: {}`, the same "propose a subject and
+// an action" question both times), so the model kept answering the story's
+// single most salient moment. This ticket adds the anti-repetition mechanism
+// the previous one deliberately left out (see the comment this replaces,
+// above), plus three system rules against defaulting to the obvious moment.
+// No numeric seed, no per-call temperature override, no list-of-options
+// output — all named out of scope by the ticket, each with its own reason.
+//
+// `intent.freeText` — optional, orienting only ("un moment d'intérieur",
+// "prends un personnage secondaire"). Unlike the style-feedback panels, the
+// note is not the operation here: the button stays active with no note
+// (`LookDevelopmentBench.tsx`'s own change, §2 of the ticket).
+//
+// `intent.parameters.previousProposal` — the real anti-repetition lever: the
+// panel feeds back the Subject/Action pair it just displayed, so "propose
+// something else" has an explicit referent the model can read and avoid
+// (asking a model the identical question twice, with no memory of its own
+// last answer, reliably reproduces that answer). `type: "string"`,
+// `default: ""` — always present after normalization, so the template block
+// that renders it can apply the same "empty -> absent from the prompt"
+// contract every other optional block here already follows, rather than a
+// caller having to omit the key entirely.
+//
+// Both new template blocks — `{ freeText: true, ... }` and
+// `{ parameter: "previousProposal", ... }` — disappear entirely when their
+// value is blank: the défaut 1 correction `asset.retakeDirected` already
+// applies (see that descriptor's own comment), reproduced here by giving both
+// new render forms (`variables/registry.ts`) the same "absent/empty/blank ->
+// empty string" contract every other freeText/parameter render form in this
+// file already follows — `assembleBlocks` drops an empty part before the
+// join, so a first click (no direction, no previous proposal) renders a user
+// message byte-for-byte identical to this descriptor's pre-ticket prompt.
 // ---------------------------------------------------------------------------
 
 import type { OperationDescriptor } from "../types";
@@ -81,6 +110,9 @@ export const lookTestSubjectActionFromStoryDescriptor: OperationDescriptor = {
 - Use only the provided story and outline as your source of truth. Do not invent facts not present in the input.
 - "subject" must be representative of this project's world — a character, creature, object, or setting element a viewer would recognize as belonging to this story. Rewrite it in your own words: never copy the pitch or the project name verbatim.
 - "action" must be playable in a single shot — a concrete moment drawn from the story, never a plot synopsis and never simply the first sentence that happens to contain a verb.
+- Do not default to the opening scene or the single most obvious moment of the story — this is a render test, not a summary, and the same story can supply many valid moments.
+- Prefer a moment that puts the render to the test: distinctive material, lighting, silhouette, or scale — something a rendered image or clip can actually show.
+- If a previous proposal is given below, propose something noticeably different from it — another moment, another location, or another subject — never a rephrasing of the same one.
 - Each field is about 25 words, written as one sentence, produced by rewriting — never a truncation of the source text.
 - This is a render test, not a retelling of the story: write "subject" and "action" so both are visible and legible in a single rendered image or clip.
 - Never name a visual style, an artist, or a brand — style comes from the Project Style, and mixing it in here would bias the test.
@@ -101,12 +133,17 @@ No markdown. No explanation. Only the JSON object.`,
     blocks: [
       { variable: "PROJECT.IDENTITY", render: "lookTest.storyLines" },
       { variable: "PROJECT.OUTLINE_SECTIONS", render: "lookTest.outlineLines" },
+      { parameter: "previousProposal", render: "lookTest.previousProposalLines" },
+      { freeText: true, render: "lookTest.freeTextDirective" },
       { text: "\nPropose a Subject and an Action for a Look Development test of this project." },
     ],
     separator: "\n",
   },
 
-  intent: {},
+  intent: {
+    freeText: { label: "Direction (optional)" },
+    parameters: [{ id: "previousProposal", type: "string", label: "Previous proposal", default: "" }],
+  },
 
   // No adapter validates a raw id for this operation — it is called only
   // from the Bench (`runWorkspaceOperation`), never through a `FormData`

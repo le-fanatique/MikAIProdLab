@@ -174,6 +174,44 @@ export function renderProjectIdentityLookTestStoryLines(data: ProjectIdentityDat
   return lines.join("\n");
 }
 
+const LOOK_TEST_FREE_TEXT_MAX_LENGTH = 300;
+
+/**
+ * `lookTest.subjectActionFromStory`'s template block for `intent.freeText`
+ * (LOOK.FROMSTORY.VARY.1) — an optional director's note that orients which
+ * moment to propose ("an interior moment", "pick a secondary character")
+ * without being required: the panel's button stays active with no note,
+ * unlike the style-feedback panels where the note IS the operation. Same
+ * "absent/empty/blank -> empty string" contract as every other
+ * `intent.freeText` render form in this file, so `assembleBlocks` drops this
+ * block entirely with no note — the same défaut 1 correction
+ * `asset.retakeDirected` already applies (see that descriptor's own comment).
+ */
+export function renderLookTestFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirection: ${trimmed.slice(0, LOOK_TEST_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+const LOOK_TEST_PREVIOUS_PROPOSAL_MAX_LENGTH = 400;
+
+/**
+ * `lookTest.subjectActionFromStory`'s template block for the
+ * `previousProposal` intent parameter (LOOK.FROMSTORY.VARY.1) — the panel's
+ * own anti-repetition mechanism: it feeds back the Subject/Action pair it
+ * just displayed, so "propose something else" has an explicit referent the
+ * model can read and avoid, rather than being asked the identical question a
+ * second time with nothing distinguishing the two calls. Same drop-when-empty
+ * contract as the freeText render form above: a first click carries no
+ * previous proposal, and this block disappears rather than referring to one
+ * that does not exist.
+ */
+export function renderLookTestPreviousProposalLines(previousProposal: string | undefined): string {
+  const trimmed = previousProposal?.trim();
+  if (!trimmed) return "";
+  return `\nPreviously proposed:\n${trimmed.slice(0, LOOK_TEST_PREVIOUS_PROPOSAL_MAX_LENGTH)}`;
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT.STYLE — anchors: project, sequence, shot, asset. World / Visual /
 // Rules segments of the Project's active published Style, wrapping
@@ -2992,6 +3030,7 @@ export const PARAMETER_RENDER_FORMS = {
   "outline.sectionInstructionBullet": renderOutlineTargetSectionsBullet,
   "shotsFromSequence.jsonSchemaBlock": renderShotsFromSequenceJsonSchemaBlock,
   "assetsFromProject.finalInstructionLine": renderAssetsFromProjectFinalInstructionLine,
+  "lookTest.previousProposalLines": renderLookTestPreviousProposalLines,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -3084,6 +3123,7 @@ export const FREE_TEXT_RENDER_FORMS = {
   "sequenceLightingDirected.freeTextDirective": renderSequenceLightingDirectedFreeTextDirective,
   "styleAdjust.directorNoteLine": renderStyleAdjustDirectorNoteLine,
   "styleAdjust.directorRuleLine": renderStyleAdjustDirectorRuleLine,
+  "lookTest.freeTextDirective": renderLookTestFreeTextDirective,
 } as const;
 
 export const VARIABLE_REGISTRY = {
