@@ -102,6 +102,19 @@ Prefer this order:
 3. `rg --files` for bounded file discovery;
 4. targeted file reads around relevant lines.
 
+**Navigation answers "where is this symbol". It does not answer "does this
+rule exist".** For that, `docs/WHERE_THE_RULES_LIVE.md` first: the entity
+schema carries no rules, and each one lives in a single extracted module whose
+name often has nothing to do with the rule. The `@ImageN` ordering rule is in a
+module named for the storyboard; grepping `imageOrder` finds nothing and
+concluding "absent" from that is how an audit reached three wrong conclusions
+on 2026-08-24.
+
+**Trace backwards from what is consumed** — the queued payload, the assembled
+prompt, the inserted row — rather than forwards from the entity. And read the
+module header when you land: in this repository they carry the decision, its
+date and what was rejected.
+
 Install the Claude Code TypeScript LSP plugin locally:
 
 ```text

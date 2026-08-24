@@ -81,6 +81,11 @@ Do not commit or push before an explicit user go.
   §5 — mandatory reading for any LLM Workspace ticket, and the acceptance
   reference: a design that cannot express all three founding use cases is the
   wrong design. Terms in `AGENTS.md` § Context policy.**
+- **Which module owns which decision: `docs/WHERE_THE_RULES_LIVE.md`** — open
+  it before concluding that a mechanism is missing. The schema describes
+  entities, not rules, and this repository puts each rule in one extracted
+  module on purpose. Three wrong conclusions in one audit, 2026-08-24, are why
+  this line exists.
 - Architecture and durable decisions: `docs/ARCHITECTURE_DECISIONS.md`
 - Supervision workflow: `docs/DEVELOPMENT_WORKFLOW.md`
 - User observations: `docs/USER_FEEDBACK.md` — **idea box, not a development

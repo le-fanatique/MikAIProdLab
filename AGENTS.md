@@ -47,6 +47,12 @@ from the active ticket instead.
   it leaves untouched. "None" is acceptable; not asking is not. What the
   omission of this contract cost until 2026-08-15 is recorded in that file's
   own "Reachability" section — read it before arguing the rule is heavy.
+- **`docs/WHERE_THE_RULES_LIVE.md` before asserting that a mechanism, a field
+  or a rule does not exist** — in a review, an audit, or a ticket's premise.
+  The entity schema does not carry rules; this repository puts each one in a
+  single extracted module, and a dozen of them exist because a rule had been
+  written twice. Claiming a gap without opening this file is how three wrong
+  conclusions reached a document on 2026-08-24;
 - `docs/PROJECT_STATE.md` when repository/product state must be reconciled;
 - `docs/ROADMAP.md` for prioritization or ticket sequencing;
 - `docs/ARCHITECTURE_DECISIONS.md` for architecture, migration, ownership,

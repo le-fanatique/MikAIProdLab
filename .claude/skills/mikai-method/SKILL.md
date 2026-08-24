@@ -202,10 +202,49 @@ This does not replace the UC1/UC2/UC3 question — that one fires once a ticket
 is known to be a workspace ticket. This one fires earlier, and decides whether
 it is.
 
+## 10b. Never conclude a mechanism is missing from the schema alone
+
+Added 2026-08-24, after an audit of the Shot prompt got three things wrong
+before it got them right — each time by reasoning about behaviour from the
+entity schema while the behaviour lived in the path.
+
+It proposed building an `@ImageN` binding from the stored order of
+`shot_reference_images`, when the engine numbers its slots from the author's
+own selection in the Dynamic Batch picker and `orderStoryboardReferences`
+already held that rule, extracted and correct. It called the camera "debt"
+before reading `cameraInstruction.ts`, which is the most engine-aligned part of
+the system. It called lighting "a missing ingredient" before reading
+`resolveStoryboardLighting.ts`, where a working three-level chain sits — simply
+unfilled everywhere.
+
+**An empty field is not a missing mechanism, and a schema does not carry a
+rule.** Before writing that something does not exist:
+
+- **trace backwards from what is consumed** — the queued payload, the assembled
+  prompt, the inserted row — and read the function that produced it, rather
+  than forwards from the entity;
+- **grep the effect, not the name**: the rule that decides `@ImageN` lives in a
+  module named for the storyboard, lifted out of a page;
+- **look for a second implementation before writing the first**;
+- **read the module header.** In this repository they carry the decision, its
+  date, the author's own words, and what was tried and rejected.
+
+`docs/WHERE_THE_RULES_LIVE.md` is the short map this produced: which module
+owns which decision, and which rules live in two places and must move together.
+Open it at the start of any audit, and before asserting a gap in any review.
+
+A rule enforced in two files is this codebase's recurring defect — a dozen pure
+modules exist precisely because a resolution had been written twice and the
+copies drifted. The bound on a model's field is the live example: the action
+enforces it, the descriptor declares it, and changing the declaration alone
+changes nothing at runtime.
+
 ## 11. Where things are
 
 - the active ticket, under the Opus protocol: `.agents/supervised_task.md`
 - the executor's report: `.agents/executor_report.md`
+- **which module owns which decision: `docs/WHERE_THE_RULES_LIVE.md`** — short,
+  and the answer to "does this exist?" far more often than the schema is
 - current state: `docs/PROJECT_STATE.md` — 469 lines, readable in full
 - workspace architecture: `docs/LLM_WORKSPACE_ARCHITECTURE.md`, sections 3 and
   4 are the live reference; section 11.3 holds the queue

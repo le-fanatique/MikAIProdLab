@@ -27,6 +27,11 @@ The value of this document is therefore less "here is what to build" than
 **"here is what is already true, and where the two halves of the codebase
 disagree with each other."**
 
+The three wrong readings were generalised on 2026-08-24 into
+`docs/WHERE_THE_RULES_LIVE.md` — which module owns which decision, and which
+rules live in two places and must move together. Open that file before
+asserting a gap anywhere; this audit is its worked example.
+
 ### What the guide is, and is not
 
 §5.5's framing is unchanged and binds everything below: the guide is the
