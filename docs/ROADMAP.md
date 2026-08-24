@@ -27,7 +27,28 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Deux chantiers clos le 2026-08-23 : « Galerie de templates de
+**Le chantier « Upgrade du prompt de Shot », ouvert le 2026-08-24.** Son
+cadrage est `docs/SHOT_PROMPT_SD25_AUDIT.md` — un audit de la composition du
+prompt d'un Shot contre Seedance 2.5, contre le skill `sd25-pe` et contre le
+guide 2.0 qui nous sert de norme de conformisation. Il liste huit ajustements
+ordonnés, dont **une seule migration** (la carte de prompt sur `assets`).
+
+La règle de conception à tenir dès le premier ticket, parce qu'une passe sur
+le storyboard image puis vidéo suivra : **un seul compositeur, paramétré par
+le nombre de shots, dont le shot isolé est le cas N = 1.**
+
+Ticket actif : voir `.agents/supervised_task.md`.
+
+Deux hotfix sont sortis de l'audit et sont déjà commités et poussés
+(`3bf6150`) — la troncature de `camera_position` et la déclaration périmée de
+`createGeneratedShots` dans le registre d'actions. Détail dans
+`docs/PROJECT_STATE.md`.
+
+**Reporté, pas abandonné** : une revue des documents pour qu'un audit de ce
+genre ne repasse plus à côté d'autant de mécanismes déjà livrés. L'auteur l'a
+demandée le 2026-08-24 puis a choisi d'enchaîner sur le dev d'abord.
+
+Deux chantiers clos le 2026-08-23 : « Galerie de templates de
 génération » (**huit tickets**, commités, poussés et migrés) puis
 « L'assistant de Project Style » (**neuf commits, aucune migration**) — voir
 la section 6 et `docs/PROJECT_STATE.md`.

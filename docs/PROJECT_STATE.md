@@ -2,6 +2,98 @@
 
 Last updated: 2026-08-24
 
+## `CAM.POSITION.COMPOSITE.1` — three answers were being stored in a field of fifty
+
+One commit, `3bf6150`. No migration. Found on Sq_5000, which the author
+generated on 2026-08-24 while an audit of the Shot prompt was being written.
+
+`cameraPosition` is the one camera axis the vocabulary declares as **three
+independent questions** — tilt, height, placement — whose grouping
+`cameraVocabulary.ts` says must never be elided. The JSON schema line showed
+the model those three labelled groups; the rules block, two lines further
+down, asked for *"exactly one value"*. The model followed the shape it was
+shown and answered all three, which was the reasonable reading. The
+50-character bound — correct for the four axes that carry one value — then cut
+the answer mid-word. Three of six shots were stored as `role: Over-`,
+`role: Rear Vie`, `role: Establish`.
+
+**B19d had already seen a symptom of this and treated the wrong cause.** It
+moved the group label to the front of the value list, recording that *"a model
+copied the whole thing into the field as one value, twice, on the author's own
+shots"*. That changed the shape of the corruption, not its cause. The
+instruction now states what the axis actually is: one value per group, written
+`tilt: <value>, height: <value>, role: <value>`.
+
+**The bound that was actually cutting was not the one the fix first targeted.**
+`normalizeShot` (`src/actions/llm/sequenceShots.ts`) truncates before insert;
+the descriptor's `truncateTo` only *declares* what the action does. The
+end-to-end test reproduced `role: Over-` after the descriptor alone had been
+raised — which is the entire argument for writing the net before the code. Both
+are now 120, and the worst case the catalogue can produce (80 characters) is
+derived from the vocabulary in the test rather than typed as a literal, so a
+longer label added later moves the test on its own.
+
+**A second defect in the same area, found by the same reading.** The action
+registry declared one camera column for `createGeneratedShots` while the action
+writes five, and its comment described a gap that had been closed — asserting
+the action "still writes `shots.cameraPitch`", a column that no longer exists.
+A future session reading that note would have set out to dig the hole again.
+Nothing caught it because this action, alone among its peers, had **no
+assertion comparing its declaration to the row it produces**: its own test
+already proved `cameraSubject` was written while the declaration denied it, and
+the two never met. `createShotAtPosition` and `addRuleAction` both had that
+assertion; `createGeneratedShots` now does too.
+
+**Existing assertions were changed, and that is the ticket, not a shortcut**:
+`cameraPosition` leaves the "every palette axis is bounded at 50" rule while
+the other three keep it, and twenty-one byte-exact prompt snapshot fragments
+follow the new instruction text — they exist to catch precisely this.
+
+Five mutations verified red: each bound restored to 50, the action ceasing to
+write `cameraPosition`, a column removed from `columns.written`, and the rule
+reverted to "exactly one value". 1791 tests, 174 files, `tsc` and `build`
+clean.
+
+**Consequence the author must know**: the three corrupted rows were repaired
+directly in the database on 2026-08-24, after a verified backup
+(`mikai-backup-2026-08-24T18-00-56-735Z`). Each truncated prefix had exactly
+one match in the `role` palette — `Over-`, `Rear Vie` and `Establish` are
+unambiguous — so the reconstruction was deterministic, not a guess. A sweep of
+the whole database afterwards found no other truncated value among the 69 shots
+carrying a `camera_position`.
+
+## `SHOT_PROMPT_SD25_AUDIT` — what an audit of one prompt found about the app
+
+One commit, `3a7b87b`. Documentation only, no code, no field, no ticket
+authorized. The document is `docs/SHOT_PROMPT_SD25_AUDIT.md`.
+
+Worth recording here because of **how it went wrong twice before it went
+right**, which is a lesson about this codebase rather than about Seedance:
+
+1. The first reading proposed building an `@ImageN` binding from the stored
+   order of `shot_reference_images`. That order has no relation to what the
+   workflow actually feeds — the engine numbers `image1`, `image2`, … from the
+   author's own selection in the Dynamic Batch picker, which displays those
+   slot labels and offers Move Up / Move Down. Rendering the stored order would
+   have been a confident lie.
+2. `orderStoryboardReferences` (`IND.REFORDER.1`) **already holds that rule**,
+   extracted, pure and correct, covering both workflow shapes. What sits on the
+   Shot path — `guideDefault.conformReferences` — is a second implementation of
+   the same rule, wrong, and dead: nothing reads its output.
+3. Two claims about the camera and about lighting were written before reading
+   B19 and `resolveStoryboardLighting`. Both were wrong: the camera is the
+   best-aligned part of the system, and the three-level lighting chain exists
+   and works — it is simply **empty everywhere**, six environment Assets, six
+   Sequences and every Shot.
+
+The pattern in all three: a mechanism had been built, was correct, and was
+invisible from the entity schema alone. **A revision of the reading contract,
+so this costs less next time, is owed** — the author asked for it on
+2026-08-24 and chose to run the development first.
+
+Six findings of §5.6's coverage measurement of 2026-08-18 are now stale, each
+with its evidence, listed in §6 of the audit for whoever opens the first ticket.
+
 ## `LOOK.FROMSTORY.VARY.1` — the same question asked twice gets the same answer
 
 One commit, `ff89bbe`. No migration. The author, after using
