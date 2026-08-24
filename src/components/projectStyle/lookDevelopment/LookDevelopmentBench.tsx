@@ -44,9 +44,9 @@ import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import {
   NEUTRAL_BENCHMARK_SUBJECT,
   NEUTRAL_BENCHMARK_ACTION,
-  deriveFromStoryText,
   randomizeNeutralSubjectAndAction,
 } from "@/lib/lookDevelopment/lookDevelopmentPresets";
+import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import ImageSourcePicker from "@/components/ImageSourcePicker";
 import Collapsible from "@/components/Collapsible";
 import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
@@ -71,7 +71,6 @@ type LoadErrors = {
 
 type Props = {
   projectId: number;
-  project: { name: string; pitch: string | null; description: string | null; story: string | null };
   initialDraft: WorkingDraftView | null;
   initialVersions: ActiveVersionView;
   initialReferences: ProjectStyleReferenceView[];
@@ -306,7 +305,6 @@ const SCALAR_KINDS = new Set<WorkflowInput["kind"]>(["integer", "float", "boolea
 
 export default function LookDevelopmentBench({
   projectId,
-  project,
   initialDraft,
   initialVersions,
   initialReferences,
@@ -334,47 +332,60 @@ export default function LookDevelopmentBench({
   // source switch is applied. See the Codex retake round 1 (P1) comments
   // below for why the two pending decisions must stay mutually exclusive.
   const [pendingRandomize, setPendingRandomize] = useState(false);
+  // ── From Story LLM fill (LOOK.FROMSTORY.LLM.1) — a third pending-overwrite
+  // decision, on the exact model of `pendingRandomize` above (a plain
+  // boolean: the operation reads no local state besides `projectId`, so
+  // nothing needs to be frozen ahead of the confirm click). Kept mutually
+  // exclusive with the other two everywhere they're staged — see the Codex
+  // retake round 1 (P1) comments this ticket extends, not replaces.
+  const [pendingFromStoryFill, setPendingFromStoryFill] = useState(false);
+  const [fromStoryLoading, setFromStoryLoading] = useState(false);
+  const [fromStoryError, setFromStoryError] = useState<string | null>(null);
 
   const isDirty = subject !== lastAppliedText.subject || action !== lastAppliedText.action;
 
-  const applyPreset = useCallback(
-    (next: LookTestSource) => {
-      let nextSubject = "";
-      let nextAction = "";
-      if (next === "from-story") {
-        const derived = deriveFromStoryText(project);
-        nextSubject = derived.subject;
-        nextAction = derived.action;
-      } else if (next === "neutral-benchmark") {
-        nextSubject = NEUTRAL_BENCHMARK_SUBJECT;
-        nextAction = NEUTRAL_BENCHMARK_ACTION;
-      }
-      setSource(next);
-      setSubject(nextSubject);
-      setAction(nextAction);
-      setLastAppliedText({ subject: nextSubject, action: nextAction });
-      setPendingSourceSwitch(null);
-      // Codex retake round 1 (P1) — applying a source switch (Overwrite or a
-      // no-opt-in direct switch) supersedes any stale Random decision left
-      // over from a PREVIOUS source: without this, a leftover
-      // `pendingRandomize` confirmation could still be sitting on screen
-      // after `source` has already moved on, and its Overwrite button would
-      // then install neutral content under the wrong (now-current) source.
-      setPendingRandomize(false);
-    },
-    [project]
-  );
+  const applyPreset = useCallback((next: LookTestSource) => {
+    // LOOK.FROMSTORY.LLM.1 — "From Story" no longer installs text on
+    // selection (like "Custom", both fields start empty): the LLM-backed
+    // fill is now a separate, explicit action (`handleFromStoryFillClick`
+    // below), not something a source switch does implicitly.
+    let nextSubject = "";
+    let nextAction = "";
+    if (next === "neutral-benchmark") {
+      nextSubject = NEUTRAL_BENCHMARK_SUBJECT;
+      nextAction = NEUTRAL_BENCHMARK_ACTION;
+    }
+    setSource(next);
+    setSubject(nextSubject);
+    setAction(nextAction);
+    setLastAppliedText({ subject: nextSubject, action: nextAction });
+    setPendingSourceSwitch(null);
+    // Codex retake round 1 (P1) — applying a source switch (Overwrite or a
+    // no-opt-in direct switch) supersedes any stale Random decision left
+    // over from a PREVIOUS source: without this, a leftover
+    // `pendingRandomize` confirmation could still be sitting on screen
+    // after `source` has already moved on, and its Overwrite button would
+    // then install neutral content under the wrong (now-current) source.
+    setPendingRandomize(false);
+    // LOOK.FROMSTORY.LLM.1 — same reasoning, extended to the third pending
+    // decision: a stale From Story fill confirmation must not survive a
+    // source switch either.
+    setPendingFromStoryFill(false);
+    setFromStoryError(null);
+  }, []);
 
   const handleSourceSelect = useCallback(
     (next: LookTestSource) => {
       if (next === source) return;
       if (isDirty) {
-        // Codex retake round 1 (P1) — the two pending overwrite decisions
-        // (source switch vs. randomize) are mutually exclusive: staging a
-        // new source-switch decision immediately invalidates/clears any
-        // pending Random decision, so at most one confirmation banner is
-        // ever visible and a stale one can never be actioned later.
+        // Codex retake round 1 (P1) — the pending overwrite decisions
+        // (source switch vs. randomize vs. From Story fill) are mutually
+        // exclusive: staging a new source-switch decision immediately
+        // invalidates/clears any pending Random or From Story decision, so
+        // at most one confirmation banner is ever visible and a stale one
+        // can never be actioned later.
         setPendingRandomize(false);
+        setPendingFromStoryFill(false);
         setPendingSourceSwitch(next);
         return;
       }
@@ -403,14 +414,73 @@ export default function LookDevelopmentBench({
   const handleRandomizeClick = useCallback(() => {
     if (isDirty) {
       // Codex retake round 1 (P1) — symmetric to handleSourceSelect: staging
-      // a Random decision invalidates/clears any pending source-switch
-      // decision, keeping the two confirmations mutually exclusive.
+      // a Random decision invalidates/clears any pending source-switch or
+      // From Story fill decision, keeping the three confirmations mutually
+      // exclusive.
       setPendingSourceSwitch(null);
+      setPendingFromStoryFill(false);
       setPendingRandomize(true);
       return;
     }
     applyRandomized();
   }, [isDirty, applyRandomized]);
+
+  // LOOK.FROMSTORY.LLM.1 — the LLM-backed fill for "From Story". Unlike
+  // `applyRandomized` above, this is a real network call (`runWorkspaceOperation`
+  // against `lookTest.subjectActionFromStory`), so it carries its own
+  // loading/error state; the overwrite-confirmation shape it sits behind
+  // (`pendingFromStoryFill` / `handleFromStoryFillClick`) is otherwise
+  // identical to `pendingRandomize` / `handleRandomizeClick`.
+  const applyFromStoryFill = useCallback(async () => {
+    // Codex retake round 1 (P1) — defense-in-depth, same guard
+    // `applyRandomized` carries: even if a stale confirmation were ever
+    // actioned after `source` moved away from "from-story", this refuses to
+    // apply the fill under a different preset. It only clears the stale flag.
+    if (source !== "from-story") {
+      setPendingFromStoryFill(false);
+      return;
+    }
+    setFromStoryLoading(true);
+    setFromStoryError(null);
+    try {
+      const result = await runWorkspaceOperation({ descriptorId: "lookTest.subjectActionFromStory", ids: { projectId } });
+      if (!result.ok) {
+        setFromStoryError(result.error);
+        return;
+      }
+      if (result.kind !== "object") {
+        setFromStoryError("Expected an object-kind result.");
+        return;
+      }
+      const { subject: nextSubject, action: nextAction } = result.values;
+      if (typeof nextSubject !== "string" || typeof nextAction !== "string") {
+        setFromStoryError("Unexpected non-text value in a string field.");
+        return;
+      }
+      setSubject(nextSubject);
+      setAction(nextAction);
+      setLastAppliedText({ subject: nextSubject, action: nextAction });
+    } catch {
+      setFromStoryError("Failed to generate a subject and action from the story. Check your connection and try again — your text was not cleared.");
+    } finally {
+      setFromStoryLoading(false);
+      setPendingFromStoryFill(false);
+    }
+  }, [source, projectId]);
+
+  const handleFromStoryFillClick = useCallback(() => {
+    if (isDirty) {
+      // Symmetric to handleSourceSelect / handleRandomizeClick: staging a
+      // From Story fill decision invalidates/clears any pending source-switch
+      // or Random decision, keeping the three confirmations mutually
+      // exclusive.
+      setPendingSourceSwitch(null);
+      setPendingRandomize(false);
+      setPendingFromStoryFill(true);
+      return;
+    }
+    void applyFromStoryFill();
+  }, [isDirty, applyFromStoryFill]);
 
   // ── Mode + Style source ──────────────────────────────────────────────
   // STYLE.1.POLISH.1 — the Default Look Development Workflow (Settings), if
@@ -1002,8 +1072,9 @@ export default function LookDevelopmentBench({
         <SectionHeading>Test setup</SectionHeading>
 
         {/* STYLE.1.POLISH.1 (C3) — closed by default; state lives in this
-            component (subject/action/source/pendingSourceSwitch/pendingRandomize),
-            never in Collapsible, so it survives close/reopen unchanged. */}
+            component (subject/action/source/pendingSourceSwitch/pendingRandomize/
+            pendingFromStoryFill), never in Collapsible, so it survives
+            close/reopen unchanged. */}
         <Collapsible label="Test content" defaultOpen={false}>
         <div className="flex flex-col gap-2">
           <div className="flex gap-2 flex-wrap items-center">
@@ -1020,6 +1091,21 @@ export default function LookDevelopmentBench({
             {source === "neutral-benchmark" && (
               <button type="button" className={segButtonBase + " " + segButtonInactive} onClick={handleRandomizeClick}>
                 Randomize subject and action
+              </button>
+            )}
+            {/* LOOK.FROMSTORY.LLM.1 — "From Story" no longer installs text on
+                selection; this explicit button runs the LLM operation and
+                fills Subject/Action, going through the same overwrite
+                confirmation as the two other presets when the fields were
+                edited by hand. */}
+            {source === "from-story" && (
+              <button
+                type="button"
+                className={segButtonBase + " " + segButtonInactive}
+                disabled={fromStoryLoading}
+                onClick={handleFromStoryFillClick}
+              >
+                {fromStoryLoading ? "Generating…" : "Generate Subject & Action from Story"}
               </button>
             )}
           </div>
@@ -1049,6 +1135,20 @@ export default function LookDevelopmentBench({
               </div>
             </div>
           )}
+          {pendingFromStoryFill && (
+            <div className="rounded border border-[#4a3a1f] bg-[#1f1a10] px-3 py-2 flex items-center justify-between gap-3">
+              <span className="text-xs text-[#c9a24b]">Generating from the story will overwrite your edited Subject/Action text. Continue?</span>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" className={smallInputClass + " w-auto"} disabled={fromStoryLoading} onClick={() => void applyFromStoryFill()}>
+                  {fromStoryLoading ? "Generating…" : "Overwrite"}
+                </button>
+                <button type="button" className={smallInputClass + " w-auto"} disabled={fromStoryLoading} onClick={() => setPendingFromStoryFill(false)}>
+                  Keep my text
+                </button>
+              </div>
+            </div>
+          )}
+          {fromStoryError && <p className="text-xs text-[#cf7b6b]">{fromStoryError}</p>}
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-[#6e767d]">Subject</label>

@@ -29,6 +29,7 @@ import { shotLightingDirectedDescriptor } from "./shotLightingDirected";
 import { sequenceLightingDirectedDescriptor } from "./sequenceLightingDirected";
 import { styleAdjustDirectedDescriptor } from "./styleAdjustDirected";
 import { styleAdjustFromLookResultDescriptor } from "./styleAdjustFromLookResult";
+import { lookTestSubjectActionFromStoryDescriptor } from "./lookTestSubjectActionFromStory";
 
 export const DESCRIPTORS = {
   "story.generate": storyGenerateDescriptor,
@@ -52,6 +53,7 @@ export const DESCRIPTORS = {
   "sequence.lightingDirected": sequenceLightingDirectedDescriptor,
   "style.adjustDirected": styleAdjustDirectedDescriptor,
   "style.adjustFromLookResult": styleAdjustFromLookResultDescriptor,
+  "lookTest.subjectActionFromStory": lookTestSubjectActionFromStoryDescriptor,
 } as const satisfies Record<string, OperationDescriptor>;
 
 export {
@@ -76,4 +78,5 @@ export {
   sequenceLightingDirectedDescriptor,
   styleAdjustDirectedDescriptor,
   styleAdjustFromLookResultDescriptor,
+  lookTestSubjectActionFromStoryDescriptor,
 };

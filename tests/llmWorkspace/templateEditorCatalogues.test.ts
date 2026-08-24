@@ -33,8 +33,11 @@ describe("the render-form catalogue is derived from the registry tables, not rec
   });
 
   it("a variable with no single-variable render form answers an empty catalogue, not an error", () => {
-    // PROJECT.OUTLINE_SECTIONS has no entry in VARIABLE_RENDER_FORMS.
-    expect(renderFormsForVariable("PROJECT.OUTLINE_SECTIONS")).toEqual([]);
+    // PROJECT.SHOTS has no entry in VARIABLE_RENDER_FORMS. (Until
+    // LOOK.FROMSTORY.LLM.1, this example was PROJECT.OUTLINE_SECTIONS —
+    // `lookTest.subjectActionFromStory` gave it a render form, so this proof
+    // needed a different still-orphan variable, not a different behaviour.)
+    expect(renderFormsForVariable("PROJECT.SHOTS")).toEqual([]);
   });
 
   it("THE assertion: the catalogue refuses a form belonging to another block type", () => {

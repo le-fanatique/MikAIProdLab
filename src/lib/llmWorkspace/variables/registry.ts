@@ -157,6 +157,23 @@ export function renderOutlineTargetSectionsBullet(targetSections: number | null 
   return `- ${sectionInstruction}`;
 }
 
+/**
+ * `lookTest.subjectActionFromStory`'s template block for `PROJECT.IDENTITY`
+ * (LOOK.FROMSTORY.LLM.1). Reads only `name` (identity) and `story` — never
+ * `pitch` or `description` — matching the ticket's own instruction ("le field
+ * story directement et les outline"): the two ingredients this operation was
+ * asked to read are the raw story text and the outline sections
+ * (`PROJECT.OUTLINE_SECTIONS`, its own render form below), not the shorter
+ * pitch/description fields `deriveFromStoryText` used to lean on. The Story
+ * line is dropped entirely when blank — a Project with an outline but no
+ * story text is still a normal input (§ preconditions of the descriptor).
+ */
+export function renderProjectIdentityLookTestStoryLines(data: ProjectIdentityData): string {
+  const lines: string[] = [`Project: ${data.name}`];
+  if (data.story?.trim()) lines.push(`Story:\n${data.story.trim()}`);
+  return lines.join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT.STYLE — anchors: project, sequence, shot, asset. World / Visual /
 // Rules segments of the Project's active published Style, wrapping
@@ -739,6 +756,20 @@ export async function resolveProjectOutlineSections(projectId: number): Promise<
     throw new Error(`resolveProjectOutlineSections: project ${projectId} not found.`);
   }
   return project.outline?.trim() ? parseOutlineSections(project.outline) : [];
+}
+
+/**
+ * `lookTest.subjectActionFromStory`'s template block for
+ * `PROJECT.OUTLINE_SECTIONS` (LOOK.FROMSTORY.LLM.1) — the second of the two
+ * ingredients the ticket names ("le field story directement et les
+ * outline"). Empty when the Project has no outline (or one that parses into
+ * no "## " sections) — a normal state per the descriptor's own
+ * preconditions, not an error.
+ */
+export function renderProjectOutlineSectionsLookTestLines(sections: OutlineSection[]): string {
+  if (sections.length === 0) return "";
+  const body = sections.map((s) => `## ${s.title}\n${s.body || "(empty)"}`).join("\n\n");
+  return `Outline:\n\n${body}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2856,6 +2887,10 @@ export const VARIABLE_RENDER_FORMS = {
     "castingFromSequence.projectBackgroundLines": renderCastingFromSequenceProjectBackgroundLines,
     "shotInsert.projectLines": renderShotInsertProjectLines,
     "styleAdjust.projectLines": renderStyleAdjustProjectLines,
+    "lookTest.storyLines": renderProjectIdentityLookTestStoryLines,
+  },
+  "PROJECT.OUTLINE_SECTIONS": {
+    "lookTest.outlineLines": renderProjectOutlineSectionsLookTestLines,
   },
   "PROJECT.SEQUENCES": {
     "assetsFromProject.sequencesBlock": renderAssetsFromProjectSequencesBlock,

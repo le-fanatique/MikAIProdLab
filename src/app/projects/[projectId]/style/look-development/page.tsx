@@ -127,7 +127,6 @@ export default async function LookDevelopmentPage({ params }: Props) {
       <PageHeader title="Look Development Bench" meta={project.name} />
       <LookDevelopmentBench
         projectId={pid}
-        project={{ name: project.name, pitch: project.pitch, description: project.description, story: project.story }}
         initialDraft={draftView}
         initialVersions={versionView}
         initialReferences={references}
