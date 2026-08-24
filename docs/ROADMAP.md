@@ -238,6 +238,18 @@ avec leur raison.
 
 ## 6. Clos — où le retrouver
 
+**`STYLE.COMPILE.POLARITY.1` — clos le 2026-08-24**, un commit : `674e177`.
+Aucune migration.
+
+Une règle `Avoid` était compilée comme une consigne à appliquer : le
+générateur produisait ce que l'auteur demandait d'exclure. `strength` n'est
+pas de la métadonnée, c'est une polarité — elle s'exprime désormais par le
+bloc qui accueille la règle. Le compilateur, qui alimente six surfaces de
+génération, n'avait aucun test dédié ; il en a dix-huit.
+
+**Une version publiée garde son texte compilé figé** : republier est ce qui
+prend la correction.
+
 **`LOOK.FEEDBACK.PLACE.1` et `LOOK.FEEDBACK.DRAFT.1` — clos le 2026-08-24**,
 deux commits : `66586f5` et `d25ae7f`. Aucune migration.
 

@@ -2,6 +2,51 @@
 
 Last updated: 2026-08-24
 
+## `STYLE.COMPILE.POLARITY.1` — an `Avoid` rule was compiled as an instruction
+
+One commit, `674e177`. No migration. Found by the author on 2026-08-24,
+looking at what his own generations came back with.
+
+`compileStyleSnapshot` rendered **every** active rule as `- <instruction>`
+under a single `Style Rules:` block. A rule carrying `strength: "Avoid"`
+therefore reached the generator identical to a `Required` one — the author
+asked to exclude blue skies and ordered them.
+
+**The reasoning error is worth keeping**, because it was written down and
+looked principled. §3 of `docs/PROJECT_STYLE_MVP_DECISIONS.md` says *"internal
+metadata is not literal prompt content"*, and the compiler's own header cited
+it to justify dropping `strength` along with `category`, `applicability`,
+`section` and `provenance`. But those four **describe** a rule; `strength`
+carries its **polarity**. Dropping it does not simplify the compiled text, it
+inverts it. The compiler already knew this elsewhere — a pillar's
+`negativeConstraints` have always had their own `Avoid:` block. Atomic rules
+had simply never been given the same treatment.
+
+**This session made it worse before finding it.** The two style descriptors
+shipped on 2026-08-23 instruct the model to express a negative constraint
+*through* `strength: "Avoid"` and never as a negation in the text ("textured
+brushwork", not "not photorealistic"). Good instruction in isolation; combined
+with a compiler that discards polarity, it **guarantees** the inversion. Before
+it, a hand-written "no blue skies" at least survived as text. A correct rule
+in one layer became a trap because of a silent assumption in another — the
+prompts were left untouched, and the compiler was made to hold its half.
+
+Polarity is expressed by **which block a rule lands in**, never by an inline
+`[Avoid]` label — on that point §3 was right, and its original line was left
+intact with a dated clarification appended below it. A future session reading
+§3 alone would otherwise revert this fix and look correct doing it.
+
+**The net came first**, and it did not exist: a compiler feeding six
+generation surfaces and every published version had **no dedicated test**. 18
+now, 12 characterizing what was already right, 6 pinning the polarity split —
+verified red against the unfixed code before the fix, and both required
+mutations break them.
+
+**Consequence the author must know**: a published version's `compiledText` is
+frozen by design, so versions published before this fix keep the inverted
+text. The draft and its rules are intact — publishing a new version is what
+picks up the correction.
+
 ## Where the style assistant is reachable from — two placement tickets
 
 `LOOK.FEEDBACK.PLACE.1` (`66586f5`) then `LOOK.FEEDBACK.DRAFT.1` (`d25ae7f`).
