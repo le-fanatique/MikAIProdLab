@@ -47,6 +47,16 @@ frozen by design, so versions published before this fix keep the inverted
 text. The draft and its rules are intact — publishing a new version is what
 picks up the correction.
 
+Confirmed by the author on 2026-08-24, on his own generations.
+
+**Two questions left open with him, recorded in `.agents/supervised_task.md`
+so they are not rediscovered**: whether `Required` and `Preferred` should be
+visibly marked in the compiled text rather than merely ordered, and whether
+the `Avoid:` block should eventually be routed to a ComfyUI negative-prompt
+node — a concept that exists nowhere in the app today (verified: no
+`negative` anywhere outside Project Style's own `negativeConstraints`), and
+therefore a chantier, not a fix.
+
 ## Where the style assistant is reachable from — two placement tickets
 
 `LOOK.FEEDBACK.PLACE.1` (`66586f5`) then `LOOK.FEEDBACK.DRAFT.1` (`d25ae7f`).
