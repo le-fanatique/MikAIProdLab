@@ -396,26 +396,25 @@ export const ACTION_REGISTRY = {
     response: "redirectOnly",
     ownership: { checked: true, transactional: false },
     columns: {
-      // `cameraPitch` removed (B19d) — see the module header, decision 4,
-      // and `.agents/executor_report.md`. `sequenceShots.ts`'s own
-      // `normalizeShot`/`createGeneratedShots` are untouched by this ticket
-      // (only `shots.fromSequence`'s `output.fields` and this declaration
-      // change): the action still reads a raw `camera_pitch` key when a
-      // caller supplies one and still writes `shots.cameraPitch` from it —
-      // this list documents what a model-driven Approve populates, which no
-      // longer includes it now that the descriptor stops asking the model
-      // for it. `cameraPosition`/`movementSpeed`/`cameraSubject` are
-      // deliberately NOT added here: `createGeneratedShots`'s insert
-      // (`sequenceShots.ts`) has no code path writing those three columns at
-      // all — `GeneratedSequenceShot`/`normalizeShot`/`toShot()`
-      // (`SequenceShotsLLMAssistPanel.tsx`) predate the five-field camera
-      // vocabulary and are out of this ticket's scope (its own
-      // `GeneratedSequenceShot` is declared "vivant", not to be moved or
-      // widened here) — see `.agents/executor_report.md` for the gap this
-      // leaves: the model can now propose `shot_size`/`camera_position`/
-      // `movement_speed`/`camera_subject`, but nothing on this write path
-      // reads any of the four back into a created shot's columns
-      // (`camera_movement` alone still round-trips, its key unchanged).
+      // `cameraPitch` is gone with its column (B19c/B19h): no model writes
+      // it, and `shots.cameraPitch` no longer exists to be written.
+      //
+      // **Corrected 2026-08-24.** This note used to say the opposite of the
+      // code, and had done since B19d: that the action "still writes
+      // `shots.cameraPitch`", and that `cameraPosition`/`movementSpeed`/
+      // `cameraSubject` were "deliberately NOT added here" because
+      // `createGeneratedShots` had "no code path writing those three columns
+      // at all". That gap was closed — `sequenceShots.ts:127-132` writes all
+      // five camera columns — and the note outlived it, describing a hole a
+      // future session would have set out to dig again. The four missing
+      // names are added below.
+      //
+      // Why nothing caught it: unlike `createShotAtPosition` and
+      // `addRuleAction`, this action had no assertion comparing this
+      // declaration against the row it actually produces. Its own test even
+      // proved `cameraSubject` was written while this list denied it, and
+      // the two never met. `registry.test.ts` now closes that loop for this
+      // action too, so the drift cannot come back silently.
       written: [
         "sequenceId",
         "shotCode",
@@ -424,7 +423,11 @@ export const ACTION_REGISTRY = {
         "durationSeconds",
         "actionPitch",
         "shotSize",
+        "cameraPosition",
         "cameraMovement",
+        "movementSpeed",
+        "cameraSubject",
+        "cameraLens",
         "continuityIn",
         "continuityOut",
         "shotPrompt",

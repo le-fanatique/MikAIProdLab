@@ -37,7 +37,13 @@ function normalizeShot(raw: unknown): GeneratedSequenceShot | null {
     continuity_in: str(r.continuity_in, 500),
     action_pitch: str(r.action_pitch, 300),
     shot_size: str(r.shot_size, 50),
-    camera_position: str(r.camera_position, 50),
+    // CAM.POSITION.COMPOSITE.1 — this is the bound that actually cut the
+    // author's data: three of Sq_5000's six shots were stored as
+    // `role: Over-` / `role: Rear Vie` / `role: Establish`. `cameraPosition`
+    // is three independent questions, so a correct answer names all three
+    // and the catalogue's longest is 80 characters. Kept in step with
+    // `shots.fromSequence`'s declared `truncateTo`, which mirrors this line.
+    camera_position: str(r.camera_position, 120),
     camera_movement: str(r.camera_movement, 50),
     movement_speed: str(r.movement_speed, 50),
     camera_subject: str(r.camera_subject, 300),

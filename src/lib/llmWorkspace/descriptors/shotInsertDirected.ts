@@ -250,7 +250,10 @@ No markdown. No explanation. Only the JSON object.`,
       // `cameraSubject`, which is prose by design and has no palette to
       // bound it against.
       { type: "string", field: "shotSize", jsonKey: "shot_size", truncateTo: 50 },
-      { type: "string", field: "cameraPosition", jsonKey: "camera_position", truncateTo: 50 },
+      // CAM.POSITION.COMPOSITE.1 — same bound, same reason as
+      // `shotsFromSequence`'s: this axis carries three answers, not one, and
+      // 50 cut them mid-word. See that descriptor's own note.
+      { type: "string", field: "cameraPosition", jsonKey: "camera_position", truncateTo: 120 },
       { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
       { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
       { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },

@@ -332,13 +332,20 @@ describe("shot.insertDirected — assembly (no oracle, §Pas d'oracle of the tic
 // field that is prose, not a palette code, and the ticket's own truncation
 // finding (a 50-character bound cut a real response mid-sentence) is why it
 // gets a wider bound — 300, not 50 — while the four palette fields
-// (`shotSize`/`cameraPosition`/`cameraMovement`/`movementSpeed`) stay at 50.
+// (`shotSize`/`cameraMovement`/`movementSpeed`) stay at 50, while `cameraPosition` moves to 120 (CAM.POSITION.COMPOSITE.1).
 // The write-action half (`normalizeProposedShot`) is untouched by this
 // ticket and does not read `cameraSubject` at all — see
 // `.agents/executor_report.md` for that gap.
 // ---------------------------------------------------------------------------
 describe("shot.insertDirected — camera field bounds (B19d, was cameraSubject bound LLMW.UC1.TUNE.2)", () => {
-  it("the descriptor declares cameraSubject's truncateTo as 300, and every palette camera field's as 50", () => {
+  // CAM.POSITION.COMPOSITE.1 (2026-08-24) — `cameraPosition` leaves the
+  // "every palette field is 50" rule, deliberately. It is the one axis the
+  // vocabulary declares as three independent questions (tilt / height /
+  // placement), so a correct answer names all three and the catalogue's
+  // longest is 80 characters. 50 was cutting real answers mid-word on the
+  // author's own shots. The other three palette axes carry one value each
+  // and keep their 50.
+  it("the descriptor declares cameraSubject's truncateTo as 300, cameraPosition's as 120, and the three single-value palette fields' as 50", () => {
     const output = shotInsertDirectedDescriptor.output;
     if (output.kind !== "object") throw new Error("unreachable");
     const byField = (name: string) => {
@@ -348,7 +355,7 @@ describe("shot.insertDirected — camera field bounds (B19d, was cameraSubject b
     };
     expect(byField("cameraSubject").truncateTo).toBe(300);
     expect(byField("shotSize").truncateTo).toBe(50);
-    expect(byField("cameraPosition").truncateTo).toBe(50);
+    expect(byField("cameraPosition").truncateTo).toBe(120);
     expect(byField("cameraMovement").truncateTo).toBe(50);
     expect(byField("movementSpeed").truncateTo).toBe(50);
   });

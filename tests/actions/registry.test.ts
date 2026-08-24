@@ -400,7 +400,15 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
         action_pitch: "ap1",
         camera_subject: "cp1",
         shot_size: "wide",
+        // CAM.POSITION.COMPOSITE.1 — `camera_position`, `movement_speed` and
+        // `camera_lens` were absent from this payload, so nothing proved the
+        // action writes them, and `columns.written` denied it for years
+        // without contradiction. The composite below is the real shape the
+        // instruction now asks for, at more than the old 50-character bound.
+        camera_position: "tilt: High Angle, height: Chest Level, role: Over-the-Shoulder (OTS)",
         camera_movement: "pan",
+        movement_speed: "Slow",
+        camera_lens: "35mm",
         continuity_out: "co1",
         shot_prompt: "sp1",
       },
@@ -443,6 +451,13 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].cameraSubject).toBe("cp1");
     expect(created[0].shotSize).toBe("wide");
     expect(created[0].cameraMovement).toBe("pan");
+    // The composite survives whole — 71 characters, past the bound that used
+    // to cut it at 50 and store `role: Over-`.
+    expect(created[0].cameraPosition).toBe(
+      "tilt: High Angle, height: Chest Level, role: Over-the-Shoulder (OTS)"
+    );
+    expect(created[0].movementSpeed).toBe("Slow");
+    expect(created[0].cameraLens).toBe("35mm");
     expect(created[0].continuityIn).toBe("ci1");
     expect(created[0].continuityOut).toBe("co1");
     expect(created[0].shotPrompt).toBe("sp1");
@@ -450,6 +465,34 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     expect(created[0].approvedVideoPath).toBeNull();
     expect(created[0].trimInSeconds).toBeNull();
     expect(created[0].trimOutSeconds).toBeNull();
+
+    // Declared columns match ACTION_REGISTRY.createGeneratedShots.columns.written.
+    //
+    // The loop this action closes: until 2026-08-24 this test proved
+    // `cameraSubject` was written while the declaration denied it, and
+    // nothing compared the two. `createShotAtPosition` and `addRuleAction`
+    // already had this assertion; this action did not, which is exactly how
+    // its declaration drifted four columns behind its own insert.
+    expect([...ACTION_REGISTRY.createGeneratedShots.columns.written].sort()).toEqual(
+      [
+        "sequenceId",
+        "shotCode",
+        "title",
+        "description",
+        "durationSeconds",
+        "actionPitch",
+        "shotSize",
+        "cameraPosition",
+        "cameraMovement",
+        "movementSpeed",
+        "cameraSubject",
+        "cameraLens",
+        "continuityIn",
+        "continuityOut",
+        "shotPrompt",
+        "orderIndex",
+      ].sort()
+    );
   });
 
   it("createGeneratedShots — refuses a sequence belonging to another project and writes no row", async () => {

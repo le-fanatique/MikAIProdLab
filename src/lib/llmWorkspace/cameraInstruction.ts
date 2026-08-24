@@ -97,7 +97,23 @@ export function renderCameraFieldSchemaLine(fieldId: CameraInstructionFieldId): 
       // it showed the model was not itself valid JSON.
       return `"shot_size": "string or null — ${renderAxisValueList(FIELD_TO_AXIS.shot_size)}, or a start-to-end interval such as 'MS to WS'"`;
     case "camera_position":
-      return `"camera_position": "string or null — ${renderAxisValueList(FIELD_TO_AXIS.camera_position)}"`;
+      // CAM.POSITION.COMPOSITE.1 — this axis is three independent questions
+      // (tilt / height / placement), and the shape it is asked for now says
+      // so. Until 2026-08-24 this line showed the three labelled groups as a
+      // value list while the rules block asked for "exactly one value": the
+      // model followed the shape it was shown and returned all three, which
+      // was the reasonable reading. The instruction now matches what the
+      // axis actually is, instead of contradicting itself.
+      //
+      // Single quotes on the example, for the same reason `shot_size`'s uses
+      // them: this line sits inside a block the instruction calls "a valid
+      // JSON object matching exactly this schema", and a double quote here
+      // would close the string early.
+      //
+      // `<value>` placeholders rather than real labels, on purpose — a real
+      // one would make "Eye Level" appear a third time in this line, and the
+      // catalogue's two legitimate occurrences (one per group) are asserted.
+      return `"camera_position": "string or null — three independent answers: one value from each group, written 'tilt: <value>, height: <value>, role: <value>'. Groups and their values — ${renderAxisValueList(FIELD_TO_AXIS.camera_position)}"`;
     case "camera_movement":
       return `"camera_movement": "string or null — ${renderAxisValueList(FIELD_TO_AXIS.camera_movement)}. One value only."`;
     case "movement_speed":
@@ -137,10 +153,10 @@ export function renderCameraInstructionRulesBlock(): string {
   const movementSpeed = renderAxisValueList(FIELD_TO_AXIS.movement_speed);
   return `CAMERA FIELDS:
 - shot_size is exactly one value from this set: ${shotSize}. It may also be a start-to-end interval, such as "MS to WS", when the framing itself changes over the course of the shot.
-- camera_position is exactly one value from this set: ${cameraPosition}.
+- camera_position answers three independent questions — how the lens is tilted, how high the camera sits, and the shot's narrative role. Give one value from each group, written exactly 'tilt: <value>, height: <value>, role: <value>': ${cameraPosition}.
 - camera_movement is exactly one value from this set: ${cameraMovement}. One movement only — never two combined (e.g. "pan + tilt").
 - movement_speed is exactly one value from this set: ${movementSpeed}.
-- None of the four fields above takes prose or a combination of values — shot_size's interval is the one named exception. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
+- None of the four fields above takes prose — shot_size's interval and camera_position's three-group answer are the two named exceptions, and no other field takes a combination of values. If the shot's camera behavior changes in a way these fields cannot state, describe it in camera_subject instead of forcing it into one of them.
 - camera_subject is prose, not a palette value: who or what the camera follows, and where the move starts and ends — movement + subject + start + direction + arrival. Do not use only a term detached from its subject.
 - camera_lens is the lens or focal length when the source states one ("35mm", "85mm macro", "wide-angle"). It has no list either, and it is secondary: never invent one.
 - A value outside these lists is accepted as written. Choose from the list when it fits; never invent one to force a fit.`;

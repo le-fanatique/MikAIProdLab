@@ -187,7 +187,16 @@ CONTINUITY RULES:
         // not a length problem), 300 on `cameraSubject` — it is prose by
         // design, the one axis with no palette to bound it against.
         { type: "string", field: "shotSize", jsonKey: "shot_size", truncateTo: 50 },
-        { type: "string", field: "cameraPosition", jsonKey: "camera_position", truncateTo: 50 },
+        // CAM.POSITION.COMPOSITE.1 — 50 was right for a one-value palette
+        // axis and wrong for this one: `cameraPosition` is three independent
+        // questions, so a correct answer is `tilt: … , height: … , role: …`,
+        // and the longest the catalogue can produce is 80 characters. On
+        // Sq_5000 (2026-08-24) three of six shots were cut mid-word —
+        // `role: Over-`, `role: Rear Vie`, `role: Establish`. 120 leaves room
+        // for a longer label without reopening this; the bound is pinned
+        // against the catalogue's own worst case in
+        // `tests/llmWorkspace/cameraInstruction.test.ts`.
+        { type: "string", field: "cameraPosition", jsonKey: "camera_position", truncateTo: 120 },
         { type: "string", field: "cameraMovement", jsonKey: "camera_movement", truncateTo: 50 },
         { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
         { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
