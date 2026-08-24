@@ -24,8 +24,6 @@ import type {
   ConformationFinding,
   ConformationInspectionRequest,
   ConformationProfile,
-  ConformationRequest,
-  ConformedReference,
 } from "../types";
 
 /**
@@ -54,47 +52,17 @@ const ROLE_TO_GUIDE_MODE: Readonly<Record<string, string>> = {
 };
 
 /**
- * Renders each stored reference into its `@ImageN` tag and, when its role has
- * one, the guide's named mode for it.
+ * SHOTPROMPT.HEADER.1 — the guide's named mode for a raw stored role, used by
+ * `buildSequenceStoryboardPrompt.ts`'s `Subject Definition:` line.
  *
- * **Order.** The ordinal follows the request's own order — which is the stored
- * order, which is the order the user arranged — and never the role. §5.6's
- * whole point is that this information *"is already in the database"*; a
- * re-sort here would throw away the one thing the Prompt Compiler used to make
- * the user restate by hand.
+ * SHOTPROMPT.CONFORM.1 removed this table's other reader, `conformReferences`
+ * — a second, wrong implementation of `@ImageN` numbering that duplicated
+ * `orderStoryboardReferences.ts` (`docs/WHERE_THE_RULES_LIVE.md`) and was dead
+ * on every consumed path. `ROLE_TO_GUIDE_MODE` itself, and this function,
+ * stay: `inspect` below does not use them, but the header does.
  *
- * **A role with no named mode keeps its tag and gets `mode: null`.** Three
- * options existed and two are wrong: dropping the reference loses an image the
- * user deliberately filed, and inventing a mode lies to the engine. Tagging it
- * without a mode is the only one that neither loses data nor fabricates any —
- * the caller can still name `@Image3` in the prose, which is exactly what an
- * untyped reference is for.
- *
- * **An unrecognized or absent role is treated as a role with no mode**, not as
- * an error. `normalizeReferenceImageRoleValue` returns `null` for anything the
- * catalogue does not know, including a legacy value written before a rename;
- * refusing there would make a stale row unrenderable rather than merely
- * unlabelled.
- */
-function conformReferences(request: ConformationRequest): ConformedReference[] {
-  return request.references.map((reference, index) => {
-    const role = normalizeReferenceImageRoleValue(reference.role);
-    return {
-      tag: `@Image${index + 1}`,
-      mode: role ? ROLE_TO_GUIDE_MODE[role] ?? null : null,
-      role,
-      label: reference.label,
-    };
-  });
-}
-
-/**
- * SHOTPROMPT.HEADER.1 — the same lookup `conformReferences` above makes,
- * exposed for `buildSequenceStoryboardPrompt.ts`'s `Subject Definition:`
- * line, which needs the guide's named mode for a raw stored role without
- * duplicating this table. A role with no named mode (or no role at all)
- * returns `null` — never an invented mode, the same rule `conformReferences`
- * already applies.
+ * A role with no named mode (or no role at all) returns `null` — never an
+ * invented mode.
  */
 export function getGuideModeForRole(role: string | null): string | null {
   const normalized = normalizeReferenceImageRoleValue(role);
@@ -123,9 +91,14 @@ const WORD_BUDGET_MIN = 60;
 const WORD_BUDGET_MAX = 100;
 /** The guide's hard cap, past which the prompt is well outside its intended shape. */
 const WORD_HARD_CAP = 150;
-/** The guide's per-engine tag caps: 9 images, 12 files total. */
-const IMAGE_TAG_CAP = 9;
-const FILE_TAG_CAP = 12;
+/**
+ * The engine's hard limits, 2.5: 30 images, 10 videos, 10 audios, 50 assets
+ * total (SHOTPROMPT.CONFORM.1, ajustement #5). Video and audio are not
+ * composed into a prompt yet (see `fileTagCount`'s own comment in
+ * `../types.ts`), so only the image and total caps have a check today.
+ */
+export const IMAGE_TAG_CAP = 30;
+export const FILE_TAG_CAP = 50;
 
 /**
  * Splits on whitespace after trimming and drops empty strings. Not a smarter
@@ -151,25 +124,32 @@ function countCameraPhrases(cameraPhrases: string[]): number {
 function inspect(request: ConformationInspectionRequest): ConformationFinding[] {
   const findings: ConformationFinding[] = [];
 
-  const wordCount = countWords(request.body);
-  if (wordCount > WORD_HARD_CAP) {
-    findings.push({
-      code: "wordBudget",
-      severity: "warn",
-      message: `The prompt body is ${wordCount} words, past the guide's ${WORD_HARD_CAP}-word hard cap.`,
-    });
-  } else if (wordCount > WORD_BUDGET_MAX) {
-    findings.push({
-      code: "wordBudget",
-      severity: "warn",
-      message: `The prompt body is ${wordCount} words, over the guide's ${WORD_BUDGET_MIN}–${WORD_BUDGET_MAX} word budget.`,
-    });
-  } else if (wordCount < WORD_BUDGET_MIN) {
-    findings.push({
-      code: "wordBudget",
-      severity: "warn",
-      message: `The prompt body is ${wordCount} words, under the guide's ${WORD_BUDGET_MIN}–${WORD_BUDGET_MAX} word budget.`,
-    });
+  // SHOTPROMPT.CONFORM.1 (ajustement #3c): the guide's 60-100 word budget
+  // targets the mono-plan formula and explicitly exempts shot-script formats
+  // from any word limit. `inspect` cannot tell a single Shot's body from a
+  // multi-shot package's on its own, so the caller states it via
+  // `isSinglePlan` — only counted when true.
+  if (request.isSinglePlan) {
+    const wordCount = countWords(request.body);
+    if (wordCount > WORD_HARD_CAP) {
+      findings.push({
+        code: "wordBudget",
+        severity: "warn",
+        message: `The prompt body is ${wordCount} words, past the guide's ${WORD_HARD_CAP}-word hard cap.`,
+      });
+    } else if (wordCount > WORD_BUDGET_MAX) {
+      findings.push({
+        code: "wordBudget",
+        severity: "warn",
+        message: `The prompt body is ${wordCount} words, over the guide's ${WORD_BUDGET_MIN}–${WORD_BUDGET_MAX} word budget.`,
+      });
+    } else if (wordCount < WORD_BUDGET_MIN) {
+      findings.push({
+        code: "wordBudget",
+        severity: "warn",
+        message: `The prompt body is ${wordCount} words, under the guide's ${WORD_BUDGET_MIN}–${WORD_BUDGET_MAX} word budget.`,
+      });
+    }
   }
 
   const cameraPhraseCount = countCameraPhrases(request.camera.movements);
@@ -214,6 +194,5 @@ function inspect(request: ConformationInspectionRequest): ConformationFinding[] 
 export const guideDefaultProfile: ConformationProfile = {
   id: "guide.default",
   name: "Default conformation guide",
-  conformReferences,
   inspect,
 };

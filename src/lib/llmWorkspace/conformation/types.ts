@@ -123,28 +123,20 @@ export type ConformationInspectionRequest = ConformationRequest & {
    * larger number and this module does not change.
    */
   fileTagCount: number;
-};
-
-export type ConformedReference = {
-  /** `@Image1`, `@Image2`… The ordinal follows the request's own order, never the role. */
-  tag: string;
   /**
-   * The guide's named mode for this reference, or `null` when its role has
-   * none. A `null` mode is not a failure and not a dropped reference — see
-   * `profiles/guideDefault.ts` for why keeping the tag is the only honest
-   * option.
+   * Whether `body` is a single Shot's plan. SHOTPROMPT.CONFORM.1 — the guide's
+   * 60-100 word budget targets its **mono-plan formula** and explicitly exempts
+   * its own shot-script format from any word limit. `inspect` has no way to
+   * tell a single Shot's body from a multi-shot package's on its own, so the
+   * caller states it. Defaults to not-single (`undefined`/`false`): a caller
+   * that says nothing gets no word-budget finding, never a wrong one.
    */
-  mode: string | null;
-  /** The canonical role this reference resolved to, or `null` if unrecognized/absent. */
-  role: string | null;
-  label: string | null;
+  isSinglePlan?: boolean;
 };
 
 /**
- * A profile's reference rendering. B13b widens this module with the output
- * discipline §5.6 calls for — the word budget, the one-primary-camera rule,
- * the tag caps and the lighting check — expressed as a `findings[]` alongside
- * the conformed text.
+ * The output discipline (B13b, widened by SHOTPROMPT.CONFORM.1). What the
+ * request stands off the guide against, reported as findings.
  *
  * **Findings, never exceptions.** §5.4 puts formatting entirely in the app's
  * hands and says it is *"never a rule the user is asked to obey"*. A prompt
@@ -154,11 +146,8 @@ export type ConformedReference = {
 export type ConformationProfile = {
   id: ConformationProfileId;
   name: string;
-  conformReferences: (request: ConformationRequest) => ConformedReference[];
   /**
-   * The output discipline (B13b): what the request stands off the guide
-   * against, reported as findings. Pure and deterministic, like
-   * `conformReferences` — it looks and reports, it never rewrites.
+   * Pure and deterministic — it looks and reports, it never rewrites.
    */
   inspect: (request: ConformationInspectionRequest) => ConformationFinding[];
 };

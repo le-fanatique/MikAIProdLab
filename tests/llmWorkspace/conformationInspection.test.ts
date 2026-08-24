@@ -5,6 +5,10 @@ import {
   type ConformationInspectionRequest,
   type ConformationReference,
 } from "@/lib/llmWorkspace/conformation";
+import {
+  FILE_TAG_CAP,
+  IMAGE_TAG_CAP,
+} from "@/lib/llmWorkspace/conformation/profiles/guideDefault";
 
 // ---------------------------------------------------------------------------
 // LLMW.CONFORMATION.2 (B13b) — the output discipline §5.6 calls "missing":
@@ -34,6 +38,9 @@ function compliantRequest(): ConformationInspectionRequest {
     body: words(80),
     lighting: "Golden hour, warm rim light",
     fileTagCount: 3,
+    // These fixtures probe the word budget itself, so they state the single-
+    // plan body the budget is scoped to (SHOTPROMPT.CONFORM.1).
+    isSinglePlan: true,
   };
 }
 
@@ -81,6 +88,16 @@ describe("guide.default — output discipline (inspect)", () => {
     expect(profile.inspect({ ...compliantRequest(), body: words(100) })).toEqual([]);
   });
 
+  it("wordBudget: an out-of-budget body triggers it for a single plan, but not for a multi-shot package", () => {
+    const outOfBudget = { ...compliantRequest(), body: words(10) };
+
+    const single = profile.inspect({ ...outOfBudget, isSinglePlan: true });
+    expect(single.map((f) => f.code)).toContain("wordBudget");
+
+    const multi = profile.inspect({ ...outOfBudget, isSinglePlan: false });
+    expect(multi.map((f) => f.code)).not.toContain("wordBudget");
+  });
+
   it("primaryCamera: zero camera phrases triggers it", () => {
     const findings = profile.inspect({ ...compliantRequest(), camera: { phrases: [], movements: [] } });
     expect(findings).toHaveLength(1);
@@ -112,26 +129,30 @@ describe("guide.default — output discipline (inspect)", () => {
     ).toEqual([]);
   });
 
-  it("imageTagCap: more than 9 referenced images triggers it", () => {
-    const findings = profile.inspect({ ...compliantRequest(), references: refs(10) });
+  it("imageTagCap: 10 referenced images does not trigger it — the 2.0 cap is gone", () => {
+    expect(profile.inspect({ ...compliantRequest(), references: refs(10) })).toEqual([]);
+  });
+
+  it(`imageTagCap: more than ${IMAGE_TAG_CAP} referenced images triggers it`, () => {
+    const findings = profile.inspect({ ...compliantRequest(), references: refs(IMAGE_TAG_CAP + 1) });
     expect(findings).toHaveLength(1);
     expect(findings[0].code).toBe("imageTagCap");
     expect(findings[0].severity).toBe("warn");
   });
 
-  it("imageTagCap: exactly 9 referenced images reports nothing", () => {
-    expect(profile.inspect({ ...compliantRequest(), references: refs(9) })).toEqual([]);
+  it(`imageTagCap: exactly ${IMAGE_TAG_CAP} referenced images reports nothing`, () => {
+    expect(profile.inspect({ ...compliantRequest(), references: refs(IMAGE_TAG_CAP) })).toEqual([]);
   });
 
-  it("fileTagCap: more than 12 files in total triggers it", () => {
-    const findings = profile.inspect({ ...compliantRequest(), fileTagCount: 13 });
+  it(`fileTagCap: more than ${FILE_TAG_CAP} files in total triggers it`, () => {
+    const findings = profile.inspect({ ...compliantRequest(), fileTagCount: FILE_TAG_CAP + 1 });
     expect(findings).toHaveLength(1);
     expect(findings[0].code).toBe("fileTagCap");
     expect(findings[0].severity).toBe("warn");
   });
 
-  it("fileTagCap: exactly 12 files reports nothing", () => {
-    expect(profile.inspect({ ...compliantRequest(), fileTagCount: 12 })).toEqual([]);
+  it(`fileTagCap: exactly ${FILE_TAG_CAP} files reports nothing`, () => {
+    expect(profile.inspect({ ...compliantRequest(), fileTagCount: FILE_TAG_CAP })).toEqual([]);
   });
 
   it("lightingMissing: null lighting triggers an info finding, not a warning", () => {
@@ -153,11 +174,12 @@ describe("guide.default — output discipline (inspect)", () => {
 
   it("reports findings in a fixed, deterministic order", () => {
     const findings = profile.inspect({
-      references: refs(10),
+      references: refs(IMAGE_TAG_CAP + 1),
       camera: { phrases: [], movements: [] },
       body: words(10),
       lighting: null,
-      fileTagCount: 13,
+      fileTagCount: FILE_TAG_CAP + 1,
+      isSinglePlan: true,
     });
 
     expect(findings.map((f) => f.code)).toEqual([

@@ -36,11 +36,7 @@ import type {
   PromptCompilationContext,
 } from "@/lib/prompts/buildPromptCompilationContext";
 import { getConformationProfile, DEFAULT_CONFORMATION_PROFILE_ID } from "../conformation";
-import type {
-  ConformationFinding,
-  ConformationProfileId,
-  ConformedReference,
-} from "../conformation";
+import type { ConformationFinding, ConformationProfileId } from "../conformation";
 
 export type StoryboardCompositionPartId =
   | "subject"
@@ -103,7 +99,6 @@ export type StoryboardShotComposition = {
   text: string;
   /** Only the parts that actually contributed — never a fabricated empty one. */
   parts: StoryboardCompositionPart[];
-  references: ConformedReference[];
   findings: ConformationFinding[];
 };
 
@@ -250,11 +245,6 @@ export function composeStoryboardShot(
     label: reference.label,
   }));
 
-  const references = profile.conformReferences({
-    references: conformationReferences,
-    camera: { phrases: cameraPhrases, movements: cameraMovements },
-  });
-
   const findings = profile.inspect({
     references: conformationReferences,
     camera: { phrases: cameraPhrases, movements: cameraMovements },
@@ -269,7 +259,10 @@ export function composeStoryboardShot(
     // absent because nothing composes video references into this prompt yet,
     // and audio has no entity at all (§5.6).
     fileTagCount: conformationReferences.length,
+    // This function composes exactly one Shot's plan — always a single plan,
+    // never a multi-shot package. SHOTPROMPT.CONFORM.1.
+    isSinglePlan: true,
   });
 
-  return { text, parts, references, findings };
+  return { text, parts, findings };
 }

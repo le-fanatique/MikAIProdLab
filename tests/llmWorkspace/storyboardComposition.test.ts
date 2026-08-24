@@ -129,13 +129,6 @@ describe("composeStoryboardShot", () => {
     expect(withoutForbidden.parts.some((p) => p.id === "constraints")).toBe(false);
   });
 
-  it("puts the references through the conformation stage, with their guide modes", () => {
-    const { references } = composeStoryboardShot(inputWith());
-
-    expect(references.map((r) => r.tag)).toEqual(["@Image1", "@Image2"]);
-    expect(references.map((r) => r.mode)).toEqual(["as first frame", "as character reference"]);
-  });
-
   it("surfaces the conformation findings rather than acting on them", () => {
     const result = composeStoryboardShot(
       inputWith({ lighting: null })
@@ -212,7 +205,6 @@ describe("composeStoryboardShot", () => {
 
     expect(result.parts.map((p) => p.id)).toEqual(["action"]);
     expect(result.text).toBe("Action: A door closes.");
-    expect(result.references).toEqual([]);
   });
 
   it("still reports primaryCamera when no movement is named at all — the finding kept its real meaning", () => {

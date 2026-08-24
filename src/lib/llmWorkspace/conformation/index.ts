@@ -32,5 +32,4 @@ export type {
   ConformationProfileId,
   ConformationReference,
   ConformationRequest,
-  ConformedReference,
 } from "./types";
