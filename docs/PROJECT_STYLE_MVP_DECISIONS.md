@@ -96,6 +96,25 @@ The compiler must:
   `Status` scaffolding;
 - display the exact compiled Style before generation.
 
+**Clarification, 2026-08-24 (`STYLE.COMPILE.POLARITY.1`):** "internal metadata
+is not literal prompt content" was read to include `strength`, and the
+compiler dropped it entirely — every non-disabled rule rendered as a plain
+`- <instruction>` bullet under `Style Rules:`, `Avoid` exactly like `Required`.
+That reading is too broad. `category`, `applicability`, `provenanceNotes` and
+`section` describe a rule; omitting them is what this decision calls for.
+`strength` is different: it carries the rule's **polarity**. Dropping it does
+not simplify the compiled text, it **inverts** its meaning — an `Avoid` rule
+compiled as an unmarked instruction tells the generator to do the very thing
+the author asked it to exclude. The fix is not an inline label (still
+forbidden, still "not literal prompt content" — `[Required]`/`[Avoid]` markers
+inside a rule line are not what this section calls for either): polarity is
+expressed by **which block a rule lands in**. `Avoid` rules render in their
+own `Avoid:` block; `Required` and `Preferred` rules (and a rule with no
+declared `strength`, since it stays optional) render in `Style Rules:`,
+`Required` first. See `src/lib/projectStyle/compileStyleSnapshot.ts` for the
+implementation and `tests/lib/compileStyleSnapshot.test.ts` for the
+characterization and polarity tests.
+
 ## 4. Workspace MVP
 
 The disabled Project navigation item becomes a real Project-level workspace
