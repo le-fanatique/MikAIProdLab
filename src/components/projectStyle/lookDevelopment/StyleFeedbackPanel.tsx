@@ -4,7 +4,11 @@
 // StyleFeedbackPanel.tsx — STYLE.LLM.LOOKFEEDBACK.UI.1 (ticket 4b of
 // "L'assistant de Project Style", 2026-08-23)
 //
-// The only surface for `style.adjustFromLookResult` (STYLE.LLM.LOOKFEEDBACK.CORE.1):
+// The surface for `style.adjustFromLookResult` (STYLE.LLM.LOOKFEEDBACK.CORE.1),
+// mounted twice since LOOK.FEEDBACK.PLACE.1 — under `Save Look Result` in
+// `LookDevelopmentBench` for the generation just published, and next to a
+// reopened test's review controls in `LookDevelopmentRecentTests` for an older
+// result. One component, two anchors, no second implementation:
 // a director's note anchored on ONE opened, durable Look Test result, not on
 // the Project's Working Draft in the abstract — "ça part trop vers le
 // photoréalisme" in front of a real render. Never imports the descriptor

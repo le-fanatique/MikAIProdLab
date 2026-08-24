@@ -53,6 +53,7 @@ import GenerationJobStatusPanel from "@/components/GenerationJobStatusPanel";
 import { refImageUrl } from "@/lib/refImageUrl";
 import LookDevelopmentRecentTests from "@/components/projectStyle/lookDevelopment/LookDevelopmentRecentTests";
 import LookDevelopmentComparisonGrid from "@/components/projectStyle/lookDevelopment/LookDevelopmentComparisonGrid";
+import StyleFeedbackPanel from "@/components/projectStyle/lookDevelopment/StyleFeedbackPanel";
 import type { LookResultStatus } from "@/lib/lookDevelopment/contracts";
 
 // ---------------------------------------------------------------------------
@@ -79,11 +80,13 @@ type Props = {
   initialLoadErrors: LoadErrors;
   /** STYLE.1.POLISH.1 — `default_workflow_look_development` (Settings > Generation Defaults). Null/absent/invalid falls back to the historical image-first default. */
   initialDefaultLookDevelopmentWorkflowId: number | null;
-  /** `style.adjustFromLookResult`'s `commitAdvisory` (STYLE.LLM.LOOKFEEDBACK.UI.1),
-   * resolved server-side by the page and passed straight through to
-   * `LookDevelopmentRecentTests`, which mounts `StyleFeedbackPanel` next to
-   * the opened result's review controls. This component never imports a
-   * descriptor itself. */
+  /** `style.adjustFromLookResult`'s `commitAdvisory` (STYLE.LLM.LOOKFEEDBACK.UI.1,
+   * extended by LOOK.FEEDBACK.PLACE.1), resolved server-side by the page and
+   * passed straight through to two `StyleFeedbackPanel` mounts: this
+   * component's own, under the just-saved `publishedResult` for the
+   * generation the author is looking at right now, and the one forwarded to
+   * `LookDevelopmentRecentTests`, next to an older, reopened test's review
+   * controls. This component never imports a descriptor itself. */
   styleFeedbackCommitAdvisory?: string;
 };
 
@@ -1467,6 +1470,14 @@ export default function LookDevelopmentBench({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={refImageUrl(publishedResult.filePath)} alt="Look Result" className="max-w-full rounded border border-[#2c3035]" />
                     )}
+                    {/* LOOK.FEEDBACK.PLACE.1 — the author is right here, having
+                        just saved this result; the panel is anchored on the
+                        SAME `publishedResult.resultId` (`{ resultId, filePath }`
+                        already carried by this state, not re-resolved). The
+                        older mount in `LookDevelopmentRecentTests` still serves
+                        a reopened test days later — this one saves the two
+                        clicks down to it for the generation just published. */}
+                    <StyleFeedbackPanel projectId={projectId} lookResultId={publishedResult.resultId} commitAdvisory={styleFeedbackCommitAdvisory} />
                   </div>
                 ) : (
                   <button type="button" className={buttonClass} disabled={publishing} onClick={handleSaveLookResult}>

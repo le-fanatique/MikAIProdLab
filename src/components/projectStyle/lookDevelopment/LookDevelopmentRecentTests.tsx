@@ -404,13 +404,16 @@ export default function LookDevelopmentRecentTests({
                 }}
                 onRefetchDetail={() => refetchDetail(lookTestId)}
               />
-              {/* STYLE.LLM.LOOKFEEDBACK.UI.1 — the only surface for
-                  `style.adjustFromLookResult`, next to this opened result's
-                  own review controls. */}
+              {/* STYLE.LLM.LOOKFEEDBACK.UI.1, extended by LOOK.FEEDBACK.PLACE.1
+                  — one of two surfaces for `style.adjustFromLookResult`. This
+                  one sits next to a REOPENED test's review controls, for
+                  looking back on an older result days later. The other lives
+                  in `LookDevelopmentBench`, right under `Save Look Result`,
+                  for the generation the author just published. */}
               <StyleFeedbackPanel projectId={projectId} lookResultId={detail.result.id} commitAdvisory={styleFeedbackCommitAdvisory} />
             </>
           ) : (
-            <p className="text-[#6e767d]">No durable result saved</p>
+            <p className="text-[#6e767d]">No durable result saved — save the Look Result to review it here and to request style feedback.</p>
           )}
 
           {(isPrerun || lookTestId in activeReruns) && (
