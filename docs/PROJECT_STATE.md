@@ -2,6 +2,41 @@
 
 Last updated: 2026-08-24
 
+## `LOOK.FROMSTORY.VARY.1` — the same question asked twice gets the same answer
+
+One commit, `ff89bbe`. No migration. The author, after using
+`Generate Subject & Action from Story` a few times: it proposes *« sensiblement
+la même chose »*, `action` above all.
+
+**Diagnosed against the real settings, not guessed**: `app_settings` carries
+`llm_temperature = 0.7` on all three providers, read read-only. Sampling was
+never the constraint. The operation was: identical story and outline, `intent:
+{}`, and **no memory of what it had just proposed**. Re-asking a model the
+exact same question returns the story's most salient beat — the same one,
+every time. `action` suffers more than `subject` because a story has many
+representative subjects and usually one obvious scene.
+
+The fix is a referent, not a temperature knob: the panel remembers the pair it
+displayed and sends it back as `intent.parameters.previousProposal`, so
+"propose something else" finally points at something. Plus an optional
+steering note — the button stays active without it, since here the note
+orients rather than *being* the operation — and three prompt rules: don't
+default to the opening scene, prefer a moment that stresses the render, depart
+noticeably from a supplied previous proposal.
+
+**The supervisor's own omission, stated**: `docs/LLM_WORKSPACE_PRODUCT_VISION.md`
+§4 already required, for UC1, that *"the user must be able to re-run with
+another seed"*. The descriptor was written yesterday with `intent: {}` and no
+such control, and no one checked that requirement against a new operation
+because it is phrased as belonging to UC1.
+
+**Known limit, reported rather than hidden**: the model sees only the
+immediately preceding proposal, not the history. Exact repetition should stop;
+cycling between two or three moments over 3+ consecutive clicks is not
+prevented. The next step, if that happens, is a list-of-options output — more
+UI, deliberately not taken here. Not yet re-tested by the author at the time of
+writing.
+
 ## `STYLE.COMPILE.POLARITY.1` — an `Avoid` rule was compiled as an instruction
 
 One commit, `674e177`. No migration. Found by the author on 2026-08-24,

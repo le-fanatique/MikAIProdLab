@@ -238,6 +238,16 @@ avec leur raison.
 
 ## 6. Clos — où le retrouver
 
+**`LOOK.FROMSTORY.VARY.1` — clos le 2026-08-24**, un commit : `ff89bbe`.
+Aucune migration.
+
+Deux clics posaient au modèle exactement la même question. La correction lui
+donne un référent — la proposition précédente — plus une note d'orientation
+facultative et trois règles de prompt. **Limite connue et assumée** : le
+modèle ne voit que la proposition immédiatement précédente, pas
+l'historique ; un cycle sur trois clics ou plus n'est pas empêché. La marche
+suivante, si l'auteur la demande, est une sortie en liste d'options.
+
 **`STYLE.COMPILE.POLARITY.1` — clos le 2026-08-24**, un commit : `674e177`.
 Aucune migration.
 
