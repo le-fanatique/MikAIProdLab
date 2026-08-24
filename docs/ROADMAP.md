@@ -37,16 +37,39 @@ La règle de conception à tenir dès le premier ticket, parce qu'une passe sur
 le storyboard image puis vidéo suivra : **un seul compositeur, paramétré par
 le nombre de shots, dont le shot isolé est le cas N = 1.**
 
-**Livré : `#1`** — `SHOTGEN.INSTRUCTION.1`, commit `bd7ee02`, aucune
-migration. Generate Shots cesse d'obliger le modèle à redécrire l'apparence du
-casting, et demande enfin `lighting`. Une vérification manuelle reste due à
-l'auteur : générer réellement des plans et lire si le casting est nommé sans
-être redécrit. Aucun agent ne peut la faire.
+**Trois tickets livrés, aucune migration**, et la file non bloquée est
+épuisée. Détail dans `docs/PROJECT_STATE.md`.
 
-**Prochain : `#2`, et il t'appartient.** Remplir le `lighting` des six
-environnements de Space Corsair — tous à `null` aujourd'hui. C'est de la
-donnée, pas du code, et le `#1` comme le `#3` n'ont leur pleine mesure qu'une
-fois ce rig posé.
+| Ticket | Commit | Livré |
+| --- | --- | --- |
+| `SHOTGEN.INSTRUCTION.1` | `bd7ee02` | la consigne cesse d'obliger à redécrire le casting, et demande `lighting` |
+| `SHOTPROMPT.HEADER.1` | `bcc6af0` | l'en-tête nomme les sujets, le Style ne se répète plus par shot |
+| `SHOTPROMPT.CONFORM.1` | `c00ebe9` | `conformReferences` supprimé, caps et budget alignés sur 2.5 |
+
+**Deux ajustements de l'audit sont sortis de la file**, et c'est la
+supervision qui les a arrêtés :
+
+- **`#6` — annulé.** Il proposait de cesser de concaténer les axes caméra et
+  la prose de `camera_subject`. C'est une décision explicite de l'auteur du
+  2026-08-21, inscrite dans `cameraInstruction.ts` avec la consigne qu'il
+  faudrait sa parole pour la défaire. L'audit l'avait proposée sans avoir lu ce
+  paragraphe. **Réouvrir demande le go de l'auteur.**
+- **`#8` — reporté après `#7`.** Le livrer seul viderait `Constraints:` de la
+  seule contrainte négative qui atteint le moteur aujourd'hui.
+
+**Bloqué sur l'auteur, et c'est le seul chemin :**
+
+- **`#2` — remplir le `lighting` des six environnements de Space Corsair.**
+  Tous à `null`. Ce n'est pas du code. `lightingFromImage` peut proposer un rig
+  depuis une image de référence approuvée, pour éviter la page blanche.
+- **`#4`, la carte de prompt, et `#7`, les contraintes au niveau shot** — les
+  deux seules migrations de l'audit. Jamais appliquées automatiquement :
+  générer, montrer le SQL, attendre `db:migrate`.
+- **`#3b`, brancher le shot isolé sur le compositeur** — délibérément gardé
+  pour **après `#4`**. Sans la carte, le bloc Subject d'un shot isolé déverse
+  les champs longs de la bible dans le prompt : l'audit §8 mesure 299 mots là
+  où la cible en fait 250. Le livrer avant la carte produirait un prompt que
+  l'auteur jugerait sur ses défauts.
 
 Ticket actif : voir `.agents/supervised_task.md`.
 

@@ -2,6 +2,63 @@
 
 Last updated: 2026-08-24
 
+## `SHOTPROMPT.HEADER.1` and `SHOTPROMPT.CONFORM.1` — the header, and the rule that was wrong twice
+
+Two commits, `bcc6af0` and `c00ebe9`. No migration.
+
+**The header now names the subjects** (`Casting References:` →
+`Subject Definition:`, carrying the guide's named mode where the role has one),
+and **the Project Style is rendered once** instead of being copied into every
+Shot body. Audit §8's measurement is the argument: on a twenty-Shot Sequence,
+the repeated parts weigh 14 644 words against 2 465 once the header is
+factorised. The dominant term was repetition, never length.
+
+**`conformReferences` is gone** — a second, wrong implementation of a rule
+`orderStoryboardReferences` already owned, numbering `@ImageN` from the stored
+order while the engine numbers from the batch selection. Dead as well as wrong:
+nothing read its output. Its eleven tests went with it and the suite count
+dropped, deliberately.
+
+**Two supervision findings worth keeping**, because both are the same class of
+error and both were caught after the map meant to prevent them was written.
+
+1. **The ticket asked for a `【Unused Assets】` block, and the ticket was
+   wrong.** The executor implemented it and honestly flagged a doubt: those
+   images are never uploaded. Tracing the payment path confirmed it —
+   `resolvedBatchImages` holds only the selection, and `expandDynamicBatch`
+   clones the chain once per selected image. The block was announcing `@ImageN`
+   tags absent from the model's own request, and was vacant by construction:
+   without a Dynamic Batch node everything is sent and the block never appears;
+   it appeared only when the batch had narrowed, which is exactly when the
+   unselected ones do not travel. The block makes sense in `sd25-pe` because
+   there one attaches a pool and distributes roles in the text; here selection
+   precedes the payload. **Removed.**
+2. **Audit adjustment #6 contradicts a decision the author had already made.**
+   It proposed no longer concatenating the camera axes with `camera_subject`'s
+   prose. `cameraInstruction.ts:140-147` records the author seeing that
+   duplication on his own shots on 2026-08-21, keeping it deliberately, and
+   states *"Removing it would need the author's word, not a tidy-up"*. The
+   audit proposed it without having read that paragraph. **Cancelled; reopening
+   needs his go.**
+
+Both are the failure `docs/WHERE_THE_RULES_LIVE.md` was written to prevent —
+reasoning from a model of the world (the skill's, the schema's) rather than
+from this app's own path. **The map did not stop its own author from repeating
+the mistake the same day.** That is worth knowing about maps: they help the
+reader who opens them, and this one is only useful if the reading contract
+actually forces it open.
+
+**Adjustment #8 is deferred behind #7, not dropped.** Removing
+`forbidden_variations` from the composed prompt would empty `Constraints:` of
+the only negative constraint reaching the engine today, its replacement being a
+column that needs an unauthorised migration.
+
+**The unblocked queue is now exhausted.** What remains needs the author: the
+six environments' lighting (data, not code), the two migrations (#4 and #7),
+and #3b — wiring the isolated Shot onto the composer — deliberately held until
+the prompt card exists, since without it a single Shot's Subject block dumps
+the Bible's long fields into the prompt.
+
 ## `SHOTGEN.INSTRUCTION.1` — the instruction was manufacturing the drift
 
 One commit, `bd7ee02`. No migration — `shots.lighting` already existed. First
