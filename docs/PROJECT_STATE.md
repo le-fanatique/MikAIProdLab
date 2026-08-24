@@ -2,6 +2,43 @@
 
 Last updated: 2026-08-24
 
+## Where the style assistant is reachable from — two placement tickets
+
+`LOOK.FEEDBACK.PLACE.1` (`66586f5`) then `LOOK.FEEDBACK.DRAFT.1` (`d25ae7f`).
+No migration. Both came out of the author testing his own product on
+2026-08-24, and the second corrected the supervisor, not the code.
+
+**First he could not find the panel.** It existed at one mount only, inside
+the `detail.result` branch of a reopened Look Test: scroll down, click `Open`,
+and only if a durable result had been saved. It was moved under
+`Save Look Result`, where he had just clicked, anchored on the
+`publishedResult` the bench already held.
+
+**Then he said what he had actually meant**: *« je veux faire des feedback sur
+le current draft, donc pas associé à une generation »*. The supervisor had
+heard half the need — reacting to a render — and built only that. The
+operation for the other half already existed (`style.adjustDirected`) and was
+mounted nowhere but the Style Workspace.
+
+The lesson is about listening, not architecture: a request that names a place
+(*« à côté du bouton Generate Look Test »*) was read as a placement problem
+when it was a **different operation**. Asking "which of the two things do you
+mean" would have cost one sentence; assuming cost a ticket.
+
+**What the fix taught about the code.** The two existing panels differ
+structurally, not cosmetically: the Style Workspace one receives
+`handleAddRule` and `revision` from a parent that keeps the rule list live;
+the bench one resolves the revision itself through `getWorkingDraft`. The
+second contract is the one a page without that parent needs — so it was
+parameterized by operation (`StyleDirectorNotePanel`) and now serves three
+mounts with one implementation. The Style Workspace panel was deliberately
+left alone: folding it in would cost its live rule-list refresh.
+
+Only the rule cards were extracted — 33 bytes-identical lines, pure JSX, no
+state moved. The Approve/Discard row was measured and **not** extracted: one
+caller has a `submitting` condition the other does not, and forcing that into
+a shared component would have hidden a real difference.
+
 ## `LOOK.FROMSTORY.LLM.1` — a preset that cut, replaced by one that writes
 
 One commit, `0c149ab`. No migration. Asked for by the author on 2026-08-24,

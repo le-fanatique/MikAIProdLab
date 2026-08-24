@@ -238,6 +238,18 @@ avec leur raison.
 
 ## 6. Clos — où le retrouver
 
+**`LOOK.FEEDBACK.PLACE.1` et `LOOK.FEEDBACK.DRAFT.1` — clos le 2026-08-24**,
+deux commits : `66586f5` et `d25ae7f`. Aucune migration.
+
+L'assistant de style est atteignable depuis le banc : un panneau sur le
+Working Draft à côté de `Generate Look Test`, utilisable sans aucune
+génération, et un panneau sur le résultat sous `Save Look Result`. Un
+composant paramétré par son opération, trois montages.
+
+Le second ticket a corrigé le superviseur, pas le code : une demande qui
+nommait un endroit était en fait une demande d'**une autre opération**. C'est
+écrit dans `docs/PROJECT_STATE.md` parce que la leçon est d'écoute.
+
 **`LOOK.FROMSTORY.LLM.1` — clos le 2026-08-24**, un commit : `0c149ab`.
 Aucune migration.
 
