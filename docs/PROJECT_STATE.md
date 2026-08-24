@@ -2,6 +2,64 @@
 
 Last updated: 2026-08-24
 
+## `SHOTGEN.INSTRUCTION.1` — the instruction was manufacturing the drift
+
+One commit, `bd7ee02`. No migration — `shots.lighting` already existed. First
+ticket of the Shot-prompt chantier (`docs/SHOT_PROMPT_SD25_AUDIT.md`, §9 #1).
+
+Two misroutings in one instruction, both invisible from the schema.
+
+**`shot_prompt` was forbidden to name the cast.** The closing line said *"No
+labels, no narrative scene references — only visual content"*, which obliges
+the model to re-invent each character's appearance in every Shot. It does: on
+Sq_5000, Azelle's wardrobe is phrased five different ways across six Shots, and
+none of them is her Asset Bible's; the prop that holds that wardrobe is cast on
+none of the six. The drift was produced upstream, before any image model saw
+the prompt.
+
+One nuance that had to be walked back before it was written down: on Sq_4000
+the model never names her, on Sq_5000 it names her in five Shots of six. The
+instruction does not *reliably* suppress the name — it makes the result
+unpredictable in both directions. What is constant, and all that can be
+asserted, is the re-description.
+
+**`lighting` was never asked for.** Fourteen output fields, not one of them,
+while the same instruction demanded a self-contained visual paragraph. The
+lighting therefore landed inside `shot_prompt` and the column built for it
+stayed empty — `null` on Sq_5000's six Shots, on all six Sequences, and on all
+six environment Assets. It is now asked for, and it traverses: JSON schema,
+`normalizeShot`, the insert, `columns.written`.
+
+It is described as the Shot's own lighting *event*, never the inherited
+ambiance: the rig belongs to the environment and the Sequence, which
+`resolveStoryboardLighting` already resolves by precedence rather than
+accumulation. The author's arbitration, 2026-08-24.
+
+**The supervision found what the executor had honestly declared it had not
+done.** Its report stated plainly that it had reasoned about the three required
+mutations rather than running them. `mikai-method` §2 does not accept that, so
+the supervisor ran four: the action ceasing to write `lighting`, `lighting`
+removed from `columns.written`, the instruction reverted (seven tests), and
+`lighting` removed from the JSON schema. All red. **The honesty of the report is
+what made the check possible** — it is worth more than a report claiming the
+mutations were exercised.
+
+Two test files outside the announced scope had to follow, additively, with no
+assertion weakened. The ticket did not name them because the supervision had
+not seen them — a drafting gap, not an executor overreach.
+
+**Consequence the author must know**: `shot_prompt` will shrink, possibly to
+nothing. Once `action_pitch`, `description`, the six camera axes and `lighting`
+are excluded, roughly fifteen words of a sixty-word paragraph were genuinely
+unique, and those were lighting. This is the direction the audit wants — §9 #4
+has that field dissolving — not a regression.
+
+**Still owed, and not yet done**: the manual check of §8 of the ticket —
+generating Shots on a real Sequence and reading whether the model actually
+names the cast without re-describing it. It is a model call on the author's own
+project, so no agent can perform it. Approved on the strength of the code and
+the net, not on a real generation.
+
 ## `CAM.POSITION.COMPOSITE.1` — three answers were being stored in a field of fifty
 
 One commit, `3bf6150`. No migration. Found on Sq_5000, which the author

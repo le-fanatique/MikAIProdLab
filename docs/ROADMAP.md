@@ -37,6 +37,17 @@ La règle de conception à tenir dès le premier ticket, parce qu'une passe sur
 le storyboard image puis vidéo suivra : **un seul compositeur, paramétré par
 le nombre de shots, dont le shot isolé est le cas N = 1.**
 
+**Livré : `#1`** — `SHOTGEN.INSTRUCTION.1`, commit `bd7ee02`, aucune
+migration. Generate Shots cesse d'obliger le modèle à redécrire l'apparence du
+casting, et demande enfin `lighting`. Une vérification manuelle reste due à
+l'auteur : générer réellement des plans et lire si le casting est nommé sans
+être redécrit. Aucun agent ne peut la faire.
+
+**Prochain : `#2`, et il t'appartient.** Remplir le `lighting` des six
+environnements de Space Corsair — tous à `null` aujourd'hui. C'est de la
+donnée, pas du code, et le `#1` comme le `#3` n'ont leur pleine mesure qu'une
+fois ce rig posé.
+
 Ticket actif : voir `.agents/supervised_task.md`.
 
 Deux hotfix sont sortis de l'audit et sont déjà commités et poussés
