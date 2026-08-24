@@ -201,6 +201,12 @@ CONTINUITY RULES:
         { type: "string", field: "movementSpeed", jsonKey: "movement_speed", truncateTo: 50 },
         { type: "string", field: "cameraSubject", jsonKey: "camera_subject", truncateTo: 300 },
         { type: "string", field: "cameraLens", jsonKey: "camera_lens", truncateTo: 80 },
+        // SHOTGEN.INSTRUCTION.1 — the shot's own lighting event, distinct
+        // from the ambient rig `SEQ.LIGHTING`/`resolveStoryboardLighting`
+        // carry by precedence, not accumulation. Prose, like `cameraSubject`
+        // right above it — same 300-character bound, for the same reason:
+        // it is a sentence, not a palette code.
+        { type: "string", field: "lighting", jsonKey: "lighting", truncateTo: 300 },
         { type: "string", field: "continuityOut", jsonKey: "continuity_out", truncateTo: 500 },
         { type: "string", field: "shotPrompt", jsonKey: "shot_prompt", truncateTo: 1000 },
       ],

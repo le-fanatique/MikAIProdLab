@@ -144,6 +144,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
       "camera_lens": "string or null — lens or focal length, only when stated",
+      "lighting": "string or null — the lighting event specific to this shot only, e.g. a flare, a strobe, a shadow passing over the subject. Never the ambient light already set by the environment or the sequence.",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -151,7 +152,7 @@ Always respond with a valid JSON object matching exactly this schema:
 }
 No markdown. No explanation. Only the JSON object.
 The array must contain exactly 8 shots.
-shot_prompt must be a dense, cinematic visual description suitable for AI image/video generation. No labels, no narrative scene references — only visual content.`, user: `TASK
+shot_prompt may name any cast character or location by its own name. It must never redescribe their appearance — that is the bible's job, not this field's. shot_prompt states only what this shot alone adds visually: never repeat what is already covered by action_pitch, description, the six camera fields, or lighting.`, user: `TASK
 Generate exactly 8 shots for this sequence.
 
 APPROVED SEQUENCE PROMPT — primary creative direction, overrides all other context:
@@ -245,6 +246,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
       "camera_lens": "string or null — lens or focal length, only when stated",
+      "lighting": "string or null — the lighting event specific to this shot only, e.g. a flare, a strobe, a shadow passing over the subject. Never the ambient light already set by the environment or the sequence.",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -252,7 +254,7 @@ Always respond with a valid JSON object matching exactly this schema:
 }
 No markdown. No explanation. Only the JSON object.
 The array must contain exactly 6 shots.
-shot_prompt must be a dense, cinematic visual description suitable for AI image/video generation. No labels, no narrative scene references — only visual content.`, user: `TASK
+shot_prompt may name any cast character or location by its own name. It must never redescribe their appearance — that is the bible's job, not this field's. shot_prompt states only what this shot alone adds visually: never repeat what is already covered by action_pitch, description, the six camera fields, or lighting.`, user: `TASK
 Generate exactly 6 shots for this sequence.
 
 APPROVED SEQUENCE PROMPT — primary creative direction, overrides all other context:
@@ -338,6 +340,7 @@ Always respond with a valid JSON object matching exactly this schema:
       "movement_speed": "string or null — Slow, Smooth, Stable, Gradual, Gentle, Rapid",
       "camera_subject": "string or null — prose: movement + subject it follows + start + direction + arrival",
       "camera_lens": "string or null — lens or focal length, only when stated",
+      "lighting": "string or null — the lighting event specific to this shot only, e.g. a flare, a strobe, a shadow passing over the subject. Never the ambient light already set by the environment or the sequence.",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -345,7 +348,7 @@ Always respond with a valid JSON object matching exactly this schema:
 }
 No markdown. No explanation. Only the JSON object.
 The array must contain exactly 4 shots.
-shot_prompt must be a dense, cinematic visual description suitable for AI image/video generation. No labels, no narrative scene references — only visual content.`, user: `Project: Untitled Project
+shot_prompt may name any cast character or location by its own name. It must never redescribe their appearance — that is the bible's job, not this field's. shot_prompt states only what this shot alone adds visually: never repeat what is already covered by action_pitch, description, the six camera fields, or lighting.`, user: `Project: Untitled Project
 
 Sequence: Sequence
 Summary: Not provided

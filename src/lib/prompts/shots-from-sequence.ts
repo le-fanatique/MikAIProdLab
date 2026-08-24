@@ -35,6 +35,10 @@ export type GeneratedSequenceShot = {
   movement_speed?: string | null;
   camera_subject?: string | null;
   camera_lens?: string | null;
+  // SHOTGEN.INSTRUCTION.1 — the shot's own lighting event, distinct from the
+  // ambient rig `shots.lighting`'s sibling columns (`sequences.lighting`,
+  // an environment Asset's `lighting`) already carry by precedence.
+  lighting?: string | null;
   continuity_out?: string | null;
   shot_prompt?: string | null;
 };

@@ -48,6 +48,9 @@ function normalizeShot(raw: unknown): GeneratedSequenceShot | null {
     movement_speed: str(r.movement_speed, 50),
     camera_subject: str(r.camera_subject, 300),
     camera_lens: str(r.camera_lens, 80),
+    // SHOTGEN.INSTRUCTION.1 — same 300-character bound as `camera_subject`,
+    // which mirrors this line: prose, not a palette code.
+    lighting: str(r.lighting, 300),
     continuity_out: str(r.continuity_out, 500),
     shot_prompt: str(r.shot_prompt, 1000),
   };
@@ -136,6 +139,7 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
       movementSpeed: shot.movement_speed ?? null,
       cameraSubject: shot.camera_subject ?? null,
       cameraLens: shot.camera_lens ?? null,
+      lighting: shot.lighting ?? null,
       continuityIn: shot.continuity_in ?? null,
       continuityOut: shot.continuity_out ?? null,
       shotPrompt,

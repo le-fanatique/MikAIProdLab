@@ -2638,6 +2638,7 @@ Always respond with a valid JSON object matching exactly this schema:
       ${renderCameraFieldSchemaLine("movement_speed")},
       ${renderCameraFieldSchemaLine("camera_subject")},
       ${renderCameraFieldSchemaLine("camera_lens")},
+      "lighting": "string or null — the lighting event specific to this shot only, e.g. a flare, a strobe, a shadow passing over the subject. Never the ambient light already set by the environment or the sequence.",
       "continuity_out": "string — changed state at the end of this shot, which becomes the starting state of the next shot",
       "shot_prompt": "string or null — clean visual generation prompt in English, one dense paragraph"
     }
@@ -2645,7 +2646,7 @@ Always respond with a valid JSON object matching exactly this schema:
 }
 No markdown. No explanation. Only the JSON object.
 The array must contain exactly ${count} shots.
-shot_prompt must be a dense, cinematic visual description suitable for AI image/video generation. No labels, no narrative scene references — only visual content.`;
+shot_prompt may name any cast character or location by its own name. It must never redescribe their appearance — that is the bible's job, not this field's. shot_prompt states only what this shot alone adds visually: never repeat what is already covered by action_pitch, description, the six camera fields, or lighting.`;
 }
 
 /** Template, Path A (Approved Sequence Prompt present) — `shots-from-sequence.ts:74-121`. Empty when there is no Approved Sequence Prompt. */

@@ -535,6 +535,8 @@ describe("equality — shots.fromSequence via runWorkspaceOperation vs. the list
           { type: "string", field: "movement_speed", jsonKey: "movement_speed" },
           { type: "string", field: "camera_subject", jsonKey: "camera_subject" },
           { type: "string", field: "camera_lens", jsonKey: "camera_lens" },
+          // SHOTGEN.INSTRUCTION.1 — kept in step with `shotsFromSequenceDescriptor.output.item.fields`.
+          { type: "string", field: "lighting", jsonKey: "lighting" },
           { type: "string", field: "continuity_out", jsonKey: "continuity_out" },
           { type: "string", field: "shot_prompt", jsonKey: "shot_prompt" },
         ],

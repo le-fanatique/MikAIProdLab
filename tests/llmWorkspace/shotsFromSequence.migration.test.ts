@@ -93,6 +93,8 @@ const expectedShots = [
     movement_speed: "stable",
     camera_subject: longCameraSubject.slice(0, 300), // truncateTo: 300
     camera_lens: "",
+    // SHOTGEN.INSTRUCTION.1 — absent from `rawModelResponse` -> readStringField's own default, "".
+    lighting: "",
     continuity_out: "Courier and rival face off, weapons drawn.",
     shot_prompt: "Wide static shot of two figures facing off on a rooftop at dusk.",
   },
@@ -109,6 +111,7 @@ const expectedShots = [
     movement_speed: "",
     camera_subject: "",
     camera_lens: "",
+    lighting: "",
     continuity_out: "",
     shot_prompt: "",
   },

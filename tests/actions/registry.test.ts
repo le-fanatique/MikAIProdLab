@@ -409,6 +409,8 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
         camera_movement: "pan",
         movement_speed: "Slow",
         camera_lens: "35mm",
+        // SHOTGEN.INSTRUCTION.1 — the shot's own lighting event.
+        lighting: "lt1",
         continuity_out: "co1",
         shot_prompt: "sp1",
       },
@@ -458,6 +460,7 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
     );
     expect(created[0].movementSpeed).toBe("Slow");
     expect(created[0].cameraLens).toBe("35mm");
+    expect(created[0].lighting).toBe("lt1");
     expect(created[0].continuityIn).toBe("ci1");
     expect(created[0].continuityOut).toBe("co1");
     expect(created[0].shotPrompt).toBe("sp1");
@@ -487,6 +490,7 @@ describe("action registry — insert entries (LLMW.ACTION.INSERT.1, B7c-w)", () 
         "movementSpeed",
         "cameraSubject",
         "cameraLens",
+        "lighting",
         "continuityIn",
         "continuityOut",
         "shotPrompt",

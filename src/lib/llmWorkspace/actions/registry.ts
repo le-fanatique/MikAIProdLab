@@ -428,6 +428,12 @@ export const ACTION_REGISTRY = {
         "movementSpeed",
         "cameraSubject",
         "cameraLens",
+        // SHOTGEN.INSTRUCTION.1 — added alongside `lighting` joining the
+        // model's JSON output (`shots-from-sequence.ts`'s `jsonSchemaBlock`)
+        // and `normalizeShot`/the insert above. Same shape as the four
+        // camera columns above it: declared here the moment the action
+        // actually writes it, not after.
+        "lighting",
         "continuityIn",
         "continuityOut",
         "shotPrompt",
