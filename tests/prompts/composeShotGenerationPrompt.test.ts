@@ -94,7 +94,7 @@ describe("composeShotGenerationPrompt", () => {
     // The six-part composeStoryboardShot body is reused, not reimplemented.
     expect(result.text).toContain("Camera: medium shot — eye level");
     expect(result.text).toContain("Lighting: Harsh rooftop sun.");
-    expect(result.text).toContain("Constraints: - Mara: Never smiling.");
+    expect(result.text).toContain("Avoid: - Mara: Never smiling.");
   });
 
   it("omits the Style line when no Project Style is resolved", () => {
@@ -123,32 +123,38 @@ describe("composeShotGenerationPrompt", () => {
   });
 
   // SHOTPROMPT.STYLE.1 Part B — the resolved Project Style Avoid block
-  // reaches Constraints through this composer too, never Style.
-  it("passes projectStyleAvoid through to Constraints, never into Style", () => {
+  // reaches the Avoid part through this composer too, never Style.
+  // SHOTPROMPT.POLARITY.1 — that part is now labelled `Avoid`, not
+  // `Constraints`.
+  it("passes projectStyleAvoid through to the Avoid part, never into Style", () => {
     const result = composeShotGenerationPrompt(
       baseInput({ projectStyle: "Gritty cyberpunk realism.", projectStyleAvoid: "Avoid:\n- No bright colors." })
     );
     const styleSection = result.sections.find((s) => s.id === "style")!;
     expect(styleSection.text).not.toContain("Avoid:");
     const compositionSection = result.sections.find((s) => s.id === "composition")!;
-    expect(compositionSection.text).toContain("Constraints: Avoid:\n- No bright colors.");
+    expect(compositionSection.text).toContain("Avoid: Avoid:\n- No bright colors.");
   });
 
   // SHOTPROMPT.RENDER.1 — shot 999230's real payload: the composer must
-  // never reproduce "Style: Style Rules:" nor "Constraints: Avoid:". By the
-  // time `projectStyle`/`projectStyleAvoid` reach this composer they are
-  // already `resolveProjectStyleTextForComposition`'s heading-less
-  // `styleText`/`avoidText` (see tests/lib/resolveProjectStyleTextForComposition.test.ts)
+  // never reproduce "Style: Style Rules:". By the time `projectStyle`/
+  // `projectStyleAvoid` reach this composer they are already
+  // `resolveProjectStyleTextForComposition`'s heading-less `styleText`/
+  // `avoidText` (see tests/lib/resolveProjectStyleTextForComposition.test.ts)
   // — this test exercises the composer's own labeling with exactly that
   // shape, and still expects the rules/avoid content to survive.
-  it("never doubles the block heading under its own 'Style: '/'Constraints:' label, and still carries the rules and the negative constraint", () => {
+  // SHOTPROMPT.POLARITY.1 — also proves the part's own label ("Avoid") is
+  // never doubled with itself, the regression the previous ticket caused
+  // by dropping the nested `Avoid:` heading and then having to remove the
+  // outer label's own name from the check.
+  it("never doubles the block heading under its own 'Style: '/'Avoid: ' label, and still carries the rules and the negative constraint", () => {
     const result = composeShotGenerationPrompt(
       baseInput({ projectStyle: "- textured brushwork", projectStyleAvoid: "- no bright colors" })
     );
     expect(result.text).not.toContain("Style: Style Rules:");
-    expect(result.text).not.toContain("Constraints: Avoid:");
+    expect(result.text).not.toContain("Avoid: Avoid:");
     expect(result.text).toContain("Style: - textured brushwork");
-    expect(result.text).toContain("- no bright colors");
+    expect(result.text).toContain("Avoid: - no bright colors");
   });
 
   it("omits Subject Definition when no casting reference carries an assetName", () => {

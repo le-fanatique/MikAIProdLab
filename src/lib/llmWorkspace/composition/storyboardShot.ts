@@ -98,9 +98,10 @@ export type StoryboardShotCompositionInput = {
    * (`resolveProjectStyleTextForComposition`'s `avoidText`, itself split
    * from the snapshot's own `strength` field, never by parsing compiled
    * text — `docs/WHERE_THE_RULES_LIVE.md`: "polarity is carried by which
-   * block a rule lands in"). Joins `Constraints:` ahead of the per-asset
-   * `forbiddenVariations` lines — the project-level negative constraint
-   * first, the asset-specific ones after. `null`/blank renders nothing.
+   * block a rule lands in"). Joins ahead of the per-asset
+   * `forbiddenVariations` lines, under the `Avoid:` heading
+   * (SHOTPROMPT.POLARITY.1) — the project-level negative constraint first,
+   * the asset-specific ones after. `null`/blank renders nothing.
    */
   styleAvoid?: string | null;
   profileId?: ConformationProfileId;
@@ -175,7 +176,8 @@ function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
 }
 
 /**
- * Constraints — what to avoid.
+ * Avoid — what to avoid. (Part id stays `constraints`, an internal key —
+ * see SHOTPROMPT.POLARITY.1 at the call site.)
  *
  * `forbiddenVariations`, per asset, was the only negative constraint the
  * product stored when this comment was first written — §5.6 was explicit
@@ -276,7 +278,13 @@ export function composeStoryboardShot(
     // de la séquence" — the rig is read against the camera, not against the
     // look.
     { id: "lighting", label: "Lighting", text: nonEmpty(input.lighting) },
-    { id: "constraints", label: "Constraints", text: buildConstraints(context.castAssets, input.styleAvoid) },
+    // SHOTPROMPT.POLARITY.1 — labelled `Avoid`, not `Constraints`: everything
+    // this part renders is a prohibition (Style rules with `strength:
+    // "Avoid"`, per-asset `forbiddenVariations`), and the block a rule lands
+    // in is what carries polarity here (`docs/WHERE_THE_RULES_LIVE.md`).
+    // The part id stays `constraints` — an internal key, not the displayed
+    // word.
+    { id: "constraints", label: "Avoid", text: buildConstraints(context.castAssets, input.styleAvoid) },
   ];
 
   const parts: StoryboardCompositionPart[] = candidates
