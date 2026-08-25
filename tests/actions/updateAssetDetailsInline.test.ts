@@ -13,6 +13,9 @@ const FILLED = {
   visualIdentity: "Visual identity",
   usageRules: "Usage rules",
   forbiddenVariations: "Forbidden variations",
+  // ASSET.LIGHTING.PLACE.1 — the sixth field this full-replacement action
+  // now writes.
+  lighting: "Old lighting",
 };
 
 beforeAll(async () => {
@@ -25,13 +28,14 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("updateAssetDetailsInline — exact write", () => {
-  it("writes the five text fields and touches no other column", async () => {
+  it("writes the six text fields and touches no other column", async () => {
     const assetId = await insertAsset(ctx, projectId, {
       description: "Old",
       notes: "Old",
       visualIdentity: "Old",
       usageRules: "Old",
       forbiddenVariations: "Old",
+      lighting: "Old",
     });
     const before = await readAsset(ctx, assetId);
 
@@ -40,12 +44,13 @@ describe("updateAssetDetailsInline — exact write", () => {
     const after = await readAsset(ctx, assetId);
     expect(result).toEqual({ ok: true });
     // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — `bibleSourceFingerprint` is now
-    // written on every call alongside the five text fields, from `null`
+    // written on every call alongside the six text fields, from `null`
     // (this fixture's insert never sets it) to the computed fingerprint.
     expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual([
       "bibleSourceFingerprint",
       "description",
       "forbiddenVariations",
+      "lighting",
       "notes",
       "usageRules",
       "visualIdentity",
@@ -56,6 +61,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       visualIdentity: after.visualIdentity,
       usageRules: after.usageRules,
       forbiddenVariations: after.forbiddenVariations,
+      lighting: after.lighting,
     }).toEqual(FILLED);
     // name / type / orderIndex / projectId are outside the action's scope.
     expect(after.name).toBe(before.name);
@@ -79,6 +85,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       visualIdentity: "",
       usageRules: "\n\t",
       forbiddenVariations: "",
+      lighting: "   ",
     });
 
     const after = await readAsset(ctx, assetId);
@@ -87,11 +94,12 @@ describe("updateAssetDetailsInline — exact write", () => {
     expect(after.visualIdentity).toBeNull();
     expect(after.usageRules).toBeNull();
     expect(after.forbiddenVariations).toBeNull();
+    expect(after.lighting).toBeNull();
   });
 
   it("overwrites every field on each call — the payload is a full replacement", async () => {
     // Documented blast radius: a caller that only means to change one field
-    // must resend the other four, otherwise they are nulled.
+    // must resend the other five, otherwise they are nulled.
     const assetId = await insertAsset(ctx, projectId, FILLED);
 
     await updateAssetDetailsInline({
@@ -102,6 +110,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       visualIdentity: "Only this one",
       usageRules: "",
       forbiddenVariations: "",
+      lighting: "",
     });
 
     const after = await readAsset(ctx, assetId);
@@ -110,6 +119,31 @@ describe("updateAssetDetailsInline — exact write", () => {
     expect(after.notes).toBeNull();
     expect(after.usageRules).toBeNull();
     expect(after.forbiddenVariations).toBeNull();
+    expect(after.lighting).toBeNull();
+  });
+
+  // ASSET.LIGHTING.PLACE.1 §6 — the ticket's own required test: `lighting`
+  // is written, and no other column changes. Since `updateAssetDetailsInline`
+  // is a full-replacement action (behaviour 3), "touches no other column"
+  // means: every other field is resent unchanged, so `changedColumns` (a
+  // value diff, not a SQL-touch diff) reports only `lighting` — the same
+  // reading `updateAssetLightingInline`'s own "exact write" test gives the
+  // phrase, on the one-column action it targets.
+  it("writes lighting and touches no other column when the rest of the payload repeats the stored values", async () => {
+    const assetId = await insertAsset(ctx, projectId, FILLED);
+    const before = await readAsset(ctx, assetId);
+
+    const result = await updateAssetDetailsInline({
+      ...FILLED,
+      assetId,
+      projectId,
+      lighting: "Soft key from the left, cool ambient fill",
+    });
+
+    const after = await readAsset(ctx, assetId);
+    expect(result).toEqual({ ok: true });
+    expect(after.lighting).toBe("Soft key from the left, cool ambient fill");
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual(["lighting"]);
   });
 });
 
@@ -126,6 +160,7 @@ describe("updateAssetDetailsInline — foreign chain refusal", () => {
       visualIdentity: "Injected",
       usageRules: "Injected",
       forbiddenVariations: "Injected",
+      lighting: "Injected",
     });
 
     expect(result).toEqual({ ok: false, error: "Asset not found." });

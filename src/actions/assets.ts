@@ -323,8 +323,12 @@ export async function updateAssetDetailsInline(input: {
   visualIdentity: string;
   usageRules: string;
   forbiddenVariations: string;
+  // ASSET.LIGHTING.PLACE.1 — the manual way of the three §5.9 describes to
+  // fill `lighting` (LLMW.LIGHTING.1's field, B15a). Full replacement, same
+  // as the other five fields: a blank value becomes null.
+  lighting: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { assetId, projectId, description, notes, visualIdentity, usageRules, forbiddenVariations } = input;
+  const { assetId, projectId, description, notes, visualIdentity, usageRules, forbiddenVariations, lighting } = input;
 
   const [existing] = await db
     .select({
@@ -345,6 +349,7 @@ export async function updateAssetDetailsInline(input: {
   const finalVisualIdentity = visualIdentity.trim() || null;
   const finalUsageRules = usageRules.trim() || null;
   const finalForbiddenVariations = forbiddenVariations.trim() || null;
+  const finalLighting = lighting.trim() || null;
 
   // SCHEMA.BIBLE_FRESHNESS.1-R1 — this is the one place the Asset Bible
   // (visualIdentity/usageRules/forbiddenVariations) is written, but it is
@@ -373,6 +378,7 @@ export async function updateAssetDetailsInline(input: {
       visualIdentity: finalVisualIdentity,
       usageRules: finalUsageRules,
       forbiddenVariations: finalForbiddenVariations,
+      lighting: finalLighting,
       // Bible unchanged → leave the fingerprint column untouched (Drizzle
       // omits a key that is not in `.set()`). Two accepted consequences,
       // both resolving doubt toward the warning rather than toward silence:

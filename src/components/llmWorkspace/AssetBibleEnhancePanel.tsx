@@ -16,6 +16,9 @@ type Props = {
   visualIdentity: string | null;
   usageRules: string | null;
   forbiddenVariations: string | null;
+  // ASSET.LIGHTING.PLACE.1 — never generated here, carried through unchanged
+  // by `buildAssetBibleCommitArgs`'s own `existingLighting`.
+  lighting: string | null;
   isConfigured: boolean;
 };
 
@@ -36,6 +39,7 @@ export default function AssetBibleEnhancePanel({
   visualIdentity: existingVisualIdentity,
   usageRules: existingUsageRules,
   forbiddenVariations: existingForbiddenVariations,
+  lighting: existingLighting,
   isConfigured,
 }: Props) {
   const [justUpdated, setJustUpdated] = useState(false);
@@ -87,6 +91,7 @@ export default function AssetBibleEnhancePanel({
             visualIdentity: current.visualIdentity,
             usageRules: current.usageRules,
             forbiddenVariations: current.forbiddenVariations,
+            existingLighting,
           });
           return ACTION_BINDINGS.updateAssetDetailsInline(...args);
         },

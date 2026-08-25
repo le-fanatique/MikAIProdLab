@@ -44,6 +44,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       visualIdentity: "Tall, red cape.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     expect(result).toEqual({ ok: true });
 
@@ -63,6 +64,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       visualIdentity: "Tall, red cape.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
 
@@ -93,6 +95,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       visualIdentity: "Tall, red cape.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     await updateAssetDescriptionFieldInline({
       assetId,
@@ -111,6 +114,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       visualIdentity: "Tall, red cape, updated silhouette.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
 
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
@@ -130,6 +134,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       visualIdentity: "Tall, red cape.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
 
@@ -144,6 +149,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       visualIdentity: "Tall, red cape.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("stale");
 
@@ -157,6 +163,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       visualIdentity: "Tall, red cape, updated silhouette.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
 
@@ -169,6 +176,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       visualIdentity: "Tall, red cape, updated silhouette.",
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
+      lighting: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("stale");
   });

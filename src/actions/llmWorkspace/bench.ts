@@ -245,6 +245,7 @@ export async function commitBenchProposal(input: {
           visualIdentity: assets.visualIdentity,
           usageRules: assets.usageRules,
           forbiddenVariations: assets.forbiddenVariations,
+          lighting: assets.lighting,
         })
         .from(assets)
         .where(eq(assets.id, assetId));
@@ -270,6 +271,10 @@ export async function commitBenchProposal(input: {
         visualIdentity: pick("visualIdentity"),
         usageRules: pick("usageRules"),
         forbiddenVariations: pick("forbiddenVariations"),
+        // `assetBible.generate` never declares `lighting` as an output
+        // field — always carried through unchanged, same as description/
+        // notes when `preserved` excludes them.
+        existingLighting: existing.lighting,
       });
       return ACTION_BINDINGS.updateAssetDetailsInline(...args);
     }

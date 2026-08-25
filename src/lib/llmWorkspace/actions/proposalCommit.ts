@@ -41,6 +41,11 @@ export function buildAssetBibleCommitArgs(input: {
   visualIdentity: string;
   usageRules: string;
   forbiddenVariations: string;
+  // ASSET.LIGHTING.PLACE.1 — `assetBible.generate` never produces `lighting`
+  // (it is not one of its declared output fields), so this call carries it
+  // through unchanged, the same treatment `description`/`notes` already get
+  // above.
+  existingLighting: string | null;
 }): Parameters<typeof ACTION_BINDINGS.updateAssetDetailsInline> {
   return [
     {
@@ -51,6 +56,7 @@ export function buildAssetBibleCommitArgs(input: {
       visualIdentity: preserveAssetBibleField(input.existingVisualIdentity ?? "", input.visualIdentity),
       usageRules: preserveAssetBibleField(input.existingUsageRules ?? "", input.usageRules),
       forbiddenVariations: preserveAssetBibleField(input.existingForbiddenVariations ?? "", input.forbiddenVariations),
+      lighting: input.existingLighting ?? "",
     },
   ];
 }
@@ -74,6 +80,26 @@ export function buildAssetDescriptionFieldCommitArgs(input: {
       field: input.field,
       mode: input.mode,
       content: input.content.trim(),
+    },
+  ];
+}
+
+// ── lighting.fromImage → updateAssetLightingInline (returnValue) ──────────
+//
+// ASSET.LIGHTING.PLACE.1. `updateAssetLightingInline` (B15a) already writes
+// `lighting` alone — a full replacement, no append/preserve step needed
+// here (unlike `buildAssetBibleCommitArgs` above, this descriptor's only
+// output field IS the column being written).
+export function buildAssetLightingCommitArgs(input: {
+  assetId: number;
+  projectId: number;
+  lighting: string;
+}): Parameters<typeof ACTION_BINDINGS.updateAssetLightingInline> {
+  return [
+    {
+      assetId: input.assetId,
+      projectId: input.projectId,
+      lighting: input.lighting,
     },
   ];
 }

@@ -23,6 +23,8 @@ import { assetNotesGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/ass
 import AssetRetakeDirectedPanel from "@/components/llmWorkspace/AssetRetakeDirectedPanel";
 import { assetRetakeDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/assetRetakeDirected";
 import AssetBibleEnhancePanel from "@/components/llmWorkspace/AssetBibleEnhancePanel";
+import AssetLightingFromImagePanel from "@/components/llmWorkspace/AssetLightingFromImagePanel";
+import { lightingFromImageDescriptor } from "@/lib/llmWorkspace/descriptors/lightingFromImage";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 import AssetAlignmentPanel from "@/components/projectStyle/AssetAlignmentPanel";
 import { getAssetAlignmentStatusAction, type GetAssetAlignmentStatusResult } from "@/actions/assetAlignment";
@@ -207,6 +209,14 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
     .where(eq(assetReferenceImages.assetId, aid))
     .orderBy(asc(assetReferenceImages.orderIndex));
 
+  // ASSET.LIGHTING.PLACE.1 §4b — the "AI Assist" card for `lighting.fromImage`
+  // only renders when the Asset has at least one *approved* reference image:
+  // with none, the operation has nothing to read. The images offered for
+  // selection inside the card, once it renders, are every reference image
+  // (see `AssetLightingFromImagePanel`'s own comment for why) — this flag
+  // only gates visibility.
+  const hasApprovedReferenceImage = refImages.some((image) => image.approvedForGeneration);
+
   const llmSettings = await getLLMSettings();
 
   const deleteAction = deleteAsset.bind(null, aid, pid);
@@ -344,6 +354,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             visualIdentity={asset.visualIdentity}
             usageRules={asset.usageRules}
             forbiddenVariations={asset.forbiddenVariations}
+            lighting={asset.lighting}
             returnTo={detailsReturnTo}
           />
           <p className="mt-3 border-t border-[#1e2124] pt-3 text-xs text-[#4b5158]">
@@ -462,10 +473,29 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             visualIdentity={asset.visualIdentity}
             usageRules={asset.usageRules}
             forbiddenVariations={asset.forbiddenVariations}
+            lighting={asset.lighting}
             isConfigured={!!llmSettings.model.trim()}
           />
         </Card>
       </Collapsible>
+
+      {/* ASSET.LIGHTING.PLACE.1 §4b — absent, not disabled, when the Asset has
+          no approved reference image: "sans image, l'opération n'a rien à
+          lire" (the ticket's own words). */}
+      {hasApprovedReferenceImage && lightingFromImageDescriptor.images && (
+        <Collapsible label="Describe Lighting From Reference">
+          <Card title="Describe Lighting From Reference">
+            <AssetLightingFromImagePanel
+              projectId={pid}
+              assetId={aid}
+              referenceImages={refImages.map((image) => ({ id: image.id, label: image.label }))}
+              minCount={lightingFromImageDescriptor.images.minCount}
+              maxCount={lightingFromImageDescriptor.images.maxCount}
+              isConfigured={!!llmSettings.model.trim()}
+            />
+          </Card>
+        </Collapsible>
+      )}
 
       {/* ── References ────────────────────────────────────── */}
       <SectionLabel label="References" />

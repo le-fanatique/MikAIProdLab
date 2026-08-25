@@ -86,6 +86,37 @@ describe("commitBenchProposal — assetBible.generate → updateAssetDetailsInli
     expect(after.description).toBe("Existing description");
     expect(after.notes).toBe("Existing notes");
   });
+
+  // ASSET.LIGHTING.PLACE.1 — `assetBible.generate` never declares `lighting`
+  // as an output field, so approving one must never null it. This is the
+  // caller-side half of the proof `proposalCommit.test.ts` gives the
+  // *builder* (`buildAssetBibleCommitArgs` carries `existingLighting`
+  // through): this test proves `bench.ts`'s own `updateAssetDetailsInline`
+  // case actually reads the asset's real `lighting` column and passes it as
+  // `existingLighting`, rather than e.g. `null` — a regression that would
+  // pass every other assertion in this file.
+  it("preserves the asset's existing lighting, untouched by an Asset Bible approval", async () => {
+    const projectId = await insertProject(ctx, "Asset bible lighting project");
+    const assetId = await insertAsset(ctx, projectId, {
+      description: "Existing description",
+      notes: "Existing notes",
+      lighting: "Soft key from the left, cool ambient fill",
+    });
+
+    const result = await commitBenchProposal({
+      templateId: "assetBible.generate",
+      ids: { projectId, assetId },
+      values: {
+        visualIdentity: "Approved visual identity",
+        usageRules: "Approved usage rules",
+        forbiddenVariations: "Approved forbidden variations",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const after = await readAsset(ctx, assetId);
+    expect(after.lighting).toBe("Soft key from the left, cool ambient fill");
+  });
 });
 
 describe("commitBenchProposal — chain refusal", () => {

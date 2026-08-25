@@ -14,6 +14,10 @@ type Props = {
   visualIdentity: string | null;
   usageRules: string | null;
   forbiddenVariations: string | null;
+  // ASSET.LIGHTING.PLACE.1 — the manual way, of the three §5.9 describes, to
+  // fill this Asset-level field (LLMW.LIGHTING.1's own column). Independent
+  // of the Asset Bible fields above, same as description/notes.
+  lighting: string | null;
   returnTo: string;
 };
 
@@ -25,6 +29,7 @@ export default function AssetInlineDetailsForm({
   visualIdentity: initialVisualIdentity,
   usageRules: initialUsageRules,
   forbiddenVariations: initialForbiddenVariations,
+  lighting: initialLighting,
   returnTo,
 }: Props) {
   const [description, setDescription] = useState(initialDescription ?? "");
@@ -32,6 +37,7 @@ export default function AssetInlineDetailsForm({
   const [visualIdentity, setVisualIdentity] = useState(initialVisualIdentity ?? "");
   const [usageRules, setUsageRules] = useState(initialUsageRules ?? "");
   const [forbiddenVariations, setForbiddenVariations] = useState(initialForbiddenVariations ?? "");
+  const [lighting, setLighting] = useState(initialLighting ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +57,7 @@ export default function AssetInlineDetailsForm({
   useEffect(() => { setVisualIdentity(initialVisualIdentity ?? ""); }, [initialVisualIdentity]);
   useEffect(() => { setUsageRules(initialUsageRules ?? ""); }, [initialUsageRules]);
   useEffect(() => { setForbiddenVariations(initialForbiddenVariations ?? ""); }, [initialForbiddenVariations]);
+  useEffect(() => { setLighting(initialLighting ?? ""); }, [initialLighting]);
 
   async function handleSave() {
     setIsSaving(true);
@@ -64,6 +71,7 @@ export default function AssetInlineDetailsForm({
         visualIdentity,
         usageRules,
         forbiddenVariations,
+        lighting,
       });
       if (result.ok) {
         // Construct returnTo with detailsUpdated param
@@ -179,6 +187,23 @@ export default function AssetInlineDetailsForm({
         <p className="text-xs text-[#4b5158]">
           Optional guidance for consistent generation — used by the upcoming Prompt Compiler.
         </p>
+      </div>
+
+      {/* ASSET.LIGHTING.PLACE.1 — the manual way to fill this field, next to
+          the other in-line Details fields above. Independent of the Asset
+          Bible block. */}
+      <div className="flex flex-col gap-2 border-t border-[#1e2124] pt-4">
+        <label htmlFor="lighting" className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+          Lighting
+        </label>
+        <textarea
+          id="lighting"
+          value={lighting}
+          onChange={(e) => setLighting(e.target.value)}
+          rows={3}
+          className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none focus:outline-none focus:border-[#3a4046] transition-colors leading-relaxed"
+          placeholder="Direction, hardness, color and contrast of the light in this environment..."
+        />
       </div>
 
       <div className="flex items-center gap-2 border-t border-[#1e2124] pt-3">
