@@ -55,7 +55,7 @@ import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
-import { resolveProjectStyle } from "@/lib/llmWorkspace/variables/registry";
+import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import {
   resolveStoryboardLighting,
   type StoryboardLighting,
@@ -63,24 +63,6 @@ import {
 import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
 import StoryboardCompositionChoice from "@/components/StoryboardCompositionChoice";
 import StoryboardShotRangeChoice from "@/components/StoryboardShotRangeChoice";
-
-// ---------------------------------------------------------------------------
-// LLMW.STORYBOARD.COMPOSE.2 (B14b) — same two helpers as
-// `src/actions/sequenceGeneration.ts`'s own copy, duplicated rather than
-// shared: this page already recomputes its whole DB fetch independently of
-// the action ("Data-fetch/package-build logic is intentionally recomputed
-// here", this file's own header comment above) — same convention applied to
-// this one addition.
-// ---------------------------------------------------------------------------
-
-async function resolveProjectStyleTextForComposition(projectId: number): Promise<string | null> {
-  const data = await resolveProjectStyle(projectId);
-  if (data.mode === "none") return null;
-  const joined = [data.worldSegment, data.visualSegment, data.rulesSegment]
-    .filter((segment) => segment.length > 0)
-    .join("\n\n");
-  return joined.length > 0 ? joined : null;
-}
 
 // SEQGEN.STORYBOARD.SHOTRANGE.1 — `shotFrom`/`shotTo` carry a Shot id (never
 // a position), parsed exactly like `jobId` already is above: string |

@@ -65,7 +65,7 @@ import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { findTextInputKey } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
-import { resolveProjectStyle } from "@/lib/llmWorkspace/variables/registry";
+import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import {
   resolveStoryboardLighting,
   type StoryboardLighting,
@@ -97,26 +97,6 @@ import { selectStoryboardShotRange } from "@/lib/prompts/selectStoryboardShotRan
  */
 function isGuideComposition(value: string | null | undefined): boolean {
   return value !== "legacy";
-}
-
-/**
- * `composeStoryboardShot`'s `projectStyle` input — `resolveProjectStyle`
- * (`PROJECT.STYLE`, `src/lib/llmWorkspace/variables/registry.ts`) reused
- * verbatim rather than re-resolving Style here: it already wraps
- * `resolveAssetStyleContext` (STYLE.1.F.CORE), the same call the Style
- * preview on this page (`prepareGenerationStyleSource`) goes through
- * transitively. Segments are joined exactly as `asset-bible-from-context.ts`
- * already joins the same three segments for its own "Project Style:" block
- * (`[worldSegment, visualSegment, rulesSegment].filter(Boolean).join("\n\n")`)
- * — not a new join rule.
- */
-async function resolveProjectStyleTextForComposition(projectId: number): Promise<string | null> {
-  const data = await resolveProjectStyle(projectId);
-  if (data.mode === "none") return null;
-  const joined = [data.worldSegment, data.visualSegment, data.rulesSegment]
-    .filter((segment) => segment.length > 0)
-    .join("\n\n");
-  return joined.length > 0 ? joined : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -46,6 +46,10 @@ import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyl
 import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
 import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
+import { buildPromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
+import { buildOrderedShotReferenceInputs, composeShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
+import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
+import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { type FillSource } from "@/lib/textInputKind";
 import { resolvePromptCompilerTextNode } from "@/lib/prompts/workflowTextNode";
@@ -365,20 +369,6 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   // SHOT.VIDEO.LIBRARY.1, Lot C — see ShotGenerationPanel.tsx's identical comment.
   const availableVideos = await loadRuntimeVideoOptionsForShot(shid);
 
-  // STYLE.1.E.SURFACES.1 — same trusted consumer selection as ShotGenerationPanel
-  // and the server action's runShotGenerationCore. Preview-only; the action
-  // re-resolves independently at submit time.
-  const styleConsumer = isStoryboardContext ? ("shot-storyboard" as const) : workflow.kind === "video" ? ("shot-video" as const) : ("shot-image" as const);
-  const preparedStyle = await prepareGenerationStyleSource(
-    styleConsumer,
-    { kind: "shot", projectId: pid, sequenceId: sid, shotId: shid },
-    compiledShotPrompt.text
-  );
-  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : compiledShotPrompt.text;
-  const styledTextOverrideByNodeId = preparedStyle.ok
-    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
-    : textOverrideByNodeId;
-
   // SEQGEN.STORYBOARD.2 (retake 3) — storyboard=1/storyboardRefs must survive
   // the Image Inputs "Update Preview" GET form and the Generate redirect's
   // returnTo, not just this page's initial render. Reused below both as
@@ -432,6 +422,77 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     .map((id) => availableImages.find((img) => img.id === id))
     .filter((img): img is NonNullable<typeof img> => img !== undefined)
     .map((img) => ({ id: img.id, imagePath: img.imagePath }));
+
+  // SHOTPROMPT.SHOT.1 — the single shared composer, also called by
+  // runShotGenerationCore and ShotGenerationPanel.tsx: `@ImageN` follows this
+  // exact same batch selection (never DB order), Style/lighting are resolved
+  // once by the same two functions those two surfaces call, and the six-part
+  // body is `composeStoryboardShot`'s, never a fourth reimplementation.
+  const promptContext = buildPromptCompilationContext({
+    shot: {
+      title: shot.title,
+      description: shot.description,
+      actionPitch: shot.actionPitch,
+      cameraPitch: shot.cameraSubject,
+      durationSeconds: shot.durationSeconds,
+      shotPrompt: shot.shotPrompt,
+      compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
+      hasPromptSegments: hasRealPromptSegments,
+      hasMissingTiming: compiledPrompt.hasMissingTiming,
+    },
+    castAssets: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      description: r.assetDescription,
+    })),
+    references: buildOrderedShotReferenceInputs({ hasDynamicBatch: batchDetectionOk, batchSelectedIds, availableImages }),
+    assetBibles: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      visualIdentity: r.assetVisualIdentity,
+      usageRules: r.assetUsageRules,
+      forbiddenVariations: r.assetForbiddenVariations,
+    })),
+    sequenceContext: sequence,
+    projectContext: project,
+    sources: { casting: true, references: true, assetBibles: true, sequenceContext: true, projectContext: true },
+  });
+
+  const [projectStyleText, shotLighting] = await Promise.all([
+    resolveProjectStyleTextForComposition(pid),
+    resolveStoryboardLighting(sid, [{ id: shid, lighting: shot.lighting }]),
+  ]);
+
+  const composedPrompt = composeShotGenerationPrompt({
+    kind: workflow.kind as ShotPromptCompileKind,
+    context: promptContext,
+    continuity: {
+      shotSize: shot.shotSize,
+      cameraPosition: shot.cameraPosition,
+      cameraMovement: shot.cameraMovement,
+      movementSpeed: shot.movementSpeed,
+      cameraSubject: shot.cameraSubject,
+      cameraLens: shot.cameraLens,
+    },
+    lighting: shotLighting.byShotId[shid] ?? null,
+    projectStyle: projectStyleText,
+  });
+
+  // STYLE.1.E.SURFACES.1 — same trusted consumer selection as ShotGenerationPanel
+  // and the server action's runShotGenerationCore. Preview-only; the action
+  // re-resolves independently at submit time.
+  const styleConsumer = isStoryboardContext ? ("shot-storyboard" as const) : workflow.kind === "video" ? ("shot-video" as const) : ("shot-image" as const);
+  const preparedStyle = await prepareGenerationStyleSource(
+    styleConsumer,
+    { kind: "shot", projectId: pid, sequenceId: sid, shotId: shid },
+    composedPrompt.text
+  );
+  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : composedPrompt.text;
+  const styledTextOverrideByNodeId = preparedStyle.ok
+    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
+    : textOverrideByNodeId;
 
   const built =
     parsed !== null
@@ -684,7 +745,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
 
         <Card title="Shot Prompt">
           <CompiledShotPromptPreviewPanel
-            compiled={compiledShotPrompt}
+            compiled={composedPrompt}
             workflowKind={workflow.kind}
           />
           <div className="mt-3 pt-3 border-t border-[#1e2124]">
@@ -973,7 +1034,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                       <form action={saveStoryboardDraftFromJob}>
                         <input type="hidden" name="shotId" value={String(shid)} />
                         <input type="hidden" name="jobId" value={String(activeJobId)} />
-                        <input type="hidden" name="promptSnapshot" value={compiledShotPrompt.text} />
+                        <input type="hidden" name="promptSnapshot" value={composedPrompt.text} />
                         <input type="hidden" name="referencesSnapshot" value={storyboardReferencesSnapshot} />
                         <input type="hidden" name="returnTo" value={outputReturnTo} />
                         <button

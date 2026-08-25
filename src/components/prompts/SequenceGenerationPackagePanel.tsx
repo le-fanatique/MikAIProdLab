@@ -11,6 +11,8 @@ import {
   formatSequenceGenerationPackageText,
   type SequenceGenerationPackageShotInput,
 } from "@/lib/prompts/buildSequenceGenerationPackage";
+import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
+import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 
 type ShotRow = {
   id: number;
@@ -21,6 +23,10 @@ type ShotRow = {
   cameraSubject: string | null;
   shotSize: string | null;
   cameraMovement: string | null;
+  /** SHOTPROMPT.SHOT.1 (supervision fix) — the remaining three camera axes: previously absent from this panel's own row type, so the Camera line the guide composition renders was silently missing them. */
+  cameraPosition: string | null;
+  movementSpeed: string | null;
+  cameraLens: string | null;
   continuityIn: string | null;
   continuityOut: string | null;
   continuityNotes: string | null;
@@ -28,6 +34,8 @@ type ShotRow = {
   shotPrompt: string | null;
   approvedVideoPath: string | null;
   orderIndex: number;
+  /** SHOTPROMPT.SHOT.1 — the Shot's own lighting field, for `resolveStoryboardLighting`. */
+  lighting: string | null;
 };
 
 type Props = {
@@ -215,8 +223,12 @@ export default async function SequenceGenerationPackagePanel({
       durationSeconds: s.durationSeconds,
       hasApprovedVideo: s.approvedVideoPath !== null,
       continuity: {
-        framing: s.shotSize,
+        shotSize: s.shotSize,
+        cameraPosition: s.cameraPosition,
         cameraMovement: s.cameraMovement,
+        movementSpeed: s.movementSpeed,
+        cameraSubject: s.cameraSubject,
+        cameraLens: s.cameraLens,
         continuityIn: s.continuityIn,
         continuityOut: s.continuityOut,
         continuityNotes: s.continuityNotes,
@@ -272,7 +284,23 @@ export default async function SequenceGenerationPackagePanel({
     shotInputs,
     { ignorePromptSegments, ignoreUnapprovedReferences }
   );
-  const formattedText = formatSequenceGenerationPackageText(pkg);
+
+  // SHOTPROMPT.SHOT.1 — this panel used to render the legacy body (Shot
+  // Prompt only) while the Storyboard generate page already rendered the
+  // guide composition for the very same package: two previews of the same
+  // data disagreeing about what it contains. Reuses the exact same two
+  // resolvers the Storyboard generate page and its action call — never a
+  // second resolution of either Project Style or lighting.
+  const projectStyle = await resolveProjectStyleTextForComposition(projectId);
+  const lighting = await resolveStoryboardLighting(
+    sequenceId,
+    shots.map((s) => ({ id: s.id, lighting: s.lighting }))
+  );
+  const formattedText = formatSequenceGenerationPackageText(pkg, {
+    storyboardComposition: { lighting },
+  });
+  const trimmedProjectStyle = projectStyle?.trim() || null;
+  const displayedText = trimmedProjectStyle ? `Style:\n${trimmedProjectStyle}\n\n${formattedText}` : formattedText;
   const formattedJson = JSON.stringify(pkg, null, 2);
 
   // UX.PRODUCTIVITY.POLISH.1 — Lot E. Compact closed-row summary: title,
@@ -319,7 +347,7 @@ export default async function SequenceGenerationPackagePanel({
           </form>
 
           <div className="flex items-center gap-2">
-            <CopyTextButton text={formattedText} label="Copy compiled text" />
+            <CopyTextButton text={displayedText} label="Copy compiled text" />
             <CopyTextButton text={formattedJson} label="Copy JSON" />
           </div>
 

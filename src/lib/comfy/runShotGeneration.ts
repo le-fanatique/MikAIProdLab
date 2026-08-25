@@ -35,7 +35,11 @@ import { generationJobs, projects, sequences, shots, comfyWorkflows, assets, sho
 import { eq, asc, inArray } from "drizzle-orm";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
-import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
+import { type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
+import { buildPromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
+import { buildOrderedShotReferenceInputs, composeShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
+import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
+import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
 import { prepareComfyPayloadForQueue } from "@/lib/comfy/prepareComfyPayload";
 import { queueComfyPrompt } from "@/lib/comfy/comfyServerClient";
@@ -43,7 +47,7 @@ import { queueCloudPrompt } from "@/lib/comfy/comfyCloudClient";
 import { getComfySettings } from "@/lib/settings";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
-import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
+import { buildGenerationPayload, detectDynamicBatchUiInfo } from "@/lib/comfy/buildGenerationPayload";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import {
@@ -194,6 +198,15 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       assetName: assets.name,
       assetType: assets.type,
       assetDescription: assets.description,
+      // SHOTPROMPT.SHOT.1 — the Asset Bible fields `composeStoryboardShot`'s
+      // Subject/Constraints parts read (`context.castAssets[].assetBible`).
+      // Previously not selected here, so the queued job's own "Subject"/
+      // "Constraints" text would have silently diverged from the preview's
+      // (ShotGenerationPanel/`/map` select these same three columns
+      // already) — the exact drift the shared composer exists to prevent.
+      assetVisualIdentity: assets.visualIdentity,
+      assetUsageRules: assets.usageRules,
+      assetForbiddenVariations: assets.forbiddenVariations,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -237,31 +250,6 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
   // --- 5. Recompute prompt + canonical payload (mirrors map page / panels — GEN.SEEDANCE.1) ---
   const compiledPrompt = compilePromptSegments(segmentList);
   const hasRealPromptSegments = segmentList.length > 0;
-  const compiledShotPrompt = compileShotPrompt({
-    kind: workflow.kind as ShotPromptCompileKind,
-    shotPrompt: shot.shotPrompt,
-    compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
-    hasPromptSegments: hasRealPromptSegments,
-    hasMissingTiming: compiledPrompt.hasMissingTiming,
-  });
-
-  let preparedStyle: PreparedGenerationStyleSource | null = null;
-  let effectiveSuggestedText = compiledShotPrompt.text;
-  let effectiveTextOverrideByNodeId = args.textOverrideByNodeId;
-
-  if (styleConsumer !== null) {
-    preparedStyle = await prepareGenerationStyleSource(styleConsumer, { kind: "shot", projectId, sequenceId, shotId }, compiledShotPrompt.text);
-    if (!preparedStyle.ok) {
-      return { ok: false, error: preparedStyle.error };
-    }
-    const styleReady = preparedStyle;
-    effectiveSuggestedText = styleReady.composedSuggestedPrompt.prompt;
-    if (args.textOverrideByNodeId) {
-      effectiveTextOverrideByNodeId = Object.fromEntries(
-        Object.entries(args.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, styleReady.composeTextOverride(value)])
-      );
-    }
-  }
 
   const availableImages = buildRuntimeImageOptions(
     shotRefImages,
@@ -272,6 +260,8 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
   // Collect batch images: read from args.batchImagesByNodeId (only one
   // Dynamic Batch node is supported in V1), resolve placeholder ids to
   // actual imagePaths using availableImages, preserving selection order.
+  const batchUiInfo = detectDynamicBatchUiInfo(workflow.workflowJson);
+  const hasDynamicBatch = batchUiInfo.kind === "ready";
   const batchEntry = args.batchImagesByNodeId ? Object.entries(args.batchImagesByNodeId)[0] : undefined;
 
   const resolvedBatchImages: DynamicBatchExpansionImage[] = [];
@@ -284,9 +274,91 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       resolvedBatchImages.push({ id: found.id, imagePath: found.imagePath });
     }
   }
+  const batchSelectedIds = resolvedBatchImages.map((img) => img.id);
 
   // SHOT.VIDEO.LIBRARY.1, Lot C
   const availableVideos = await loadRuntimeVideoOptionsForShot(shotId);
+
+  // SHOTPROMPT.SHOT.1 — the single shared composer, also called by
+  // ShotGenerationPanel.tsx and the /map page: `@ImageN` follows this exact
+  // same batch selection (never DB order), Style/lighting are resolved once
+  // by the same two functions those two surfaces call, and the six-part body
+  // is `composeStoryboardShot`'s, never a fourth reimplementation.
+  const promptContext = buildPromptCompilationContext({
+    shot: {
+      title: shot.title,
+      description: shot.description,
+      actionPitch: shot.actionPitch,
+      cameraPitch: shot.cameraSubject,
+      durationSeconds: shot.durationSeconds,
+      shotPrompt: shot.shotPrompt,
+      compiledPromptSegments: hasRealPromptSegments ? compiledPrompt.text : "",
+      hasPromptSegments: hasRealPromptSegments,
+      hasMissingTiming: compiledPrompt.hasMissingTiming,
+    },
+    castAssets: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      description: r.assetDescription,
+    })),
+    references: buildOrderedShotReferenceInputs({ hasDynamicBatch, batchSelectedIds, availableImages }),
+    assetBibles: assignedRows.map((r) => ({
+      assetId: r.assetId,
+      assetName: r.assetName,
+      assetType: r.assetType,
+      visualIdentity: r.assetVisualIdentity,
+      usageRules: r.assetUsageRules,
+      forbiddenVariations: r.assetForbiddenVariations,
+    })),
+    sequenceContext: {
+      title: sequence.title,
+      summary: sequence.summary,
+      mood: sequence.mood,
+      locationHint: sequence.locationHint,
+      narrativePurpose: sequence.narrativePurpose,
+    },
+    projectContext: { name: project.name, pitch: project.pitch, story: project.story },
+    sources: { casting: true, references: true, assetBibles: true, sequenceContext: true, projectContext: true },
+  });
+
+  const [projectStyleText, shotLighting] = await Promise.all([
+    resolveProjectStyleTextForComposition(projectId),
+    resolveStoryboardLighting(sequenceId, [{ id: shotId, lighting: shot.lighting }]),
+  ]);
+
+  const composedPrompt = composeShotGenerationPrompt({
+    kind: workflow.kind as ShotPromptCompileKind,
+    context: promptContext,
+    continuity: {
+      shotSize: shot.shotSize,
+      cameraPosition: shot.cameraPosition,
+      cameraMovement: shot.cameraMovement,
+      movementSpeed: shot.movementSpeed,
+      cameraSubject: shot.cameraSubject,
+      cameraLens: shot.cameraLens,
+    },
+    lighting: shotLighting.byShotId[shotId] ?? null,
+    projectStyle: projectStyleText,
+  });
+
+  let preparedStyle: PreparedGenerationStyleSource | null = null;
+  let effectiveSuggestedText = composedPrompt.text;
+  let effectiveTextOverrideByNodeId = args.textOverrideByNodeId;
+
+  if (styleConsumer !== null) {
+    preparedStyle = await prepareGenerationStyleSource(styleConsumer, { kind: "shot", projectId, sequenceId, shotId }, composedPrompt.text);
+    if (!preparedStyle.ok) {
+      return { ok: false, error: preparedStyle.error };
+    }
+    const styleReady = preparedStyle;
+    effectiveSuggestedText = styleReady.composedSuggestedPrompt.prompt;
+    if (args.textOverrideByNodeId) {
+      effectiveTextOverrideByNodeId = Object.fromEntries(
+        Object.entries(args.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, styleReady.composeTextOverride(value)])
+      );
+    }
+  }
 
   const built = buildGenerationPayload({
     workflowJson: workflow.workflowJson,

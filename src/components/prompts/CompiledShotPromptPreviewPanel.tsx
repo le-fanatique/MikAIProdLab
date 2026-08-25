@@ -1,7 +1,8 @@
-import type { CompiledShotPrompt } from "@/lib/prompts/compileShotPrompt";
+import type { ComposedShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
 
 type Props = {
-  compiled: CompiledShotPrompt;
+  /** SHOTPROMPT.SHOT.1 — the shared composer's output (Style/Subject Definition/six parts/Timeline), never the bare `compileShotPrompt` result. */
+  compiled: ComposedShotGenerationPrompt;
   workflowKind: string;
 };
 

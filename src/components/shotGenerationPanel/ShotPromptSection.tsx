@@ -1,10 +1,11 @@
 import Link from "next/link";
 import CompiledShotPromptPreviewPanel from "@/components/prompts/CompiledShotPromptPreviewPanel";
 import InlineShotPromptEditor from "@/components/InlineShotPromptEditor";
-import type { compileShotPrompt } from "@/lib/prompts/compileShotPrompt";
+import type { ComposedShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
 
 type Props = {
-  compiledShotPrompt: ReturnType<typeof compileShotPrompt>;
+  /** SHOTPROMPT.SHOT.1 — the shared composer's output (Style/Subject Definition/six parts/Timeline), never the bare `compileShotPrompt` result. */
+  compiledShotPrompt: ComposedShotGenerationPrompt;
   workflowKind: string;
   projectId: number;
   sequenceId: number;

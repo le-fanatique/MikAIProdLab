@@ -68,6 +68,8 @@ export type PromptCompilationReferenceImageInput = {
   source: "shot" | "asset";
   assetId?: number | null;
   assetName?: string | null;
+  /** SHOTPROMPT.SHOT.1 — the cast Asset's type (e.g. "character"), the exact sibling `assetName` already carries. Only ever set for `source === "asset"`. */
+  assetType?: string | null;
   label?: string | null;
   role?: string | null;
   variantState?: string | null;
@@ -82,6 +84,8 @@ export type PromptCompilationImageTag = {
   source: "shot" | "asset";
   assetId: number | null;
   assetName: string | null;
+  /** SHOTPROMPT.SHOT.1 — see the input field's own comment. */
+  assetType: string | null;
   label: string | null;
   role: string | null;
   variantState: string | null;
@@ -258,6 +262,7 @@ function buildReferences(
       source: ref.source,
       assetId: ref.source === "asset" ? ref.assetId ?? null : null,
       assetName: ref.source === "asset" ? trimOrNull(ref.assetName) : null,
+      assetType: ref.source === "asset" ? trimOrNull(ref.assetType) : null,
       label: trimOrNull(ref.label),
       role,
       variantState,
