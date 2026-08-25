@@ -5,8 +5,9 @@ import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildAssetLightingCommitArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
+import { refImageUrl } from "@/lib/refImageUrl";
 
-type ReferenceImage = { id: number; label: string | null };
+type ReferenceImage = { id: number; label: string | null; imagePath: string };
 
 type Draft = { text: string };
 
@@ -15,10 +16,10 @@ type Props = {
   assetId: number;
   /** Every reference image this Asset has — same scope `ASSET.REFERENCE_IMAGES`
    * (the descriptor's own declared image source) resolves from, unfiltered by
-   * approval. The caller decides *whether* this panel renders at all (gated
-   * on at least one approved image existing); which images are offered for
-   * selection inside it is a separate question, answered by the descriptor's
-   * own source rather than narrowed again here. */
+   * approval. ASSET.LIGHTING.PLACE.2 — this panel now always renders (the
+   * caller no longer gates it on approval, a filter this image family never
+   * had); an empty list is rendered here as an explicit empty state rather
+   * than an empty, unusable selector. */
   referenceImages: ReferenceImage[];
   minCount: number;
   maxCount: number;
@@ -91,6 +92,24 @@ export default function AssetLightingFromImagePanel({
     ];
   }
 
+  // ASSET.LIGHTING.PLACE.2 §4a — `minCount: 1` means an Asset with no
+  // reference image at all cannot run this operation. Rendered as an
+  // explicit empty state (a sentence, not a disabled checkbox list with a
+  // button underneath) rather than letting the card render its normal,
+  // unusable-with-zero-options body.
+  if (referenceImages.length === 0) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-xs text-[#6e767d] leading-relaxed">
+          Read the lighting visible in one or more of this asset&apos;s reference images and propose it as the Lighting field.
+        </p>
+        <p className="text-xs text-[#4b5158]">
+          Add a reference image to this asset first — this operation needs at least one to read.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-[#6e767d] leading-relaxed">
@@ -109,17 +128,44 @@ export default function AssetLightingFromImagePanel({
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
               {`Reference images (${selectedIds.length} selected, ${minCount}–${maxCount} required)`}
             </p>
-            <div className="flex flex-col gap-1.5">
-              {referenceImages.map((image) => (
-                <label key={image.id} className="flex items-center gap-2 text-xs text-[#a4abb2]">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(image.id)}
-                    onChange={() => toggleImage(image.id)}
-                  />
-                  {image.label ?? `Reference #${image.id}`}
-                </label>
-              ))}
+            <div className="grid grid-cols-3 gap-1.5">
+              {referenceImages.map((image) => {
+                const isSelected = selectedIds.includes(image.id);
+                const label = image.label ?? `Reference #${image.id}`;
+                return (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() => toggleImage(image.id)}
+                    title={label}
+                    className={[
+                      "relative flex flex-col w-full rounded overflow-hidden text-left transition-colors",
+                      isSelected
+                        ? "border-2 border-[#5b93d6] bg-[#141e2b]"
+                        : "border-2 border-[#232629] bg-[#1a1d20] hover:border-[#3a4046] hover:bg-[#212529]",
+                    ].join(" ")}
+                  >
+                    <div className="aspect-square w-full bg-[#141618] flex items-center justify-center overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={refImageUrl(image.imagePath)}
+                        alt={label}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="px-1 pt-0.5 pb-1">
+                      <p className="text-[10px] text-[#6e767d] truncate leading-snug">{label}</p>
+                    </div>
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#5b93d6] flex items-center justify-center">
+                        <svg width="8" height="6" viewBox="0 0 8 6" fill="none" aria-hidden="true">
+                          <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         }
