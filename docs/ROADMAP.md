@@ -60,8 +60,11 @@ supervision qui les a arrêtés :
 **Bloqué sur l'auteur, et c'est le seul chemin :**
 
 - **`#2` — remplir le `lighting` des six environnements de Space Corsair.**
-  Tous à `null`. Ce n'est pas du code. `lightingFromImage` peut proposer un rig
-  depuis une image de référence approuvée, pour éviter la page blanche.
+  Tous à `null`. Ce n'est pas du code. **Débloqué par `ASSET.LIGHTING.PLACE.1`
+  (`a7f66c4`)** : le champ est désormais éditable depuis la page de l'asset, et
+  une carte d'assist propose un rig lu depuis une image de référence approuvée
+  quand il y en a une. Avant ce ticket, deux des trois façons du §5.9 étaient
+  inatteignables.
 - **`#4`, la carte de prompt, et `#7`, les contraintes au niveau shot** — les
   deux seules migrations de l'audit. Jamais appliquées automatiquement :
   générer, montrer le SQL, attendre `db:migrate`.

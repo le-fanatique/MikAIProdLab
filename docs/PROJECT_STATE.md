@@ -2,6 +2,51 @@
 
 Last updated: 2026-08-24
 
+## `ASSET.LIGHTING.PLACE.1` — two of §5.9's three ways were unreachable
+
+One commit, `a7f66c4`. No migration — `assets.lighting` existed.
+
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.9 describes three ways to fill the
+lighting field. The third — the director's note — was wired. **The other two
+were not**, at the level §5.9 itself calls *"the level that earns the
+feature"*: the Environment Asset. By hand, the field existed only on
+`/assets/[id]/edit`, while the Asset page already edited five other fields
+inline. From an image, `lighting.fromImage` existed with its commit action and
+was **exposed on no product screen at all** — its only two touchpoints were the
+bench and the template editor.
+
+Both are now on the Asset page. The assist card appears only when the Asset has
+an approved reference image: with none, the operation has nothing to read, so
+there is no card rather than a disabled one.
+
+**A defect this ticket would have introduced, caught by the executor.**
+`updateAssetDetailsInline` now writes `lighting`, so every existing caller
+passing the full field set would have **wiped the column** — committing an
+Asset Bible proposal from the bench would have silently emptied the rig. The
+executor extended `bench.ts` and `AssetBibleEnhancePanel` to carry the existing
+value through, outside the ticket's written scope, and reported it. That was
+correct.
+
+**And the carry-through was covered by nothing, which the supervision proved by
+breaking it**: `existingLighting: existing.lighting` → `null`, full suite, 1794
+passing. A builder-level test proved the *builder* carried the value; nothing
+proved the *caller* passed the real one. Closed with a read-after-write
+assertion in the harness that already tested that branch. Re-mutated, one test
+falls with the right mismatch.
+
+**A supervision mistake worth recording**, because it nearly cost the executor's
+work: restoring a mutation with `git checkout <file>` on `bench.ts` discarded
+its five uncommitted lines. Rewritten identically and verified (`git diff
+--stat` back to 5 insertions, `tsc` clean, the executor confirming byte-for-byte
+afterwards). **Never restore a mutation with `git checkout` on a file carrying
+uncommitted work** — copy the file aside first, as every other mutation in this
+session did.
+
+Verified in a real browser against the dev server, per §5's standing decision
+against a DOM harness. The test value was reset to `null` afterwards and a sweep
+confirms the project still carries no lighting anywhere — filling the six
+environments remains the author's own work.
+
 ## `SHOTPROMPT.HEADER.1` and `SHOTPROMPT.CONFORM.1` — the header, and the rule that was wrong twice
 
 Two commits, `bcc6af0` and `c00ebe9`. No migration.
