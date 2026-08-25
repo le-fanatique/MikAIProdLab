@@ -29,24 +29,39 @@ import { buildBatchKey } from "@/components/DynamicBatchImageList";
  * has run — would submit the literal server-rendered `value=""`, even
  * though a real selection already exists. Optional and defaults to `""`,
  * so every existing Shot/Asset caller is unaffected.
+ *
+ * REFROLE.INTENT.1 — `roleInitialValue`, when passed, renders and keeps in
+ * sync a second hidden input, `batchImageRoles_<nodeId>`, mirroring the
+ * selection sync above exactly (same sessionStorage-first, URL-fallback
+ * read at submit time) so the job-level role overlay reaches the server
+ * action on the same submit as the selection itself. Omitted by every
+ * caller that doesn't pass it — no second hidden input is rendered, so an
+ * existing caller behaves exactly as before this ticket.
  */
 
 type Props = {
   batchNodeId: string;
   workflowId: string;
   initialValue?: string;
+  roleInitialValue?: string;
 };
 
-export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialValue }: Props) {
+export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialValue, roleInitialValue }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const roleInputRef = useRef<HTMLInputElement>(null);
   const hasInitialValue = initialValue !== undefined;
   const initial = initialValue ?? "";
+  const hasRoleOverrides = roleInitialValue !== undefined;
+  const roleInitial = roleInitialValue ?? "";
 
   useEffect(() => {
     // T2 — workflow-keyed sessionStorage
     const ssKey = buildBatchKey(workflowId, batchNodeId);
     // URL param key stays the same (unchanged server contract)
     const urlKey = `batchImages_${batchNodeId}`;
+    // REFROLE.INTENT.1 — sibling key/param for the role overlay.
+    const roleSsKey = `${ssKey}.roles`;
+    const roleUrlKey = `batchImageRoles_${batchNodeId}`;
 
     function resolveCurrentValue(): string {
       const params = new URLSearchParams(window.location.search);
@@ -58,9 +73,18 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
       return raw !== null ? raw : initial;
     }
 
+    function resolveCurrentRoleValue(): string {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get(roleUrlKey);
+      return raw !== null ? raw : roleInitial;
+    }
+
     function syncFromUrl() {
       if (!inputRef.current) return;
       inputRef.current.value = resolveCurrentValue();
+      if (roleInputRef.current) {
+        roleInputRef.current.value = resolveCurrentRoleValue();
+      }
     }
 
     // Sync on mount
@@ -86,6 +110,18 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
           sessionStorage.setItem(ssKey, current);
         } else {
           sessionStorage.removeItem(ssKey);
+        }
+      } catch {
+        // sessionStorage unavailable — URL-based sync remains the fallback.
+      }
+    }
+    if (hasRoleOverrides) {
+      try {
+        const currentRole = resolveCurrentRoleValue();
+        if (currentRole) {
+          sessionStorage.setItem(roleSsKey, currentRole);
+        } else {
+          sessionStorage.removeItem(roleSsKey);
         }
       } catch {
         // sessionStorage unavailable — URL-based sync remains the fallback.
@@ -131,6 +167,23 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
       if (el && el.value !== value) {
         el.value = value;
       }
+
+      if (roleInputRef.current) {
+        let roleValue = "";
+        try {
+          roleValue = sessionStorage.getItem(roleSsKey) ?? "";
+        } catch {
+          // sessionStorage unavailable — fall through to URL.
+        }
+        if (!roleValue) {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get(roleUrlKey);
+          roleValue = raw !== null ? raw : roleInitial;
+        }
+        if (roleInputRef.current.value !== roleValue) {
+          roleInputRef.current.value = roleValue;
+        }
+      }
     }
 
     const el0 = inputRef.current;
@@ -147,14 +200,24 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
         form.removeEventListener("submit", onFormSubmit);
       }
     };
-  }, [batchNodeId, workflowId, initial, hasInitialValue]);
+  }, [batchNodeId, workflowId, initial, hasInitialValue, roleInitial, hasRoleOverrides]);
 
   return (
-    <input
-      ref={inputRef}
-      type="hidden"
-      name={`batchImages_${batchNodeId}`}
-      value={initial}
-    />
+    <>
+      <input
+        ref={inputRef}
+        type="hidden"
+        name={`batchImages_${batchNodeId}`}
+        value={initial}
+      />
+      {hasRoleOverrides && (
+        <input
+          ref={roleInputRef}
+          type="hidden"
+          name={`batchImageRoles_${batchNodeId}`}
+          value={roleInitial}
+        />
+      )}
+    </>
   );
 }

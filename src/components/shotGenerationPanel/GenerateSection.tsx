@@ -3,6 +3,7 @@ import PartnerNodeConfirmForm from "@/components/PartnerNodeConfirmForm";
 import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runWorkflowGenerationFromForm, runShotStoryboardGenerationFromForm } from "@/actions/generation";
+import { serializeBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
 import type { WorkflowPayloadPatchResult } from "@/lib/comfy/patchWorkflowPayload";
 import type { PanelCloudPreflight } from "@/lib/comfy/cloudPreflight";
 
@@ -25,6 +26,8 @@ type Props = {
   textOverrideByNodeId: Record<string, string>;
   batchDetectionOk: boolean;
   batchNodeId: string;
+  /** REFROLE.INTENT.1 — the current job-level role overlay, `id -> role`. */
+  batchRoleOverrides: Record<string, string>;
   workflowKind: string;
 };
 
@@ -48,6 +51,7 @@ export default function GenerateSection({
   textOverrideByNodeId,
   batchDetectionOk,
   batchNodeId,
+  batchRoleOverrides,
   workflowKind,
 }: Props) {
   return (
@@ -156,7 +160,11 @@ export default function GenerateSection({
               the current URL searchParams at submit time, keeping in sync with
               client-side DynamicBatchImageList updates via pushState(). */}
           {batchDetectionOk && (
-            <DynamicBatchFormSync batchNodeId={batchNodeId} workflowId={String(wid)} />
+            <DynamicBatchFormSync
+              batchNodeId={batchNodeId}
+              workflowId={String(wid)}
+              roleInitialValue={serializeBatchRoleOverridesParam(batchRoleOverrides)}
+            />
           )}
           {/* COMFY.PROVIDER.1 — confirmPartnerNodeCost is deliberately NOT
               rendered here: PartnerNodeConfirmForm sets it itself, only on

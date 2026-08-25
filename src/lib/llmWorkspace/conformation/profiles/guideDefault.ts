@@ -19,7 +19,7 @@
 // Seedance" true rather than merely written down.
 // ---------------------------------------------------------------------------
 
-import { normalizeReferenceImageRoleValue } from "@/lib/referenceImageRoles";
+import { normalizeReferenceImageRoleValue, getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
 import type {
   ConformationFinding,
   ConformationInspectionRequest,
@@ -67,6 +67,22 @@ const ROLE_TO_GUIDE_MODE: Readonly<Record<string, string>> = {
 export function getGuideModeForRole(role: string | null): string | null {
   const normalized = normalizeReferenceImageRoleValue(role);
   return normalized ? ROLE_TO_GUIDE_MODE[normalized] ?? null : null;
+}
+
+/**
+ * REFROLE.INTENT.1 — the roles a caller may offer as a job-level override
+ * for `getGuideModeForRole`, i.e. exactly the ones with a named mode. Reads
+ * `ROLE_TO_GUIDE_MODE`'s own keys rather than a second, hand-copied list, so
+ * a role added to that table later is offered automatically. The catalogue
+ * label (`src/lib/referenceImageRoles.ts`) is reused for display; a key
+ * missing from the catalogue (should not happen — every key above is a
+ * catalogue value) falls back to the raw role string rather than throwing.
+ */
+export function getRolesWithNamedGuideMode(): { value: string; label: string }[] {
+  return Object.keys(ROLE_TO_GUIDE_MODE).map((value) => ({
+    value,
+    label: getReferenceImageRoleLabel(value) ?? value,
+  }));
 }
 
 // ---------------------------------------------------------------------------

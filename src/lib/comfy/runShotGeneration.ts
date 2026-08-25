@@ -79,6 +79,14 @@ export type ShotGenerationArgs = {
   /** Only treated as authoritative when the user actually edited the JSON — see EditablePatchedJsonPanel/patchedJsonOverrideActive. */
   patchedJsonOverride?: Record<string, unknown>;
   batchImagesByNodeId?: Record<string, DynamicBatchExpansionImage[]>;
+  /**
+   * REFROLE.INTENT.1 — the job-level role overlay for the same Dynamic
+   * Batch node's selected images (`batchImageRoles_<nodeId>`, `id -> role`),
+   * keyed identically to `batchImagesByNodeId`. Only the single node V1
+   * supports is ever read (same convention as `batchImagesByNodeId`'s own
+   * `Object.entries(...)[0]` below). Never written back to the library.
+   */
+  batchImageRoleOverridesByNodeId?: Record<string, Record<string, string>>;
   /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
   confirmPartnerNodeCost?: boolean;
   /** CAMLAB.POLISH.1 — set only by the Camera Lab's Gaussian-to-image caller; recorded as-is on the job's payloadSnapshot, never inferred here. */
@@ -275,6 +283,11 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
     }
   }
   const batchSelectedIds = resolvedBatchImages.map((img) => img.id);
+  // REFROLE.INTENT.1 — same single-node convention as batchEntry above.
+  const roleOverrideEntry = args.batchImageRoleOverridesByNodeId
+    ? Object.entries(args.batchImageRoleOverridesByNodeId)[0]
+    : undefined;
+  const batchRoleOverrides = roleOverrideEntry?.[1] ?? undefined;
 
   // SHOT.VIDEO.LIBRARY.1, Lot C
   const availableVideos = await loadRuntimeVideoOptionsForShot(shotId);
@@ -302,7 +315,7 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       assetType: r.assetType,
       description: r.assetDescription,
     })),
-    references: buildOrderedShotReferenceInputs({ hasDynamicBatch, batchSelectedIds, availableImages }),
+    references: buildOrderedShotReferenceInputs({ hasDynamicBatch, batchSelectedIds, availableImages, roleOverrides: batchRoleOverrides }),
     assetBibles: assignedRows.map((r) => ({
       assetId: r.assetId,
       assetName: r.assetName,

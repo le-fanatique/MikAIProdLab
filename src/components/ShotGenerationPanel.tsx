@@ -28,6 +28,7 @@ import { compilePromptSegments } from "@/lib/prompts/compilePromptSegments";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { buildPromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
 import { buildOrderedShotReferenceInputs, composeShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
+import { buildBatchRoleOverrideParamKey, parseBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
 import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
@@ -369,6 +370,14 @@ export default async function ShotGenerationPanel({
     }
   }
 
+  // REFROLE.INTENT.1 — the job-level role overlay, read from its own sibling
+  // param so the preview and the queued job never disagree on which role a
+  // reference carries for this generation.
+  const batchRoleOverrides =
+    batchUiInfo.kind === "ready"
+      ? parseBatchRoleOverridesParam(currentSearchParams[buildBatchRoleOverrideParamKey(batchUiInfo.batchNodeId)] ?? "")
+      : {};
+
   // --- Canonical payload (GEN.SEEDANCE.1): same function used by /map,
   // AssetGenerationPanel and the server action — the preview computed here
   // matches exactly what queueing recomputes. ---
@@ -400,7 +409,7 @@ export default async function ShotGenerationPanel({
       assetType: r.assetType,
       description: r.assetDescription,
     })),
-    references: buildOrderedShotReferenceInputs({ hasDynamicBatch: batchDetectionOk, batchSelectedIds, availableImages }),
+    references: buildOrderedShotReferenceInputs({ hasDynamicBatch: batchDetectionOk, batchSelectedIds, availableImages, roleOverrides: batchRoleOverrides }),
     assetBibles: assignedRows.map((r) => ({
       assetId: r.assetId,
       assetName: r.assetName,
@@ -781,6 +790,7 @@ export default async function ShotGenerationPanel({
           batchError={batchError}
           batchImageGroups={batchImageGroups}
           batchSelectedIds={batchSelectedIds}
+          batchRoleOverrides={batchRoleOverrides}
           workflowId={wid}
         />
 
@@ -812,6 +822,7 @@ export default async function ShotGenerationPanel({
             textOverrideByNodeId={textOverrideByNodeId}
             batchDetectionOk={batchDetectionOk}
             batchNodeId={batchNodeId}
+            batchRoleOverrides={batchRoleOverrides}
             workflowKind={workflow.kind}
           />
         )}

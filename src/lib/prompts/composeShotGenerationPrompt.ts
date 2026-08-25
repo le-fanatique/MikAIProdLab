@@ -47,6 +47,7 @@ import {
 import { getGuideModeForRole } from "@/lib/llmWorkspace/conformation/profiles/guideDefault";
 import { orderStoryboardReferences } from "./orderStoryboardReferences";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
+import { resolveOverriddenRole } from "@/lib/comfy/dynamicBatchRoleOverrides";
 
 // ---------------------------------------------------------------------------
 // Reference ordering — IND.REFORDER.1's rule applied to a single Shot.
@@ -64,6 +65,15 @@ export type BuildOrderedShotReferenceInputsParams = {
   batchSelectedIds: string[];
   /** Every selectable reference for this Shot (shot + cast asset references), in display order — the fallback when there is no batch node. */
   availableImages: RuntimeImageOption[];
+  /**
+   * REFROLE.INTENT.1 — the job-level role overlay from the Dynamic Batch
+   * "Selected Images" panel (`batchImageRoles_<nodeId>`, `id -> role`).
+   * Overrides the library's own stored role for that id, for this
+   * composition only — never written back to `shot_reference_images` or
+   * `asset_reference_images`. Absent/undefined behaves exactly as before
+   * this ticket.
+   */
+  roleOverrides?: Record<string, string>;
 };
 
 export function buildOrderedShotReferenceInputs(
@@ -90,7 +100,7 @@ export function buildOrderedShotReferenceInputs(
     assetName: img.assetName ?? null,
     assetType: img.assetType ?? null,
     label: img.label ?? null,
-    role: img.role ?? null,
+    role: resolveOverriddenRole(img.id, img.role ?? null, params.roleOverrides),
     variantState: img.variantState ?? null,
     approvedForGeneration: img.approved ?? null,
   }));

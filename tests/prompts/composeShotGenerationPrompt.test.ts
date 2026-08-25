@@ -201,6 +201,72 @@ describe("buildOrderedShotReferenceInputs — @ImageN follows the batch selectio
     });
     expect(references.map((r) => r.refId)).toEqual(["shot-1", "asset-1-2", "asset-1-3"]);
   });
+
+  // REFROLE.INTENT.1 — the job-level role overlay replaces the library's own
+  // stored role for that id only, and never touches the others.
+  it("applies roleOverrides in place of the library's stored role, for the overridden id only", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-2", "asset-1-3"],
+      availableImages,
+      roleOverrides: { "asset-1-2": "environment" },
+    });
+    expect(references.find((r) => r.refId === "asset-1-2")!.role).toBe("environment");
+    expect(references.find((r) => r.refId === "asset-1-3")!.role).toBe("environment");
+  });
+
+  it("leaves the library's own stored role untouched when roleOverrides is absent", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-2"],
+      availableImages,
+    });
+    expect(references[0].role).toBe("character");
+  });
+});
+
+// REFROLE.INTENT.1 filet — the surchargeoverride actually changes the named
+// mode `Subject Definition:` renders, i.e. it reaches getGuideModeForRole.
+describe("REFROLE.INTENT.1 — the role override changes the rendered named mode", () => {
+  const availableImages: RuntimeImageOption[] = [
+    { id: "asset-1-2", source: "asset", imagePath: "/b.png", label: "B", role: "keyframe", assetName: "Mara", assetType: "character" },
+  ];
+
+  it("Subject Definition renders the overridden role's named mode, not the library's stored role", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-2"],
+      availableImages,
+      roleOverrides: { "asset-1-2": "environment" },
+    });
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character" }],
+      references,
+      assetBibles: [],
+      sources: { casting: true, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    expect(result.text).toContain("Mara (character) — @Image1 as background environment");
+  });
+
+  it("without an override, the library's own stored role ('keyframe') renders no named mode", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-2"],
+      availableImages,
+    });
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character" }],
+      references,
+      assetBibles: [],
+      sources: { casting: true, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    expect(result.text).toContain("Mara (character) — @Image1");
+    expect(result.text).not.toContain("as background environment");
+  });
 });
 
 describe("SHOTPROMPT.SHOT.1 filet — the three Shot surfaces call the same composer", () => {

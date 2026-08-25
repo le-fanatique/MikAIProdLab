@@ -6,6 +6,12 @@ import ImageSourcePicker from "@/components/ImageSourcePicker";
 import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { uploadShotSourceFromPanel, uploadAssetSourceFromPanel } from "@/actions/panelUpload";
 import { refImageUrl } from "@/lib/refImageUrl";
+import { getRolesWithNamedGuideMode } from "@/lib/llmWorkspace/conformation/profiles/guideDefault";
+import {
+  buildBatchRoleOverrideParamKey,
+  serializeBatchRoleOverridesParam,
+  pruneBatchRoleOverrides,
+} from "@/lib/comfy/dynamicBatchRoleOverrides";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,6 +58,14 @@ type Props = {
   error: BatchError | null;
   availableImages: BatchImageGroup[];
   selectedImageIds: string[];
+  /**
+   * REFROLE.INTENT.1 — the current job-level role overlay, `id -> role`,
+   * for this batch node. Never written to the library — only the URL's
+   * `batchImageRoles_<nodeId>` sibling param and sessionStorage. Absent ids
+   * fall back to the library's own stored role (rendered by the caller as
+   * this component's "role of the library" default).
+   */
+  roleOverrides?: Record<string, string>;
   passthroughParams: Record<string, string>;
   basePath: string;
   /** "shot" or "asset" determine which panel upload server action to use; "sequence" (SEQGEN.STORYBOARD.3) has no upload action — only casting references already in the DB feed the batch, so the Upload Image form is not rendered for it. */
@@ -88,6 +102,11 @@ function buildBatchParamKey(batchNodeId: string): string {
   return `batchImages_${batchNodeId}`;
 }
 
+// REFROLE.INTENT.1 — offered roles are exactly those with a named guide
+// mode. Read once at module scope: the table is static within a session,
+// and this keeps every render from re-deriving it.
+const NAMED_GUIDE_MODE_ROLES = getRolesWithNamedGuideMode();
+
 /** Build incrementing batch slot labels like "image1", "image2", etc. */
 function buildBatchSlotLabels(index: number): string {
   return index === 0 ? "image1" : `image${index + 1}`;
@@ -103,6 +122,7 @@ export default function DynamicBatchImageList({
   error,
   availableImages,
   selectedImageIds,
+  roleOverrides: roleOverridesProp,
   passthroughParams,
   basePath,
   contextType,
@@ -117,6 +137,9 @@ export default function DynamicBatchImageList({
   const router = useRouter();
 
   const [selected, setSelected] = useState<string[]>(selectedImageIds);
+  // REFROLE.INTENT.1 — job-level role overlay, id -> role. Never written to
+  // the library; lives only in the URL's sibling param + sessionStorage.
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, string>>(roleOverridesProp ?? {});
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Combine all available images into flat picker items
@@ -124,6 +147,8 @@ export default function DynamicBatchImageList({
 
   // T2 — workflow-keyed sessionStorage
   const ssKey = buildBatchKey(workflowId, batchNodeId);
+  // REFROLE.INTENT.1 — sibling sessionStorage key for the role overlay.
+  const roleSsKey = `${ssKey}.roles`;
 
   // Seed sessionStorage from initial URL params on mount so the hidden input
   // can read a fresh value on the very first Generate click after page load.
@@ -132,15 +157,33 @@ export default function DynamicBatchImageList({
       if (sessionStorage.getItem(ssKey) === null) {
         sessionStorage.setItem(ssKey, selectedImageIds.length > 0 ? selectedImageIds.join(",") : "");
       }
+      // REFROLE.INTENT.1 — same seeding for the role overlay.
+      if (sessionStorage.getItem(roleSsKey) === null) {
+        const initialRoles = roleOverridesProp ?? {};
+        const serialized = serializeBatchRoleOverridesParam(initialRoles);
+        sessionStorage.setItem(roleSsKey, serialized);
+      }
     } catch { /* sessionStorage unavailable */ }
-  }, [ssKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ssKey, roleSsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function pushState(newIds: string[]) {
+  /**
+   * REFROLE.INTENT.1 — `nextRoleOverrides` defaults to pruning the current
+   * overrides down to `newIds` (`pruneBatchRoleOverrides`, the same rule
+   * `pruneDynamicBatchIds` applies to the selection itself), so every
+   * selection-changing caller below elides a removed image's override for
+   * free. `handleRoleChange` is the only caller that passes an explicit map
+   * (ids unchanged, only the overlay itself changes).
+   */
+  function pushState(newIds: string[], nextRoleOverrides?: Record<string, string>) {
+    const prunedRoles = nextRoleOverrides ?? pruneBatchRoleOverrides(roleOverrides, newIds);
+    setRoleOverrides(prunedRoles);
+
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(passthroughParams)) {
-      if (!k.startsWith("batchImages_") && k !== "jobId") params.set(k, v);
+      if (!k.startsWith("batchImages_") && !k.startsWith("batchImageRoles_") && k !== "jobId") params.set(k, v);
     }
     const urlKey = buildBatchParamKey(batchNodeId);
+    const roleUrlKey = buildBatchRoleOverrideParamKey(batchNodeId);
     // Retake Round 2 — once the user has explicitly acted on this batch
     // (this function only ever runs from an explicit action), the param
     // stays PRESENT even when it empties out, on the Sequence Storyboard
@@ -148,6 +191,13 @@ export default function DynamicBatchImageList({
     // absent" behavior byte-identical.
     if (newIds.length > 0 || preserveExplicitEmptySelection) {
       params.set(urlKey, newIds.join(","));
+    }
+    const serializedRoles = serializeBatchRoleOverridesParam(prunedRoles);
+    // REFROLE.INTENT.1 — additive sibling param: only present when there is
+    // at least one override, so a URL with none is byte-identical to a URL
+    // predating this ticket.
+    if (serializedRoles) {
+      params.set(roleUrlKey, serializedRoles);
     }
     router.replace(`${basePath}?${params.toString()}`, { scroll: false });
 
@@ -159,6 +209,7 @@ export default function DynamicBatchImageList({
       } else {
         sessionStorage.removeItem(ssKey);
       }
+      sessionStorage.setItem(roleSsKey, serializedRoles);
     } catch {
       // sessionStorage unavailable — ignore, URL-based sync is fallback.
     }
@@ -197,6 +248,19 @@ export default function DynamicBatchImageList({
     const next = [...selected, ...missing];
     setSelected(next);
     pushState(next);
+  }
+
+  // REFROLE.INTENT.1 — the role selector's onChange. Empty value ("(library
+  // role)") clears the override for that id rather than storing an empty
+  // string, so a returned-to-default id never lingers in the URL param.
+  function handleRoleChange(id: string, role: string) {
+    const next = { ...roleOverrides };
+    if (role) {
+      next[id] = role;
+    } else {
+      delete next[id];
+    }
+    pushState(selected, next);
   }
 
   function handleMoveUp(index: number) {
@@ -343,6 +407,22 @@ export default function DynamicBatchImageList({
                     </span>
                   )}
                 </div>
+                {/* REFROLE.INTENT.1 — job-level role overlay for this
+                    generation only; never writes to the library. Default
+                    option ("(library role)") clears the override. */}
+                <select
+                  value={roleOverrides[id] ?? ""}
+                  onChange={(e) => handleRoleChange(id, e.target.value)}
+                  title="Override this image's role for this generation only"
+                  className="shrink-0 rounded border border-[#2c3035] bg-[#141618] text-[10px] text-[#a4abb2] px-1.5 py-1 max-w-[9.5rem]"
+                >
+                  <option value="">(library role)</option>
+                  {NAMED_GUIDE_MODE_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
                 <div className="flex items-center gap-0.5 shrink-0">
                   <button
                     type="button"
@@ -470,10 +550,15 @@ export default function DynamicBatchImageList({
             value={(() => {
               const p = new URLSearchParams();
               for (const [k, v] of Object.entries(passthroughParams)) {
-                if (!k.startsWith("batchImages_") && k !== "jobId") p.set(k, v);
+                if (!k.startsWith("batchImages_") && !k.startsWith("batchImageRoles_") && k !== "jobId") p.set(k, v);
               }
               const key = buildBatchParamKey(batchNodeId);
               if (selected.length > 0) p.set(key, selected.join(","));
+              // REFROLE.INTENT.1 — the role overlay survives the same
+              // upload-then-return round trip as the selection itself.
+              const roleKey = buildBatchRoleOverrideParamKey(batchNodeId);
+              const serializedRoles = serializeBatchRoleOverridesParam(roleOverrides);
+              if (serializedRoles) p.set(roleKey, serializedRoles);
               return `${basePath}?${p.toString()}`;
             })()}
           />

@@ -48,6 +48,11 @@ import { saveStoryboardDraftFromJob } from "@/actions/storyboard";
 import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/compileShotPrompt";
 import { buildPromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
 import { buildOrderedShotReferenceInputs, composeShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
+import {
+  buildBatchRoleOverrideParamKey,
+  parseBatchRoleOverridesParam,
+  serializeBatchRoleOverridesParam,
+} from "@/lib/comfy/dynamicBatchRoleOverrides";
 import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -423,6 +428,12 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     .filter((img): img is NonNullable<typeof img> => img !== undefined)
     .map((img) => ({ id: img.id, imagePath: img.imagePath }));
 
+  // REFROLE.INTENT.1 — the job-level role overlay, read from its own
+  // sibling param so this preview never disagrees with the queued job.
+  const batchRoleOverrides = batchDetectionOk
+    ? parseBatchRoleOverridesParam(currentSearchParams[buildBatchRoleOverrideParamKey(batchNodeId)] ?? "")
+    : {};
+
   // SHOTPROMPT.SHOT.1 — the single shared composer, also called by
   // runShotGenerationCore and ShotGenerationPanel.tsx: `@ImageN` follows this
   // exact same batch selection (never DB order), Style/lighting are resolved
@@ -446,7 +457,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       assetType: r.assetType,
       description: r.assetDescription,
     })),
-    references: buildOrderedShotReferenceInputs({ hasDynamicBatch: batchDetectionOk, batchSelectedIds, availableImages }),
+    references: buildOrderedShotReferenceInputs({ hasDynamicBatch: batchDetectionOk, batchSelectedIds, availableImages, roleOverrides: batchRoleOverrides }),
     assetBibles: assignedRows.map((r) => ({
       assetId: r.assetId,
       assetName: r.assetName,
@@ -640,6 +651,14 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   if (batchDetectionOk && batchSelectedIds.length > 0) {
     selectionParams.set(`batchImages_${batchNodeId}`, batchSelectedIds.join(","));
   }
+  // REFROLE.INTENT.1 — the role overlay survives the generation redirect
+  // the same way the selection itself does.
+  if (batchDetectionOk) {
+    const serializedRoles = serializeBatchRoleOverridesParam(batchRoleOverrides);
+    if (serializedRoles) {
+      selectionParams.set(buildBatchRoleOverrideParamKey(batchNodeId), serializedRoles);
+    }
+  }
   if (storyboardPreserveParams) {
     for (const [key, value] of Object.entries(storyboardPreserveParams)) {
       selectionParams.set(key, value);
@@ -824,6 +843,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               error={batchError}
               availableImages={batchImageGroups}
               selectedImageIds={batchSelectedIds}
+              roleOverrides={batchRoleOverrides}
               passthroughParams={currentSearchParams}
               basePath={basePath}
               contextType="shot"
@@ -972,7 +992,11 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                   {/* GEN.SEEDANCE.1 — Dynamic Batch selection, same sync
                       mechanism as the panels (URL + sessionStorage). */}
                   {batchDetectionOk && (
-                    <DynamicBatchFormSync batchNodeId={batchNodeId} workflowId={String(wid)} />
+                    <DynamicBatchFormSync
+                      batchNodeId={batchNodeId}
+                      workflowId={String(wid)}
+                      roleInitialValue={serializeBatchRoleOverridesParam(batchRoleOverrides)}
+                    />
                   )}
 
                   <WorkflowGenerateActions

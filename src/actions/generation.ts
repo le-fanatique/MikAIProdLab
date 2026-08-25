@@ -16,6 +16,7 @@ import { queueCloudPrompt } from "@/lib/comfy/comfyCloudClient";
 import { getComfySettings } from "@/lib/settings";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
+import { parseBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
 import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
@@ -142,6 +143,20 @@ async function submitShotGeneration(formData: FormData, normalStyleIntent: "auto
     }));
   }
 
+  // REFROLE.INTENT.1 — the job-level role overlay, keyed identically to
+  // batchImagesByNodeId above. Never written to the library.
+  const batchImageRoleOverridesByNodeId: Record<string, Record<string, string>> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("batchImageRoles_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("batchImageRoles_".length).trim();
+    if (!nodeId) continue;
+    const overrides = parseBatchRoleOverridesParam(value);
+    if (Object.keys(overrides).length > 0) {
+      batchImageRoleOverridesByNodeId[nodeId] = overrides;
+    }
+  }
+
   // GEN.SEEDANCE.1 — the Advanced Payload Editor textarea is always present
   // in the DOM, so patchedJsonOverride is always submitted; it is only
   // treated as an explicit override when patchedJsonOverrideActive is also
@@ -183,6 +198,7 @@ async function submitShotGeneration(formData: FormData, normalStyleIntent: "auto
       textOverrideByNodeId,
       patchedJsonOverride,
       batchImagesByNodeId,
+      batchImageRoleOverridesByNodeId,
       confirmPartnerNodeCost,
       appendProjectStyleRequested: appendProjectStyle,
     },
@@ -801,7 +817,10 @@ export async function attachOutputAsShotReference(
         imagePath: destRelative,
         sourceFilename: null,
         label: "Generated Output",
-        imageRole: "keyframe",
+        // REFROLE.INTENT.1 — a render is not a keyframe. The role is left
+        // unset so the author classifies it; the job overrides intent, not
+        // the library's stored role.
+        imageRole: null,
       });
       nextOrder += 1;
     }
@@ -908,7 +927,8 @@ export async function attachOutputAsAssetReference(
         imagePath: destRelative,
         sourceFilename: null,
         label: "Generated Output",
-        imageRole: "keyframe",
+        // REFROLE.INTENT.1 — same reasoning as the shot-reference site above.
+        imageRole: null,
       });
       nextOrder += 1;
     }
