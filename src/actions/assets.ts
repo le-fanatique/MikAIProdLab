@@ -223,6 +223,42 @@ export async function updateAssetLightingInline(input: {
   return { ok: true };
 }
 
+/**
+ * ASSET.PROMPTCARD.2 — the Prompt Card's write side, on the exact model of
+ * `updateAssetLightingInline` above: a caller-supplied object (not
+ * FormData), the same ownership chain (a SELECT, then an UPDATE, two
+ * separate statements, no db.transaction), the same `{ ok: true } | { ok:
+ * false; error }` shape, narrowed to one field with no append/replace mode —
+ * always a full replacement, and a blank/whitespace-only value clears the
+ * column to null. Writes `promptCard` alone — no other column, including
+ * `description`/`notes`/the Asset Bible fields.
+ */
+export async function updateAssetPromptCardInline(input: {
+  assetId: number;
+  projectId: number;
+  promptCard: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { assetId, projectId } = input;
+
+  const [existing] = await db
+    .select({ projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, assetId));
+
+  if (!existing || existing.projectId !== projectId) {
+    return { ok: false, error: "Asset not found." };
+  }
+
+  const value = input.promptCard.trim() === "" ? null : input.promptCard;
+
+  await db
+    .update(assets)
+    .set({ promptCard: value, updatedAt: new Date().toISOString() })
+    .where(eq(assets.id, assetId));
+
+  return { ok: true };
+}
+
 export async function applyBatchAssetDescriptionDraftsInline(input: {
   projectId: number;
   mode: "replace" | "append";

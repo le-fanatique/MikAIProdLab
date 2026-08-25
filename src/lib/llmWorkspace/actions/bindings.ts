@@ -20,6 +20,7 @@ import {
   updateAssetDescriptionFieldInline,
   applyBatchAssetDescriptionDraftsInline,
   updateAssetLightingInline,
+  updateAssetPromptCardInline,
 } from "@/actions/assets";
 import {
   updateShotPrompt,
@@ -74,5 +75,6 @@ export const ACTION_BINDINGS = {
   updateShotLighting,
   updateSequenceLighting,
   updateAssetLightingInline,
+  updateAssetPromptCardInline,
   addRuleAction,
 } as const satisfies Record<ActionId, (...args: never[]) => Promise<unknown>>;

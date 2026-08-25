@@ -264,6 +264,24 @@ describe("action registry — declared columns match the columns actually writte
       [...ACTION_REGISTRY.updateShotNarrativeContext.columns.written].sort()
     );
   });
+
+  // ASSET.PROMPTCARD.2 — the correspondence assertion §4 of the ticket
+  // requires: this drifted twice this week for want of exactly this check.
+  it("updateAssetPromptCardInline", async () => {
+    const assetId = await insertAsset(ctx, projectId);
+    const before = await readAsset(ctx, assetId);
+
+    await assetsActions.updateAssetPromptCardInline({
+      assetId,
+      projectId,
+      promptCard: "Scuffed utilitarian coat, weathered fur, calloused hands",
+    });
+
+    const after = await readAsset(ctx, assetId);
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt").sort()).toEqual(
+      [...ACTION_REGISTRY.updateAssetPromptCardInline.columns.written].sort()
+    );
+  });
 });
 
 describe("action registry — particularities referenced instead of duplicated", () => {

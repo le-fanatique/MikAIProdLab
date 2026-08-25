@@ -111,6 +111,25 @@ export function buildAssetLightingCommitArgs(input: {
   ];
 }
 
+// ── asset.promptCard → updateAssetPromptCardInline (returnValue) ──────────
+//
+// ASSET.PROMPTCARD.2. `updateAssetPromptCardInline` writes `promptCard`
+// alone — a full replacement, no append/preserve step needed here, same
+// shape as `buildAssetLightingCommitArgs` above.
+export function buildAssetPromptCardCommitArgs(input: {
+  assetId: number;
+  projectId: number;
+  promptCard: string;
+}): Parameters<typeof ACTION_BINDINGS.updateAssetPromptCardInline> {
+  return [
+    {
+      assetId: input.assetId,
+      projectId: input.projectId,
+      promptCard: input.promptCard,
+    },
+  ];
+}
+
 // ── story.generate → applyGeneratedStory (returnValue, positional) ────────
 export function buildApplyGeneratedStoryArgs(
   projectId: number,

@@ -2012,6 +2012,68 @@ export function renderAssetRetakeDirectorRuleLine(freeText: string | undefined):
 }
 
 // ---------------------------------------------------------------------------
+// `asset.promptCard` render forms — ASSET.PROMPTCARD.2. Own, narrower forms
+// over ASSET.CORE/ASSET.BIBLE rather than the two operations' shared ones
+// (`assetContext.coreLines`, `assetRetake.bibleLines`): §3 of the ticket
+// names exactly Name, Type, Description, Visual Identity and Forbidden
+// Variations as this operation's context — never Notes, never Usage Rules
+// (a production handling rule, not a visual trait) — so the render forms
+// project that narrower subset rather than reusing a wider one and asking
+// the model to ignore the rest.
+// ---------------------------------------------------------------------------
+
+/** ASSET.CORE, `asset.promptCard`'s own render form — Name, Type, Description only, never Notes. */
+export function renderAssetPromptCardCoreLines(data: AssetCoreData): string {
+  const lines: string[] = [`Asset: ${data.name}`, `Type: ${data.type}`];
+  lines.push(data.description?.trim() ? `Description: ${data.description.trim()}` : `Description: (none)`);
+  return lines.join("\n");
+}
+
+/**
+ * ASSET.BIBLE, `asset.promptCard`'s own render form — Visual Identity and
+ * Forbidden Variations only, never Usage Rules. Forbidden Variations is
+ * still handed to the model as context (rule 3 of §3 of the ticket asks it
+ * to absorb the prohibition positively, never to repeat it), the label
+ * below says so explicitly rather than relying on the system prompt alone.
+ * Empty when the Asset carries neither field, matching every other
+ * "nothing to say" render form in this file.
+ */
+export function renderAssetPromptCardBibleLines(data: AssetBibleData): string {
+  const hasBible = data.visualIdentity?.trim() || data.forbiddenVariations?.trim();
+  if (!hasBible) return "";
+  const lines: string[] = [`\nAsset Bible (reference):`];
+  if (data.visualIdentity?.trim()) lines.push(`Visual Identity: ${data.visualIdentity.trim()}`);
+  if (data.forbiddenVariations?.trim()) {
+    lines.push(
+      `Forbidden Variations (context only — never name this in the card; state its positive opposite instead): ${data.forbiddenVariations.trim()}`
+    );
+  }
+  return lines.join("\n");
+}
+
+const ASSET_PROMPT_CARD_FREE_TEXT_MAX_LENGTH = 500;
+
+/** User: the director's note, when given — empty (and dropped) with no note. */
+export function renderAssetPromptCardFreeTextDirective(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return `\nDirector's note: ${trimmed.slice(0, ASSET_PROMPT_CARD_FREE_TEXT_MAX_LENGTH)}`;
+}
+
+/**
+ * System: the conditional "Respond to the director's note below" rule —
+ * empty (and dropped by `assembleBlocks`) with no note, same "an absent
+ * block never refers to a block that is not there" discipline
+ * `renderAssetRetakeDirectorRuleLine` above already follows, corrective
+ * manche B10 caught it missing.
+ */
+export function renderAssetPromptCardDirectorRuleLine(freeText: string | undefined): string {
+  const trimmed = freeText?.trim();
+  if (!trimmed) return "";
+  return "- Respond to the director's note below: it says what to emphasize or de-emphasize, never a new visual fact to invent.";
+}
+
+// ---------------------------------------------------------------------------
 // `sequencePrompt.assist` / `shotPrompt.assist` render forms —
 // LLMW.DESCRIPTOR.RENDER.1 (B1c), widened 2026-08-13.
 //
@@ -2983,10 +3045,12 @@ export const VARIABLE_RENDER_FORMS = {
     "assetDescriptionBatch.closingLine": renderAssetCoreClosingBoth,
     "assetBible.coreLines": renderAssetCoreBibleLines,
     "assetBible.closingLine": renderAssetCoreClosingBible,
+    "assetPromptCard.coreLines": renderAssetPromptCardCoreLines,
   },
   "ASSET.BIBLE": {
     "assetBible.existingBibleLines": renderAssetBibleExistingLines,
     "assetRetake.bibleLines": renderAssetRetakeBibleLines,
+    "assetPromptCard.bibleLines": renderAssetPromptCardBibleLines,
   },
   "ASSET.SEQ_APPEARANCES": {
     "assetContext.seqAppearancesLines": renderAssetSeqAppearancesLines,
@@ -3135,6 +3199,8 @@ export const FREE_TEXT_RENDER_FORMS = {
   "shotRetake.freeTextDirective": renderShotRetakeFreeTextDirective,
   "assetRetake.freeTextDirective": renderAssetRetakeFreeTextDirective,
   "assetRetake.directorRuleLine": renderAssetRetakeDirectorRuleLine,
+  "assetPromptCard.freeTextDirective": renderAssetPromptCardFreeTextDirective,
+  "assetPromptCard.directorRuleLine": renderAssetPromptCardDirectorRuleLine,
   "shotInsert.freeTextDirective": renderShotInsertFreeTextDirective,
   "shotInsert.directiveRuleLine": renderShotInsertDirectiveRuleLine,
   "shotLightingDirected.freeTextDirective": renderShotLightingDirectedFreeTextDirective,

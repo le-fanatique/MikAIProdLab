@@ -314,6 +314,10 @@ export type ActionId =
   | "updateShotLighting"
   | "updateSequenceLighting"
   | "updateAssetLightingInline"
+  // ASSET.PROMPTCARD.2 — the Prompt Card's write side, mirroring
+  // `updateAssetLightingInline` exactly (one field, full replacement, no
+  // append mode), over `assets.promptCard`.
+  | "updateAssetPromptCardInline"
   // STYLE.LLM.ACTIONS.1 — the write side ticket 3 of "L'assistant de Project
   // Style" (STYLE.LLM.ADJUST.1) needs: `addRuleAction` inserts one atomic
   // rule into the Working Draft's `project_style_rules`, `status` forced to

@@ -25,6 +25,7 @@ import { assetRetakeDirectedDescriptor } from "@/lib/llmWorkspace/descriptors/as
 import AssetBibleEnhancePanel from "@/components/llmWorkspace/AssetBibleEnhancePanel";
 import AssetLightingFromImagePanel from "@/components/llmWorkspace/AssetLightingFromImagePanel";
 import { lightingFromImageDescriptor } from "@/lib/llmWorkspace/descriptors/lightingFromImage";
+import AssetPromptCardPanel from "@/components/llmWorkspace/AssetPromptCardPanel";
 import AssetInlineDetailsForm from "@/components/AssetInlineDetailsForm";
 import AssetAlignmentPanel from "@/components/projectStyle/AssetAlignmentPanel";
 import { getAssetAlignmentStatusAction, type GetAssetAlignmentStatusResult } from "@/actions/assetAlignment";
@@ -467,6 +468,21 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             usageRules={asset.usageRules}
             forbiddenVariations={asset.forbiddenVariations}
             lighting={asset.lighting}
+            promptCard={asset.promptCard}
+            isConfigured={!!llmSettings.model.trim()}
+          />
+        </Card>
+      </Collapsible>
+
+      {/* ASSET.PROMPTCARD.2 — rendered unconditionally, no display condition
+          (§5 of the ticket): every asset has a Bible, even an empty one, so
+          the Prompt Card assist is always reachable here, next to "Enhance
+          Asset Bible" whose approved short translation it is. */}
+      <Collapsible label="Propose Prompt Card">
+        <Card title="Propose Prompt Card">
+          <AssetPromptCardPanel
+            projectId={pid}
+            assetId={aid}
             promptCard={asset.promptCard}
             isConfigured={!!llmSettings.model.trim()}
           />

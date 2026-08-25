@@ -34,6 +34,7 @@ import {
   buildApplyGeneratedStoryArgs,
   buildAssetBibleCommitArgs,
   buildAssetDescriptionFieldCommitArgs,
+  buildAssetPromptCardCommitArgs,
   buildShotRetakeCommitArgs,
 } from "@/lib/llmWorkspace/actions/proposalCommit";
 
@@ -358,6 +359,24 @@ export async function commitBenchProposal(input: {
         projectId,
         lighting: requireStringValue(input.values, field),
       });
+    }
+
+    // ASSET.PROMPTCARD.2 — `updateAssetPromptCardInline`'s own commit
+    // branch, reachable from this ticket's own descriptor (`asset.promptCard`,
+    // `output.kind: "object"`, one field: `promptCard`), unlike
+    // `addRuleAction` below.
+    case "updateAssetPromptCardInline": {
+      const field = descriptor.output.kind === "object" ? descriptor.output.fields[0]?.field : undefined;
+      if (field !== "promptCard") {
+        return { ok: false, error: "This template's output field cannot be routed to an update action." };
+      }
+      const assetId = input.ids.assetId as number;
+      const args = buildAssetPromptCardCommitArgs({
+        assetId,
+        projectId,
+        promptCard: requireStringValue(input.values, field),
+      });
+      return ACTION_BINDINGS.updateAssetPromptCardInline(...args);
     }
 
     // STYLE.LLM.ACTIONS.1 — added only because ActionId grew (types.ts) and

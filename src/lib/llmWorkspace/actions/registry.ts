@@ -695,6 +695,28 @@ export const ACTION_REGISTRY = {
     ],
   },
 
+  // ASSET.PROMPTCARD.2 — the Prompt Card's write side (§4 of the ticket:
+  // "sur le modèle EXACT de `updateAssetLightingInline`"). Reachable from a
+  // descriptor's `commit` from this same ticket (`asset.promptCard`), unlike
+  // most entries above at their own time of declaration.
+  updateAssetPromptCardInline: {
+    id: "updateAssetPromptCardInline",
+    operation: "update",
+    source: { module: "@/actions/assets", export: "updateAssetPromptCardInline" },
+    target: { entity: "asset" },
+    response: "returnValue",
+    ownership: { checked: true, transactional: false },
+    columns: {
+      written: ["promptCard"],
+      writesUpdatedAt: true,
+    },
+    writeSemantics: "replace",
+    notes: [
+      "Same shape as `updateAssetLightingInline` (src/actions/assets.ts) — a caller-supplied object, not FormData; ownership check (SELECT) and mutation (UPDATE) as two separate statements, no db.transaction; `{ ok: true } | { ok: false; error }` — narrowed to one field with no append/replace mode: always a full replacement, and a blank/whitespace-only value clears the column to null. Proven by tests/actions/updateAssetPromptCardInline.test.ts, including a read-after-write assertion that `description`/`notes`/`lighting`/the Asset Bible fields stay unchanged.",
+      "Ownership check (src/actions/assets.ts, SELECT) and mutation (UPDATE) are two separate statements, no db.transaction. Structural fact; see registry.test.ts's structural assertion.",
+    ],
+  },
+
   // STYLE.LLM.ACTIONS.1 — the write side ticket 3 of "L'assistant de Project
   // Style" (STYLE.LLM.ADJUST.1) needs. Not yet reachable from a descriptor's
   // `commit` — declared and proven against a real database ahead of that
