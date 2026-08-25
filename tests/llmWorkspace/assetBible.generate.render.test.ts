@@ -64,6 +64,8 @@ describe("assetBible.generate descriptor — strict prompt equality", () => {
         worldSegment: "A rain-soaked megacity.",
         visualSegment: "Neon and chrome.",
         rulesSegment: "Never show daylight.",
+        rulesPositiveSegment: "Never show daylight.",
+        rulesAvoidSegment: "",
       },
     };
     const expected = { system: `You are a production asset supervisor for a film or animation project.

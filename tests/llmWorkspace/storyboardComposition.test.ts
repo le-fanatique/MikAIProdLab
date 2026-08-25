@@ -129,6 +129,34 @@ describe("composeStoryboardShot", () => {
     expect(withoutForbidden.parts.some((p) => p.id === "constraints")).toBe(false);
   });
 
+  // SHOTPROMPT.STYLE.1 Part B — the Project Style's `Avoid:` block joins
+  // Constraints, ahead of the per-asset forbiddenVariations lines, and never
+  // appears under Style (which this function does not even render — see
+  // SHOTPROMPT.HEADER.1 above).
+  it("folds the Project Style Avoid block into Constraints, ahead of forbiddenVariations", () => {
+    const withStyleAvoid = composeStoryboardShot(
+      inputWith({ styleAvoid: "Avoid:\n- No bright colors.\n- No daylight exteriors." })
+    );
+    const constraints = withStyleAvoid.parts.find((p) => p.id === "constraints")!;
+    expect(constraints.text).toContain("Avoid:\n- No bright colors.\n- No daylight exteriors.");
+    expect(constraints.text).toContain("Never long hair.");
+    expect(constraints.text.indexOf("No bright colors")).toBeLessThan(constraints.text.indexOf("Never long hair."));
+    expect(withStyleAvoid.text).not.toContain("Style:");
+
+    // Present even with no per-asset forbiddenVariations at all.
+    const styleAvoidOnly = composeStoryboardShot(
+      inputWith({
+        context: contextWith({ assetBibles: [{ assetId: 1, assetName: "Mara" }] }),
+        styleAvoid: "Avoid:\n- No bright colors.",
+      })
+    );
+    expect(styleAvoidOnly.parts.find((p) => p.id === "constraints")!.text).toBe("Avoid:\n- No bright colors.");
+
+    // null/blank renders nothing extra — byte-identical to before this field existed.
+    const withoutStyleAvoid = composeStoryboardShot(inputWith({ styleAvoid: null }));
+    expect(withoutStyleAvoid.parts.find((p) => p.id === "constraints")!.text).toBe("- Mara: Never long hair.");
+  });
+
   it("surfaces the conformation findings rather than acting on them", () => {
     const result = composeStoryboardShot(
       inputWith({ lighting: null })

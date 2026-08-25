@@ -103,6 +103,37 @@ describe("composeShotGenerationPrompt", () => {
     expect(result.text.startsWith("Style:")).toBe(false);
   });
 
+  // SHOTPROMPT.STYLE.1 Part A (regression filet) — the compositeur is the
+  // SOLE source of Style text: exactly one "Style:" occurrence when Style is
+  // requested (checkbox checked -> `projectStyle` resolved), zero when it is
+  // not (unchecked -> `projectStyle: null`). This is the exact assertion the
+  // three Shot surfaces (runShotGeneration.ts, ShotGenerationPanel.tsx, the
+  // /map page) rely on now that none of them compose a second copy via
+  // `prepareGenerationStyleSource`'s own composed prompt.
+  it("contains exactly one 'Style:' occurrence when Project Style is requested (checkbox checked)", () => {
+    const result = composeShotGenerationPrompt(baseInput({ projectStyle: "Gritty cyberpunk realism." }));
+    const occurrences = result.text.split("Style:").length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it("contains zero 'Style:' occurrences when Project Style is not requested (checkbox unchecked)", () => {
+    const result = composeShotGenerationPrompt(baseInput({ projectStyle: null }));
+    const occurrences = result.text.split("Style:").length - 1;
+    expect(occurrences).toBe(0);
+  });
+
+  // SHOTPROMPT.STYLE.1 Part B — the resolved Project Style Avoid block
+  // reaches Constraints through this composer too, never Style.
+  it("passes projectStyleAvoid through to Constraints, never into Style", () => {
+    const result = composeShotGenerationPrompt(
+      baseInput({ projectStyle: "Gritty cyberpunk realism.", projectStyleAvoid: "Avoid:\n- No bright colors." })
+    );
+    const styleSection = result.sections.find((s) => s.id === "style")!;
+    expect(styleSection.text).not.toContain("Avoid:");
+    const compositionSection = result.sections.find((s) => s.id === "composition")!;
+    expect(compositionSection.text).toContain("Constraints: Avoid:\n- No bright colors.");
+  });
+
   it("omits Subject Definition when no casting reference carries an assetName", () => {
     const context = buildPromptCompilationContext({
       shot: { shotPrompt: "Empty rooftop at dawn." },
@@ -198,5 +229,111 @@ describe("SHOTPROMPT.SHOT.1 filet — the three Shot surfaces call the same comp
     const source = readFileSync(filePath, "utf8");
     expect(source).toContain("composeShotGenerationPrompt({");
     expect(source).toContain('from "@/lib/prompts/composeShotGenerationPrompt"');
+  });
+
+  // SHOTPROMPT.STYLE.1 Part A (regression filet) — none of the three
+  // surfaces may use `prepareGenerationStyleSource`'s own composing outputs
+  // (`composedSuggestedPrompt.prompt` / `composeTextOverride(...)`) to build
+  // the queued/previewed text any more: the compositeur above is now the
+  // sole source. `prepareGenerationStyleSource` itself must still be called
+  // (never debranched) so `hasEffectiveStyle`/`provenanceCandidate` keep
+  // reporting honestly.
+  it.each(surfaces)("%s still calls prepareGenerationStyleSource(...) but never composes its output into the queued text", (filePath) => {
+    const source = readFileSync(filePath, "utf8");
+    expect(source).toContain("prepareGenerationStyleSource(");
+    expect(source).not.toContain("preparedStyle.composedSuggestedPrompt.prompt");
+    expect(source).not.toContain("preparedStyle.composeTextOverride");
+    expect(source).not.toContain("styleReady.composedSuggestedPrompt.prompt");
+    expect(source).not.toContain("styleReady.composeTextOverride");
+  });
+
+  // SHOTPROMPT.STYLE.1 — `runShotGeneration.ts` is the one surface whose
+  // reported provenance must stay wired: `styleActuallyInjected` and
+  // `findEditedStyleTextMismatch` still read `preparedStyle`'s own
+  // `hasEffectiveStyle`, proving the module was not disconnected, only
+  // stopped from composing.
+  it("runShotGeneration.ts still derives styleActuallyInjected from preparedStyle.hasEffectiveStyle and still calls findEditedStyleTextMismatch", () => {
+    const source = readFileSync(path.join(repoRoot, "src", "lib", "comfy", "runShotGeneration.ts"), "utf8");
+    expect(source).toContain("preparedStyleOk.hasEffectiveStyle");
+    expect(source).toContain("findEditedStyleTextMismatch(");
+  });
+});
+
+// SHOTPROMPT.STYLE.1 (Part A, preview/queue parity — coordinator retake) —
+// `runShotGeneration.ts` gates `projectStyle` on the real "Append Project
+// Style" choice (real per-request server data). The two preview surfaces
+// (`ShotGenerationPanel.tsx`, the `/map` page) are Server Components with no
+// live signal of the checkbox's client-side state at render time, so they
+// cannot gate the same way — instead they must render the Style HEADER as
+// its own CSS-toggled element (never a second full composed prompt), the
+// same `group-has-[#appendProjectStyle:not(:checked)]` idiom
+// `ProjectStyleAppendCheckbox`/`ProjectStyleGenerationPreview` already use.
+// Both surfaces route through the one shared `CompiledShotPromptPreviewPanel`
+// — checking that ONE file's content is sufficient to prove both agree.
+describe("SHOTPROMPT.STYLE.1 Part A — preview/queue parity for Style", () => {
+  const repoRoot = path.resolve(__dirname, "..", "..");
+  const runShotGenerationPath = path.join(repoRoot, "src", "lib", "comfy", "runShotGeneration.ts");
+  const panelPath = path.join(repoRoot, "src", "components", "prompts", "CompiledShotPromptPreviewPanel.tsx");
+  const previewSurfaces = [
+    path.join(repoRoot, "src", "components", "ShotGenerationPanel.tsx"),
+    path.join(
+      repoRoot,
+      "src",
+      "app",
+      "projects",
+      "[projectId]",
+      "sequences",
+      "[sequenceId]",
+      "shots",
+      "[shotId]",
+      "workflows",
+      "[workflowId]",
+      "map",
+      "page.tsx"
+    ),
+  ];
+
+  it("runShotGeneration.ts gates the compositeur's projectStyle/projectStyleAvoid on styleConsumer !== null", () => {
+    const source = readFileSync(runShotGenerationPath, "utf8");
+    expect(source).toContain("projectStyle: styleConsumer !== null ? resolvedProjectStyle.styleText : null");
+    expect(source).toContain("projectStyleAvoid: styleConsumer !== null ? resolvedProjectStyle.avoidText : null");
+  });
+
+  it("CompiledShotPromptPreviewPanel.tsx renders the Style header as its own CSS-toggled element, never a second full composed prompt", () => {
+    const source = readFileSync(panelPath, "utf8");
+    // The "Sections used" style block is individually toggled...
+    expect(source).toContain('section.id === "style"');
+    // ...and so is the Style prefix inside "Final Text" — both via the exact
+    // same group-has selector the rest of this feature already uses.
+    const toggleOccurrences = source.split("group-has-[#appendProjectStyle:not(:checked)]/style:hidden").length - 1;
+    expect(toggleOccurrences).toBeGreaterThanOrEqual(2);
+    // Never a second call to the composer — `compiled` (the panel's own
+    // prop) is resolved exactly once by the caller; this panel only reads
+    // it, it never recomposes.
+    expect(source).not.toContain("composeShotGenerationPrompt(");
+  });
+
+  // ShotGenerationPanel.tsx renders CompiledShotPromptPreviewPanel through
+  // its own extracted ShotPromptSection (IND.CLIENTSPLIT.1); the /map page
+  // renders it directly. Both must still share the one `group/style`
+  // ancestor with `ProjectStyleAppendCheckbox` for the CSS toggle to reach
+  // the checkbox at all.
+  it("ShotGenerationPanel.tsx renders the Style preview through ShotPromptSection (which renders CompiledShotPromptPreviewPanel), inside group/style with the checkbox", () => {
+    const panelSource = readFileSync(previewSurfaces[0], "utf8");
+    expect(panelSource).toContain("ShotPromptSection");
+    expect(panelSource).toContain("group/style");
+    expect(panelSource).toContain("ProjectStyleAppendCheckbox");
+    const shotPromptSectionSource = readFileSync(
+      path.join(repoRoot, "src", "components", "shotGenerationPanel", "ShotPromptSection.tsx"),
+      "utf8"
+    );
+    expect(shotPromptSectionSource).toContain("CompiledShotPromptPreviewPanel");
+  });
+
+  it("the /map page renders CompiledShotPromptPreviewPanel directly, inside group/style with the checkbox", () => {
+    const source = readFileSync(previewSurfaces[1], "utf8");
+    expect(source).toContain("CompiledShotPromptPreviewPanel");
+    expect(source).toContain("group/style");
+    expect(source).toContain("ProjectStyleAppendCheckbox");
   });
 });

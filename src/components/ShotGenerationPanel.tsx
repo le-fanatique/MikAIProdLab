@@ -414,11 +414,16 @@ export default async function ShotGenerationPanel({
     sources: { casting: true, references: true, assetBibles: true, sequenceContext: true, projectContext: true },
   });
 
-  const [projectStyleText, shotLighting] = await Promise.all([
+  const [resolvedProjectStyle, shotLighting] = await Promise.all([
     resolveProjectStyleTextForComposition(pid),
     resolveStoryboardLighting(sid, [{ id: shid, lighting: shot.lighting }]),
   ]);
 
+  // SHOTPROMPT.STYLE.1 — the compositeur is the sole source of Style TEXT
+  // in this preview (`ProjectStyleGenerationPreview`'s own CSS toggle is
+  // what shows the "will not be appended" state when the checkbox is
+  // unchecked — this preview computation always assumes the checkbox's
+  // `defaultChecked` state, same as before).
   const composedPrompt = composeShotGenerationPrompt({
     kind: workflow.kind as ShotPromptCompileKind,
     context: promptContext,
@@ -431,7 +436,8 @@ export default async function ShotGenerationPanel({
       cameraLens: shot.cameraLens,
     },
     lighting: shotLighting.byShotId[shid] ?? null,
-    projectStyle: projectStyleText,
+    projectStyle: resolvedProjectStyle.styleText,
+    projectStyleAvoid: resolvedProjectStyle.avoidText,
   });
 
   // STYLE.1.E.SURFACES.1 — same trusted consumer selection as the server
@@ -446,10 +452,15 @@ export default async function ShotGenerationPanel({
     { kind: "shot", projectId: pid, sequenceId: sid, shotId: shid },
     composedPrompt.text
   );
-  const styledSuggestedText = preparedStyle.ok ? preparedStyle.composedSuggestedPrompt.prompt : composedPrompt.text;
-  const styledTextOverrideByNodeId = preparedStyle.ok
-    ? Object.fromEntries(Object.entries(textOverrideByNodeId).map(([nodeId, value]) => [nodeId, preparedStyle.composeTextOverride(value)]))
-    : textOverrideByNodeId;
+  // SHOTPROMPT.STYLE.1 (Part A) — `composedPrompt.text` above already
+  // carries the Style segment once. `preparedStyle` is still resolved (its
+  // `hasEffectiveStyle`/`provenanceCandidate`/`compiledSegment` still drive
+  // `ProjectStyleGenerationPreview` below), but its own
+  // `composedSuggestedPrompt`/`composeTextOverride` outputs are no longer
+  // used to build the previewed payload, so the segment is never composed
+  // into it a second time.
+  const styledSuggestedText = composedPrompt.text;
+  const styledTextOverrideByNodeId = textOverrideByNodeId;
 
   const built =
     parsed !== null

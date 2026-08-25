@@ -107,8 +107,16 @@ export type ComposeShotGenerationPromptInput = {
   continuity: StoryboardShotCompositionInput["continuity"];
   /** Already resolved by precedence (`resolveStoryboardLighting`) — one value, never re-derived here. */
   lighting: string | null;
-  /** Already resolved (`resolveProjectStyleTextForComposition`) — rendered once, ahead of `Subject Definition:`, the same convention `buildSequenceStoryboardPrompt`'s header uses. `null`/blank renders no `Style:` line. */
+  /** Already resolved (`resolveProjectStyleTextForComposition`'s `styleText`) — rendered once, ahead of `Subject Definition:`, the same convention `buildSequenceStoryboardPrompt`'s header uses. `null`/blank renders no `Style:` line. */
   projectStyle: string | null;
+  /**
+   * SHOTPROMPT.STYLE.1 — `resolveProjectStyleTextForComposition`'s
+   * `avoidText`: the compiled `Avoid:` block over Project Style rules with
+   * `strength: "Avoid"`. Never rendered under `Style:` — passed through to
+   * `composeStoryboardShot`, which folds it into `Constraints:` ahead of the
+   * per-asset `forbiddenVariations` lines. `null`/blank renders nothing.
+   */
+  projectStyleAvoid?: string | null;
   profileId?: StoryboardShotCompositionInput["profileId"];
 };
 
@@ -181,6 +189,7 @@ export function composeShotGenerationPrompt(input: ComposeShotGenerationPromptIn
     context,
     continuity: input.continuity,
     lighting: input.lighting,
+    styleAvoid: input.projectStyleAvoid,
     profileId: input.profileId,
   });
 

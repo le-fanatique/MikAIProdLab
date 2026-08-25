@@ -11,6 +11,13 @@
 // the "World & Design Language" vs "Visual Treatment" distinction the
 // ticket requires be preserved) plus a separate Asset-applicable approved
 // rules segment.
+//
+// SHOTPROMPT.STYLE.1 — `rulesPositiveSegment`/`rulesAvoidSegment` split
+// `rulesSegment` at the snapshot's own `strength` field (the same polarity
+// split `compileStyleSnapshot` already performs internally), never by
+// parsing `rulesSegment`'s compiled text. `rulesSegment` itself is kept
+// unchanged for its existing callers (Enhance Description/Notes/Bible),
+// which still want World + Rules (Avoid included) as one block.
 // ---------------------------------------------------------------------------
 
 import { EMPTY_STYLE_SNAPSHOT, type StyleSnapshot } from "../styleSnapshot";
@@ -22,8 +29,12 @@ export type AssetStyleSegments = {
   worldSegment: string;
   /** Compiled "Visual Treatment:\n..." block, or "" when the pillar is empty. */
   visualSegment: string;
-  /** Compiled "Style Rules:\n- ..." block over only the rules applicable to the "asset" consumer, or "" when none apply. */
+  /** Compiled "Style Rules:\n- ..." block over only the rules applicable to the "asset" consumer (Required/Preferred/undeclared AND Avoid together), or "" when none apply. */
   rulesSegment: string;
+  /** SHOTPROMPT.STYLE.1 — same asset-applicable rules as `rulesSegment`, `Avoid`-strength rules excluded — compiled "Style Rules:\n- ..." block, or "" when none apply. */
+  rulesPositiveSegment: string;
+  /** SHOTPROMPT.STYLE.1 — same asset-applicable rules as `rulesSegment`, only the `Avoid`-strength ones — compiled "Avoid:\n- ..." block, or "" when none apply. */
+  rulesAvoidSegment: string;
 };
 
 /** True when every segment is empty — the exact condition under which a Style-aware prompt builder must fall back to its pre-Style, byte-identical output. */
@@ -31,14 +42,20 @@ export function isAssetStyleSegmentsEmpty(segments: AssetStyleSegments): boolean
   return segments.worldSegment === "" && segments.visualSegment === "" && segments.rulesSegment === "";
 }
 
-/** Pure. Same snapshot always yields the exact same three segments — no DB, no clock, no randomness. */
+/** Pure. Same snapshot always yields the exact same segments — no DB, no clock, no randomness. */
 export function compileAssetStyleSegments(snapshot: StyleSnapshot): AssetStyleSegments {
   const worldSegment = compileStyleSnapshot({ ...EMPTY_STYLE_SNAPSHOT, world: snapshot.world });
   const visualSegment = compileStyleSnapshot({ ...EMPTY_STYLE_SNAPSHOT, visual: snapshot.visual });
-  const rulesSegment = compileStyleSnapshot({
+  const applicableRules = snapshot.rules.filter((rule) => isApplicableToConsumer(rule.applicability, "asset"));
+  const rulesSegment = compileStyleSnapshot({ ...EMPTY_STYLE_SNAPSHOT, rules: applicableRules });
+  const rulesPositiveSegment = compileStyleSnapshot({
     ...EMPTY_STYLE_SNAPSHOT,
-    rules: snapshot.rules.filter((rule) => isApplicableToConsumer(rule.applicability, "asset")),
+    rules: applicableRules.filter((rule) => rule.strength !== "Avoid"),
+  });
+  const rulesAvoidSegment = compileStyleSnapshot({
+    ...EMPTY_STYLE_SNAPSHOT,
+    rules: applicableRules.filter((rule) => rule.strength === "Avoid"),
   });
 
-  return { worldSegment, visualSegment, rulesSegment };
+  return { worldSegment, visualSegment, rulesSegment, rulesPositiveSegment, rulesAvoidSegment };
 }

@@ -11,7 +11,10 @@ import {
   formatSequenceGenerationPackageText,
   type SequenceGenerationPackageShotInput,
 } from "@/lib/prompts/buildSequenceGenerationPackage";
-import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
+import {
+  resolveProjectStyleTextForComposition,
+  joinProjectStyleTextForComposition,
+} from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 
 type ShotRow = {
@@ -291,7 +294,9 @@ export default async function SequenceGenerationPackagePanel({
   // data disagreeing about what it contains. Reuses the exact same two
   // resolvers the Storyboard generate page and its action call — never a
   // second resolution of either Project Style or lighting.
-  const projectStyle = await resolveProjectStyleTextForComposition(projectId);
+  // SHOTPROMPT.STYLE.1 — out of this ticket's scope: reconstruct the exact
+  // legacy joined text rather than changing this Sequence panel's behavior.
+  const projectStyle = joinProjectStyleTextForComposition(await resolveProjectStyleTextForComposition(projectId));
   const lighting = await resolveStoryboardLighting(
     sequenceId,
     shots.map((s) => ({ id: s.id, lighting: s.lighting }))

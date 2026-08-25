@@ -88,7 +88,7 @@ describe("assetDescription.batch descriptor — strict prompt equality", () => {
         { label: "Front view", imageRole: "reference", sourceFilename: "front.png" },
         { label: null, imageRole: "reference", sourceFilename: "side.png" },
       ],
-      style: { mode: "active", worldSegment: "A rain-soaked megacity.", visualSegment: "Neon and chrome.", rulesSegment: "Never show daylight." },
+      style: { mode: "active", worldSegment: "A rain-soaked megacity.", visualSegment: "Neon and chrome.", rulesSegment: "Never show daylight.", rulesPositiveSegment: "Never show daylight.", rulesAvoidSegment: "" },
     };
     const expected = { system: `You are a production asset supervisor for a film or animation project.
 Your task is to write or enrich the description and notes for a specific asset.

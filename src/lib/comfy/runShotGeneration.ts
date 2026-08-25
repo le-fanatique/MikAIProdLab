@@ -322,11 +322,19 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
     sources: { casting: true, references: true, assetBibles: true, sequenceContext: true, projectContext: true },
   });
 
-  const [projectStyleText, shotLighting] = await Promise.all([
+  const [resolvedProjectStyle, shotLighting] = await Promise.all([
     resolveProjectStyleTextForComposition(projectId),
     resolveStoryboardLighting(sequenceId, [{ id: shotId, lighting: shot.lighting }]),
   ]);
 
+  // SHOTPROMPT.STYLE.1 (Part A, regression fix) — the compositeur is now the
+  // SOLE source of Style TEXT: it receives `projectStyle`/`projectStyleAvoid`
+  // only when the user actually requested Style (`styleConsumer !== null`,
+  // derived above from the real "Append Project Style" form choice), never
+  // unconditionally. Previously this passed `projectStyleText` regardless of
+  // that choice, so an unchecked box still got one "Style:" (from here) and
+  // a checked box got two (this one, plus `prepareGenerationStyleSource`'s
+  // own copy appended below).
   const composedPrompt = composeShotGenerationPrompt({
     kind: workflow.kind as ShotPromptCompileKind,
     context: promptContext,
@@ -339,24 +347,26 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       cameraLens: shot.cameraLens,
     },
     lighting: shotLighting.byShotId[shotId] ?? null,
-    projectStyle: projectStyleText,
+    projectStyle: styleConsumer !== null ? resolvedProjectStyle.styleText : null,
+    projectStyleAvoid: styleConsumer !== null ? resolvedProjectStyle.avoidText : null,
   });
 
   let preparedStyle: PreparedGenerationStyleSource | null = null;
-  let effectiveSuggestedText = composedPrompt.text;
-  let effectiveTextOverrideByNodeId = args.textOverrideByNodeId;
+  // SHOTPROMPT.STYLE.1 (Part A) — `composedPrompt.text` above already
+  // carries the Style segment, once, when requested. `prepareGenerationStyleSource`
+  // is still resolved below so `hasEffectiveStyle` / `provenanceCandidate` /
+  // `compiledSegment` keep feeding `styleActuallyInjected` and
+  // `findEditedStyleTextMismatch` further down — but its own
+  // `composedSuggestedPrompt` / `composeTextOverride` outputs (which would
+  // compose that same segment a second time) are deliberately not used to
+  // build the queued text any more.
+  const effectiveSuggestedText = composedPrompt.text;
+  const effectiveTextOverrideByNodeId = args.textOverrideByNodeId;
 
   if (styleConsumer !== null) {
     preparedStyle = await prepareGenerationStyleSource(styleConsumer, { kind: "shot", projectId, sequenceId, shotId }, composedPrompt.text);
     if (!preparedStyle.ok) {
       return { ok: false, error: preparedStyle.error };
-    }
-    const styleReady = preparedStyle;
-    effectiveSuggestedText = styleReady.composedSuggestedPrompt.prompt;
-    if (args.textOverrideByNodeId) {
-      effectiveTextOverrideByNodeId = Object.fromEntries(
-        Object.entries(args.textOverrideByNodeId).map(([nodeId, value]) => [nodeId, styleReady.composeTextOverride(value)])
-      );
     }
   }
 

@@ -65,7 +65,10 @@ import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
 import { findTextInputKey } from "@/lib/comfy/patchWorkflowPayload";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import { findEditedStyleTextMismatch } from "@/lib/comfy/generationActionHelpers";
-import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
+import {
+  resolveProjectStyleTextForComposition,
+  joinProjectStyleTextForComposition,
+} from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import {
   resolveStoryboardLighting,
   type StoryboardLighting,
@@ -444,7 +447,12 @@ async function buildSequenceStoryboardGenerationContext(
     | { projectStyle: string | null; lighting: StoryboardLighting }
     | undefined;
   if (useGuideComposition) {
-    const projectStyle = await resolveProjectStyleTextForComposition(projectId);
+    // SHOTPROMPT.STYLE.1 — out of this ticket's scope (the Sequence
+    // Storyboard package still renders one joined "Style:" block, Avoid
+    // included, in `buildSequenceStoryboardPrompt`'s own header): reconstruct
+    // the exact legacy joined text rather than changing this surface's
+    // behavior.
+    const projectStyle = joinProjectStyleTextForComposition(await resolveProjectStyleTextForComposition(projectId));
 
     const lighting = await resolveStoryboardLighting(
       sequenceId,

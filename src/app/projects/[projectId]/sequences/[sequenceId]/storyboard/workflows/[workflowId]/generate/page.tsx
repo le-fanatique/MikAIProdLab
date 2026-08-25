@@ -55,7 +55,10 @@ import { getComfySettings } from "@/lib/settings";
 import { computeCloudPreflightForPanel } from "@/lib/comfy/cloudPreflight";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
-import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
+import {
+  resolveProjectStyleTextForComposition,
+  joinProjectStyleTextForComposition,
+} from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import {
   resolveStoryboardLighting,
   type StoryboardLighting,
@@ -476,7 +479,10 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   let storyboardFindings: { shotLabel: string; findings: { code: string; severity: "info" | "warn"; message: string }[] }[] = [];
 
   if (useGuideComposition) {
-    const projectStyle = await resolveProjectStyleTextForComposition(pid);
+    // SHOTPROMPT.STYLE.1 — out of this ticket's scope: reconstruct the exact
+    // legacy joined text (Avoid still trailing inside "Style:") rather than
+    // changing this Sequence Storyboard surface's behavior.
+    const projectStyle = joinProjectStyleTextForComposition(await resolveProjectStyleTextForComposition(pid));
 
     const lighting = await resolveStoryboardLighting(
       sid,

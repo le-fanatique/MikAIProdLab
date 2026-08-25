@@ -224,7 +224,16 @@ export function renderLookTestPreviousProposalLines(previousProposal: string | u
 
 export type ProjectStyleData =
   | { mode: "none" }
-  | { mode: "active"; worldSegment: string; visualSegment: string; rulesSegment: string };
+  | {
+      mode: "active";
+      worldSegment: string;
+      visualSegment: string;
+      rulesSegment: string;
+      /** SHOTPROMPT.STYLE.1 — `rulesSegment` with `Avoid`-strength rules excluded, or "" when none apply. Additive; existing consumers keep reading `rulesSegment`. */
+      rulesPositiveSegment: string;
+      /** SHOTPROMPT.STYLE.1 — only `rulesSegment`'s `Avoid`-strength rules, compiled "Avoid:\n- ..." block, or "" when none apply. */
+      rulesAvoidSegment: string;
+    };
 
 export async function resolveProjectStyle(projectId: number): Promise<ProjectStyleData> {
   const { resolveAssetStyleContext } = await import(
@@ -242,6 +251,8 @@ export async function resolveProjectStyle(projectId: number): Promise<ProjectSty
     worldSegment: resolved.context.segments.worldSegment,
     visualSegment: resolved.context.segments.visualSegment,
     rulesSegment: resolved.context.segments.rulesSegment,
+    rulesPositiveSegment: resolved.context.segments.rulesPositiveSegment,
+    rulesAvoidSegment: resolved.context.segments.rulesAvoidSegment,
   };
 }
 

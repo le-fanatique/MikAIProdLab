@@ -91,6 +91,17 @@ export type StoryboardShotCompositionInput = {
    * framing, while the environment is still unlocked.
    */
   lighting: string | null;
+  /**
+   * SHOTPROMPT.STYLE.1 — the compiled `Avoid:` block over Project Style
+   * rules with `strength: "Avoid"`, resolved by the caller
+   * (`resolveProjectStyleTextForComposition`'s `avoidText`, itself split
+   * from the snapshot's own `strength` field, never by parsing compiled
+   * text — `docs/WHERE_THE_RULES_LIVE.md`: "polarity is carried by which
+   * block a rule lands in"). Joins `Constraints:` ahead of the per-asset
+   * `forbiddenVariations` lines — the project-level negative constraint
+   * first, the asset-specific ones after. `null`/blank renders nothing.
+   */
+  styleAvoid?: string | null;
   profileId?: ConformationProfileId;
 };
 
@@ -141,21 +152,31 @@ function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
 /**
  * Constraints — what to avoid.
  *
- * Only `forbiddenVariations`, per asset, because that is the only negative
- * constraint the product actually stores. §5.6 is explicit that shot- and
- * project-level negative constraints have **no field at all**, that the author
- * named it a real gap in his own work, and that it is **explicitly not MVP**
- * (B18, after Chantier 2). This renders what exists and invents nothing.
+ * `forbiddenVariations`, per asset, was the only negative constraint the
+ * product stored when this comment was first written — §5.6 was explicit
+ * that shot- and project-level negative constraints had **no field at all**.
+ * SHOTPROMPT.STYLE.1 changes that for the project level: Project Style rules
+ * with `strength: "Avoid"` are a real, already-stored negative constraint
+ * (STYLE.COMPILE.POLARITY.1) that used to render under `Style:` — this now
+ * renders it here instead, ahead of the per-asset lines, since it is the
+ * broader constraint and the asset-specific ones are its refinements.
  */
-function buildConstraints(cast: PromptCompilationCastAsset[]): string | null {
-  const lines = cast
+function buildConstraints(cast: PromptCompilationCastAsset[], styleAvoid: string | null | undefined): string | null {
+  const blocks: string[] = [];
+
+  const avoidBlock = nonEmpty(styleAvoid ?? null);
+  if (avoidBlock) blocks.push(avoidBlock);
+
+  const assetLines = cast
     .map((asset) => {
       const forbidden = nonEmpty(asset.assetBible?.forbiddenVariations ?? null);
       if (!forbidden) return null;
       return `- ${asset.assetName}: ${forbidden}`;
     })
     .filter((line): line is string => line !== null);
-  return lines.length > 0 ? lines.join("\n") : null;
+  if (assetLines.length > 0) blocks.push(assetLines.join("\n"));
+
+  return blocks.length > 0 ? blocks.join("\n\n") : null;
 }
 
 /**
@@ -230,7 +251,7 @@ export function composeStoryboardShot(
     // de la séquence" — the rig is read against the camera, not against the
     // look.
     { id: "lighting", label: "Lighting", text: nonEmpty(input.lighting) },
-    { id: "constraints", label: "Constraints", text: buildConstraints(context.castAssets) },
+    { id: "constraints", label: "Constraints", text: buildConstraints(context.castAssets, input.styleAvoid) },
   ];
 
   const parts: StoryboardCompositionPart[] = candidates
