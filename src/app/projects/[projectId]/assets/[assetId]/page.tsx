@@ -489,6 +489,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
                 id: image.id,
                 label: image.label,
                 imagePath: image.imagePath,
+                approvedForGeneration: image.approvedForGeneration,
               }))}
               minCount={lightingFromImageDescriptor.images.minCount}
               maxCount={lightingFromImageDescriptor.images.maxCount}

@@ -4,10 +4,12 @@ import { useState } from "react";
 import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
 import { buildAssetLightingCommitArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
+import { resolveDefaultReferenceImageSelection } from "@/lib/llmWorkspace/resolveDefaultReferenceImageSelection";
 import ProposalPanel, { type ProposalApproveAction, type ProposalTrigger } from "@/components/llmWorkspace/ProposalPanel";
+import ThumbnailHoverPreview from "@/components/ThumbnailHoverPreview";
 import { refImageUrl } from "@/lib/refImageUrl";
 
-type ReferenceImage = { id: number; label: string | null; imagePath: string };
+type ReferenceImage = { id: number; label: string | null; imagePath: string; approvedForGeneration: boolean };
 
 type Draft = { text: string };
 
@@ -19,7 +21,11 @@ type Props = {
    * approval. ASSET.LIGHTING.PLACE.2 — this panel now always renders (the
    * caller no longer gates it on approval, a filter this image family never
    * had); an empty list is rendered here as an explicit empty state rather
-   * than an empty, unusable selector. */
+   * than an empty, unusable selector. `approvedForGeneration` — added by
+   * ASSET.LIGHTING.PLACE.3 — decides only the default checkbox state
+   * (`resolveDefaultReferenceImageSelection`), never which images appear
+   * here or whether the card renders: every image stays offered and
+   * selectable regardless of approval. */
   referenceImages: ReferenceImage[];
   minCount: number;
   maxCount: number;
@@ -44,15 +50,16 @@ export default function AssetLightingFromImagePanel({
   maxCount,
   isConfigured,
 }: Props) {
-  // Default selection: as many of the Asset's own reference images as the
-  // descriptor allows, in the order the page already queried them
-  // (`orderIndex`) — the same "no click-order to express" limitation
-  // `BenchRunPanel`'s own images selector documents, accepted here for the
-  // same reason: nothing downstream reads a checked order, only the
-  // resulting `selectedIds` array's own order, which is this list's display
-  // order.
+  // Default selection — ASSET.LIGHTING.PLACE.3 §1c, replacing PLACE.1's
+  // "first `maxCount` images" default (arbitrary on a twelve-image Asset).
+  // `resolveDefaultReferenceImageSelection` pre-checks the approved images
+  // alone (capped at `maxCount`), or nothing if none is approved. This is
+  // NOT the approval gate PLACE.2 removed: approval decides only what
+  // starts pre-checked here, never whether the card renders or which images
+  // this grid offers — every image stays selectable by hand, approved or
+  // not, exactly as before.
   const [selectedIds, setSelectedIds] = useState<number[]>(
-    referenceImages.slice(0, maxCount).map((image) => image.id)
+    resolveDefaultReferenceImageSelection(referenceImages, maxCount)
   );
 
   function toggleImage(id: number) {
@@ -128,42 +135,61 @@ export default function AssetLightingFromImagePanel({
             <p className="text-[10px] font-medium uppercase tracking-wider text-[#4b5158]">
               {`Reference images (${selectedIds.length} selected, ${minCount}–${maxCount} required)`}
             </p>
-            <div className="grid grid-cols-3 gap-1.5">
+            {/* ASSET.LIGHTING.PLACE.3 §1a — `grid-cols-5`, measured against
+             * the previous `grid-cols-3`: a tile on a 1126px-wide panel
+             * measured 371x391px (area ≈137.9k px²); five columns at the
+             * same `gap-1.5` measure ≈220x~230px (area ≈47.9k px²) — close
+             * to the requested third of the surface (ratio ≈2.9x), the
+             * nearest available column count (four columns only reaches
+             * ≈1.8x, six overshoots to ≈4.1x). */}
+            <div className="grid grid-cols-5 gap-1.5">
               {referenceImages.map((image) => {
                 const isSelected = selectedIds.includes(image.id);
                 const label = image.label ?? `Reference #${image.id}`;
                 return (
-                  <button
+                  // ASSET.LIGHTING.PLACE.3 §1b — `ThumbnailHoverPreview`
+                  // (`src/components/ThumbnailHoverPreview.tsx`), the same
+                  // wrapper `ImageSourcePicker` uses. `focusable` is left at
+                  // its default `false`: the wrapped `<button>` below is
+                  // already a focusable descendant, so setting it `true`
+                  // would add a second tab stop for the same thumbnail.
+                  <ThumbnailHoverPreview
                     key={image.id}
-                    type="button"
-                    onClick={() => toggleImage(image.id)}
-                    title={label}
-                    className={[
-                      "relative flex flex-col w-full rounded overflow-hidden text-left transition-colors",
-                      isSelected
-                        ? "border-2 border-[#5b93d6] bg-[#141e2b]"
-                        : "border-2 border-[#232629] bg-[#1a1d20] hover:border-[#3a4046] hover:bg-[#212529]",
-                    ].join(" ")}
+                    src={refImageUrl(image.imagePath)}
+                    alt={label}
+                    className="w-full"
                   >
-                    <div className="aspect-square w-full bg-[#141618] flex items-center justify-center overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={refImageUrl(image.imagePath)}
-                        alt={label}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="px-1 pt-0.5 pb-1">
-                      <p className="text-[10px] text-[#6e767d] truncate leading-snug">{label}</p>
-                    </div>
-                    {isSelected && (
-                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#5b93d6] flex items-center justify-center">
-                        <svg width="8" height="6" viewBox="0 0 8 6" fill="none" aria-hidden="true">
-                          <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                    <button
+                      type="button"
+                      onClick={() => toggleImage(image.id)}
+                      title={label}
+                      className={[
+                        "relative flex flex-col w-full rounded overflow-hidden text-left transition-colors",
+                        isSelected
+                          ? "border-2 border-[#5b93d6] bg-[#141e2b]"
+                          : "border-2 border-[#232629] bg-[#1a1d20] hover:border-[#3a4046] hover:bg-[#212529]",
+                      ].join(" ")}
+                    >
+                      <div className="aspect-square w-full bg-[#141618] flex items-center justify-center overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={refImageUrl(image.imagePath)}
+                          alt={label}
+                          className="w-full h-full object-contain"
+                        />
                       </div>
-                    )}
-                  </button>
+                      <div className="px-1 pt-0.5 pb-1">
+                        <p className="text-[10px] text-[#6e767d] truncate leading-snug">{label}</p>
+                      </div>
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#5b93d6] flex items-center justify-center">
+                          <svg width="8" height="6" viewBox="0 0 8 6" fill="none" aria-hidden="true">
+                            <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      )}
+                    </button>
+                  </ThumbnailHoverPreview>
                 );
               })}
             </div>
