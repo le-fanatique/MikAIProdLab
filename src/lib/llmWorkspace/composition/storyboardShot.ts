@@ -92,8 +92,9 @@ export type StoryboardShotCompositionInput = {
    */
   lighting: string | null;
   /**
-   * SHOTPROMPT.STYLE.1 — the compiled `Avoid:` block over Project Style
-   * rules with `strength: "Avoid"`, resolved by the caller
+   * SHOTPROMPT.STYLE.1 — the Avoid group's bullet lines over Project Style
+   * rules with `strength: "Avoid"`, **no leading `Avoid:` heading**
+   * (SHOTPROMPT.RENDER.1), resolved by the caller
    * (`resolveProjectStyleTextForComposition`'s `avoidText`, itself split
    * from the snapshot's own `strength` field, never by parsing compiled
    * text — `docs/WHERE_THE_RULES_LIVE.md`: "polarity is carried by which
@@ -127,6 +128,21 @@ function joinFragments(fragments: Array<string | null>, separator: string): stri
 }
 
 /**
+ * SHOTPROMPT.RENDER.1 — `nonEmpty`, plus collapsing every run of whitespace
+ * (including line breaks) into a single space. For a value rendered inside
+ * a `- ` list-item line in `buildSubject`: the author writes his Prompt
+ * Card, Visual Identity and Description in a free-text textarea with real
+ * line breaks (shot 999230's card was written on three lines), and a raw
+ * line break there reads as the start of new list items — the two lines
+ * after it look like bullets without being ones. **Render-only**: the
+ * stored value itself is never rewritten, only what this function returns.
+ */
+function nonEmptySingleLine(value: string | null | undefined): string | null {
+  const flattened = value?.replace(/\s+/g, " ").trim();
+  return flattened ? flattened : null;
+}
+
+/**
  * Subject — who is in the shot. The cast in its stored order (never re-sorted:
  * that order is the user's), each with what distinguishes it.
  *
@@ -141,15 +157,15 @@ function joinFragments(fragments: Array<string | null>, separator: string): stri
 function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
   const lines = cast
     .map((asset) => {
-      const card = nonEmpty(asset.assetBible?.promptCard ?? null);
+      const card = nonEmptySingleLine(asset.assetBible?.promptCard ?? null);
       return joinFragments(
         card
           ? [nonEmpty(asset.assetName), nonEmpty(asset.assetType), card]
           : [
               nonEmpty(asset.assetName),
               nonEmpty(asset.assetType),
-              nonEmpty(asset.assetBible?.visualIdentity ?? null),
-              nonEmpty(asset.description),
+              nonEmptySingleLine(asset.assetBible?.visualIdentity ?? null),
+              nonEmptySingleLine(asset.description),
             ],
         " — "
       );

@@ -233,6 +233,10 @@ export type ProjectStyleData =
       rulesPositiveSegment: string;
       /** SHOTPROMPT.STYLE.1 — only `rulesSegment`'s `Avoid`-strength rules, compiled "Avoid:\n- ..." block, or "" when none apply. */
       rulesAvoidSegment: string;
+      /** SHOTPROMPT.RENDER.1 — same rules as `rulesPositiveSegment`, bullet lines only, no leading `Style Rules:` heading. */
+      rulesPositiveBulletsOnly: string;
+      /** SHOTPROMPT.RENDER.1 — same rules as `rulesAvoidSegment`, bullet lines only, no leading `Avoid:` heading. */
+      rulesAvoidBulletsOnly: string;
     };
 
 export async function resolveProjectStyle(projectId: number): Promise<ProjectStyleData> {
@@ -253,6 +257,8 @@ export async function resolveProjectStyle(projectId: number): Promise<ProjectSty
     rulesSegment: resolved.context.segments.rulesSegment,
     rulesPositiveSegment: resolved.context.segments.rulesPositiveSegment,
     rulesAvoidSegment: resolved.context.segments.rulesAvoidSegment,
+    rulesPositiveBulletsOnly: resolved.context.segments.rulesPositiveBulletsOnly,
+    rulesAvoidBulletsOnly: resolved.context.segments.rulesAvoidBulletsOnly,
   };
 }
 

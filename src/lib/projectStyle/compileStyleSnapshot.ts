@@ -37,7 +37,7 @@
 //   - A completely empty Style compiles to the empty string "".
 // ---------------------------------------------------------------------------
 
-import type { StylePillarSnapshot, StyleSnapshot } from "./styleSnapshot";
+import type { StylePillarSnapshot, StyleRuleSnapshot, StyleSnapshot } from "./styleSnapshot";
 
 function compilePillarBlock(heading: string, pillar: StylePillarSnapshot): string | null {
   const parts: string[] = [];
@@ -60,6 +60,32 @@ function compilePillarBlock(heading: string, pillar: StylePillarSnapshot): strin
   return `${heading}:\n${parts.join("\n\n")}`;
 }
 
+/**
+ * Polarity split, not an inline label: `Avoid` rules never enter
+ * "Style Rules:" — they get their own group. `Required`, `Preferred` and
+ * undeclared-strength rules stay in the Style Rules group, `Required` first,
+ * each group keeping its relative order otherwise.
+ *
+ * Extracted (SHOTPROMPT.RENDER.1) so the composition-only, heading-less
+ * bullet builders below share this exact partition rather than each
+ * re-deriving it — the single place `strength` is read, never a second
+ * implementation of the polarity split.
+ */
+function partitionActiveRuleLines(rules: StyleRuleSnapshot[]): { styleRuleLines: string[]; avoidRuleLines: string[] } {
+  const activeRules = rules
+    .filter((rule) => rule.status !== "disabled")
+    .map((rule) => ({ strength: rule.strength, instruction: rule.instruction.trim() }))
+    .filter((rule) => rule.instruction.length > 0);
+
+  const requiredLines = activeRules.filter((rule) => rule.strength === "Required").map((rule) => rule.instruction);
+  const otherStyleRuleLines = activeRules
+    .filter((rule) => rule.strength !== "Required" && rule.strength !== "Avoid")
+    .map((rule) => rule.instruction);
+  const avoidRuleLines = activeRules.filter((rule) => rule.strength === "Avoid").map((rule) => rule.instruction);
+
+  return { styleRuleLines: [...requiredLines, ...otherStyleRuleLines], avoidRuleLines };
+}
+
 export function compileStyleSnapshot(snapshot: StyleSnapshot): string {
   const blocks: string[] = [];
 
@@ -72,22 +98,8 @@ export function compileStyleSnapshot(snapshot: StyleSnapshot): string {
   const visualBlock = compilePillarBlock("Visual Treatment", snapshot.visual);
   if (visualBlock) blocks.push(visualBlock);
 
-  const activeRules = snapshot.rules
-    .filter((rule) => rule.status !== "disabled")
-    .map((rule) => ({ strength: rule.strength, instruction: rule.instruction.trim() }))
-    .filter((rule) => rule.instruction.length > 0);
+  const { styleRuleLines, avoidRuleLines } = partitionActiveRuleLines(snapshot.rules);
 
-  // Polarity split, not an inline label: `Avoid` rules never enter
-  // "Style Rules:" — they get their own block. `Required`, `Preferred` and
-  // undeclared-strength rules stay in "Style Rules:", `Required` first,
-  // each group keeping its relative order otherwise.
-  const requiredLines = activeRules.filter((rule) => rule.strength === "Required").map((rule) => rule.instruction);
-  const otherStyleRuleLines = activeRules
-    .filter((rule) => rule.strength !== "Required" && rule.strength !== "Avoid")
-    .map((rule) => rule.instruction);
-  const avoidRuleLines = activeRules.filter((rule) => rule.strength === "Avoid").map((rule) => rule.instruction);
-
-  const styleRuleLines = [...requiredLines, ...otherStyleRuleLines];
   if (styleRuleLines.length > 0) {
     blocks.push(`Style Rules:\n${styleRuleLines.map((line) => `- ${line}`).join("\n")}`);
   }
@@ -96,6 +108,34 @@ export function compileStyleSnapshot(snapshot: StyleSnapshot): string {
   }
 
   return blocks.join("\n\n");
+}
+
+/**
+ * SHOTPROMPT.RENDER.1 — the Style Rules group's bullet lines only, with
+ * **no leading `Style Rules:` heading**. For `styleContext.ts`'s
+ * `rulesPositiveSegment`, the one caller that folds this text under a label
+ * it already supplies (`Style: `) — reusing `compileStyleSnapshot` there
+ * duplicated the heading (`Style: Style Rules:`, shot 999230). Never used
+ * for the published `compiledText` or the Project Style preview, which keep
+ * calling `compileStyleSnapshot` unchanged: those titles are legitimate
+ * there. `""` when the group is empty.
+ */
+export function compileStyleRuleBulletsOnly(rules: StyleRuleSnapshot[]): string {
+  const { styleRuleLines } = partitionActiveRuleLines(rules);
+  return styleRuleLines.length > 0 ? styleRuleLines.map((line) => `- ${line}`).join("\n") : "";
+}
+
+/**
+ * SHOTPROMPT.RENDER.1 — the `Avoid` group's bullet lines only, with no
+ * leading `Avoid:` heading. For `styleContext.ts`'s `rulesAvoidSegment`,
+ * which composition folds under `Constraints:` (`Constraints: Avoid:`,
+ * shot 999230). Same non-goal as `compileStyleRuleBulletsOnly` above:
+ * `compileStyleSnapshot` and its published/preview callers are untouched.
+ * `""` when the group is empty.
+ */
+export function compileAvoidRuleBulletsOnly(rules: StyleRuleSnapshot[]): string {
+  const { avoidRuleLines } = partitionActiveRuleLines(rules);
+  return avoidRuleLines.length > 0 ? avoidRuleLines.map((line) => `- ${line}`).join("\n") : "";
 }
 
 /** True when a snapshot would compile to "" — used to refuse publishing an entirely empty Style without duplicating the compiler's own emptiness logic. */

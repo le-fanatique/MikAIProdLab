@@ -18,10 +18,29 @@
 // parsing `rulesSegment`'s compiled text. `rulesSegment` itself is kept
 // unchanged for its existing callers (Enhance Description/Notes/Bible),
 // which still want World + Rules (Avoid included) as one block.
+// `rulesPositiveSegment`/`rulesAvoidSegment` themselves keep their own
+// `Style Rules:`/`Avoid:` heading — `resolveProjectStyleTextForComposition`'s
+// `joinProjectStyleTextForComposition` reconstructs the exact legacy joined
+// string from them for the Sequence Storyboard package, which still wants
+// those headings (SHOTPROMPT.STYLE.1 §5 left it out of scope).
+//
+// SHOTPROMPT.RENDER.1 — adds `rulesPositiveBulletsOnly`/`rulesAvoidBulletsOnly`,
+// the same asset-applicable rules with **no heading at all**. The Shot
+// composer's `Style: `/`Constraints:` labels already name the block
+// (`resolveProjectStyleTextForComposition`'s `styleText`/`avoidText`), so
+// reusing the headed segments there duplicated it verbatim on the author's
+// real payload (`Style: Style Rules:`, `Constraints: Avoid:`). A second
+// entry point rather than an in-place edit, precisely because the headed
+// segments still have a live, correct consumer (the Sequence package's
+// legacy join) that this ticket does not touch.
 // ---------------------------------------------------------------------------
 
 import { EMPTY_STYLE_SNAPSHOT, type StyleSnapshot } from "../styleSnapshot";
-import { compileStyleSnapshot } from "../compileStyleSnapshot";
+import {
+  compileStyleSnapshot,
+  compileStyleRuleBulletsOnly,
+  compileAvoidRuleBulletsOnly,
+} from "../compileStyleSnapshot";
 import { isApplicableToConsumer } from "../generationStyleSource";
 
 export type AssetStyleSegments = {
@@ -35,6 +54,18 @@ export type AssetStyleSegments = {
   rulesPositiveSegment: string;
   /** SHOTPROMPT.STYLE.1 — same asset-applicable rules as `rulesSegment`, only the `Avoid`-strength ones — compiled "Avoid:\n- ..." block, or "" when none apply. */
   rulesAvoidSegment: string;
+  /**
+   * SHOTPROMPT.RENDER.1 — same rules as `rulesPositiveSegment`, **bullet
+   * lines only, no leading `Style Rules:` heading**. For a caller that
+   * already supplies its own label. `""` when none apply.
+   */
+  rulesPositiveBulletsOnly: string;
+  /**
+   * SHOTPROMPT.RENDER.1 — same rules as `rulesAvoidSegment`, **bullet lines
+   * only, no leading `Avoid:` heading**. For a caller that already supplies
+   * its own label. `""` when none apply.
+   */
+  rulesAvoidBulletsOnly: string;
 };
 
 /** True when every segment is empty — the exact condition under which a Style-aware prompt builder must fall back to its pre-Style, byte-identical output. */
@@ -56,6 +87,18 @@ export function compileAssetStyleSegments(snapshot: StyleSnapshot): AssetStyleSe
     ...EMPTY_STYLE_SNAPSHOT,
     rules: applicableRules.filter((rule) => rule.strength === "Avoid"),
   });
+  // SHOTPROMPT.RENDER.1 — heading-less variants, same partition, for the
+  // Shot composer's `Style: `/`Constraints:` labels.
+  const rulesPositiveBulletsOnly = compileStyleRuleBulletsOnly(applicableRules);
+  const rulesAvoidBulletsOnly = compileAvoidRuleBulletsOnly(applicableRules);
 
-  return { worldSegment, visualSegment, rulesSegment, rulesPositiveSegment, rulesAvoidSegment };
+  return {
+    worldSegment,
+    visualSegment,
+    rulesSegment,
+    rulesPositiveSegment,
+    rulesAvoidSegment,
+    rulesPositiveBulletsOnly,
+    rulesAvoidBulletsOnly,
+  };
 }

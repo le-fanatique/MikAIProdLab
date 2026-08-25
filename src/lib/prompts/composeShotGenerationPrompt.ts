@@ -121,10 +121,13 @@ export type ComposeShotGenerationPromptInput = {
   projectStyle: string | null;
   /**
    * SHOTPROMPT.STYLE.1 — `resolveProjectStyleTextForComposition`'s
-   * `avoidText`: the compiled `Avoid:` block over Project Style rules with
-   * `strength: "Avoid"`. Never rendered under `Style:` — passed through to
-   * `composeStoryboardShot`, which folds it into `Constraints:` ahead of the
-   * per-asset `forbiddenVariations` lines. `null`/blank renders nothing.
+   * `avoidText`: the Avoid group's bullet lines over Project Style rules
+   * with `strength: "Avoid"` — **no leading `Avoid:` heading**
+   * (SHOTPROMPT.RENDER.1: this value is passed through to
+   * `composeStoryboardShot`, which folds it into `Constraints:` ahead of
+   * the per-asset `forbiddenVariations` lines, so re-adding `Avoid:` here
+   * duplicated it, `Constraints: Avoid:`). Never rendered under `Style:`.
+   * `null`/blank renders nothing.
    */
   projectStyleAvoid?: string | null;
   profileId?: StoryboardShotCompositionInput["profileId"];

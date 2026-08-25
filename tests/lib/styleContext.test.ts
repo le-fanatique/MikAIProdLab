@@ -82,3 +82,41 @@ describe("compileAssetStyleSegments — rulesPositiveSegment / rulesAvoidSegment
     expect(segments.rulesSegment).toBe("");
   });
 });
+
+// ---------------------------------------------------------------------------
+// SHOTPROMPT.RENDER.1 — `rulesPositiveBulletsOnly`/`rulesAvoidBulletsOnly`:
+// same asset-applicable, strength-split rules as `rulesPositiveSegment`/
+// `rulesAvoidSegment`, but with no leading `Style Rules:`/`Avoid:` heading —
+// for `resolveProjectStyleTextForComposition`'s `styleText`/`avoidText`,
+// which the Shot composer folds under its own `Style: `/`Constraints:`
+// label. `rulesPositiveSegment`/`rulesAvoidSegment` themselves are untouched
+// (proven above) — they still feed the Sequence Storyboard package's
+// byte-identical legacy join.
+// ---------------------------------------------------------------------------
+describe("compileAssetStyleSegments — rulesPositiveBulletsOnly / rulesAvoidBulletsOnly (heading-less)", () => {
+  it("rulesPositiveBulletsOnly carries the Style Rules group's bullets with no heading; rulesAvoidBulletsOnly carries the Avoid group's, also with no heading", () => {
+    const segments = compileAssetStyleSegments(
+      snapshot({
+        rules: [makeRule({ instruction: "textured brushwork", strength: "Required" }), makeRule({ instruction: "no bright colors", strength: "Avoid" })],
+      })
+    );
+    expect(segments.rulesPositiveBulletsOnly).toBe("- textured brushwork");
+    expect(segments.rulesAvoidBulletsOnly).toBe("- no bright colors");
+    expect(segments.rulesPositiveBulletsOnly).not.toContain("Style Rules:");
+    expect(segments.rulesAvoidBulletsOnly).not.toContain("Avoid:");
+  });
+
+  it("is '' when the respective group is empty, same as the headed segments", () => {
+    const onlyRequired = compileAssetStyleSegments(
+      snapshot({ rules: [makeRule({ instruction: "textured brushwork", strength: "Required" })] })
+    );
+    expect(onlyRequired.rulesAvoidBulletsOnly).toBe("");
+    expect(onlyRequired.rulesPositiveBulletsOnly).toBe("- textured brushwork");
+
+    const onlyAvoid = compileAssetStyleSegments(
+      snapshot({ rules: [makeRule({ instruction: "no bright colors", strength: "Avoid" })] })
+    );
+    expect(onlyAvoid.rulesPositiveBulletsOnly).toBe("");
+    expect(onlyAvoid.rulesAvoidBulletsOnly).toBe("- no bright colors");
+  });
+});

@@ -30,32 +30,61 @@ import "server-only";
 // The Shot composer (`composeShotGenerationPrompt`) now renders `Avoid`
 // under `Constraints:`, never under `Style:`, so this now returns the two
 // values separately — `styleText` (World + Visual + Style Rules, Avoid
-// excluded) and `avoidText` (only the compiled `Avoid:` block) — split at
+// excluded) and `avoidText` (only the Avoid group) — split at
 // the snapshot's own `strength` field (`compileAssetStyleSegments`'s
 // `rulesPositiveSegment`/`rulesAvoidSegment`), never by parsing the joined
 // text. `joinProjectStyleTextForComposition` below reconstructs the exact
 // legacy single string for the Sequence Storyboard package callers, which
 // were not asked to separate `Avoid` out (SHOTPROMPT.STYLE.1 §5 scope).
+//
+// SHOTPROMPT.RENDER.1 — `styleText`/`avoidText` now come from
+// `compileAssetStyleSegments`'s `rulesPositiveBulletsOnly`/
+// `rulesAvoidBulletsOnly` — bullet lines with no leading `Style Rules:`/
+// `Avoid:` heading — instead of `rulesPositiveSegment`/`rulesAvoidSegment`.
+// `composeShotGenerationPrompt`'s `Style: `/`Constraints:` labels already
+// name the block; the heading duplicated it verbatim on the author's real
+// payload (`Style: Style Rules:`, `Constraints: Avoid:`). This does not
+// touch the Sequence Storyboard package's byte-identical legacy string:
+// `joinProjectStyleTextForComposition` below now builds it directly from
+// the still-headed `rulesPositiveSegment`/`rulesAvoidSegment`, which
+// `compileAssetStyleSegments` keeps unchanged for exactly this caller —
+// SHOTPROMPT.STYLE.1 §5 left that surface out of scope, and this ticket
+// does too.
 // ---------------------------------------------------------------------------
 
 import { resolveProjectStyle } from "@/lib/llmWorkspace/variables/registry";
 
 export type ResolvedProjectStyleTextForComposition = {
-  /** World + Visual + Style Rules (Avoid-strength rules excluded), joined exactly as before minus the trailing Avoid block. `null` when there is no effective Style content at all. */
+  /** World + Visual + Style Rules bullets (Avoid-strength rules excluded, no leading `Style Rules:` heading), joined. `null` when there is no effective Style content at all. */
   styleText: string | null;
-  /** Only the compiled `Avoid:` block over Style rules with `strength: "Avoid"`, or `null` when none apply. */
+  /** Only the Avoid group's bullet lines (no leading `Avoid:` heading), or `null` when none apply. */
   avoidText: string | null;
+  /** SHOTPROMPT.RENDER.1 — the byte-identical pre-fix headed join, for `joinProjectStyleTextForComposition` only. `null` when there is no effective Style content at all. */
+  legacyJoinedText: string | null;
 };
 
 export async function resolveProjectStyleTextForComposition(projectId: number): Promise<ResolvedProjectStyleTextForComposition> {
   const data = await resolveProjectStyle(projectId);
-  if (data.mode === "none") return { styleText: null, avoidText: null };
-  const joined = [data.worldSegment, data.visualSegment, data.rulesPositiveSegment]
+  if (data.mode === "none") return { styleText: null, avoidText: null, legacyJoinedText: null };
+
+  // SHOTPROMPT.RENDER.1 — heading-less: the caller (`composeShotGenerationPrompt`)
+  // already supplies `Style: `/`Constraints:`.
+  const joined = [data.worldSegment, data.visualSegment, data.rulesPositiveBulletsOnly]
     .filter((segment) => segment.length > 0)
     .join("\n\n");
+
+  // Byte-identical to this function's pre-SHOTPROMPT.RENDER.1 return: the
+  // still-headed `rulesPositiveSegment`/`rulesAvoidSegment` joined exactly as
+  // `[styleText, avoidText]` used to be — for `joinProjectStyleTextForComposition`
+  // only.
+  const legacyJoined = [data.worldSegment, data.visualSegment, data.rulesPositiveSegment, data.rulesAvoidSegment]
+    .filter((segment) => segment.length > 0)
+    .join("\n\n");
+
   return {
     styleText: joined.length > 0 ? joined : null,
-    avoidText: data.rulesAvoidSegment.length > 0 ? data.rulesAvoidSegment : null,
+    avoidText: data.rulesAvoidBulletsOnly.length > 0 ? data.rulesAvoidBulletsOnly : null,
+    legacyJoinedText: legacyJoined.length > 0 ? legacyJoined : null,
   };
 }
 
@@ -63,12 +92,12 @@ export async function resolveProjectStyleTextForComposition(projectId: number): 
  * Reconstructs the single joined text this function returned before
  * SHOTPROMPT.STYLE.1 split Style from Avoid — used only by the Sequence
  * Storyboard package callers (`buildSequenceStoryboardPrompt`'s header),
- * which still render one "Style:" block and were not part of this ticket's
- * scope (SHOTPROMPT.STYLE.1 §5). Byte-identical to the old single-string
- * return: `[styleText, avoidText]` joined the same way `compileStyleSnapshot`
- * already joins its own blocks.
+ * which still render one "Style:" block and were not part of that ticket's
+ * scope (SHOTPROMPT.STYLE.1 §5), nor of SHOTPROMPT.RENDER.1's
+ * (§4a/§4b talk only about the Shot composer's own labels). Returns
+ * `legacyJoinedText` verbatim — computed above from the still-headed
+ * segments, untouched by the heading-less fix.
  */
 export function joinProjectStyleTextForComposition(resolved: ResolvedProjectStyleTextForComposition): string | null {
-  const joined = [resolved.styleText, resolved.avoidText].filter((s): s is string => Boolean(s)).join("\n\n");
-  return joined.length > 0 ? joined : null;
+  return resolved.legacyJoinedText;
 }

@@ -146,6 +146,48 @@ describe("composeStoryboardShot", () => {
       );
       expect(blankCard.parts.find((p) => p.id === "subject")!.text).toBe(cardless.text);
     });
+
+    // SHOTPROMPT.RENDER.1 — shot 999230: the author wrote his Prompt Card on
+    // three lines in the textarea. A raw line break inside a `- ` list item
+    // reads as the start of new bullets, breaking the list. Render-only:
+    // the stored value (`promptCard`) is never rewritten, only what
+    // `buildSubject` renders.
+    it("collapses a multi-line Prompt Card into a single rendered line, never rewriting the stored value", () => {
+      const multilineCard =
+        "Anthropomorphic female macaque, weathered fur, calloused hands,\nscuffed utilitarian flight jacket over a faded undersuit,\nsharp survivalist features";
+      const result = composeStoryboardShot(
+        inputWith({
+          context: contextWith({
+            assetBibles: [{ assetId: 1, assetName: "Mara", promptCard: multilineCard }],
+          }),
+        })
+      );
+
+      const subject = result.parts.find((p) => p.id === "subject")!;
+      expect(subject.text.split("\n")).toHaveLength(1);
+      expect(subject.text).toBe(
+        "- Mara — character — Anthropomorphic female macaque, weathered fur, calloused hands, scuffed utilitarian flight jacket over a faded undersuit, sharp survivalist features"
+      );
+    });
+
+    // Same defect, no Prompt Card: description/visualIdentity are the
+    // ticket's own explicit extension ("§4c... pas seulement la carte").
+    it("collapses multi-line visualIdentity and description into single rendered lines too, in the no-card fallback", () => {
+      const result = composeStoryboardShot(
+        inputWith({
+          context: contextWith({
+            castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character", description: "Lead,\nmid-30s." }],
+            assetBibles: [
+              { assetId: 1, assetName: "Mara", visualIdentity: "Cropped hair,\nscarred jaw." },
+            ],
+          }),
+        })
+      );
+
+      const subject = result.parts.find((p) => p.id === "subject")!;
+      expect(subject.text.split("\n")).toHaveLength(1);
+      expect(subject.text).toBe("- Mara — character — Cropped hair, scarred jaw. — Lead, mid-30s.");
+    });
   });
 
   it("keeps the Shot Prompt as an ingredient — it stops being the only one, it does not disappear", () => {

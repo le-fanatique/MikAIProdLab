@@ -134,6 +134,23 @@ describe("composeShotGenerationPrompt", () => {
     expect(compositionSection.text).toContain("Constraints: Avoid:\n- No bright colors.");
   });
 
+  // SHOTPROMPT.RENDER.1 — shot 999230's real payload: the composer must
+  // never reproduce "Style: Style Rules:" nor "Constraints: Avoid:". By the
+  // time `projectStyle`/`projectStyleAvoid` reach this composer they are
+  // already `resolveProjectStyleTextForComposition`'s heading-less
+  // `styleText`/`avoidText` (see tests/lib/resolveProjectStyleTextForComposition.test.ts)
+  // — this test exercises the composer's own labeling with exactly that
+  // shape, and still expects the rules/avoid content to survive.
+  it("never doubles the block heading under its own 'Style: '/'Constraints:' label, and still carries the rules and the negative constraint", () => {
+    const result = composeShotGenerationPrompt(
+      baseInput({ projectStyle: "- textured brushwork", projectStyleAvoid: "- no bright colors" })
+    );
+    expect(result.text).not.toContain("Style: Style Rules:");
+    expect(result.text).not.toContain("Constraints: Avoid:");
+    expect(result.text).toContain("Style: - textured brushwork");
+    expect(result.text).toContain("- no bright colors");
+  });
+
   it("omits Subject Definition when no casting reference carries an assetName", () => {
     const context = buildPromptCompilationContext({
       shot: { shotPrompt: "Empty rooftop at dawn." },
