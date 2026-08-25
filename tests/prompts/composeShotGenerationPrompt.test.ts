@@ -69,7 +69,12 @@ function baseInput(overrides: Partial<ComposeShotGenerationPromptInput> = {}): C
 
 describe("composeShotGenerationPrompt", () => {
   it("renders Style, Subject Definition, the six-part composition and Timeline in order for a video Shot with casting, references and segments", () => {
-    const result = composeShotGenerationPrompt(baseInput({ kind: "video" }));
+    // SHOTPROMPT.NEGATIVE.1 — the Avoid part no longer materialises from an
+    // asset's own `forbiddenVariations` (the fixture's Mara carries one); a
+    // Project Style Avoid rule is what makes it appear here.
+    const result = composeShotGenerationPrompt(
+      baseInput({ kind: "video", projectStyleAvoid: "- No bright colors." })
+    );
 
     expect(result.kind).toBe("video");
     expect(result.usedTimeline).toBe(true);
@@ -94,7 +99,8 @@ describe("composeShotGenerationPrompt", () => {
     // The six-part composeStoryboardShot body is reused, not reimplemented.
     expect(result.text).toContain("Camera: medium shot — eye level");
     expect(result.text).toContain("Lighting: Harsh rooftop sun.");
-    expect(result.text).toContain("Avoid: - Mara: Never smiling.");
+    expect(result.text).toContain("Avoid: - No bright colors.");
+    expect(result.text).not.toContain("Never smiling.");
   });
 
   it("omits the Style line when no Project Style is resolved", () => {

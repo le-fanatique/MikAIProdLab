@@ -98,10 +98,10 @@ export type StoryboardShotCompositionInput = {
    * (`resolveProjectStyleTextForComposition`'s `avoidText`, itself split
    * from the snapshot's own `strength` field, never by parsing compiled
    * text — `docs/WHERE_THE_RULES_LIVE.md`: "polarity is carried by which
-   * block a rule lands in"). Joins ahead of the per-asset
-   * `forbiddenVariations` lines, under the `Avoid:` heading
-   * (SHOTPROMPT.POLARITY.1) — the project-level negative constraint first,
-   * the asset-specific ones after. `null`/blank renders nothing.
+   * block a rule lands in"). Rendered under the `Avoid:` heading
+   * (SHOTPROMPT.POLARITY.1). `null`/blank renders nothing — SHOTPROMPT.NEGATIVE.1
+   * means this is the part's only content: per-asset `forbiddenVariations`
+   * no longer joins it (see `buildConstraints`).
    */
   styleAvoid?: string | null;
   profileId?: ConformationProfileId;
@@ -179,31 +179,22 @@ function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
  * Avoid — what to avoid. (Part id stays `constraints`, an internal key —
  * see SHOTPROMPT.POLARITY.1 at the call site.)
  *
- * `forbiddenVariations`, per asset, was the only negative constraint the
- * product stored when this comment was first written — §5.6 was explicit
- * that shot- and project-level negative constraints had **no field at all**.
- * SHOTPROMPT.STYLE.1 changes that for the project level: Project Style rules
- * with `strength: "Avoid"` are a real, already-stored negative constraint
- * (STYLE.COMPILE.POLARITY.1) that used to render under `Style:` — this now
- * renders it here instead, ahead of the per-asset lines, since it is the
- * broader constraint and the asset-specific ones are its refinements.
+ * SHOTPROMPT.NEGATIVE.1 — per-asset `forbiddenVariations` is no longer
+ * rendered here. `docs/SHOT_PROMPT_SD25_AUDIT.md` ajustement #8: naming the
+ * prohibited variation invokes it in the model's conditioning, the reference
+ * image and the Prompt Card already say the same thing at the positive (the
+ * one the diffusion model actually follows), and the field's prose was
+ * written for the bible/alignment reviewer, not for an engine. The field
+ * itself (`assets.forbidden_variations`) is untouched — still written, still
+ * edited, still read by the style alignment review and the bible assists.
+ * Only this composition stops reading it.
+ *
+ * What remains: Project Style rules with `strength: "Avoid"` — a real,
+ * already-stored negative constraint (STYLE.COMPILE.POLARITY.1) that used to
+ * render under `Style:` (SHOTPROMPT.STYLE.1) and now renders here instead.
  */
-function buildConstraints(cast: PromptCompilationCastAsset[], styleAvoid: string | null | undefined): string | null {
-  const blocks: string[] = [];
-
-  const avoidBlock = nonEmpty(styleAvoid ?? null);
-  if (avoidBlock) blocks.push(avoidBlock);
-
-  const assetLines = cast
-    .map((asset) => {
-      const forbidden = nonEmpty(asset.assetBible?.forbiddenVariations ?? null);
-      if (!forbidden) return null;
-      return `- ${asset.assetName}: ${forbidden}`;
-    })
-    .filter((line): line is string => line !== null);
-  if (assetLines.length > 0) blocks.push(assetLines.join("\n"));
-
-  return blocks.length > 0 ? blocks.join("\n\n") : null;
+function buildConstraints(styleAvoid: string | null | undefined): string | null {
+  return nonEmpty(styleAvoid ?? null);
 }
 
 /**
@@ -280,11 +271,11 @@ export function composeStoryboardShot(
     { id: "lighting", label: "Lighting", text: nonEmpty(input.lighting) },
     // SHOTPROMPT.POLARITY.1 — labelled `Avoid`, not `Constraints`: everything
     // this part renders is a prohibition (Style rules with `strength:
-    // "Avoid"`, per-asset `forbiddenVariations`), and the block a rule lands
-    // in is what carries polarity here (`docs/WHERE_THE_RULES_LIVE.md`).
-    // The part id stays `constraints` — an internal key, not the displayed
-    // word.
-    { id: "constraints", label: "Avoid", text: buildConstraints(context.castAssets, input.styleAvoid) },
+    // "Avoid"`), and the block a rule lands in is what carries polarity here
+    // (`docs/WHERE_THE_RULES_LIVE.md`). The part id stays `constraints` — an
+    // internal key, not the displayed word. SHOTPROMPT.NEGATIVE.1 — per-asset
+    // `forbiddenVariations` no longer reaches this part (see `buildConstraints`).
+    { id: "constraints", label: "Avoid", text: buildConstraints(input.styleAvoid) },
   ];
 
   const parts: StoryboardCompositionPart[] = candidates

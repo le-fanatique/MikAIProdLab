@@ -71,7 +71,10 @@ describe("composeStoryboardShot", () => {
   // package instead of once per Shot. This assertion is the filet that must
   // fall the moment "style" reappears here.
   it("renders the five parts left of the guide's formula when every ingredient exists — Style moved to the header", () => {
-    const result = composeStoryboardShot(inputWith());
+    // SHOTPROMPT.NEGATIVE.1 — the Avoid part no longer materialises from
+    // an asset's own `forbiddenVariations` (the default fixture carries one);
+    // a Project Style Avoid rule is what makes it appear here.
+    const result = composeStoryboardShot(inputWith({ styleAvoid: "- No bright colors." }));
 
     expect(result.parts.map((p) => p.id)).toEqual([
       "subject",
@@ -214,53 +217,37 @@ describe("composeStoryboardShot", () => {
     expect(result.text).not.toContain("Avoid:");
   });
 
-  it("renders only the negative constraints that exist — never an invented one", () => {
-    const withForbidden = composeStoryboardShot(inputWith());
-    expect(withForbidden.parts.find((p) => p.id === "constraints")!.text).toContain("Never long hair.");
-
-    // §5.6: shot- and project-level negative constraints have no field at all
-    // (B18). With no Asset Bible carrying one, the part is simply absent.
-    const withoutForbidden = composeStoryboardShot(
-      inputWith({ context: contextWith({ assetBibles: [{ assetId: 1, assetName: "Mara" }] }) })
-    );
-    expect(withoutForbidden.parts.some((p) => p.id === "constraints")).toBe(false);
+  // SHOTPROMPT.NEGATIVE.1 — the Avoid part now carries the Project Style's
+  // negative rules ONLY. An asset's own `forbiddenVariations` — even when
+  // set (the default fixture's Mara carries one) — must never reach it:
+  // naming what to avoid invokes it in the model's conditioning, and the
+  // reference image / Prompt Card already say the same thing at the
+  // positive. The field itself is untouched elsewhere (registry/actions
+  // tests below prove it is still written and read).
+  it("renders only the Project Style Avoid rules — never an asset's forbiddenVariations", () => {
+    const withStyleAvoid = composeStoryboardShot(inputWith({ styleAvoid: "- No bright colors." }));
+    const constraints = withStyleAvoid.parts.find((p) => p.id === "constraints")!;
+    expect(constraints.text).toBe("- No bright colors.");
+    expect(constraints.text).not.toContain("Never long hair.");
+    expect(withStyleAvoid.text).not.toContain("Never long hair.");
   });
 
-  // SHOTPROMPT.STYLE.1 Part B — the Project Style's `Avoid:` block joins
-  // the Avoid part (SHOTPROMPT.POLARITY.1 — labelled `Avoid`, part id stays
-  // `constraints`), ahead of the per-asset forbiddenVariations lines, and
-  // never appears under Style (which this function does not even render —
-  // see SHOTPROMPT.HEADER.1 above).
-  it("folds the Project Style Avoid block into the Avoid part, ahead of forbiddenVariations", () => {
-    const withStyleAvoid = composeStoryboardShot(
-      inputWith({ styleAvoid: "Avoid:\n- No bright colors.\n- No daylight exteriors." })
-    );
-    const constraints = withStyleAvoid.parts.find((p) => p.id === "constraints")!;
-    expect(constraints.text).toContain("Avoid:\n- No bright colors.\n- No daylight exteriors.");
-    expect(constraints.text).toContain("Never long hair.");
-    expect(constraints.text.indexOf("No bright colors")).toBeLessThan(constraints.text.indexOf("Never long hair."));
-    expect(withStyleAvoid.text).not.toContain("Style:");
-
-    // Present even with no per-asset forbiddenVariations at all.
-    const styleAvoidOnly = composeStoryboardShot(
-      inputWith({
-        context: contextWith({ assetBibles: [{ assetId: 1, assetName: "Mara" }] }),
-        styleAvoid: "Avoid:\n- No bright colors.",
-      })
-    );
-    expect(styleAvoidOnly.parts.find((p) => p.id === "constraints")!.text).toBe("Avoid:\n- No bright colors.");
-
-    // null/blank renders nothing extra — byte-identical to before this field existed.
+  // The part is absent, not rendered empty, when no Project Style Avoid rule
+  // exists — even though the asset in the fixture carries a
+  // `forbiddenVariations` value. Composing never falls back to it.
+  it("is absent, not empty, when there is no Project Style Avoid rule — even with an asset's forbiddenVariations set", () => {
     const withoutStyleAvoid = composeStoryboardShot(inputWith({ styleAvoid: null }));
-    expect(withoutStyleAvoid.parts.find((p) => p.id === "constraints")!.text).toBe("- Mara: Never long hair.");
+    expect(withoutStyleAvoid.parts.some((p) => p.id === "constraints")).toBe(false);
+    expect(withoutStyleAvoid.text).not.toContain("Avoid:");
+    expect(withoutStyleAvoid.text).not.toContain("Never long hair.");
   });
 
   // SHOTPROMPT.POLARITY.1 — the regression filet: the composed text carries
-  // `Avoid:`, never `Constraints:`, and both the Style rules' negative block
-  // and the per-asset forbidden variations render under that one title, with
-  // no nested heading — `styleAvoid` here is heading-less, the real shape
-  // `resolveProjectStyleTextForComposition`'s `avoidText` returns.
-  it("labels the part 'Avoid', never 'Constraints', with Style rules and forbiddenVariations both under it", () => {
+  // `Avoid:`, never `Constraints:`, and the Style rules' negative block is
+  // the part's entire content, with no nested heading — `styleAvoid` here is
+  // heading-less, the real shape `resolveProjectStyleTextForComposition`'s
+  // `avoidText` returns.
+  it("labels the part 'Avoid', never 'Constraints'", () => {
     const result = composeStoryboardShot(
       inputWith({ styleAvoid: "- Dominant comic-book contour outlining\n- Photorealistic character rendering" })
     );
@@ -268,8 +255,8 @@ describe("composeStoryboardShot", () => {
     expect(result.text).toContain("Avoid:");
     expect(result.text).not.toContain("Constraints:");
     expect(result.text).toContain("Avoid: - Dominant comic-book contour outlining");
-    expect(result.text).toContain("Never long hair.");
     expect(result.text).not.toContain("Avoid: Avoid:");
+    expect(result.text).not.toContain("Never long hair.");
   });
 
   it("surfaces the conformation findings rather than acting on them", () => {
