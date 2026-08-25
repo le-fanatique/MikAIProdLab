@@ -200,6 +200,8 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       assetVisualIdentity: assets.visualIdentity,
       assetUsageRules: assets.usageRules,
       assetForbiddenVariations: assets.forbiddenVariations,
+      // ASSET.PROMPTCARD.1 — same reasoning as the three columns above.
+      assetPromptCard: assets.promptCard,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -465,6 +467,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       visualIdentity: r.assetVisualIdentity,
       usageRules: r.assetUsageRules,
       forbiddenVariations: r.assetForbiddenVariations,
+      promptCard: r.assetPromptCard,
     })),
     sequenceContext: sequence,
     projectContext: project,

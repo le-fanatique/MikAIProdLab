@@ -50,6 +50,17 @@ export const assets = sqliteTable("assets", {
   // makes this field earn its place — `SEQ.LIGHTING`'s resolver reads it
   // through `sequence_assets` when the Sequence's own field is empty.
   lighting: text("lighting"),
+  // ASSET.PROMPTCARD.1 — §4/§9 of docs/SHOT_PROMPT_SD25_AUDIT.md. The short,
+  // approved form of the Asset Bible: 3 to 5 geometric anchors an engine can
+  // hold onto (the audit's own count), never a paragraph. It never carries an
+  // invariant that belongs to one Shot (a pose, an expression, a state for
+  // this plan only) — that stays a Shot-level concern, exactly as `lighting`
+  // above never carries a Shot's own rig. `visualIdentity`/`description`
+  // remain the source of truth this card is drafted from; writing this
+  // column never rewrites them. Nullable, no default: every asset created
+  // before this column existed, and every asset the author has not yet
+  // curated a card for, is `null` — a normal state, not an error.
+  promptCard: text("prompt_card"),
   orderIndex: int("order_index").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

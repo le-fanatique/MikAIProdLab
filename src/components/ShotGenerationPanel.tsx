@@ -166,6 +166,10 @@ export default async function ShotGenerationPanel({
         assetVisualIdentity: assets.visualIdentity,
         assetUsageRules: assets.usageRules,
         assetForbiddenVariations: assets.forbiddenVariations,
+        // ASSET.PROMPTCARD.1 — same reasoning as the three columns above:
+        // without it, a filled Prompt Card never reaches this preview's
+        // composed Subject part.
+        assetPromptCard: assets.promptCard,
       })
       .from(shotAssets)
       .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -417,6 +421,7 @@ export default async function ShotGenerationPanel({
       visualIdentity: r.assetVisualIdentity,
       usageRules: r.assetUsageRules,
       forbiddenVariations: r.assetForbiddenVariations,
+      promptCard: r.assetPromptCard,
     })),
     sequenceContext: sequence,
     projectContext: project,

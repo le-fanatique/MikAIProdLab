@@ -440,6 +440,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
           visualIdentity: c.visualIdentity,
           usageRules: c.usageRules,
           forbiddenVariations: c.forbiddenVariations,
+          promptCard: c.promptCard,
         })),
         sequenceContext: {
           title: sequence.title,

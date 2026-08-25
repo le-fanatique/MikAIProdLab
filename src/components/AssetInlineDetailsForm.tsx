@@ -18,6 +18,11 @@ type Props = {
   // fill this Asset-level field (LLMW.LIGHTING.1's own column). Independent
   // of the Asset Bible fields above, same as description/notes.
   lighting: string | null;
+  // ASSET.PROMPTCARD.1 — the short, approved form of the Bible (3-5 anchors)
+  // `buildSubject` (composition/storyboardShot.ts) prefers over
+  // visualIdentity/description when present. No assist writes this yet — the
+  // author fills it by hand here, same as `lighting` above.
+  promptCard: string | null;
   returnTo: string;
 };
 
@@ -30,6 +35,7 @@ export default function AssetInlineDetailsForm({
   usageRules: initialUsageRules,
   forbiddenVariations: initialForbiddenVariations,
   lighting: initialLighting,
+  promptCard: initialPromptCard,
   returnTo,
 }: Props) {
   const [description, setDescription] = useState(initialDescription ?? "");
@@ -38,6 +44,7 @@ export default function AssetInlineDetailsForm({
   const [usageRules, setUsageRules] = useState(initialUsageRules ?? "");
   const [forbiddenVariations, setForbiddenVariations] = useState(initialForbiddenVariations ?? "");
   const [lighting, setLighting] = useState(initialLighting ?? "");
+  const [promptCard, setPromptCard] = useState(initialPromptCard ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +65,7 @@ export default function AssetInlineDetailsForm({
   useEffect(() => { setUsageRules(initialUsageRules ?? ""); }, [initialUsageRules]);
   useEffect(() => { setForbiddenVariations(initialForbiddenVariations ?? ""); }, [initialForbiddenVariations]);
   useEffect(() => { setLighting(initialLighting ?? ""); }, [initialLighting]);
+  useEffect(() => { setPromptCard(initialPromptCard ?? ""); }, [initialPromptCard]);
 
   async function handleSave() {
     setIsSaving(true);
@@ -72,6 +80,7 @@ export default function AssetInlineDetailsForm({
         usageRules,
         forbiddenVariations,
         lighting,
+        promptCard,
       });
       if (result.ok) {
         // Construct returnTo with detailsUpdated param
@@ -141,6 +150,27 @@ export default function AssetInlineDetailsForm({
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4b5158]">
           Asset Bible
         </p>
+
+        {/* ASSET.PROMPTCARD.1 — the short, curated form (3-5 anchors) the
+            storyboard composition prefers over Visual Identity + Description
+            when filled. No assist writes it yet (ASSET.PROMPTCARD.2); the
+            author drafts it here by hand. */}
+        <div className="flex flex-col gap-2">
+          <label htmlFor="promptCard" className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">
+            Prompt Card
+          </label>
+          <textarea
+            id="promptCard"
+            value={promptCard}
+            onChange={(e) => setPromptCard(e.target.value)}
+            rows={3}
+            className="rounded border border-[#2c3035] bg-[#0d0e10] px-3 py-2 text-sm text-[#a4abb2] font-mono resize-none focus:outline-none focus:border-[#3a4046] transition-colors leading-relaxed"
+            placeholder="3 to 5 geometric anchors an engine can hold onto, e.g. 'Anthropomorphic female macaque, weathered fur, calloused hands, scuffed utilitarian flight jacket over a faded undersuit'..."
+          />
+          <p className="text-xs text-[#4b5158]">
+            When filled, this replaces Visual Identity and Description in the storyboard prompt&apos;s Subject block.
+          </p>
+        </div>
 
         <div className="flex flex-col gap-2">
           <label htmlFor="visualIdentity" className="text-[10px] font-medium uppercase tracking-wider text-[#6e767d]">

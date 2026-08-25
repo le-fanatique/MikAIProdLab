@@ -33,6 +33,7 @@ function fullAssetForm(
     description: asset.description ?? "",
     notes: asset.notes ?? "",
     lighting: asset.lighting ?? "",
+    promptCard: asset.promptCard ?? "",
     ...overrides,
   });
 }
@@ -107,5 +108,57 @@ describe("updateAsset — lighting joins the existing multi-column form/action",
     );
 
     expect((await readAsset(ctx, assetId)).lighting).toBeNull();
+  });
+});
+
+describe("updateAsset — promptCard joins the existing multi-column form/action (ASSET.PROMPTCARD.1)", () => {
+  it("writes promptCard when the form submits a new value for it", async () => {
+    const assetId = await insertAsset(ctx, projectId, {
+      type: "character",
+      name: "Azelle",
+      promptCard: "Old card",
+    });
+    const before = await readAsset(ctx, assetId);
+
+    await captureAssetRedirect(() =>
+      updateAsset(assetId, projectId, fullAssetForm(before, { promptCard: "Weathered fur, calloused hands" }))
+    );
+
+    expect((await readAsset(ctx, assetId)).promptCard).toBe("Weathered fur, calloused hands");
+  });
+
+  it("preserves promptCard on a full-form resubmit that only changes the name — the S4 proof", async () => {
+    const assetId = await insertAsset(ctx, projectId, {
+      type: "character",
+      name: "Azelle",
+      promptCard: "Weathered fur, calloused hands",
+      notes: "Untouched notes",
+    });
+    const before = await readAsset(ctx, assetId);
+
+    await captureAssetRedirect(() =>
+      updateAsset(assetId, projectId, fullAssetForm(before, { name: "Azelle renamed" }))
+    );
+
+    const after = await readAsset(ctx, assetId);
+    expect(after.promptCard).toBe("Weathered fur, calloused hands");
+    expect(after.name).toBe("Azelle renamed");
+    expect(after.notes).toBe("Untouched notes");
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual(["name"]);
+  });
+
+  it("clears promptCard to null on a blank submission, same as description/notes/lighting", async () => {
+    const assetId = await insertAsset(ctx, projectId, {
+      type: "character",
+      name: "Azelle",
+      promptCard: "Old card",
+    });
+    const before = await readAsset(ctx, assetId);
+
+    await captureAssetRedirect(() =>
+      updateAsset(assetId, projectId, fullAssetForm(before, { promptCard: "" }))
+    );
+
+    expect((await readAsset(ctx, assetId)).promptCard).toBeNull();
   });
 });

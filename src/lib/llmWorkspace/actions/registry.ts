@@ -237,15 +237,16 @@ export const ACTION_REGISTRY = {
         "usageRules",
         "forbiddenVariations",
         "lighting",
+        "promptCard",
         "bibleSourceFingerprint",
       ],
       writesUpdatedAt: true,
     },
     writeSemantics: "replace",
     notes: [
-      "Behaviour 3 — full replacement: all six fields (the five original plus `lighting`, ASSET.LIGHTING.PLACE.1) are set on every call, and a blank/whitespace-only input becomes null (src/actions/assets.ts). Proven by tests/actions/updateAssetDetailsInline.test.ts, \"trims each field and stores null when a field is blank\" and \"overwrites every field on each call\", plus its own \"writes lighting alongside the other fields, changing only lighting when the rest repeat their current values\".",
+      "Behaviour 3 — full replacement: all seven fields (the five original plus `lighting` (ASSET.LIGHTING.PLACE.1) and `promptCard` (ASSET.PROMPTCARD.1)) are set on every call, and a blank/whitespace-only input becomes null (src/actions/assets.ts). Proven by tests/actions/updateAssetDetailsInline.test.ts, \"trims each field and stores null when a field is blank\" and \"overwrites every field on each call\", plus its own \"writes lighting alongside the other fields, changing only lighting when the rest repeat their current values\" and \"writes promptCard alongside the other fields, changing only promptCard when the rest repeat their current values\".",
       "Behaviour 4 — ownership check (SELECT) and mutation (UPDATE) are two separate statements, no db.transaction. Structural fact, cited here; see registry.test.ts's structural assertion rather than a race test.",
-      "SCHEMA.BIBLE_FRESHNESS.1 (S1b) — bibleSourceFingerprint is written only on the calls that actually change the Asset Bible: this action rewrites all six columns on every call, so a plain description/notes/lighting edit reports the Bible back unchanged, and capturing on every call would have marked a Bible that had just gone stale as current. The three normalized Bible values are compared against the stored row first, and the fingerprint key is included in `.set()` only when at least one differs — otherwise the column is left untouched. `lighting` plays no part in that comparison, same as description/notes. Proven by tests/actions/updateAssetDetailsInline.test.ts and tests/actions/assetBibleFreshness.test.ts, the latter asserting that a description-only edit leaves the Bible stale.",
+      "SCHEMA.BIBLE_FRESHNESS.1 (S1b) — bibleSourceFingerprint is written only on the calls that actually change the Asset Bible: this action rewrites all six columns on every call, so a plain description/notes/lighting edit reports the Bible back unchanged, and capturing on every call would have marked a Bible that had just gone stale as current. The three normalized Bible values are compared against the stored row first, and the fingerprint key is included in `.set()` only when at least one differs — otherwise the column is left untouched. `lighting` and `promptCard` play no part in that comparison, same as description/notes. Proven by tests/actions/updateAssetDetailsInline.test.ts and tests/actions/assetBibleFreshness.test.ts, the latter asserting that a description-only edit leaves the Bible stale.",
     ],
   },
 

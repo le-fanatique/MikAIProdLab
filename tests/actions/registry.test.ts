@@ -119,6 +119,7 @@ describe("action registry — declared columns match the columns actually writte
       usageRules: "u",
       forbiddenVariations: "f",
       lighting: "l",
+      promptCard: "p",
     });
 
     const after = await readAsset(ctx, assetId);

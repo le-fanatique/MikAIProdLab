@@ -231,6 +231,8 @@ async function buildSequenceStoryboardGenerationContext(
             visualIdentity: assets.visualIdentity,
             usageRules: assets.usageRules,
             forbiddenVariations: assets.forbiddenVariations,
+            // ASSET.PROMPTCARD.1 — same reasoning as the three columns above.
+            promptCard: assets.promptCard,
           })
           .from(shotAssets)
           .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -410,6 +412,7 @@ async function buildSequenceStoryboardGenerationContext(
           visualIdentity: c.visualIdentity,
           usageRules: c.usageRules,
           forbiddenVariations: c.forbiddenVariations,
+          promptCard: c.promptCard,
         })),
         sequenceContext: {
           title: sequence.title,

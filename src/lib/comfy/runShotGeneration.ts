@@ -210,11 +210,13 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       // Subject/Constraints parts read (`context.castAssets[].assetBible`).
       // Previously not selected here, so the queued job's own "Subject"/
       // "Constraints" text would have silently diverged from the preview's
-      // (ShotGenerationPanel/`/map` select these same three columns
-      // already) — the exact drift the shared composer exists to prevent.
+      // (ShotGenerationPanel/`/map` select these same columns already) — the
+      // exact drift the shared composer exists to prevent. ASSET.PROMPTCARD.1
+      // adds `promptCard`, the fourth of these — same reasoning.
       assetVisualIdentity: assets.visualIdentity,
       assetUsageRules: assets.usageRules,
       assetForbiddenVariations: assets.forbiddenVariations,
+      assetPromptCard: assets.promptCard,
     })
     .from(shotAssets)
     .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -323,6 +325,12 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       visualIdentity: r.assetVisualIdentity,
       usageRules: r.assetUsageRules,
       forbiddenVariations: r.assetForbiddenVariations,
+      // ASSET.PROMPTCARD.1 — same shared composer this ticket's own header
+      // comment warns against re-diverging: without this line, a filled
+      // Prompt Card would never reach `composeStoryboardShot`'s Subject part
+      // for a queued generation, even though the preview surfaces already
+      // select it (map page / ShotGenerationPanel).
+      promptCard: r.assetPromptCard,
     })),
     sequenceContext: {
       title: sequence.title,

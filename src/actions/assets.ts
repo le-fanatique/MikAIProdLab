@@ -64,10 +64,14 @@ export async function updateAsset(
   // every save of that page would silently clear it (the S4 trap in
   // reverse). Proven by tests/actions/updateAsset.test.ts.
   const lighting = formData.get("lighting")?.toString().trim() || null;
+  // ASSET.PROMPTCARD.1 — same reasoning as `lighting` above: it MUST also be
+  // present in the Edit Asset form or every save of that page would silently
+  // clear it once the field is displayed there.
+  const promptCard = formData.get("promptCard")?.toString().trim() || null;
 
   await db
     .update(assets)
-    .set({ name, type, description, notes, lighting, updatedAt: new Date().toISOString() })
+    .set({ name, type, description, notes, lighting, promptCard, updatedAt: new Date().toISOString() })
     .where(eq(assets.id, assetId));
 
   redirect(`/projects/${projectId}/assets/${assetId}`);
@@ -327,8 +331,21 @@ export async function updateAssetDetailsInline(input: {
   // fill `lighting` (LLMW.LIGHTING.1's field, B15a). Full replacement, same
   // as the other five fields: a blank value becomes null.
   lighting: string;
+  // ASSET.PROMPTCARD.1 — the Prompt Card field, written the same way as
+  // `lighting` above: full replacement, a blank value becomes null.
+  promptCard: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { assetId, projectId, description, notes, visualIdentity, usageRules, forbiddenVariations, lighting } = input;
+  const {
+    assetId,
+    projectId,
+    description,
+    notes,
+    visualIdentity,
+    usageRules,
+    forbiddenVariations,
+    lighting,
+    promptCard,
+  } = input;
 
   const [existing] = await db
     .select({
@@ -350,6 +367,7 @@ export async function updateAssetDetailsInline(input: {
   const finalUsageRules = usageRules.trim() || null;
   const finalForbiddenVariations = forbiddenVariations.trim() || null;
   const finalLighting = lighting.trim() || null;
+  const finalPromptCard = promptCard.trim() || null;
 
   // SCHEMA.BIBLE_FRESHNESS.1-R1 — this is the one place the Asset Bible
   // (visualIdentity/usageRules/forbiddenVariations) is written, but it is
@@ -379,6 +397,7 @@ export async function updateAssetDetailsInline(input: {
       usageRules: finalUsageRules,
       forbiddenVariations: finalForbiddenVariations,
       lighting: finalLighting,
+      promptCard: finalPromptCard,
       // Bible unchanged → leave the fingerprint column untouched (Drizzle
       // omits a key that is not in `.set()`). Two accepted consequences,
       // both resolving doubt toward the warning rather than toward silence:

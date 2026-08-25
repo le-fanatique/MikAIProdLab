@@ -85,6 +85,14 @@ export default async function EditAssetPage({ params }: Props) {
           defaultValue={asset.lighting}
           placeholder='e.g. "Overcast daylight, soft shadows, cool colour temperature"'
         />
+        <FormField
+          label="Prompt Card"
+          name="promptCard"
+          type="textarea"
+          rows={2}
+          defaultValue={asset.promptCard}
+          placeholder="3 to 5 geometric anchors, e.g. 'Anthropomorphic female macaque, weathered fur, calloused hands, scuffed utilitarian flight jacket over a faded undersuit'"
+        />
         {asset.type === "environment" && (
           <p className="text-xs text-[#6e767d] -mt-3">
             This is the field a Sequence set in this environment can inherit — use the

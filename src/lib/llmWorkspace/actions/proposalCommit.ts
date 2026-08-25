@@ -46,6 +46,12 @@ export function buildAssetBibleCommitArgs(input: {
   // through unchanged, the same treatment `description`/`notes` already get
   // above.
   existingLighting: string | null;
+  // ASSET.PROMPTCARD.1 — same treatment: `assetBible.generate` does not
+  // produce a Prompt Card (no descriptor, no assist yet — that is
+  // ASSET.PROMPTCARD.2), so it is carried through unchanged. Without this,
+  // approving an unrelated Bible proposal would silently erase an already
+  // written card, exactly the gap `ASSET.LIGHTING.PLACE.1` had for `lighting`.
+  existingPromptCard: string | null;
 }): Parameters<typeof ACTION_BINDINGS.updateAssetDetailsInline> {
   return [
     {
@@ -57,6 +63,7 @@ export function buildAssetBibleCommitArgs(input: {
       usageRules: preserveAssetBibleField(input.existingUsageRules ?? "", input.usageRules),
       forbiddenVariations: preserveAssetBibleField(input.existingForbiddenVariations ?? "", input.forbiddenVariations),
       lighting: input.existingLighting ?? "",
+      promptCard: input.existingPromptCard ?? "",
     },
   ];
 }

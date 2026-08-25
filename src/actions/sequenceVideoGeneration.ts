@@ -171,6 +171,8 @@ export async function buildSequenceVideoGenerationContext(
             visualIdentity: assets.visualIdentity,
             usageRules: assets.usageRules,
             forbiddenVariations: assets.forbiddenVariations,
+            // ASSET.PROMPTCARD.1 — same reasoning as the three columns above.
+            promptCard: assets.promptCard,
           })
           .from(shotAssets)
           .innerJoin(assets, eq(shotAssets.assetId, assets.id))
@@ -346,6 +348,7 @@ export async function buildSequenceVideoGenerationContext(
           visualIdentity: c.visualIdentity,
           usageRules: c.usageRules,
           forbiddenVariations: c.forbiddenVariations,
+          promptCard: c.promptCard,
         })),
         sequenceContext: {
           title: sequence.title,

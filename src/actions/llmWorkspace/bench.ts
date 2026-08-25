@@ -246,6 +246,7 @@ export async function commitBenchProposal(input: {
           usageRules: assets.usageRules,
           forbiddenVariations: assets.forbiddenVariations,
           lighting: assets.lighting,
+          promptCard: assets.promptCard,
         })
         .from(assets)
         .where(eq(assets.id, assetId));
@@ -275,6 +276,12 @@ export async function commitBenchProposal(input: {
         // field — always carried through unchanged, same as description/
         // notes when `preserved` excludes them.
         existingLighting: existing.lighting,
+        // ASSET.PROMPTCARD.1 — same treatment: no descriptor produces a
+        // Prompt Card, so it is always carried through unchanged. This is
+        // the exact trap ASSET.LIGHTING.PLACE.1 hit for `lighting`: without
+        // this line, committing an unrelated Bible proposal here would
+        // silently erase an already-written card.
+        existingPromptCard: existing.promptCard,
       });
       return ACTION_BINDINGS.updateAssetDetailsInline(...args);
     }

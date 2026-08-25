@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+﻿import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupTempDb, type TempDb } from "./helpers/tempDb";
 
 /**
@@ -51,6 +51,7 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
       usageRules: "New usage rules",
       forbiddenVariations: "New forbidden variations",
       existingLighting: "Existing lighting",
+      existingPromptCard: "Existing prompt card",
     });
 
     expect(args.description).toBe("Existing description");
@@ -59,6 +60,11 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
     // `lighting` as an output field, so this builder must carry it through
     // untouched, the same treatment description/notes get above.
     expect(args.lighting).toBe("Existing lighting");
+    // ASSET.PROMPTCARD.1 — same treatment for the Prompt Card: this is the
+    // non-clearing proof the ticket requires, the exact test
+    // ASSET.LIGHTING.PLACE.1 was missing for `lighting` until supervision
+    // added it.
+    expect(args.promptCard).toBe("Existing prompt card");
   });
 
   it("maps a null description/notes to an empty string, never to a value that would null the column", () => {
@@ -74,6 +80,7 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
       usageRules: "Usage rules",
       forbiddenVariations: "Forbidden variations",
       existingLighting: null,
+      existingPromptCard: null,
     });
 
     // `updateAssetDetailsInline` nulls a field only when it receives "" — a
@@ -84,6 +91,7 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
     expect(args.description).toBe("");
     expect(args.notes).toBe("");
     expect(args.lighting).toBe("");
+    expect(args.promptCard).toBe("");
   });
 
   it("applies preserveAssetBibleField: a generated field the user cleared falls back to its pre-generation value", () => {
@@ -100,6 +108,7 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
       usageRules: "",
       forbiddenVariations: "\n",
       existingLighting: null,
+      existingPromptCard: null,
     });
 
     expect(args.visualIdentity).toBe("Kept visual identity");
@@ -120,6 +129,7 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
       usageRules: "Edited by user",
       forbiddenVariations: "Edited by user",
       existingLighting: null,
+      existingPromptCard: null,
     });
 
     expect(args.visualIdentity).toBe("Edited by user");
@@ -138,6 +148,7 @@ describe("buildAssetBibleCommitArgs — assetBible.generate → updateAssetDetai
       usageRules: "u",
       forbiddenVariations: "f",
       existingLighting: null,
+      existingPromptCard: null,
     });
 
     expect(args.assetId).toBe(42);

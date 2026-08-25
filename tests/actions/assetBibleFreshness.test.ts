@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+﻿import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupTempDb, type TempDb } from "./helpers/tempDb";
 import { insertAsset, insertProject, readAsset } from "./helpers/fixtures";
 import { readAssetBibleFreshness } from "@/lib/assetBible/freshness";
@@ -45,6 +45,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     expect(result).toEqual({ ok: true });
 
@@ -65,6 +66,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
 
@@ -96,6 +98,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     await updateAssetDescriptionFieldInline({
       assetId,
@@ -115,6 +118,7 @@ describe("Asset Bible freshness capture — updateAssetDetailsInline", () => {
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
 
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
@@ -135,6 +139,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
 
@@ -150,6 +155,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("stale");
 
@@ -164,6 +170,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("current");
 
@@ -177,6 +184,7 @@ describe("Asset Bible freshness capture — SCHEMA.BIBLE_FRESHNESS.1-R1 (fingerp
       usageRules: "Always framed heroically.",
       forbiddenVariations: "Never shown slouching.",
       lighting: "",
+      promptCard: "",
     });
     expect(readAssetBibleFreshness(await readAsset(ctx, assetId))).toBe("stale");
   });

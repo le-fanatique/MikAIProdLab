@@ -347,6 +347,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             usageRules={asset.usageRules}
             forbiddenVariations={asset.forbiddenVariations}
             lighting={asset.lighting}
+            promptCard={asset.promptCard}
             returnTo={detailsReturnTo}
           />
           <p className="mt-3 border-t border-[#1e2124] pt-3 text-xs text-[#4b5158]">
@@ -466,6 +467,7 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
             usageRules={asset.usageRules}
             forbiddenVariations={asset.forbiddenVariations}
             lighting={asset.lighting}
+            promptCard={asset.promptCard}
             isConfigured={!!llmSettings.model.trim()}
           />
         </Card>

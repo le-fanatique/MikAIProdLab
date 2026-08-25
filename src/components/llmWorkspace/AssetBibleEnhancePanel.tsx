@@ -19,6 +19,10 @@ type Props = {
   // ASSET.LIGHTING.PLACE.1 — never generated here, carried through unchanged
   // by `buildAssetBibleCommitArgs`'s own `existingLighting`.
   lighting: string | null;
+  // ASSET.PROMPTCARD.1 — same treatment as `lighting` above: no descriptor
+  // produces it, so it is carried through unchanged by
+  // `buildAssetBibleCommitArgs`'s own `existingPromptCard`.
+  promptCard: string | null;
   isConfigured: boolean;
 };
 
@@ -40,6 +44,7 @@ export default function AssetBibleEnhancePanel({
   usageRules: existingUsageRules,
   forbiddenVariations: existingForbiddenVariations,
   lighting: existingLighting,
+  promptCard: existingPromptCard,
   isConfigured,
 }: Props) {
   const [justUpdated, setJustUpdated] = useState(false);
@@ -92,6 +97,7 @@ export default function AssetBibleEnhancePanel({
             usageRules: current.usageRules,
             forbiddenVariations: current.forbiddenVariations,
             existingLighting,
+            existingPromptCard,
           });
           return ACTION_BINDINGS.updateAssetDetailsInline(...args);
         },

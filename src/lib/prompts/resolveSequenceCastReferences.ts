@@ -41,6 +41,8 @@ export type SequenceCastRow = {
   visualIdentity: AssetRow["visualIdentity"];
   usageRules: AssetRow["usageRules"];
   forbiddenVariations: AssetRow["forbiddenVariations"];
+  // ASSET.PROMPTCARD.1 — same reasoning as the three fields above.
+  promptCard: AssetRow["promptCard"];
 };
 
 export type SequenceAssetReferenceRow = {
@@ -92,6 +94,7 @@ export async function resolveSequenceCastReferences({
             visualIdentity: assets.visualIdentity,
             usageRules: assets.usageRules,
             forbiddenVariations: assets.forbiddenVariations,
+            promptCard: assets.promptCard,
           })
           .from(shotAssets)
           .innerJoin(assets, eq(shotAssets.assetId, assets.id))

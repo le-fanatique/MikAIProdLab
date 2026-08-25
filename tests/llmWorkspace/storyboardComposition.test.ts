@@ -93,6 +93,61 @@ describe("composeStoryboardShot", () => {
     expect(text).toContain("Tense");
   });
 
+  // ASSET.PROMPTCARD.1 — the ticket's own required filet, one test per
+  // branch. The absence branch is the one that protects the fourteen assets
+  // with no card yet: it must prove the render is byte-for-byte unchanged
+  // from before this ticket, not merely "still contains Mara".
+  describe("buildSubject — the Prompt Card branch (ASSET.PROMPTCARD.1)", () => {
+    it("renders name — type — card, dropping visualIdentity and description, when the asset has a Prompt Card", () => {
+      const result = composeStoryboardShot(
+        inputWith({
+          context: contextWith({
+            assetBibles: [
+              {
+                assetId: 1,
+                assetName: "Mara",
+                visualIdentity: "Cropped hair, scarred jaw.",
+                promptCard: "Anthropomorphic macaque, weathered fur, calloused hands.",
+              },
+            ],
+          }),
+        })
+      );
+
+      const subject = result.parts.find((p) => p.id === "subject")!;
+      expect(subject.text).toBe(
+        "- Mara — character — Anthropomorphic macaque, weathered fur, calloused hands."
+      );
+      expect(subject.text).not.toContain("Cropped hair, scarred jaw.");
+      expect(subject.text).not.toContain("Lead, mid-30s.");
+    });
+
+    it("renders exactly the pre-card fallback, byte for byte, when the asset has no Prompt Card", () => {
+      // No `promptCard` at all — the case of every one of today's assets.
+      const withoutCard = composeStoryboardShot(inputWith());
+      const cardless = withoutCard.parts.find((p) => p.id === "subject")!;
+      expect(cardless.text).toBe("- Mara — character — Cropped hair, scarred jaw. — Lead, mid-30s.");
+
+      // An explicit blank/whitespace-only card must fall back exactly the
+      // same way as a missing one — never render an empty anchor.
+      const blankCard = composeStoryboardShot(
+        inputWith({
+          context: contextWith({
+            assetBibles: [
+              {
+                assetId: 1,
+                assetName: "Mara",
+                visualIdentity: "Cropped hair, scarred jaw.",
+                promptCard: "   ",
+              },
+            ],
+          }),
+        })
+      );
+      expect(blankCard.parts.find((p) => p.id === "subject")!.text).toBe(cardless.text);
+    });
+  });
+
   it("keeps the Shot Prompt as an ingredient — it stops being the only one, it does not disappear", () => {
     const { text, parts } = composeStoryboardShot(inputWith());
 

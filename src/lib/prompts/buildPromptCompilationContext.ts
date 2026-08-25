@@ -123,6 +123,8 @@ export type PromptCompilationAssetBibleInput = {
   visualIdentity?: string | null;
   usageRules?: string | null;
   forbiddenVariations?: string | null;
+  /** ASSET.PROMPTCARD.1 — the 3-5 anchor short form. See `PromptCompilationAssetBible.promptCard`. */
+  promptCard?: string | null;
 };
 
 export type PromptCompilationAssetBible = {
@@ -132,6 +134,13 @@ export type PromptCompilationAssetBible = {
   visualIdentity: string | null;
   usageRules: string | null;
   forbiddenVariations: string | null;
+  /**
+   * ASSET.PROMPTCARD.1 — the short, approved form of the Bible (3-5 anchors),
+   * consumed by `buildSubject` (`composition/storyboardShot.ts`) in place of
+   * `visualIdentity` + `description` when present. `null` when the asset has
+   * no card yet, which is every asset until the author writes one.
+   */
+  promptCard: string | null;
 };
 
 export type PromptCompilationSequenceContextInput = {
@@ -295,6 +304,7 @@ function buildAssetBibles(
       visualIdentity: trimOrNull(bible.visualIdentity),
       usageRules: trimOrNull(bible.usageRules),
       forbiddenVariations: trimOrNull(bible.forbiddenVariations),
+      promptCard: trimOrNull(bible.promptCard),
     });
   }
 

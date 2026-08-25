@@ -189,6 +189,7 @@ describe("buildPromptCompilerUserMessage", () => {
           visualIdentity: "Tall, weathered coat.",
           usageRules: "Always framed with her tools.",
           forbiddenVariations: "Never smiling.",
+          promptCard: null,
         },
       ],
       sequenceContext: {

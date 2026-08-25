@@ -117,6 +117,34 @@ describe("commitBenchProposal — assetBible.generate → updateAssetDetailsInli
     const after = await readAsset(ctx, assetId);
     expect(after.lighting).toBe("Soft key from the left, cool ambient fill");
   });
+
+  // ASSET.PROMPTCARD.1 §8 — the ticket's own required non-clearing test, same
+  // shape as `lighting`'s above: `assetBible.generate` never declares
+  // `promptCard` as an output field, so approving one must never null it.
+  // This is the trap ASSET.LIGHTING.PLACE.1 hit and had to have this test
+  // added by supervision for `lighting` — not repeated here.
+  it("preserves the asset's existing prompt card, untouched by an Asset Bible approval", async () => {
+    const projectId = await insertProject(ctx, "Asset bible prompt card project");
+    const assetId = await insertAsset(ctx, projectId, {
+      description: "Existing description",
+      notes: "Existing notes",
+      promptCard: "Weathered fur, calloused hands, scuffed flight jacket",
+    });
+
+    const result = await commitBenchProposal({
+      templateId: "assetBible.generate",
+      ids: { projectId, assetId },
+      values: {
+        visualIdentity: "Approved visual identity",
+        usageRules: "Approved usage rules",
+        forbiddenVariations: "Approved forbidden variations",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const after = await readAsset(ctx, assetId);
+    expect(after.promptCard).toBe("Weathered fur, calloused hands, scuffed flight jacket");
+  });
 });
 
 describe("commitBenchProposal — chain refusal", () => {

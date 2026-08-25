@@ -16,6 +16,9 @@ const FILLED = {
   // ASSET.LIGHTING.PLACE.1 — the sixth field this full-replacement action
   // now writes.
   lighting: "Old lighting",
+  // ASSET.PROMPTCARD.1 — the seventh field this full-replacement action now
+  // writes.
+  promptCard: "Old prompt card",
 };
 
 beforeAll(async () => {
@@ -28,7 +31,7 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("updateAssetDetailsInline — exact write", () => {
-  it("writes the six text fields and touches no other column", async () => {
+  it("writes the seven text fields and touches no other column", async () => {
     const assetId = await insertAsset(ctx, projectId, {
       description: "Old",
       notes: "Old",
@@ -36,6 +39,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       usageRules: "Old",
       forbiddenVariations: "Old",
       lighting: "Old",
+      promptCard: "Old",
     });
     const before = await readAsset(ctx, assetId);
 
@@ -44,7 +48,7 @@ describe("updateAssetDetailsInline — exact write", () => {
     const after = await readAsset(ctx, assetId);
     expect(result).toEqual({ ok: true });
     // SCHEMA.BIBLE_FRESHNESS.1 (S1b) — `bibleSourceFingerprint` is now
-    // written on every call alongside the six text fields, from `null`
+    // written on every call alongside the seven text fields, from `null`
     // (this fixture's insert never sets it) to the computed fingerprint.
     expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual([
       "bibleSourceFingerprint",
@@ -52,6 +56,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       "forbiddenVariations",
       "lighting",
       "notes",
+      "promptCard",
       "usageRules",
       "visualIdentity",
     ]);
@@ -62,6 +67,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       usageRules: after.usageRules,
       forbiddenVariations: after.forbiddenVariations,
       lighting: after.lighting,
+      promptCard: after.promptCard,
     }).toEqual(FILLED);
     // name / type / orderIndex / projectId are outside the action's scope.
     expect(after.name).toBe(before.name);
@@ -86,6 +92,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       usageRules: "\n\t",
       forbiddenVariations: "",
       lighting: "   ",
+      promptCard: "   ",
     });
 
     const after = await readAsset(ctx, assetId);
@@ -95,6 +102,7 @@ describe("updateAssetDetailsInline — exact write", () => {
     expect(after.usageRules).toBeNull();
     expect(after.forbiddenVariations).toBeNull();
     expect(after.lighting).toBeNull();
+    expect(after.promptCard).toBeNull();
   });
 
   it("overwrites every field on each call — the payload is a full replacement", async () => {
@@ -111,6 +119,7 @@ describe("updateAssetDetailsInline — exact write", () => {
       usageRules: "",
       forbiddenVariations: "",
       lighting: "",
+      promptCard: "",
     });
 
     const after = await readAsset(ctx, assetId);
@@ -120,6 +129,7 @@ describe("updateAssetDetailsInline — exact write", () => {
     expect(after.usageRules).toBeNull();
     expect(after.forbiddenVariations).toBeNull();
     expect(after.lighting).toBeNull();
+    expect(after.promptCard).toBeNull();
   });
 
   // ASSET.LIGHTING.PLACE.1 §6 — the ticket's own required test: `lighting`
@@ -145,6 +155,26 @@ describe("updateAssetDetailsInline — exact write", () => {
     expect(after.lighting).toBe("Soft key from the left, cool ambient fill");
     expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual(["lighting"]);
   });
+
+  // ASSET.PROMPTCARD.1 — the ticket's own required test, same shape as
+  // `lighting`'s above: `promptCard` is written, and no other column changes
+  // when the rest of the payload repeats the stored values.
+  it("writes promptCard and touches no other column when the rest of the payload repeats the stored values", async () => {
+    const assetId = await insertAsset(ctx, projectId, FILLED);
+    const before = await readAsset(ctx, assetId);
+
+    const result = await updateAssetDetailsInline({
+      ...FILLED,
+      assetId,
+      projectId,
+      promptCard: "Weathered fur, calloused hands, scuffed flight jacket",
+    });
+
+    const after = await readAsset(ctx, assetId);
+    expect(result).toEqual({ ok: true });
+    expect(after.promptCard).toBe("Weathered fur, calloused hands, scuffed flight jacket");
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual(["promptCard"]);
+  });
 });
 
 describe("updateAssetDetailsInline — foreign chain refusal", () => {
@@ -161,6 +191,7 @@ describe("updateAssetDetailsInline — foreign chain refusal", () => {
       usageRules: "Injected",
       forbiddenVariations: "Injected",
       lighting: "Injected",
+      promptCard: "Injected",
     });
 
     expect(result).toEqual({ ok: false, error: "Asset not found." });

@@ -128,23 +128,32 @@ function joinFragments(fragments: Array<string | null>, separator: string): stri
 
 /**
  * Subject — who is in the shot. The cast in its stored order (never re-sorted:
- * that order is the user's), each with what distinguishes it. `visualIdentity`
- * from the Asset Bible is included when present because it is the Bible's
- * answer to exactly this question; `description` carries the rest.
+ * that order is the user's), each with what distinguishes it.
+ *
+ * ASSET.PROMPTCARD.1 — when the asset's Prompt Card is set, it **replaces**
+ * `visualIdentity` and `description` rather than joining them: the audit
+ * (`docs/SHOT_PROMPT_SD25_AUDIT.md` §8-9) measured the two long fields as
+ * repeating each other, and the card is deliberately the short, curated
+ * answer to this exact question (3-5 anchors), not one more paragraph to
+ * concatenate. Fourteen assets have no card yet — the fallback below (the
+ * pre-existing render, unchanged) is what protects them, not a stopgap.
  */
 function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
   const lines = cast
-    .map((asset) =>
-      joinFragments(
-        [
-          nonEmpty(asset.assetName),
-          nonEmpty(asset.assetType),
-          nonEmpty(asset.assetBible?.visualIdentity ?? null),
-          nonEmpty(asset.description),
-        ],
+    .map((asset) => {
+      const card = nonEmpty(asset.assetBible?.promptCard ?? null);
+      return joinFragments(
+        card
+          ? [nonEmpty(asset.assetName), nonEmpty(asset.assetType), card]
+          : [
+              nonEmpty(asset.assetName),
+              nonEmpty(asset.assetType),
+              nonEmpty(asset.assetBible?.visualIdentity ?? null),
+              nonEmpty(asset.description),
+            ],
         " — "
-      )
-    )
+      );
+    })
     .filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.map((line) => `- ${line}`).join("\n") : null;
 }
