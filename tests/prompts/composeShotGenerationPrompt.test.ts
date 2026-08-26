@@ -8,6 +8,7 @@ import {
 } from "@/lib/prompts/composeShotGenerationPrompt";
 import { buildPromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
+import type { WorkflowInput } from "@/lib/comfy/parseWorkflow";
 
 function baseContext() {
   return buildPromptCompilationContext({
@@ -205,7 +206,7 @@ describe("buildOrderedShotReferenceInputs — @ImageN follows the batch selectio
   it("orders references by the batch's own selection when a Dynamic Batch node is usable — mutation 2's exact case", () => {
     // Selection order is the reverse of `availableImages`' own (DB) order.
     const batchSelectedIds = ["asset-1-3", "shot-1", "asset-1-2"];
-    const references = buildOrderedShotReferenceInputs({ hasDynamicBatch: true, batchSelectedIds, availableImages });
+    const references = buildOrderedShotReferenceInputs({ hasDynamicBatch: true, batchSelectedIds, availableImages, imageInputs: [] });
     expect(references.map((r) => r.refId)).toEqual(["asset-1-3", "shot-1", "asset-1-2"]);
 
     const context = buildPromptCompilationContext({
@@ -222,15 +223,6 @@ describe("buildOrderedShotReferenceInputs — @ImageN follows the batch selectio
     expect(context.imageMap["@Image3"].refId).toBe("asset-1-2");
   });
 
-  it("falls back to the available order when there is no usable Dynamic Batch node", () => {
-    const references = buildOrderedShotReferenceInputs({
-      hasDynamicBatch: false,
-      batchSelectedIds: ["asset-1-3", "shot-1", "asset-1-2"],
-      availableImages,
-    });
-    expect(references.map((r) => r.refId)).toEqual(["shot-1", "asset-1-2", "asset-1-3"]);
-  });
-
   // REFROLE.INTENT.1 — the job-level role overlay replaces the library's own
   // stored role for that id only, and never touches the others.
   it("applies roleOverrides in place of the library's stored role, for the overridden id only", () => {
@@ -239,6 +231,7 @@ describe("buildOrderedShotReferenceInputs — @ImageN follows the batch selectio
       batchSelectedIds: ["asset-1-2", "asset-1-3"],
       availableImages,
       roleOverrides: { "asset-1-2": "environment" },
+      imageInputs: [],
     });
     expect(references.find((r) => r.refId === "asset-1-2")!.role).toBe("environment");
     expect(references.find((r) => r.refId === "asset-1-3")!.role).toBe("environment");
@@ -249,8 +242,93 @@ describe("buildOrderedShotReferenceInputs — @ImageN follows the batch selectio
       hasDynamicBatch: true,
       batchSelectedIds: ["asset-1-2"],
       availableImages,
+      imageInputs: [],
     });
     expect(references[0].role).toBe("character");
+  });
+});
+
+// SHOTPROMPT.REFS.1 — the non-batch cases: references are only ever those
+// actually assigned per node, in the workflow's own node order. This is the
+// filet §6 calls for: one test per case of §4, the third ("no image input
+// at all") being the one the author actually hit on shot 999230.
+describe("buildOrderedShotReferenceInputs — SHOTPROMPT.REFS.1, no Dynamic Batch node", () => {
+  const availableImages: RuntimeImageOption[] = [
+    { id: "asset-1-2", source: "asset", imagePath: "/b.png", label: "B", role: "character", assetName: "Azelle", assetType: "character" },
+    { id: "asset-2-5", source: "asset", imagePath: "/c.png", label: "C", role: "environment", assetName: "Corporate Corridors", assetType: "environment" },
+    { id: "shot-9", source: "shot", imagePath: "/d.png", label: "D", role: null },
+  ];
+
+  function imageInput(nodeId: string): WorkflowInput {
+    return { nodeId, title: "Image (Input)", label: "Image", classType: "LoadImage", kind: "image", defaultValue: null };
+  }
+
+  it("case 2 — orders by the workflow's own node order, one line per node actually assigned, never per asset", () => {
+    // Deliberately out of the workflow's own node order, and the same asset
+    // ("asset-1-2") assigned twice, at two different nodes — mutation 3's
+    // exact case: two real sends must produce two lines, never deduplicated.
+    const imageInputs = [imageInput("30"), imageInput("12"), imageInput("45")];
+    const selectedImageByNodeId = { "45": "shot-9", "12": "asset-1-2", "30": "asset-2-5" };
+
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: false,
+      batchSelectedIds: [],
+      availableImages,
+      imageInputs,
+      selectedImageByNodeId,
+    });
+
+    // Node order is 30, 12, 45 (as parsed) -> asset-2-5, asset-1-2, shot-9.
+    expect(references.map((r) => r.refId)).toEqual(["asset-2-5", "asset-1-2", "shot-9"]);
+  });
+
+  it("case 2 — a node with no assignment contributes no line", () => {
+    const imageInputs = [imageInput("1"), imageInput("2")];
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: false,
+      batchSelectedIds: [],
+      availableImages,
+      imageInputs,
+      selectedImageByNodeId: { "1": "asset-1-2" },
+    });
+    expect(references.map((r) => r.refId)).toEqual(["asset-1-2"]);
+  });
+
+  it("case 3 — no image input in the workflow at all yields no references (never the full available list)", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: false,
+      batchSelectedIds: [],
+      availableImages,
+      imageInputs: [],
+      selectedImageByNodeId: undefined,
+    });
+    expect(references).toEqual([]);
+
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A corridor." },
+      castAssets: [
+        { assetId: 1, assetName: "Azelle", assetType: "character" },
+        { assetId: 2, assetName: "Corporate Corridors", assetType: "environment" },
+      ],
+      references,
+      assetBibles: [],
+      sources: { casting: true, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    // The decisive assertion: the part is ABSENT, never rendered empty.
+    expect(result.sections.some((s) => s.id === "subjectDefinition")).toBe(false);
+    expect(result.text).not.toContain("Subject Definition");
+  });
+
+  it("case 3 — image inputs exist but nothing is assigned yet yields no references either", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: false,
+      batchSelectedIds: [],
+      availableImages,
+      imageInputs: [imageInput("1")],
+      selectedImageByNodeId: {},
+    });
+    expect(references).toEqual([]);
   });
 });
 
@@ -267,6 +345,7 @@ describe("REFROLE.INTENT.1 — the role override changes the rendered named mode
       batchSelectedIds: ["asset-1-2"],
       availableImages,
       roleOverrides: { "asset-1-2": "environment" },
+      imageInputs: [],
     });
     const context = buildPromptCompilationContext({
       shot: { shotPrompt: "A shot." },
@@ -284,6 +363,7 @@ describe("REFROLE.INTENT.1 — the role override changes the rendered named mode
       hasDynamicBatch: true,
       batchSelectedIds: ["asset-1-2"],
       availableImages,
+      imageInputs: [],
     });
     const context = buildPromptCompilationContext({
       shot: { shotPrompt: "A shot." },
@@ -324,6 +404,15 @@ describe("SHOTPROMPT.SHOT.1 filet — the three Shot surfaces call the same comp
     const source = readFileSync(filePath, "utf8");
     expect(source).toContain("composeShotGenerationPrompt({");
     expect(source).toContain('from "@/lib/prompts/composeShotGenerationPrompt"');
+  });
+
+  // SHOTPROMPT.REFS.1 — the new parameter must reach all three surfaces, or
+  // one of them silently keeps declaring images that were never sent.
+  it.each(surfaces)("%s passes imageInputs/selectedImageByNodeId to buildOrderedShotReferenceInputs(...)", (filePath) => {
+    const source = readFileSync(filePath, "utf8");
+    expect(source).toContain("buildOrderedShotReferenceInputs({");
+    expect(source).toMatch(/imageInputs:\s*(parsed\.inputs|parsed\?\.inputs \?\? \[\])/);
+    expect(source).toContain("selectedImageByNodeId");
   });
 
   // SHOTPROMPT.STYLE.1 Part A (regression filet) — none of the three

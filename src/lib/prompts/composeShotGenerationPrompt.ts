@@ -30,12 +30,12 @@
 //
 // Pure function: no DB, no browser, no network, no Date.now()/Math.random().
 // `context` must already be built by `buildPromptCompilationContext` from a
-// `references` array in the caller's own selection order
-// (`orderStoryboardReferences` — see `buildOrderedShotReferenceInputs`
-// below) — `@ImageN` is never decided here, only read. `lighting` and
-// `projectStyle` must already be resolved (`resolveStoryboardLighting`,
-// `resolveProjectStyleTextForComposition`) — this module never re-resolves
-// either, exactly like `composeStoryboardShot`'s own `lighting` input.
+// `references` array in the caller's own selection order (see
+// `buildOrderedShotReferenceInputs` below) — `@ImageN` is never decided
+// here, only read. `lighting` and `projectStyle` must already be resolved
+// (`resolveStoryboardLighting`, `resolveProjectStyleTextForComposition`) —
+// this module never re-resolves either, exactly like `composeStoryboardShot`'s
+// own `lighting` input.
 // ---------------------------------------------------------------------------
 
 import { compileShotPrompt, type ShotPromptCompileKind } from "./compileShotPrompt";
@@ -48,14 +48,27 @@ import { getGuideModeForRole } from "@/lib/llmWorkspace/conformation/profiles/gu
 import { orderStoryboardReferences } from "./orderStoryboardReferences";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { resolveOverriddenRole } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import type { WorkflowInput } from "@/lib/comfy/parseWorkflow";
 
 // ---------------------------------------------------------------------------
-// Reference ordering — IND.REFORDER.1's rule applied to a single Shot.
-// `@ImageN` must designate the image actually sent at that position: the
-// batch's own selected order/subset when a Dynamic Batch node is usable,
-// never the raw Storyboard/cast order. Shared by all three composer callers
-// so none of them can reimplement `orderStoryboardReferences` slightly
-// differently (SHOTPROMPT.SHOT.1's filet mutation 2).
+// Reference ordering — IND.REFORDER.1's rule applied to a single Shot, and
+// SHOTPROMPT.REFS.1's correction of its non-batch case.
+//
+// `@ImageN` must designate the image actually sent at that position:
+//   - a Dynamic Batch node usable → its own selected order/subset
+//     (`orderStoryboardReferences`, reused unchanged — already correct);
+//   - no batch, but images assigned per node (`selectedImageByNodeId`) →
+//     those images, in the workflow's own deterministic node order
+//     (`orderShotReferencesByNodeAssignment` below) — never
+//     `orderStoryboardReferences`'s "everything selectable" fallback, which
+//     is right only for its other caller, the Sequence Storyboard page
+//     (`docs/WHERE_THE_RULES_LIVE.md`);
+//   - no image inputs sent at all → no references, so
+//     `composeShotGenerationPrompt` renders no `Subject Definition` block —
+//     never an empty one.
+//
+// Shared by all three composer callers so none of them can reimplement this
+// rule slightly differently (SHOTPROMPT.SHOT.1's filet mutation 2).
 // ---------------------------------------------------------------------------
 
 export type BuildOrderedShotReferenceInputsParams = {
@@ -63,7 +76,7 @@ export type BuildOrderedShotReferenceInputsParams = {
   hasDynamicBatch: boolean;
   /** The batch's own selection, in its own order — ignored when `hasDynamicBatch` is false. */
   batchSelectedIds: string[];
-  /** Every selectable reference for this Shot (shot + cast asset references), in display order — the fallback when there is no batch node. */
+  /** Every selectable reference for this Shot (shot + cast asset references), by id — the metadata lookup for whichever ids actually get ordered below. Never itself the order, on the Shot path (SHOTPROMPT.REFS.1). */
   availableImages: RuntimeImageOption[];
   /**
    * REFROLE.INTENT.1 — the job-level role overlay from the Dynamic Batch
@@ -74,7 +87,60 @@ export type BuildOrderedShotReferenceInputsParams = {
    * this ticket.
    */
   roleOverrides?: Record<string, string>;
+  /**
+   * SHOTPROMPT.REFS.1 — the workflow's own parsed inputs
+   * (`parseComfyWorkflow(workflowJson).inputs`), used only when
+   * `hasDynamicBatch` is false, to read the image-kind ones in the
+   * workflow's own node order. That order is not invented here: ComfyUI
+   * node ids are the workflow JSON's own object keys, and V8 (like every
+   * spec-conformant engine) visits integer-like keys in ascending numeric
+   * order regardless of source order — `parseComfyWorkflow`'s
+   * `detectWorkflowInputs` already relies on exactly this, and
+   * `comfyServerClient.ts`'s `extractComfyOutputs` documents the same
+   * language rule for its own "between nodes" ordering. Deterministic
+   * across runs for a given workflow, never invented.
+   */
+  imageInputs: WorkflowInput[];
+  /**
+   * SHOTPROMPT.REFS.1 — node id -> the image id actually assigned there,
+   * exactly `buildGenerationPayload`'s own `selectedImageByNodeId`. Used
+   * only when `hasDynamicBatch` is false: a workflow image node with no
+   * entry here contributes no reference line, because no image was ever
+   * actually sent for it. Absent entirely (no image inputs assigned, or no
+   * image inputs at all) yields zero references — the caller renders no
+   * `Subject Definition` block at all, never an empty one.
+   */
+  selectedImageByNodeId?: Record<string, string>;
 };
+
+/**
+ * SHOTPROMPT.REFS.1 — case 2/3 of the Shot path's own ordering rule:
+ * without a Dynamic Batch node, `@ImageN` must be the images actually
+ * assigned per node, in the workflow's own node order, never "everything
+ * selectable" (`orderStoryboardReferences`'s fallback, which is correct only
+ * for its other caller, the Sequence Storyboard page — see
+ * `docs/WHERE_THE_RULES_LIVE.md`). An asset whose two different images are
+ * each assigned to a different node yields two lines — this orders by node
+ * assignment, it never deduplicates by asset. A workflow with no image
+ * inputs, or no assignments yet, yields `[]`: no batch, no per-node
+ * assignment, nothing was actually sent.
+ */
+function orderShotReferencesByNodeAssignment(params: {
+  imageInputs: WorkflowInput[];
+  selectedImageByNodeId?: Record<string, string>;
+}): string[] {
+  const selected = params.selectedImageByNodeId;
+  if (!selected) return [];
+
+  const orderedIds: string[] = [];
+  for (const input of params.imageInputs) {
+    if (input.kind !== "image") continue;
+    const imageId = selected[input.nodeId];
+    if (!imageId) continue;
+    orderedIds.push(imageId);
+  }
+  return orderedIds;
+}
 
 export function buildOrderedShotReferenceInputs(
   params: BuildOrderedShotReferenceInputsParams
@@ -87,12 +153,27 @@ export function buildOrderedShotReferenceInputs(
   );
   const metaByRefId = new Map(orderable.map((img) => [img.id, img]));
 
-  const { references } = orderStoryboardReferences({
-    hasDynamicBatch: params.hasDynamicBatch,
-    batchSelectedIds: params.batchSelectedIds,
-    availableImages: orderable,
-    metaByRefId,
-  });
+  // Dynamic Batch reuses `orderStoryboardReferences` unchanged — already
+  // correct, it returns the batch's own selection regardless of
+  // `availableImages`. Without a batch node, the Shot path orders by actual
+  // per-node assignment instead of that module's "everything selectable"
+  // fallback (SHOTPROMPT.REFS.1 — see this file's own header and
+  // `docs/WHERE_THE_RULES_LIVE.md`).
+  const orderedIds = params.hasDynamicBatch
+    ? orderStoryboardReferences({
+        hasDynamicBatch: true,
+        batchSelectedIds: params.batchSelectedIds,
+        availableImages: orderable,
+        metaByRefId,
+      }).orderedIds
+    : orderShotReferencesByNodeAssignment({
+        imageInputs: params.imageInputs,
+        selectedImageByNodeId: params.selectedImageByNodeId,
+      });
+
+  const references = orderedIds
+    .map((id) => metaByRefId.get(id))
+    .filter((meta): meta is RuntimeImageOption & { source: "shot" | "asset" } => meta !== undefined);
 
   return references.map((img) => ({
     refId: img.id,

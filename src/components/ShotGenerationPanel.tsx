@@ -413,7 +413,16 @@ export default async function ShotGenerationPanel({
       assetType: r.assetType,
       description: r.assetDescription,
     })),
-    references: buildOrderedShotReferenceInputs({ hasDynamicBatch: batchDetectionOk, batchSelectedIds, availableImages, roleOverrides: batchRoleOverrides }),
+    references: buildOrderedShotReferenceInputs({
+      hasDynamicBatch: batchDetectionOk,
+      batchSelectedIds,
+      availableImages,
+      roleOverrides: batchRoleOverrides,
+      // SHOTPROMPT.REFS.1 — case 2/3: `@ImageN` follows actual per-node
+      // assignment (never "everything selectable") when there is no batch.
+      imageInputs: parsed?.inputs ?? [],
+      selectedImageByNodeId,
+    }),
     assetBibles: assignedRows.map((r) => ({
       assetId: r.assetId,
       assetName: r.assetName,

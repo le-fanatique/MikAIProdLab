@@ -317,7 +317,16 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       assetType: r.assetType,
       description: r.assetDescription,
     })),
-    references: buildOrderedShotReferenceInputs({ hasDynamicBatch, batchSelectedIds, availableImages, roleOverrides: batchRoleOverrides }),
+    references: buildOrderedShotReferenceInputs({
+      hasDynamicBatch,
+      batchSelectedIds,
+      availableImages,
+      roleOverrides: batchRoleOverrides,
+      // SHOTPROMPT.REFS.1 — case 2/3: `@ImageN` follows actual per-node
+      // assignment (never "everything selectable") when there is no batch.
+      imageInputs: parsed.inputs,
+      selectedImageByNodeId: args.selectedImageByNodeId,
+    }),
     assetBibles: assignedRows.map((r) => ({
       assetId: r.assetId,
       assetName: r.assetName,
