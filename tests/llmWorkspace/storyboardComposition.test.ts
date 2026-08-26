@@ -193,6 +193,64 @@ describe("composeStoryboardShot", () => {
     });
   });
 
+  // SHOTPROMPT.DERIVE.1 — `shot.description` reaches the composed prompt
+  // through this part, and this part only: it used to reach it indirectly,
+  // through `resolveShotPromptWithDefault` copying it into `shotPrompt`.
+  describe("generalDescription — the description's own part (SHOTPROMPT.DERIVE.1)", () => {
+    it("renders shot.description under 'General Description', between Subject and Action", () => {
+      const result = composeStoryboardShot(
+        inputWith({
+          context: buildPromptCompilationContext({
+            shot: {
+              title: "Rooftop standoff",
+              description: "Azelle steadies herself against the vibration, scans the failing consoles.",
+              actionPitch: "Mara steps out of cover.",
+              shotPrompt: "Mara stands on the rooftop, city behind her.",
+              durationSeconds: 5,
+            },
+            castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character", description: "Lead, mid-30s." }],
+            references: [],
+            assetBibles: [],
+            sequenceContext: { locationHint: "Rooftop, dusk", mood: "Tense" },
+            projectContext: { name: "Nightfall", pitch: "A courier runs the last mile." },
+            sources: { ...ALL_SOURCES },
+          }),
+        })
+      );
+
+      const ids = result.parts.map((p) => p.id);
+      expect(ids.indexOf("subject")).toBeLessThan(ids.indexOf("generalDescription"));
+      expect(ids.indexOf("generalDescription")).toBeLessThan(ids.indexOf("action"));
+
+      const part = result.parts.find((p) => p.id === "generalDescription")!;
+      expect(part.label).toBe("General Description");
+      expect(part.text).toBe("Azelle steadies herself against the vibration, scans the failing consoles.");
+      expect(result.text).toContain(
+        "General Description: Azelle steadies herself against the vibration, scans the failing consoles."
+      );
+    });
+
+    it("is absent, never rendered empty, when the description is missing or blank", () => {
+      const withoutDescription = composeStoryboardShot(inputWith());
+      expect(withoutDescription.parts.some((p) => p.id === "generalDescription")).toBe(false);
+      expect(withoutDescription.text).not.toContain("General Description:");
+
+      const withBlankDescription = composeStoryboardShot(
+        inputWith({
+          context: buildPromptCompilationContext({
+            shot: { title: "x", description: "   ", shotPrompt: "y" },
+            castAssets: [],
+            references: [],
+            assetBibles: [],
+            sources: { ...ALL_SOURCES },
+          }),
+        })
+      );
+      expect(withBlankDescription.parts.some((p) => p.id === "generalDescription")).toBe(false);
+      expect(withBlankDescription.text).not.toContain("General Description:");
+    });
+  });
+
   it("keeps the Shot Prompt as an ingredient — it stops being the only one, it does not disappear", () => {
     const { text, parts } = composeStoryboardShot(inputWith());
 

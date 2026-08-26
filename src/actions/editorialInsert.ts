@@ -32,7 +32,6 @@ import { eq, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getNomenclatureSettings, getLLMConfig } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
-import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 import { callLLMJson } from "@/lib/llm";
 import { outdateSequenceResultsForSequence } from "./sequenceResults";
 import type { LLMPrompt } from "@/types/llm";
@@ -112,7 +111,8 @@ export async function insertShotInSequenceFromEditorialContext(
   const title = input.title?.trim() || "Placeholder";
   const description = input.description?.trim() || null;
   const continuityNotes = input.notes?.trim() || null;
-  const shotPrompt = resolveShotPromptWithDefault({ description, actionPitch: null, cameraPitch: null });
+  // SHOTPROMPT.DERIVE.1 — no `shot_prompt` derivation here: this insertion
+  // never carries one, so the new shot starts with none.
 
   const { shotTemplate } = await getNomenclatureSettings();
   const existingCodes = await db.select({ shotCode: shots.shotCode }).from(shots).where(eq(shots.sequenceId, sequenceId));
@@ -137,7 +137,6 @@ export async function insertShotInSequenceFromEditorialContext(
         description,
         durationSeconds: targetDurationSeconds,
         continuityNotes,
-        shotPrompt,
         orderIndex: insertOrderIndex,
         createdAt: now,
         updatedAt: now,

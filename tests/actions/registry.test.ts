@@ -1010,7 +1010,7 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
     expect(rows[3].title).toBe("New at end");
   });
 
-  it("shotCode is generated from the nomenclature template, never the JSON's own value; shotPrompt is derived; approvedVideoPath/trimInSeconds/trimOutSeconds stay null", async () => {
+  it("shotCode is generated from the nomenclature template, never the JSON's own value; shotPrompt is never derived (SHOTPROMPT.DERIVE.1); approvedVideoPath/trimInSeconds/trimOutSeconds stay null", async () => {
     const sequenceId = await insertSequence(ctx, projectId);
 
     const target = await captureRedirect(() =>
@@ -1035,7 +1035,9 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
     const created = rows[0];
     expect(created.shotCode).not.toBe("MODEL_PROPOSED_CODE");
     expect(created.shotCode).toMatch(/^Sh_/);
-    expect(created.shotPrompt).toBeTruthy();
+    // SHOTPROMPT.DERIVE.1 — `ProposedShot` carries no `shot_prompt` field, and
+    // the action no longer derives one from description/actionPitch.
+    expect(created.shotPrompt).toBeNull();
     expect(created.approvedVideoPath).toBeNull();
     expect(created.trimInSeconds).toBeNull();
     expect(created.trimOutSeconds).toBeNull();
@@ -1060,7 +1062,6 @@ describe("action registry — createShotAtPosition (LLMW.ACTION.INSERT_AT.1, B11
         "cameraMovement",
         "continuityIn",
         "continuityOut",
-        "shotPrompt",
         "orderIndex",
       ].sort()
     );

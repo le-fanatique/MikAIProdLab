@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // composition/storyboardShot.ts — LLMW.STORYBOARD.COMPOSE.1 (B14a)
 //
-// The storyboard prompt's composition, per Shot: the six-part formula of
+// The storyboard prompt's composition, per Shot: the formula of
 // `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.5, filled from the ingredients
-// that already exist.
+// that already exist. SHOTPROMPT.DERIVE.1 added `generalDescription` as its
+// own part, following the Seedance 2.5 formula's placement between Subject
+// Definition and Shot Detail — the six original parts are now seven.
 //
 // **What this exists to fix.** §5.7 read the current path and found that per
 // Shot it emits a header and then `compileShotPrompt(...)` — *"only the Shot
@@ -40,6 +42,14 @@ import type { ConformationFinding, ConformationProfileId } from "../conformation
 
 export type StoryboardCompositionPartId =
   | "subject"
+  // SHOTPROMPT.DERIVE.1 — `shot.description` reaches the composed prompt
+  // through this part and this part only. It used to reach it indirectly,
+  // through `resolveShotPromptWithDefault` copying it into `shotPrompt` on
+  // every write — a duplication this ticket removes at the source. Placed
+  // between Subject and Action, following the Seedance 2.5 formula's own
+  // order: Style, Subject Definition, General Description, Shot Detail,
+  // Constraints (`docs/LLM_WORKSPACE_PRODUCT_VISION.md`).
+  | "generalDescription"
   | "action"
   | "environment"
   | "camera"
@@ -271,6 +281,11 @@ export function composeStoryboardShot(
 
   const candidates: Array<{ id: StoryboardCompositionPartId; label: string; text: string | null }> = [
     { id: "subject", label: "Subject", text: buildSubject(context.castAssets) },
+    {
+      id: "generalDescription",
+      label: "General Description",
+      text: nonEmpty(shot.description),
+    },
     {
       id: "action",
       // The jar is still an ingredient — it simply stops being the only one.

@@ -7,7 +7,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { GeneratedSequenceShot } from "@/lib/prompts/shots-from-sequence";
 import { getNomenclatureSettings } from "@/lib/settings";
-import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 import { generateSequentialCodes } from "@/lib/nomenclature";
 
 function str(value: unknown, maxLen = 1000): string | null {
@@ -121,11 +120,9 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
   for (let i = 0; i < parsedShots!.length; i++) {
     const shot = parsedShots![i];
     const shotCode = generatedCodes[i];
-    const shotPrompt = resolveShotPromptWithDefault({
-      shotPrompt: shot.shot_prompt,
-      description: shot.description,
-      actionPitch: shot.action_pitch,
-    });
+    // SHOTPROMPT.DERIVE.1 — `shot_prompt` is exactly what the model returned
+    // for this shot (already normalized by `normalizeShot`'s own `str(...)`),
+    // never re-derived from description/actionPitch.
     await db.insert(shots).values({
       sequenceId,
       shotCode,
@@ -142,7 +139,7 @@ export async function createGeneratedShots(formData: FormData): Promise<void> {
       lighting: shot.lighting ?? null,
       continuityIn: shot.continuity_in ?? null,
       continuityOut: shot.continuity_out ?? null,
-      shotPrompt,
+      shotPrompt: shot.shot_prompt ?? null,
       orderIndex: startIndex + i,
     });
   }

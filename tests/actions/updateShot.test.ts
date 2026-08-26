@@ -93,12 +93,10 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
       title: "Shot B",
       lighting: "At the start the character is in shadow, at the end lit by the screens",
       description: "Untouched description",
-      // `updateShot` recomputes `shotPrompt` from description/actionPitch/
-      // cameraSubject whenever the existing `shotPrompt` is blank
-      // (resolveShotPromptWithDefault) — pre-existing behaviour, unrelated
-      // to this ticket. Set to the value that recomputation would produce so
-      // this test's changedColumns assertion is about `lighting` alone, not
-      // a pre-existing quirk of that unrelated function.
+      // SHOTPROMPT.DERIVE.1 — `updateShot` no longer touches `shotPrompt` at
+      // all (it is absent from its own `.set()`), so this value simply
+      // survives untouched — set here only so the assertion below reads as
+      // an explicit, named value rather than an implicit null.
       shotPrompt: "Untouched description",
       shotSize: "MS",
     });
@@ -207,9 +205,9 @@ describe("updateShot — camera_subject survives a save that no longer submits i
     const shotId = await insertShot(ctx, sequenceId, {
       title: "Shot D",
       cameraSubject: "35mm, low angle, slight tilt",
-      // Non-blank so `updateShot`'s own resolveShotPromptWithDefault keeps
-      // it as-is rather than recomputing a proposal from cameraSubject — an
-      // unrelated pre-existing behaviour this test must not become about.
+      // SHOTPROMPT.DERIVE.1 — `updateShot` no longer touches `shotPrompt` at
+      // all, so this value simply survives — an explicit, named value here
+      // rather than an implicit null, unrelated to what this test is about.
       shotPrompt: "Shot D unedited prompt",
     });
     const before = await readShot(ctx, shotId);

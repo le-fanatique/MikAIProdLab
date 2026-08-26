@@ -20,11 +20,12 @@
 // descriptor, the `insertionPoint` anchor and the surface are B11-bd.
 //
 // Modelled on `createGeneratedShots` for its return shape (`Promise<void>`,
-// `redirect()` on every path), its `shotCode` generation
+// `redirect()` on every path) and its `shotCode` generation
 // (`getNomenclatureSettings` + the nomenclature helpers — the model's own
-// proposed code, if any, is read nowhere) and its `shotPrompt` derivation
-// (`resolveShotPromptWithDefault`). Two points depart from that model on
-// purpose, both required by this ticket's own contract:
+// proposed code, if any, is read nowhere). `shotPrompt` is no longer derived
+// here (SHOTPROMPT.DERIVE.1) — `ProposedShot` carries no such field, so an
+// inserted directed Shot starts with none. Two points depart from that model
+// on purpose, both required by this ticket's own contract:
 //
 //   - the proposed shot's fields are read directly under their entity field
 //     names (`title`, `durationSeconds`, `actionPitch`, ...), not through a
@@ -45,7 +46,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
-import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 
 function str(value: unknown, maxLen = 1000): string | null {
   if (typeof value !== "string") return null;
@@ -175,10 +175,9 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
     .where(eq(shots.sequenceId, sequenceId));
   const shotCode = generateNextCode(shotTemplate, existingCodeRows.map((r) => r.shotCode));
 
-  const shotPrompt = resolveShotPromptWithDefault({
-    description: proposed!.description,
-    actionPitch: proposed!.actionPitch,
-  });
+  // SHOTPROMPT.DERIVE.1 — `ProposedShot` carries no `shot_prompt` field at
+  // all, so a directed Shot inserted this way starts with none, instead of
+  // being fabricated from description/actionPitch on every insertion.
 
   const targetIndex = afterShotOrderIndex === null ? 0 : afterShotOrderIndex + 1;
   const now = new Date().toISOString();
@@ -228,7 +227,6 @@ export async function createShotAtPosition(formData: FormData): Promise<void> {
         cameraLens: proposed!.cameraLens,
         continuityIn: proposed!.continuityIn,
         continuityOut: proposed!.continuityOut,
-        shotPrompt,
         orderIndex: targetIndex,
       })
       .run();

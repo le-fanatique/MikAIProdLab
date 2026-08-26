@@ -5,7 +5,6 @@ import { shots, sequences, sequenceEditorialItems, shotVideoCandidates, shotVide
 import { eq, max, asc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { resolveShotPromptWithDefault } from "@/lib/prompts/defaultShotPrompt";
 import { getNomenclatureSettings } from "@/lib/settings";
 import { generateNextCode } from "@/lib/nomenclature";
 import { quarantineReferenceVideoFiles, restoreQuarantinedReferenceVideoFiles, finalizeQuarantinedReferenceVideoFiles } from "@/lib/shotReferenceVideos/fileCleanup";
@@ -53,8 +52,10 @@ export async function createShot(
     resolvedShotCode = generateNextCode(shotTemplate, existingCodes.map((r) => r.shotCode));
   }
 
-  const shotPrompt = resolveShotPromptWithDefault({ description, actionPitch, cameraPitch: null });
-
+  // SHOTPROMPT.DERIVE.1 — `shot_prompt` is exactly what someone writes into it,
+  // or what a model returns. Neither this form nor its FormData carries a
+  // `shot_prompt` field, so a manually created Shot starts with none, and it
+  // stays empty until the author fills it himself.
   await db.insert(shots).values({
     sequenceId,
     shotCode: resolvedShotCode,
@@ -71,7 +72,6 @@ export async function createShot(
     cameraLens,
     continuityIn,
     continuityOut,
-    shotPrompt,
     orderIndex,
   });
 
@@ -119,17 +119,11 @@ export async function updateShot(
 
   if (!title?.trim()) return;
 
-  const [existing] = await db
-    .select({ shotPrompt: shots.shotPrompt, cameraSubject: shots.cameraSubject })
-    .from(shots)
-    .where(eq(shots.id, id));
-  const resolvedShotPrompt = resolveShotPromptWithDefault({
-    shotPrompt: existing?.shotPrompt,
-    description,
-    actionPitch,
-    cameraPitch: existing?.cameraSubject,
-  });
-
+  // SHOTPROMPT.DERIVE.1 — `shot_prompt` is no longer derived here. This form
+  // carries no `shot_prompt` field, so the column is simply left out of this
+  // `.set()`: whatever the author last wrote into it (or cleared it to)
+  // survives this save untouched, instead of being refabricated from
+  // description/actionPitch/cameraSubject on every call.
   await db
     .update(shots)
     .set({
@@ -149,7 +143,6 @@ export async function updateShot(
       continuityOut,
       lighting,
       negativeConstraints,
-      shotPrompt: resolvedShotPrompt,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(shots.id, id));
