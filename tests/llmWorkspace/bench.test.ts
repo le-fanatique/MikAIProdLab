@@ -8,6 +8,7 @@ import {
   parseTemplateRef,
 } from "@/lib/llmWorkspace/bench";
 import { assetsFromProjectDescriptor } from "@/lib/llmWorkspace/descriptors/assetsFromProject";
+import { castingFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/castingFromSequence";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
 import { sequencePromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/sequencePrompt";
 import { shotPromptAssistDescriptor } from "@/lib/llmWorkspace/descriptors/shotPrompt";
@@ -250,19 +251,24 @@ describe("parseIntentInputFromSearchParams", () => {
   });
 });
 
+// ASSET.EXTRACT.SEQ.1 removes `includeShots` from `assetsFromProjectDescriptor`
+// entirely (§4a of that ticket) — this section now exercises the same
+// "boolean" bench-control behaviour on `castingFromSequenceDescriptor`'s own
+// `includeSequenceLevel`, the real boolean-typed parameter left in the
+// codebase.
 describe("parseIntentInputFromSearchParams — \"boolean\" (LLMW.BENCH.CONTROLS.1, S3)", () => {
   it('"true" converts to the boolean true', () => {
-    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "true" });
-    expect(intent.parameters).toEqual({ includeShots: true });
+    const intent = parseIntentInputFromSearchParams(castingFromSequenceDescriptor, { includeSequenceLevel: "true" });
+    expect(intent.parameters).toEqual({ includeSequenceLevel: true });
   });
 
   it('"false" converts to the boolean false', () => {
-    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "false" });
-    expect(intent.parameters).toEqual({ includeShots: false });
+    const intent = parseIntentInputFromSearchParams(castingFromSequenceDescriptor, { includeSequenceLevel: "false" });
+    expect(intent.parameters).toEqual({ includeSequenceLevel: false });
   });
 
   it("absent stays absent — the declared default is normalizeIntentParameters's job, not this parser's", () => {
-    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {});
+    const intent = parseIntentInputFromSearchParams(castingFromSequenceDescriptor, {});
     expect(intent.parameters).toBeUndefined();
   });
 
@@ -272,20 +278,20 @@ describe("parseIntentInputFromSearchParams — \"boolean\" (LLMW.BENCH.CONTROLS.
   // both, in DOM order [checkbox "true", hidden "false"] — the shape
   // `firstBenchParam` (and so this parser) must resolve to `true`.
   it("piège A — unchecked (hidden fallback alone, a single string) resolves to false", () => {
-    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "false" });
-    expect(intent.parameters).toEqual({ includeShots: false });
+    const intent = parseIntentInputFromSearchParams(castingFromSequenceDescriptor, { includeSequenceLevel: "false" });
+    expect(intent.parameters).toEqual({ includeSequenceLevel: false });
   });
 
   it("piège A — checked (checkbox + hidden fallback, in DOM order) resolves to true, not the hidden field's false", () => {
-    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, {
-      includeShots: ["true", "false"],
+    const intent = parseIntentInputFromSearchParams(castingFromSequenceDescriptor, {
+      includeSequenceLevel: ["true", "false"],
     });
-    expect(intent.parameters).toEqual({ includeShots: true });
+    expect(intent.parameters).toEqual({ includeSequenceLevel: true });
   });
 
   it("an unrecognized value is left un-converted, for normalizeIntentParameters to reject", () => {
-    const intent = parseIntentInputFromSearchParams(assetsFromProjectDescriptor, { includeShots: "yes" });
-    expect(intent.parameters).toEqual({ includeShots: "yes" });
+    const intent = parseIntentInputFromSearchParams(castingFromSequenceDescriptor, { includeSequenceLevel: "yes" });
+    expect(intent.parameters).toEqual({ includeSequenceLevel: "yes" });
   });
 });
 

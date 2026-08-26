@@ -20,6 +20,15 @@ import type { GeneratedAssetCandidate } from "@/types/llm";
 // own "impossible input throws" discipline — no `output.item.fields` entry
 // is ever boolean-typed for this descriptor, so the branch is unreachable in
 // practice, refused loudly rather than silently coerced.
+//
+// ASSET.EXTRACT.SEQ.1 — this panel is now parametrized by an optional
+// `sequenceId`: when present it names `assets.fromSequence` instead
+// (`descriptors/assetsFromSequence.ts`), the sequence-anchored, incremental
+// sibling of `assets.fromProject`. Both share this exact candidate shape
+// (`GeneratedAssetCandidate`, `toCandidate` below), the same asset-type
+// filters, and the same commit action — only the descriptor id and the
+// anchor ids sent to `runWorkspaceOperation` differ. `includeShots` no
+// longer exists on either operation and is removed from this panel entirely.
 function toCandidate(item: Record<string, string | number | boolean>): GeneratedAssetCandidate {
   function strField(key: string): string | null {
     const value = item[key];
@@ -82,6 +91,18 @@ type Props = {
   createError?: string | null;
   isConfigured: boolean;
   returnTo?: string;
+  /**
+   * ASSET.EXTRACT.SEQ.1 — when set, this panel runs the sequence-anchored,
+   * incremental `assets.fromSequence` instead of the project-wide
+   * `assets.fromProject`. The panel parametrizes by anchor rather than being
+   * duplicated: both operations share the same asset-type filters, the same
+   * result shape, and the same commit action (`createSelectedAssets`, which
+   * only ever needed a `projectId`) — only which descriptor runs, and which
+   * ids it anchors on, differ. See `.agents/executor_report.md` for why this
+   * was the reuse found, over `castingFromSequence`'s own (never
+   * reused-by-anchor) sequence-only panel.
+   */
+  sequenceId?: number;
 };
 
 export default function AssetsLLMExtractPanel({
@@ -91,6 +112,7 @@ export default function AssetsLLMExtractPanel({
   createError,
   isConfigured,
   returnTo,
+  sequenceId,
 }: Props) {
   const [state, setState] = useState<State>({ status: "idle" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -102,7 +124,6 @@ export default function AssetsLLMExtractPanel({
   const [inclVehicles, setInclVehicles] = useState(false);
   const [inclCrowds, setInclCrowds] = useState(false);
   const [inclOther, setInclOther] = useState(false);
-  const [inclShots, setInclShots] = useState(false);
 
   async function handleGenerate() {
     setState({ status: "loading" });
@@ -122,11 +143,21 @@ export default function AssetsLLMExtractPanel({
     if (inclCrowds) assetTypes.push("crowd");
     if (inclOther) assetTypes.push("other");
 
-    const result = await runWorkspaceOperation({
-      descriptorId: "assets.fromProject",
-      ids: { projectId },
-      intent: { parameters: { includeShots: inclShots, assetTypes } },
-    });
+    // ASSET.EXTRACT.SEQ.1 — `includeShots` is gone: `assets.fromProject` no
+    // longer takes it (the per-shot detail moved to `assets.fromSequence`,
+    // always shot-scoped by its own anchor), so this panel no longer builds
+    // it either, for both operations.
+    const result = sequenceId != null
+      ? await runWorkspaceOperation({
+          descriptorId: "assets.fromSequence",
+          ids: { projectId, sequenceId },
+          intent: { parameters: { assetTypes } },
+        })
+      : await runWorkspaceOperation({
+          descriptorId: "assets.fromProject",
+          ids: { projectId },
+          intent: { parameters: { assetTypes } },
+        });
     if (!result.ok) {
       setState({ status: "error", message: result.error });
       return;
@@ -171,7 +202,9 @@ export default function AssetsLLMExtractPanel({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-[#6e767d] leading-relaxed">
-        Extract asset drafts from your project's narrative. Review the candidates, select the ones you want, then create them.
+        {sequenceId != null
+          ? "Extract asset drafts from this sequence and its shots — only assets missing from the project's existing list are proposed. Review the candidates, select the ones you want, then create them."
+          : "Extract asset drafts from your project's narrative. Review the candidates, select the ones you want, then create them."}
       </p>
 
       {!isConfigured && (
@@ -219,18 +252,6 @@ export default function AssetsLLMExtractPanel({
               ))}
             </div>
           </div>
-
-          {/* Include shots toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={inclShots}
-              onChange={(e) => setInclShots(e.target.checked)}
-              className="accent-[#5b93d6]"
-            />
-            <span className="text-xs text-[#a4abb2]">Include shots</span>
-            <span className="text-xs text-[#3a4046]">(more detail, slower)</span>
-          </label>
 
           <div>
             <button

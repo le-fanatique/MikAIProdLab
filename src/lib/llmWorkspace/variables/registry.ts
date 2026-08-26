@@ -872,15 +872,14 @@ export async function resolveProjectSequences(projectId: number): Promise<Projec
 // action's own two-query shape (`seqs` then `inArray(shots.sequenceId,
 // seqIds)`) does. No bound: the action's own query carries none either.
 //
-// The action gates this read behind `includeShots` (`:151`) — an
-// intent-level choice this resolver does not and cannot see. `PROJECT.SHOTS`
-// therefore always resolves, unconditionally: a resolver cannot be
-// conditioned by an intent parameter (this ticket does not invent that
-// mechanism), so a future descriptor that declares `PROJECT.SHOTS` pays its
-// query even on a run where the block that would render it renders empty.
-// The conditionality belongs to the `{variables, parameters, render}` block
-// that will consume this variable (B7c-n4's variant), not to the resolver —
-// see `.agents/executor_report.md`.
+// ASSET.EXTRACT.SEQ.1 — `includeShots` (the intent-level choice this
+// resolver never saw) is removed from `assets.fromProject` entirely, along
+// with the `{variables, parameters, render}` block that used to consume this
+// variable. `PROJECT.SHOTS` is therefore currently unreferenced by any
+// descriptor, on the same footing several `ActionId` entries in `types.ts`
+// already sit on (declared ahead of, or after the end of, their own
+// consumer) — not deleted, since the per-shot need it answered moved to a
+// sequence-scoped variable (`SEQ.SHOT_TARGETS`) rather than disappearing.
 // ---------------------------------------------------------------------------
 
 export type ProjectShotEntry = {
@@ -1414,7 +1413,11 @@ export function renderCastingFromSequenceFilterAndEnrich(
 // of empties and joined by `"\n\n"`, produces.
 // ---------------------------------------------------------------------------
 
-const ASSETS_FROM_PROJECT_JSON_SCHEMA = `Always respond with a valid JSON object matching exactly this schema:
+// Exported (not just declared) so `assets.fromSequence`'s own system-body
+// render form (below) can reuse it byte-for-byte — "même forme de sortie",
+// §4b of ASSET.EXTRACT.SEQ.1's ticket: the JSON contract the model answers
+// against does not change with the anchor, only the narrative context does.
+export const ASSETS_FROM_PROJECT_JSON_SCHEMA = `Always respond with a valid JSON object matching exactly this schema:
 {
   "assets": [
     {
@@ -1430,7 +1433,10 @@ const ASSETS_FROM_PROJECT_JSON_SCHEMA = `Always respond with a valid JSON object
 }
 No markdown. No explanation. Only the JSON object.`;
 
-function assetsFromProjectTypesStr(assetTypes: unknown): string {
+// Exported for the same reason as `ASSETS_FROM_PROJECT_JSON_SCHEMA` above —
+// `assets.fromSequence`'s render forms recompute the same `typesStr` from the
+// same normalized `assetTypes` parameter.
+export function assetsFromProjectTypesStr(assetTypes: unknown): string {
   return Array.isArray(assetTypes) ? (assetTypes as string[]).join(", ") : "";
 }
 
@@ -1488,7 +1494,19 @@ export function renderAssetsFromProjectOutlineOrStoryBlock(data: ProjectIdentity
   return "";
 }
 
-/** Template, block 3: `SEQUENCES:\n...`, one `- title | ...` line per entry, sliced to 2000 chars. Empty when there are none. */
+/**
+ * Template, block 3: `SEQUENCES:\n...`, one `- title | ...` line per entry.
+ * Empty when there are none.
+ *
+ * ASSET.EXTRACT.SEQ.1 — no longer sliced. The pre-ticket `.slice(0, 2000)`
+ * silently decided which sequences the model could see: on the author's own
+ * largest project this block is 5363 characters, and the sequence he was
+ * missing (`Interior reactor control room`) sat at position 5293 — past the
+ * cut, on a run with `includeShots` on. Now that `includeShots` (and the
+ * `PROJECT.SHOTS` block it gated) is gone from this descriptor entirely
+ * (§4a of the ticket), this block's own volume is the sequences alone, and
+ * every sequence is now always visible to the model, unconditionally.
+ */
 export function renderAssetsFromProjectSequencesBlock(entries: ProjectSequenceEntry[]): string {
   if (entries.length === 0) return "";
   const seqLines: string[] = [];
@@ -1501,29 +1519,10 @@ export function renderAssetsFromProjectSequencesBlock(entries: ProjectSequenceEn
     if (seq.locationHint) line.push(`Location: ${seq.locationHint}`);
     seqLines.push(line.join(" | "));
   }
-  const seqBlock = `SEQUENCES:\n${seqLines.join("\n")}`;
-  return seqBlock.slice(0, 2000);
+  return `SEQUENCES:\n${seqLines.join("\n")}`;
 }
 
-/** Template, block 4: `SHOTS:\n...`, gated on both `includeShots` and a non-empty `PROJECT.SHOTS`, sliced to 1500 chars. */
-export function renderAssetsFromProjectShotsBlock(input: VariableParameterRenderInput): string {
-  const includeShots = input.parameters.includeShots === true;
-  const shotsData = input.variables["PROJECT.SHOTS"] as ProjectShotEntry[];
-  if (!includeShots || shotsData.length === 0) return "";
-  const shotLines: string[] = [];
-  for (const shot of shotsData) {
-    const line: string[] = [`- ${shot.title}`];
-    if (shot.description) line.push(shot.description);
-    if (shot.actionPitch) line.push(`Action: ${shot.actionPitch}`);
-    if (shot.continuityIn) line.push(`In: ${shot.continuityIn}`);
-    if (shot.continuityOut) line.push(`Out: ${shot.continuityOut}`);
-    shotLines.push(line.join(" | "));
-  }
-  const shotBlock = `SHOTS:\n${shotLines.join("\n")}`;
-  return shotBlock.slice(0, 1500);
-}
-
-/** Template, block 5: `EXISTING ASSETS (...):\n...`, one `- name (type)` line per entry. Empty when there are none. */
+/** Template, block 4: `EXISTING ASSETS (...):\n...`, one `- name (type)` line per entry. Empty when there are none. */
 export function renderAssetsFromProjectExistingAssetsBlock(entries: ProjectAssetEntry[]): string {
   if (entries.length === 0) return "";
   const existingLines = entries.map((a) => `- ${a.name} (${a.type})`).join("\n");
@@ -1534,6 +1533,96 @@ export function renderAssetsFromProjectExistingAssetsBlock(entries: ProjectAsset
 export function renderAssetsFromProjectFinalInstructionLine(assetTypes: unknown): string {
   const typesStr = assetsFromProjectTypesStr(assetTypes);
   return `Extract up to 20 production assets from the above narrative material. Asset types to include: ${typesStr}.`;
+}
+
+// ---------------------------------------------------------------------------
+// `assetsFromSequence` render forms — ASSET.EXTRACT.SEQ.1. The sequence-
+// anchored, incremental sibling of `assetsFromProject` (§4b of the ticket):
+// same extractible asset types, same output shape (the JSON schema itself is
+// reused byte-for-byte, `ASSETS_FROM_PROJECT_JSON_SCHEMA`), same commit
+// action (`createSelectedAssets`) — narrower context (this Sequence and its
+// own Shots, not the whole Project's sequences/shots), and no truncation
+// anywhere: the volume is bounded by construction (one Sequence), never by a
+// silent character slice. Existing assets are read into context so the model
+// proposes only what is missing — LLMW.EXTRACT.INCREMENTAL.1, the mutation
+// §7's third net entry proves — not a duplicate scan of what already exists.
+// ---------------------------------------------------------------------------
+
+/**
+ * System: the whole message for `assets.fromSequence` — mirrors
+ * `renderAssetsFromProjectSystemBody`'s own structure (role, extraction
+ * rules, field mapping, JSON schema) but scoped to one Sequence, and states
+ * the incremental rule explicitly rather than folding it into a "duplicate
+ * detection" aside: this operation's entire point is to propose only what a
+ * Project's existing asset list does not already carry (§4b of the ticket,
+ * "le sens même d'une extraction incrémentale. La consigne doit le dire
+ * explicitement").
+ */
+export function renderAssetsFromSequenceSystemBody(input: VariableParameterRenderInput): string {
+  const project = input.variables["PROJECT.IDENTITY"] as ProjectIdentityData;
+  const seq = input.variables["SEQ.CONTEXT"] as SeqContextData;
+  const typesStr = assetsFromProjectTypesStr(input.parameters.assetTypes);
+  return `You are a production asset supervisor and art department coordinator for the project "${project.name}", currently focused on the sequence "${seq.title}".
+
+Your task is to extract a list of production assets that appear in this sequence and its shots, and are NOT already declared as an asset in the project. This is an incremental extraction: only propose assets that are missing from the existing project asset list provided below. Do not re-propose an asset that is already there, even under a slightly different name.
+
+Production assets are reusable elements that must be designed, cast, or visually generated: named characters, key locations and environments, significant props, vehicles, crowd scenes.
+
+EXTRACTION RULES:
+- Extract only significant, named, or recurring assets — not every incidental detail.
+- Do not invent assets not mentioned or strongly implied by this sequence or its shots.
+- Do not propose an asset that already matches one in the existing project asset list — that is the one rule this extraction exists to enforce.
+- Maximum 20 assets total.
+- Asset types to extract: ${typesStr}
+
+FIELD MAPPING:
+- name: concise production name (1–4 words)
+- assetType: one of ${typesStr}
+- description: visual/production description — appearance, physical traits, visual style. String or null.
+- notes: narrative role, story context, design constraints, usage context. String or null.
+- sourceLevel: "sequence" if found in this sequence's own narrative fields, "shot" if found only in one of its shots.
+- sourceExcerpt: short verbatim quote (max 100 chars) from the source material where this asset appears. String or null.
+- duplicateWarning: string or null — exact name of a matching existing asset if this candidate is a duplicate after all (a safety net, not expected on a correct incremental answer), otherwise null.
+
+${ASSETS_FROM_PROJECT_JSON_SCHEMA}`;
+}
+
+/** Template block: `SEQUENCE:\n- title | ...`, the anchored sequence's own narrative fields — always non-empty, a Sequence always has a title. */
+export function renderAssetsFromSequenceSequenceBlock(data: SeqContextData): string {
+  const line: string[] = [`- ${data.title}`];
+  if (data.summary) line.push(`Summary: ${data.summary}`);
+  if (data.description) line.push(`Description: ${data.description}`);
+  if (data.narrativePurpose) line.push(`Purpose: ${data.narrativePurpose}`);
+  if (data.mood) line.push(`Mood: ${data.mood}`);
+  if (data.locationHint) line.push(`Location: ${data.locationHint}`);
+  return `SEQUENCE:\n${line.join(" | ")}`;
+}
+
+/**
+ * Template block: `SHOTS:\n...`, one line per shot of the anchored sequence
+ * — empty when the sequence has no shots yet. Unlike `assetsFromProject`'s
+ * own (removed) shots block, this one is not gated by a parameter: this
+ * operation is always shot-scoped by its own anchor (§4b of the ticket), and
+ * carries no truncation — the volume is one Sequence's own shots, bounded by
+ * construction.
+ */
+export function renderAssetsFromSequenceShotsBlock(entries: SeqShotTargetEntry[]): string {
+  if (entries.length === 0) return "";
+  const shotLines = entries.map((shot) => {
+    const line: string[] = [`- ${shot.title}`];
+    if (shot.description) line.push(shot.description);
+    if (shot.actionPitch) line.push(`Action: ${shot.actionPitch}`);
+    if (shot.continuityIn) line.push(`In: ${shot.continuityIn}`);
+    if (shot.continuityOut) line.push(`Out: ${shot.continuityOut}`);
+    return line.join(" | ");
+  });
+  return `SHOTS:\n${shotLines.join("\n")}`;
+}
+
+/** Template, closing instruction line: reiterates the incremental rule alongside the requested asset types. Always non-empty. */
+export function renderAssetsFromSequenceFinalInstructionLine(assetTypes: unknown): string {
+  const typesStr = assetsFromProjectTypesStr(assetTypes);
+  return `Extract up to 20 production assets from this sequence that are missing from the existing project asset list above — do not propose one that is already there. Asset types to include: ${typesStr}.`;
 }
 
 /**
@@ -3023,9 +3112,11 @@ export const VARIABLE_RENDER_FORMS = {
     "sequencePrompt.generateSequenceLines": renderSeqContextSequencePromptGenerateLines,
     "shotRetake.sequenceLines": renderSeqContextRetakeLines,
     "shotInsert.sequenceLines": renderShotInsertSequenceLines,
+    "assetsFromSequence.sequenceBlock": renderAssetsFromSequenceSequenceBlock,
   },
   "SEQ.SHOT_TARGETS": {
     "castingFromSequence.shotsLines": renderCastingFromSequenceShotsLines,
+    "assetsFromSequence.shotsBlock": renderAssetsFromSequenceShotsBlock,
   },
   "PROJECT.STYLE": {
     "assetContext.worldRulesBlock": renderProjectStyleWorldRulesBlock,
@@ -3112,6 +3203,7 @@ export const PARAMETER_RENDER_FORMS = {
   "outline.sectionInstructionBullet": renderOutlineTargetSectionsBullet,
   "shotsFromSequence.jsonSchemaBlock": renderShotsFromSequenceJsonSchemaBlock,
   "assetsFromProject.finalInstructionLine": renderAssetsFromProjectFinalInstructionLine,
+  "assetsFromSequence.finalInstructionLine": renderAssetsFromSequenceFinalInstructionLine,
   "lookTest.previousProposalLines": renderLookTestPreviousProposalLines,
 } as const;
 
@@ -3163,7 +3255,7 @@ export const VARIABLE_PARAMETER_RENDER_FORMS = {
   "sequencesFromOutline.systemPathABody": renderSequencesFromOutlineSystemPathABody,
   "sequencesFromOutline.systemPathBBody": renderSequencesFromOutlineSystemPathBBody,
   "assetsFromProject.systemBody": renderAssetsFromProjectSystemBody,
-  "assetsFromProject.shotsBlock": renderAssetsFromProjectShotsBlock,
+  "assetsFromSequence.systemBody": renderAssetsFromSequenceSystemBody,
   "castingFromSequence.systemBody": renderCastingFromSequenceSystemBody,
   "castingFromSequence.closingInstructionLine": renderCastingFromSequenceClosingInstructionLine,
   "shotInsert.positionLine": renderShotInsertPositionLine,

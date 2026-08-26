@@ -17,13 +17,18 @@
 // proven against a real database by LLMW.VAR.PROJECT_SCOPE.1, B7c-n2, but
 // unreferenced by any descriptor until now) alongside `PROJECT.IDENTITY`.
 //
-// Two parameters: `includeShots` (`"boolean"`, default `false`) and
-// `assetTypes` (`"multiEnum"`, default `["character", "environment",
-// "prop"]`) — both defaults are the panel's real initial state
-// (`AssetsLLMExtractPanel.tsx:63-69`), so the operation is executable at the
-// bench with no new bench control (`bench.ts`'s `parseIntentInputFromSearchParams`
-// only reads numbers/strings; a `boolean`/`multiEnum` param always falls back
-// to its declared default there — out of scope to wire, per the ticket).
+// One parameter: `assetTypes` (`"multiEnum"`, default `["character",
+// "environment", "prop"]`) — the panel's real initial state
+// (`AssetsLLMExtractPanel.tsx`), so the operation is executable at the bench
+// with no new bench control (`bench.ts`'s `parseIntentInputFromSearchParams`
+// only reads numbers/strings; a `multiEnum` param always falls back to its
+// declared default there — out of scope to wire, per the ticket).
+//
+// ASSET.EXTRACT.SEQ.1 — `includeShots` (and the `PROJECT.SHOTS` block it
+// gated) is removed: the per-shot detail this descriptor used to fold into
+// the project-wide extraction now belongs to the sequence-anchored operation
+// (`assets.fromSequence`, `descriptors/assetsFromSequence.ts`), never to the
+// project one with a flag. §4a of the ticket.
 //
 // §5 of the ticket, an accepted divergence, not a defect: in
 // `generateAssetCandidatesDraft`, "Select at least one asset type." is
@@ -61,7 +66,6 @@ export const assetsFromProjectDescriptor: OperationDescriptor = {
     variables: [
       { id: "PROJECT.IDENTITY", userAdjustable: false },
       { id: "PROJECT.SEQUENCES", userAdjustable: false },
-      { id: "PROJECT.SHOTS", userAdjustable: false },
       { id: "PROJECT.ASSETS", userAdjustable: false },
     ],
   },
@@ -92,12 +96,9 @@ export const assetsFromProjectDescriptor: OperationDescriptor = {
       { variable: "PROJECT.IDENTITY", render: "assetsFromProject.outlineOrStoryBlock" },
       // Block 3 — sequences, empty when the Project has none.
       { variable: "PROJECT.SEQUENCES", render: "assetsFromProject.sequencesBlock" },
-      // Block 4 — shots, gated on both `includeShots` and a non-empty
-      // `PROJECT.SHOTS`.
-      { variables: ["PROJECT.SHOTS"], parameters: ["includeShots"], render: "assetsFromProject.shotsBlock" },
-      // Block 5 — existing assets, empty when the Project has none.
+      // Block 4 — existing assets, empty when the Project has none.
       { variable: "PROJECT.ASSETS", render: "assetsFromProject.existingAssetsBlock" },
-      // Block 6 — always non-empty: the closing instruction line.
+      // Block 5 — always non-empty: the closing instruction line.
       { parameter: "assetTypes", render: "assetsFromProject.finalInstructionLine" },
     ],
     // The oracle's own `parts.join("\n\n")` separator (`assets-from-project.ts:143-145`)
@@ -110,14 +111,12 @@ export const assetsFromProjectDescriptor: OperationDescriptor = {
 
   intent: {
     // LLMW.DESCRIPTOR.ASSETS.1 (B7f)'s own format extension: the first
-    // `"boolean"` and the first `"multiEnum"` `intent.parameters` entries.
-    // Both defaults are `AssetsLLMExtractPanel.tsx:63-69`'s real initial
-    // panel state — three asset types checked (character, environment,
-    // prop), three unchecked, shots excluded — so this descriptor is
-    // executable at the bench (with its declared defaults; see the ticket's
-    // own "Hors scope") with no new contract needed.
+    // `"multiEnum"` `intent.parameters` entry. Its default is
+    // `AssetsLLMExtractPanel.tsx`'s real initial panel state — three asset
+    // types checked (character, environment, prop), three unchecked — so
+    // this descriptor is executable at the bench (with its declared default;
+    // see the ticket's own "Hors scope") with no new contract needed.
     parameters: [
-      { id: "includeShots", type: "boolean", label: "Include shots", default: false },
       {
         id: "assetTypes",
         type: "multiEnum",

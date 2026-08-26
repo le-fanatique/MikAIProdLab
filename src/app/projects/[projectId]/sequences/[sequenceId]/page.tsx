@@ -15,6 +15,7 @@ import { deleteShot } from "@/actions/shots";
 import { assignAssetToSequence, removeAssetFromSequence } from "@/actions/sequenceAssets";
 import SequenceShotsLLMAssistPanel from "@/components/prompts/SequenceShotsLLMAssistPanel";
 import CastingSuggestionsPanel from "@/components/CastingSuggestionsPanel";
+import AssetsLLMExtractPanel from "@/components/AssetsLLMExtractPanel";
 import SequencePromptForm from "@/components/SequencePromptForm";
 import SequenceTimelineEditor from "@/components/SequenceTimelineEditor";
 import StatusBadge from "@/components/StatusBadge";
@@ -213,6 +214,18 @@ export default async function SequencePage({ params, searchParams }: Props) {
 
   const rawCastingsError = resolvedSearchParams["castingsError"];
   const castingsError = typeof rawCastingsError === "string" ? rawCastingsError : Array.isArray(rawCastingsError) ? rawCastingsError[0] : null;
+
+  // ASSET.EXTRACT.SEQ.1 — `createSelectedAssets`'s own redirect contract
+  // (`src/actions/llm/assetExtraction.ts`), read the same way `assets/page.tsx`
+  // and `story/page.tsx` already do for the project-anchored panel.
+  const rawAssetsCreated = resolvedSearchParams["assetsCreated"];
+  const assetsCreatedStr =
+    typeof rawAssetsCreated === "string" ? rawAssetsCreated : Array.isArray(rawAssetsCreated) ? rawAssetsCreated[0] : undefined;
+  const assetsCreated = assetsCreatedStr ? parseInt(assetsCreatedStr, 10) : null;
+
+  const rawAssetsCreateError = resolvedSearchParams["assetsCreateError"];
+  const assetsCreateError =
+    typeof rawAssetsCreateError === "string" ? rawAssetsCreateError : Array.isArray(rawAssetsCreateError) ? rawAssetsCreateError[0] : null;
 
   const rawDeleteShotError = resolvedSearchParams["deleteShotError"];
   const deleteShotError = typeof rawDeleteShotError === "string" ? rawDeleteShotError : Array.isArray(rawDeleteShotError) ? rawDeleteShotError[0] : null;
@@ -879,6 +892,20 @@ npx -y pnpm@11.7.0 dev`}
             castingsApplied={Number.isFinite(castingsApplied) ? castingsApplied : null}
             castingsError={castingsError ?? null}
             isConfigured={!!llmSettings.model.trim()}
+          />
+        </Collapsible>
+      </div>
+
+      <div className="mb-6">
+        <Collapsible label="Extract Asset Drafts">
+          <AssetsLLMExtractPanel
+            projectId={pid}
+            sequenceId={sid}
+            existingAssetNames={[...assignedRows.map((r) => r.assetName), ...availableAssets.map((a) => a.name)]}
+            createdCount={Number.isFinite(assetsCreated) ? assetsCreated : null}
+            createError={assetsCreateError ?? null}
+            isConfigured={!!llmSettings.model.trim()}
+            returnTo={sequenceReturnTo}
           />
         </Collapsible>
       </div>

@@ -36,7 +36,7 @@ beforeAll(async () => {
 afterAll(() => ctx.cleanup());
 
 describe("assets.fromProject — runner prompt-equality proof", () => {
-  it("matches buildAssetsFromProjectPrompt for a fully seeded project (sequences, shots, existing assets, includeShots true)", async () => {
+  it("matches buildAssetsFromProjectPrompt for a fully seeded project (sequences, existing assets)", async () => {
     const projectId = await insertProject(ctx, "Neon Skyline");
     const { eq } = await import("drizzle-orm");
     await ctx.db
@@ -56,6 +56,10 @@ describe("assets.fromProject — runner prompt-equality proof", () => {
       locationHint: "Rain-soaked rooftops, neon skyline",
       narrativePurpose: "Escalates the central conflict.",
     });
+    // A Shot exists on the sequence, but `assets.fromProject` declares no
+    // `PROJECT.SHOTS` variable any more (ASSET.EXTRACT.SEQ.1, §4a) — its
+    // presence here proves the rendered prompt below carries no SHOTS: block
+    // regardless.
     await insertShot(ctx, sequenceId, {
       title: "Wide establishing",
       description: "Neon skyline at dusk.",
@@ -69,7 +73,7 @@ describe("assets.fromProject — runner prompt-equality proof", () => {
     const runnerResult = await resolveOperationPrompt(
       assetsFromProjectDescriptor,
       { projectId },
-      { parameters: { includeShots: true, assetTypes: ["character", "environment", "prop"] } }
+      { parameters: { assetTypes: ["character", "environment", "prop"] } }
     );
     expect(runnerResult.ok).toBe(true);
     if (!runnerResult.ok) throw new Error("unreachable");
@@ -127,9 +131,6 @@ A rooftop pursuit begins.
 SEQUENCES:
 - Rooftop chase | Summary: The courier is chased across the rooftops. | Description: A tense pursuit at night. | Purpose: Escalates the central conflict. | Mood: Tense, kinetic | Location: Rain-soaked rooftops, neon skyline
 
-SHOTS:
-- Wide establishing | Neon skyline at dusk. | Action: The courier sprints. | In: Calm street. | Out: Alley entered.
-
 EXISTING ASSETS (for duplicate detection — do not re-create these unless significantly different):
 - Kai the Courier (character)
 - Neon Alley (environment)
@@ -140,7 +141,7 @@ Extract up to 20 production assets from the above narrative material. Asset type
     expect(runnerResult.prompt.user).toBe(expected.user);
   });
 
-  it("no parameters supplied: falls back to the declared defaults (includeShots: false, assetTypes: character/environment/prop) — matches buildAssetsFromProjectPrompt with those same defaults", async () => {
+  it("no parameters supplied: falls back to the declared default (assetTypes: character/environment/prop) — matches buildAssetsFromProjectPrompt with that same default", async () => {
     const projectId = await insertProject(ctx, "Bare Skyline");
     const { eq } = await import("drizzle-orm");
     await ctx.db.update(ctx.schema.projects).set({ pitch: "A pitch." }).where(eq(ctx.schema.projects.id, projectId));

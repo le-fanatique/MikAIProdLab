@@ -4,6 +4,7 @@ import { insertProject, insertSequence } from "../actions/helpers/fixtures";
 import { shotsFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/shotsFromSequence";
 import { outlineGenerateDescriptor } from "@/lib/llmWorkspace/descriptors/outline";
 import { assetsFromProjectDescriptor } from "@/lib/llmWorkspace/descriptors/assetsFromProject";
+import { castingFromSequenceDescriptor } from "@/lib/llmWorkspace/descriptors/castingFromSequence";
 
 // ---------------------------------------------------------------------------
 // LLMW.PARAM.BOUNDS.1 (B7e-n) — proof that `normalizeIntentParameters` applies
@@ -144,13 +145,16 @@ describe("normalizeIntentParameters — level 2, through resolveOperationPrompt"
 // ---------------------------------------------------------------------------
 // LLMW.DESCRIPTOR.ASSETS.1 (B7f) — the same `normalizeIntentParameters` rule
 // ("valid -> kept; invalid or absent -> the declared default, or omission;
-// never a partial correction"), extended to `"boolean"` and `"multiEnum"`,
-// proven on `assetsFromProjectDescriptor.intent.parameters`:
+// never a partial correction"), extended to `"boolean"` and `"multiEnum"`.
 //
-//   - `includeShots` (`type: "boolean"`, `default: false`);
-//   - `assetTypes` (`type: "multiEnum"`, `values:
-//     [character,environment,prop,vehicle,crowd,other]`,
-//     `default: [character,environment,prop]`).
+// ASSET.EXTRACT.SEQ.1 removes `includeShots` from `assetsFromProjectDescriptor`
+// entirely (§4a of that ticket) — the boolean cases below now prove the rule
+// on `castingFromSequenceDescriptor`'s own `includeSequenceLevel`
+// (`type: "boolean"`, `default: false`), the real boolean-typed parameter
+// left in the codebase. The multiEnum cases keep proving the rule on
+// `assetsFromProjectDescriptor`'s own `assetTypes` (`type: "multiEnum"`,
+// `values: [character,environment,prop,vehicle,crowd,other]`,
+// `default: [character,environment,prop]`), unaffected by that ticket.
 //
 // The mutation check required by the ticket (§5 "Contrôle de mutation
 // obligatoire") targets exactly the "unknown member -> default (whole array
@@ -159,70 +163,60 @@ describe("normalizeIntentParameters — level 2, through resolveOperationPrompt"
 // `.agents/executor_report.md` for the real command output.
 // ---------------------------------------------------------------------------
 
-const includeShotsParams = assetsFromProjectDescriptor.intent.parameters!;
+const includeSequenceLevelParams = castingFromSequenceDescriptor.intent.parameters!;
 const assetTypesParams = assetsFromProjectDescriptor.intent.parameters!;
 
 describe("normalizeIntentParameters — boolean and multiEnum (LLMW.DESCRIPTOR.ASSETS.1, B7f)", () => {
   it("boolean: a valid true/false value is kept unchanged", () => {
-    expect(normalizeIntentParameters(includeShotsParams, { includeShots: true, assetTypes: ["character"] })).toEqual({
-      includeShots: true,
-      assetTypes: ["character"],
+    expect(normalizeIntentParameters(includeSequenceLevelParams, { includeSequenceLevel: true })).toEqual({
+      includeSequenceLevel: true,
     });
-    expect(normalizeIntentParameters(includeShotsParams, { includeShots: false, assetTypes: ["character"] })).toEqual({
-      includeShots: false,
-      assetTypes: ["character"],
+    expect(normalizeIntentParameters(includeSequenceLevelParams, { includeSequenceLevel: false })).toEqual({
+      includeSequenceLevel: false,
     });
   });
 
   it("boolean: a non-boolean value (string, number) falls back to the declared default (false)", () => {
-    expect(normalizeIntentParameters(includeShotsParams, { includeShots: "true", assetTypes: ["character"] })).toEqual({
-      includeShots: false,
-      assetTypes: ["character"],
+    expect(normalizeIntentParameters(includeSequenceLevelParams, { includeSequenceLevel: "true" })).toEqual({
+      includeSequenceLevel: false,
     });
-    expect(normalizeIntentParameters(includeShotsParams, { includeShots: 1, assetTypes: ["character"] })).toEqual({
-      includeShots: false,
-      assetTypes: ["character"],
+    expect(normalizeIntentParameters(includeSequenceLevelParams, { includeSequenceLevel: 1 })).toEqual({
+      includeSequenceLevel: false,
     });
   });
 
   it("boolean: absent falls back to the declared default (false)", () => {
-    expect(normalizeIntentParameters(includeShotsParams, { assetTypes: ["character"] })).toEqual({
-      includeShots: false,
-      assetTypes: ["character"],
+    expect(normalizeIntentParameters(includeSequenceLevelParams, {})).toEqual({
+      includeSequenceLevel: false,
     });
   });
 
   it("multiEnum: a valid array (every member a declared value) is kept unchanged, order preserved", () => {
     expect(normalizeIntentParameters(assetTypesParams, { assetTypes: ["prop", "character", "vehicle"] })).toEqual({
-      includeShots: false,
       assetTypes: ["prop", "character", "vehicle"],
     });
   });
 
   it("multiEnum: an empty array is valid — a real empty choice, not a mistyped value", () => {
     expect(normalizeIntentParameters(assetTypesParams, { assetTypes: [] })).toEqual({
-      includeShots: false,
       assetTypes: [],
     });
   });
 
   it("multiEnum: an array containing one unknown member is rejected IN ITS ENTIRETY, falling back to the declared default — no silent filtering of the unknown member", () => {
     expect(normalizeIntentParameters(assetTypesParams, { assetTypes: ["character", "not-a-real-type"] })).toEqual({
-      includeShots: false,
       assetTypes: ["character", "environment", "prop"],
     });
   });
 
   it("multiEnum: a non-array value falls back to the declared default", () => {
     expect(normalizeIntentParameters(assetTypesParams, { assetTypes: "character" })).toEqual({
-      includeShots: false,
       assetTypes: ["character", "environment", "prop"],
     });
   });
 
   it("multiEnum: absent falls back to the declared default", () => {
     expect(normalizeIntentParameters(assetTypesParams, {})).toEqual({
-      includeShots: false,
       assetTypes: ["character", "environment", "prop"],
     });
   });
