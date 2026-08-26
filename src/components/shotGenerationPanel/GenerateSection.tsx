@@ -4,6 +4,7 @@ import WorkflowGenerateActions from "@/components/WorkflowGenerateActions";
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { runWorkflowGenerationFromForm, runShotStoryboardGenerationFromForm } from "@/actions/generation";
 import { serializeBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import { serializeBatchImageNotesParam } from "@/lib/comfy/dynamicBatchImageNotes";
 import type { WorkflowPayloadPatchResult } from "@/lib/comfy/patchWorkflowPayload";
 import type { PanelCloudPreflight } from "@/lib/comfy/cloudPreflight";
 
@@ -28,6 +29,8 @@ type Props = {
   batchNodeId: string;
   /** REFROLE.INTENT.1 — the current job-level role overlay, `id -> role`. */
   batchRoleOverrides: Record<string, string>;
+  /** SHOTPROMPT.REFS.2 — the current job-level note overlay, `id -> note`. */
+  batchNoteOverrides: Record<string, string>;
   workflowKind: string;
   /**
    * PROMPT.DOCTOR.1 — `composeShotGenerationPrompt`'s merged findings (the
@@ -60,6 +63,7 @@ export default function GenerateSection({
   batchDetectionOk,
   batchNodeId,
   batchRoleOverrides,
+  batchNoteOverrides,
   workflowKind,
   findings,
 }: Props) {
@@ -193,6 +197,7 @@ export default function GenerateSection({
               batchNodeId={batchNodeId}
               workflowId={String(wid)}
               roleInitialValue={serializeBatchRoleOverridesParam(batchRoleOverrides)}
+              noteInitialValue={serializeBatchImageNotesParam(batchNoteOverrides)}
             />
           )}
           {/* COMFY.PROVIDER.1 — confirmPartnerNodeCost is deliberately NOT

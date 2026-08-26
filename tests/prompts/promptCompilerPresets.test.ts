@@ -108,6 +108,7 @@ describe("validatePresetRequirements", () => {
             variantState: null,
             usageNotes: null,
             approvedForGeneration: null,
+            note: null,
           },
         ],
       })
@@ -179,6 +180,7 @@ describe("buildPromptCompilerUserMessage", () => {
           variantState: "day",
           usageNotes: "wide framing",
           approvedForGeneration: null,
+          note: null,
         },
       ],
       assetBibles: [

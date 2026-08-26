@@ -53,6 +53,11 @@ import {
   parseBatchRoleOverridesParam,
   serializeBatchRoleOverridesParam,
 } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import {
+  buildBatchNoteParamKey,
+  parseBatchImageNotesParam,
+  serializeBatchImageNotesParam,
+} from "@/lib/comfy/dynamicBatchImageNotes";
 import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
@@ -436,6 +441,13 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     ? parseBatchRoleOverridesParam(currentSearchParams[buildBatchRoleOverrideParamKey(batchNodeId)] ?? "")
     : {};
 
+  // SHOTPROMPT.REFS.2 — the job-level note overlay, read exactly like
+  // `batchRoleOverrides` above, so this preview never disagrees with the
+  // queued job.
+  const batchNoteOverrides = batchDetectionOk
+    ? parseBatchImageNotesParam(currentSearchParams[buildBatchNoteParamKey(batchNodeId)] ?? "")
+    : {};
+
   // SHOTPROMPT.SHOT.1 — the single shared composer, also called by
   // runShotGenerationCore and ShotGenerationPanel.tsx: `@ImageN` follows this
   // exact same batch selection (never DB order), Style/lighting are resolved
@@ -464,6 +476,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       batchSelectedIds,
       availableImages,
       roleOverrides: batchRoleOverrides,
+      noteOverrides: batchNoteOverrides,
       // SHOTPROMPT.REFS.1 — case 2/3: `@ImageN` follows actual per-node
       // assignment (never "everything selectable") when there is no batch.
       imageInputs: parsed?.inputs ?? [],
@@ -673,6 +686,14 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
       selectionParams.set(buildBatchRoleOverrideParamKey(batchNodeId), serializedRoles);
     }
   }
+  // SHOTPROMPT.REFS.2 — the note overlay survives the generation redirect
+  // the same way the role overlay does.
+  if (batchDetectionOk) {
+    const serializedNotes = serializeBatchImageNotesParam(batchNoteOverrides);
+    if (serializedNotes) {
+      selectionParams.set(buildBatchNoteParamKey(batchNodeId), serializedNotes);
+    }
+  }
   if (storyboardPreserveParams) {
     for (const [key, value] of Object.entries(storyboardPreserveParams)) {
       selectionParams.set(key, value);
@@ -858,6 +879,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
               availableImages={batchImageGroups}
               selectedImageIds={batchSelectedIds}
               roleOverrides={batchRoleOverrides}
+              noteOverrides={batchNoteOverrides}
               passthroughParams={currentSearchParams}
               basePath={basePath}
               contextType="shot"
@@ -1010,6 +1032,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
                       batchNodeId={batchNodeId}
                       workflowId={String(wid)}
                       roleInitialValue={serializeBatchRoleOverridesParam(batchRoleOverrides)}
+                      noteInitialValue={serializeBatchImageNotesParam(batchNoteOverrides)}
                     />
                   )}
 

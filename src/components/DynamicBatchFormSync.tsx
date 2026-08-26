@@ -37,6 +37,11 @@ import { buildBatchKey } from "@/components/DynamicBatchImageList";
  * action on the same submit as the selection itself. Omitted by every
  * caller that doesn't pass it — no second hidden input is rendered, so an
  * existing caller behaves exactly as before this ticket.
+ *
+ * SHOTPROMPT.REFS.2 — `noteInitialValue`, when passed, renders and keeps in
+ * sync a third hidden input, `batchImageNotes_<nodeId>`, on the exact same
+ * pattern as `roleInitialValue` above. Omitted by every caller that doesn't
+ * pass it.
  */
 
 type Props = {
@@ -44,15 +49,19 @@ type Props = {
   workflowId: string;
   initialValue?: string;
   roleInitialValue?: string;
+  noteInitialValue?: string;
 };
 
-export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialValue, roleInitialValue }: Props) {
+export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialValue, roleInitialValue, noteInitialValue }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const roleInputRef = useRef<HTMLInputElement>(null);
+  const noteInputRef = useRef<HTMLInputElement>(null);
   const hasInitialValue = initialValue !== undefined;
   const initial = initialValue ?? "";
   const hasRoleOverrides = roleInitialValue !== undefined;
   const roleInitial = roleInitialValue ?? "";
+  const hasNoteOverrides = noteInitialValue !== undefined;
+  const noteInitial = noteInitialValue ?? "";
 
   useEffect(() => {
     // T2 — workflow-keyed sessionStorage
@@ -62,6 +71,9 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
     // REFROLE.INTENT.1 — sibling key/param for the role overlay.
     const roleSsKey = `${ssKey}.roles`;
     const roleUrlKey = `batchImageRoles_${batchNodeId}`;
+    // SHOTPROMPT.REFS.2 — sibling key/param for the note overlay.
+    const noteSsKey = `${ssKey}.notes`;
+    const noteUrlKey = `batchImageNotes_${batchNodeId}`;
 
     function resolveCurrentValue(): string {
       const params = new URLSearchParams(window.location.search);
@@ -79,11 +91,20 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
       return raw !== null ? raw : roleInitial;
     }
 
+    function resolveCurrentNoteValue(): string {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get(noteUrlKey);
+      return raw !== null ? raw : noteInitial;
+    }
+
     function syncFromUrl() {
       if (!inputRef.current) return;
       inputRef.current.value = resolveCurrentValue();
       if (roleInputRef.current) {
         roleInputRef.current.value = resolveCurrentRoleValue();
+      }
+      if (noteInputRef.current) {
+        noteInputRef.current.value = resolveCurrentNoteValue();
       }
     }
 
@@ -122,6 +143,18 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
           sessionStorage.setItem(roleSsKey, currentRole);
         } else {
           sessionStorage.removeItem(roleSsKey);
+        }
+      } catch {
+        // sessionStorage unavailable — URL-based sync remains the fallback.
+      }
+    }
+    if (hasNoteOverrides) {
+      try {
+        const currentNote = resolveCurrentNoteValue();
+        if (currentNote) {
+          sessionStorage.setItem(noteSsKey, currentNote);
+        } else {
+          sessionStorage.removeItem(noteSsKey);
         }
       } catch {
         // sessionStorage unavailable — URL-based sync remains the fallback.
@@ -184,6 +217,23 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
           roleInputRef.current.value = roleValue;
         }
       }
+
+      if (noteInputRef.current) {
+        let noteValue = "";
+        try {
+          noteValue = sessionStorage.getItem(noteSsKey) ?? "";
+        } catch {
+          // sessionStorage unavailable — fall through to URL.
+        }
+        if (!noteValue) {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get(noteUrlKey);
+          noteValue = raw !== null ? raw : noteInitial;
+        }
+        if (noteInputRef.current.value !== noteValue) {
+          noteInputRef.current.value = noteValue;
+        }
+      }
     }
 
     const el0 = inputRef.current;
@@ -200,7 +250,7 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
         form.removeEventListener("submit", onFormSubmit);
       }
     };
-  }, [batchNodeId, workflowId, initial, hasInitialValue, roleInitial, hasRoleOverrides]);
+  }, [batchNodeId, workflowId, initial, hasInitialValue, roleInitial, hasRoleOverrides, noteInitial, hasNoteOverrides]);
 
   return (
     <>
@@ -216,6 +266,14 @@ export default function DynamicBatchFormSync({ batchNodeId, workflowId, initialV
           type="hidden"
           name={`batchImageRoles_${batchNodeId}`}
           value={roleInitial}
+        />
+      )}
+      {hasNoteOverrides && (
+        <input
+          ref={noteInputRef}
+          type="hidden"
+          name={`batchImageNotes_${batchNodeId}`}
+          value={noteInitial}
         />
       )}
     </>

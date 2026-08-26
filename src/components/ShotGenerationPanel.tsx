@@ -29,6 +29,7 @@ import { compileShotPrompt, type ShotPromptCompileKind } from "@/lib/prompts/com
 import { buildPromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
 import { buildOrderedShotReferenceInputs, composeShotGenerationPrompt } from "@/lib/prompts/composeShotGenerationPrompt";
 import { buildBatchRoleOverrideParamKey, parseBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import { buildBatchNoteParamKey, parseBatchImageNotesParam } from "@/lib/comfy/dynamicBatchImageNotes";
 import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { resolveSequenceEnvironmentAssets } from "@/lib/llmWorkspace/variables/registry";
@@ -383,6 +384,14 @@ export default async function ShotGenerationPanel({
       ? parseBatchRoleOverridesParam(currentSearchParams[buildBatchRoleOverrideParamKey(batchUiInfo.batchNodeId)] ?? "")
       : {};
 
+  // SHOTPROMPT.REFS.2 — the job-level note overlay, read exactly like
+  // `batchRoleOverrides` above, so the preview and the queued job never
+  // disagree on which note a reference carries for this generation.
+  const batchNoteOverrides =
+    batchUiInfo.kind === "ready"
+      ? parseBatchImageNotesParam(currentSearchParams[buildBatchNoteParamKey(batchUiInfo.batchNodeId)] ?? "")
+      : {};
+
   // --- Canonical payload (GEN.SEEDANCE.1): same function used by /map,
   // AssetGenerationPanel and the server action — the preview computed here
   // matches exactly what queueing recomputes. ---
@@ -419,6 +428,7 @@ export default async function ShotGenerationPanel({
       batchSelectedIds,
       availableImages,
       roleOverrides: batchRoleOverrides,
+      noteOverrides: batchNoteOverrides,
       // SHOTPROMPT.REFS.1 — case 2/3: `@ImageN` follows actual per-node
       // assignment (never "everything selectable") when there is no batch.
       imageInputs: parsed?.inputs ?? [],
@@ -818,6 +828,7 @@ export default async function ShotGenerationPanel({
           batchImageGroups={batchImageGroups}
           batchSelectedIds={batchSelectedIds}
           batchRoleOverrides={batchRoleOverrides}
+          batchNoteOverrides={batchNoteOverrides}
           workflowId={wid}
         />
 
@@ -850,6 +861,7 @@ export default async function ShotGenerationPanel({
             batchDetectionOk={batchDetectionOk}
             batchNodeId={batchNodeId}
             batchRoleOverrides={batchRoleOverrides}
+            batchNoteOverrides={batchNoteOverrides}
             workflowKind={workflow.kind}
             findings={composedPrompt.findings}
           />

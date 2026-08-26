@@ -17,6 +17,7 @@ import { getComfySettings } from "@/lib/settings";
 import { maybeUnloadOllamaBeforeComfy } from "@/lib/vramManager";
 import { type DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
 import { parseBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import { parseBatchImageNotesParam } from "@/lib/comfy/dynamicBatchImageNotes";
 import { buildGenerationPayload } from "@/lib/comfy/buildGenerationPayload";
 import { serializeGenerationSnapshot, type GenerationSnapshot } from "@/lib/comfy/generationSnapshot";
 import { isSingleGenerationTarget } from "@/lib/comfy/generationTarget";
@@ -157,6 +158,20 @@ async function submitShotGeneration(formData: FormData, normalStyleIntent: "auto
     }
   }
 
+  // SHOTPROMPT.REFS.2 — the job-level free-text note overlay, keyed
+  // identically to batchImagesByNodeId above. Never written to the library.
+  const batchImageNoteOverridesByNodeId: Record<string, Record<string, string>> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("batchImageNotes_")) continue;
+    if (typeof value !== "string") continue;
+    const nodeId = key.slice("batchImageNotes_".length).trim();
+    if (!nodeId) continue;
+    const notes = parseBatchImageNotesParam(value);
+    if (Object.keys(notes).length > 0) {
+      batchImageNoteOverridesByNodeId[nodeId] = notes;
+    }
+  }
+
   // GEN.SEEDANCE.1 — the Advanced Payload Editor textarea is always present
   // in the DOM, so patchedJsonOverride is always submitted; it is only
   // treated as an explicit override when patchedJsonOverrideActive is also
@@ -199,6 +214,7 @@ async function submitShotGeneration(formData: FormData, normalStyleIntent: "auto
       patchedJsonOverride,
       batchImagesByNodeId,
       batchImageRoleOverridesByNodeId,
+      batchImageNoteOverridesByNodeId,
       confirmPartnerNodeCost,
       appendProjectStyleRequested: appendProjectStyle,
     },

@@ -15,13 +15,15 @@
 // A Shot is the N = 1 case of the Sequence Storyboard package
 // (`buildSequenceStoryboardPrompt` + `formatSequenceGenerationPackageText`'s
 // `storyboardComposition` option): the same "Style:" once, then
-// "Subject Definition:" (`@ImageN` + the guide's named mode per casting
-// reference, `getGuideModeForRole` — the exact table
-// `buildSequenceStoryboardPrompt` already uses), then the six-part body
-// `composeStoryboardShot` already renders — reused verbatim here, never
-// duplicated. `compileShotPrompt` keeps its own responsibility (the video
-// `Timeline:` text and its warnings); this module wraps it, never replaces
-// or empties it.
+// "Subject Definition:" — one line per reference actually sent, never only
+// per casting reference (SHOTPROMPT.REFS.2's correction of the mirror
+// defect), each carrying `@ImageN` plus the guide's named mode when its role
+// has one (`getGuideModeForRole` — the exact table `buildSequenceStoryboardPrompt`
+// already uses) and a job-level note when one was written — then the
+// six-part body `composeStoryboardShot` already renders — reused verbatim
+// here, never duplicated. `compileShotPrompt` keeps its own responsibility
+// (the video `Timeline:` text and its warnings); this module wraps it, never
+// replaces or empties it.
 //
 // No `【Unused Assets】` block: an unselected reference is never uploaded
 // (`docs/WHERE_THE_RULES_LIVE.md`), so naming its `@ImageN` here would tell
@@ -53,6 +55,7 @@ import type { ConformationFinding } from "@/lib/llmWorkspace/conformation";
 import { orderStoryboardReferences } from "./orderStoryboardReferences";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { resolveOverriddenRole } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import { resolveNoteOverride } from "@/lib/comfy/dynamicBatchImageNotes";
 import type { WorkflowInput } from "@/lib/comfy/parseWorkflow";
 
 // ---------------------------------------------------------------------------
@@ -92,6 +95,15 @@ export type BuildOrderedShotReferenceInputsParams = {
    * this ticket.
    */
   roleOverrides?: Record<string, string>;
+  /**
+   * SHOTPROMPT.REFS.2 — the job-level free-text note overlay from the same
+   * "Selected Images" panel (`batchImageNotes_<nodeId>`, `id -> note`).
+   * Job-only, never persisted to `shot_reference_images` or
+   * `asset_reference_images`, and never read from a library field — there is
+   * no "library note" to fall back to. Absent/undefined behaves exactly as
+   * before this ticket (no note on any reference).
+   */
+  noteOverrides?: Record<string, string>;
   /**
    * SHOTPROMPT.REFS.1 — the workflow's own parsed inputs
    * (`parseComfyWorkflow(workflowJson).inputs`), used only when
@@ -189,6 +201,7 @@ export function buildOrderedShotReferenceInputs(
     role: resolveOverriddenRole(img.id, img.role ?? null, params.roleOverrides),
     variantState: img.variantState ?? null,
     approvedForGeneration: img.approved ?? null,
+    note: resolveNoteOverride(img.id, params.noteOverrides),
   }));
 }
 
@@ -273,20 +286,38 @@ function dedupePreservingOrder(values: string[]): string[] {
 }
 
 /**
- * `assetName (assetType) — @ImageN <named mode>` per casting reference, in
- * `context.references`' own order (already the caller's selection order) —
- * the exact line shape `buildSequenceStoryboardPrompt`'s header already
- * renders once per Sequence package; here it is once per Shot. Shot-sourced
- * references (no `assetName`) never produce a line — Subject Definition
- * only ever names casting.
+ * SHOTPROMPT.REFS.2 — one line per reference actually sent
+ * (`context.references`' own order, already the caller's selection order),
+ * never one line per casting-named asset only. The mirror of
+ * `SHOTPROMPT.REFS.1`'s "declare nothing that wasn't sent": this is "declare
+ * everything that WAS sent" — the author's own case (four images sent, one
+ * from the plan, only three declared) is exactly a reference with no
+ * `assetName` producing no line at all, which this function no longer does.
+ *
+ * Two shapes, chosen by whether the reference carries a casting asset name:
+ *   - issued from an asset: `{name} ({type}) — @ImageN[ {mode}][ — {note}]` —
+ *     unchanged from before this ticket, plus the trailing note;
+ *   - issued from the plan (no asset name — a Shot reference image, or an
+ *     asset reference whose name did not survive trimming): `@ImageN[ {mode}]
+ *     [ — {note}]` — the tag alone when neither a named mode nor a note
+ *     exists, never the image's own `label` as a stand-in name. A `label`
+ *     defaults to "Generated Output" for a generated image, and the author
+ *     was explicit that showing that default would misrepresent the image as
+ *     described when it isn't ("le nom est par défaut Generated Output, donc
+ *     je suggère de ne pas le mettre").
  */
 function buildSubjectDefinitionLines(context: PromptCompilationContext): string[] {
   const lines: string[] = [];
   for (const ref of context.references) {
-    if (ref.source !== "asset" || !ref.assetName) continue;
     const mode = getGuideModeForRole(ref.role);
-    const namePart = ref.assetType ? `${ref.assetName} (${ref.assetType})` : ref.assetName;
-    lines.push(`${namePart} — ${ref.tag}${mode ? ` ${mode}` : ""}`);
+    const modePart = mode ? ` ${mode}` : "";
+    const notePart = ref.note ? ` — ${ref.note}` : "";
+    if (ref.source === "asset" && ref.assetName) {
+      const namePart = ref.assetType ? `${ref.assetName} (${ref.assetType})` : ref.assetName;
+      lines.push(`${namePart} — ${ref.tag}${modePart}${notePart}`);
+    } else {
+      lines.push(`${ref.tag}${modePart}${notePart}`);
+    }
   }
   return lines;
 }

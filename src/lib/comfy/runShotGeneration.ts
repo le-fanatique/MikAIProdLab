@@ -87,6 +87,14 @@ export type ShotGenerationArgs = {
    * `Object.entries(...)[0]` below). Never written back to the library.
    */
   batchImageRoleOverridesByNodeId?: Record<string, Record<string, string>>;
+  /**
+   * SHOTPROMPT.REFS.2 — the job-level free-text note overlay for the same
+   * Dynamic Batch node's selected images (`batchImageNotes_<nodeId>`,
+   * `id -> note`), keyed identically to `batchImagesByNodeId`. Only the
+   * single node V1 supports is ever read. Never written back to the
+   * library — job-only, ephemeral.
+   */
+  batchImageNoteOverridesByNodeId?: Record<string, Record<string, string>>;
   /** COMFY.PROVIDER.1 — explicit acknowledgment that this Cloud submission may call paid Partner Node(s). Ignored for the local provider. */
   confirmPartnerNodeCost?: boolean;
   /** CAMLAB.POLISH.1 — set only by the Camera Lab's Gaussian-to-image caller; recorded as-is on the job's payloadSnapshot, never inferred here. */
@@ -290,6 +298,11 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
     ? Object.entries(args.batchImageRoleOverridesByNodeId)[0]
     : undefined;
   const batchRoleOverrides = roleOverrideEntry?.[1] ?? undefined;
+  // SHOTPROMPT.REFS.2 — same single-node convention as batchEntry above.
+  const noteOverrideEntry = args.batchImageNoteOverridesByNodeId
+    ? Object.entries(args.batchImageNoteOverridesByNodeId)[0]
+    : undefined;
+  const batchNoteOverrides = noteOverrideEntry?.[1] ?? undefined;
 
   // SHOT.VIDEO.LIBRARY.1, Lot C
   const availableVideos = await loadRuntimeVideoOptionsForShot(shotId);
@@ -322,6 +335,7 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
       batchSelectedIds,
       availableImages,
       roleOverrides: batchRoleOverrides,
+      noteOverrides: batchNoteOverrides,
       // SHOTPROMPT.REFS.1 — case 2/3: `@ImageN` follows actual per-node
       // assignment (never "everything selectable") when there is no batch.
       imageInputs: parsed.inputs,

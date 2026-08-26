@@ -1,20 +1,23 @@
 // ---------------------------------------------------------------------------
 // composition/promptConsistency.ts — PROMPT.DOCTOR.1, Part A
 //
-// Five deterministic, no-model checks on the composed Shot prompt, each one
-// lifted from a defect the author actually hit on his own composed prompt
-// (2026-08-26): a cast Asset described in Subject but never named in Subject
-// Definition (`Corporate Corridors`, `Sensor Console`), the same description
-// repeated between General Description and Action, a cast Asset never named
-// in the action text, a cast Asset with neither a Prompt Card nor a reference
-// image, and a Shot with no `Lighting:` part despite the resolution chain
-// having environment candidates to draw from.
+// Six deterministic, no-model checks on the composed Shot prompt. The first
+// five were lifted from a defect the author actually hit on his own composed
+// prompt (2026-08-26): a cast Asset described in Subject but never named in
+// Subject Definition (`Corporate Corridors`, `Sensor Console`), the same
+// description repeated between General Description and Action, a cast Asset
+// never named in the action text, a cast Asset with neither a Prompt Card
+// nor a reference image, and a Shot with no `Lighting:` part despite the
+// resolution chain having environment candidates to draw from. The sixth
+// (SHOTPROMPT.REFS.2) is this check's own mirror: an image actually sent to
+// the engine but explained by nothing at all — no asset name, no named mode,
+// no note.
 //
 // **Why this is not `guideDefault.inspect`.** `guideDefault` (B13a/B13b) is
 // the *engine's* norm — replaceable per engine, and
 // `docs/LLM_WORKSPACE_PRODUCT_VISION.md` §5.6 forbids it from ever learning
 // the shape of *our own* composition (Subject/Action/Environment/…, cast
-// Assets, Subject Definition lines). These five checks are internal
+// Assets, Subject Definition lines). These six checks are internal
 // consistency of the composer's own parts against the composer's own cast —
 // they would still make sense with no engine profile at all, and they belong
 // beside the compositor, not inside a profile
@@ -38,6 +41,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PromptCompilationContext } from "@/lib/prompts/buildPromptCompilationContext";
+import { getGuideModeForRole } from "@/lib/llmWorkspace/conformation/profiles/guideDefault";
 import type { StoryboardShotComposition } from "./storyboardShot";
 
 export type PromptConsistencyFindingCode =
@@ -45,7 +49,8 @@ export type PromptConsistencyFindingCode =
   | "duplicateText"
   | "castAssetNotNamed"
   | "assetWithoutAnchor"
-  | "lightingChainUnused";
+  | "lightingChainUnused"
+  | "imageSentUnexplained";
 
 /** Same shape as `ConformationFinding` on purpose — see this module's own header. */
 export type PromptConsistencyFinding = {
@@ -235,6 +240,26 @@ export function checkPromptConsistency(input: PromptConsistencyCheckInput): Prom
       message:
         "No Lighting part is rendered, even though the Sequence has Environment Assets that could have supplied one.",
     });
+  }
+
+  // Check 6 — SHOTPROMPT.REFS.2: an image is actually sent (has an @ImageN
+  // tag, i.e. is in `context.references`) but nothing explains what it is
+  // for — no casting asset name, no named mode, and no free-text note.
+  // Deliberately never fires when any one of the three exists: an asset with
+  // a name, a reference with a named role (`getGuideModeForRole`), or a
+  // reference carrying a note is already explained, exactly the discipline
+  // PROMPT.DOCTOR.2 restored for check 3 after it fired on normal cases.
+  for (const ref of context.references) {
+    const hasName = ref.source === "asset" && Boolean(ref.assetName);
+    const hasMode = getGuideModeForRole(ref.role) !== null;
+    const hasNote = Boolean(ref.note && ref.note.trim());
+    if (!hasName && !hasMode && !hasNote) {
+      findings.push({
+        code: "imageSentUnexplained",
+        severity: "info",
+        message: `${ref.tag} is sent to the engine but has no asset name, no named mode and no note — nothing explains what it is for.`,
+      });
+    }
   }
 
   return findings;

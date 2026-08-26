@@ -31,6 +31,8 @@ type Props = {
   batchSelectedIds: string[];
   /** REFROLE.INTENT.1 — the current job-level role overlay, `id -> role`. */
   batchRoleOverrides: Record<string, string>;
+  /** SHOTPROMPT.REFS.2 — the current job-level note overlay, `id -> note`. */
+  batchNoteOverrides: Record<string, string>;
   workflowId: number;
 };
 
@@ -57,6 +59,7 @@ export default function SuggestedInputsBody({
   batchImageGroups,
   batchSelectedIds,
   batchRoleOverrides,
+  batchNoteOverrides,
   workflowId: wid,
 }: Props) {
   return parsed === null ? (
@@ -117,6 +120,7 @@ export default function SuggestedInputsBody({
             availableImages={batchImageGroups}
             selectedImageIds={batchSelectedIds}
             roleOverrides={batchRoleOverrides}
+            noteOverrides={batchNoteOverrides}
             passthroughParams={currentSearchParams}
             basePath={basePath}
             contextType="shot"

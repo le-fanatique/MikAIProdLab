@@ -246,6 +246,68 @@ describe("checkPromptConsistency", () => {
     expect(findings.some((f) => f.code === "lightingChainUnused")).toBe(false);
   });
 
+  // Check 6 (SHOTPROMPT.REFS.2) — an image actually sent (has an @ImageN tag)
+  // but explained by nothing: no asset name, no named mode, no note.
+  it("flags a sent reference with no asset name, no named mode and no note", () => {
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [],
+      references: [{ refId: "shot-367", source: "shot", label: "Generated Output" }],
+      assetBibles: [],
+      sources: { ...ALL_SOURCES },
+    });
+    const composition = composeStoryboardShot({ context, continuity: NO_CONTINUITY, lighting: null });
+
+    const findings = checkPromptConsistency({ composition, context });
+
+    expect(findings.some((f) => f.code === "imageSentUnexplained" && f.message.includes("@Image1"))).toBe(true);
+  });
+
+  it("does not flag a sent reference that has a named mode, even with no asset name and no note", () => {
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [],
+      references: [{ refId: "shot-367", source: "shot", role: "first_frame" }],
+      assetBibles: [],
+      sources: { ...ALL_SOURCES },
+    });
+    const composition = composeStoryboardShot({ context, continuity: NO_CONTINUITY, lighting: null });
+
+    const findings = checkPromptConsistency({ composition, context });
+
+    expect(findings.some((f) => f.code === "imageSentUnexplained")).toBe(false);
+  });
+
+  it("does not flag a sent reference that has a note, even with no asset name and no named mode", () => {
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [],
+      references: [{ refId: "shot-367", source: "shot", note: "reference for the first image of the shot" }],
+      assetBibles: [],
+      sources: { ...ALL_SOURCES },
+    });
+    const composition = composeStoryboardShot({ context, continuity: NO_CONTINUITY, lighting: null });
+
+    const findings = checkPromptConsistency({ composition, context });
+
+    expect(findings.some((f) => f.code === "imageSentUnexplained")).toBe(false);
+  });
+
+  it("does not flag a sent reference that has an asset name, even with no named mode and no note", () => {
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character" }],
+      references: [{ refId: "r1", source: "asset", assetId: 1, assetName: "Mara" }],
+      assetBibles: [],
+      sources: { ...ALL_SOURCES },
+    });
+    const composition = composeStoryboardShot({ context, continuity: NO_CONTINUITY, lighting: null });
+
+    const findings = checkPromptConsistency({ composition, context });
+
+    expect(findings.some((f) => f.code === "imageSentUnexplained")).toBe(false);
+  });
+
   it("is deterministic — the same input twice yields an identical result", () => {
     const context = buildPromptCompilationContext({
       shot: { description: "A description.", actionPitch: "An action." },

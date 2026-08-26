@@ -12,6 +12,12 @@ import {
   serializeBatchRoleOverridesParam,
   pruneBatchRoleOverrides,
 } from "@/lib/comfy/dynamicBatchRoleOverrides";
+import {
+  buildBatchNoteParamKey,
+  serializeBatchImageNotesParam,
+  pruneBatchImageNotes,
+  MAX_BATCH_IMAGE_NOTE_LENGTH,
+} from "@/lib/comfy/dynamicBatchImageNotes";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +72,13 @@ type Props = {
    * this component's "role of the library" default).
    */
   roleOverrides?: Record<string, string>;
+  /**
+   * SHOTPROMPT.REFS.2 — the current job-level free-text note overlay,
+   * `id -> note`, for this batch node. Never written to the library — only
+   * the URL's `batchImageNotes_<nodeId>` sibling param and sessionStorage.
+   * Absent ids carry no note.
+   */
+  noteOverrides?: Record<string, string>;
   passthroughParams: Record<string, string>;
   basePath: string;
   /** "shot" or "asset" determine which panel upload server action to use; "sequence" (SEQGEN.STORYBOARD.3) has no upload action — only casting references already in the DB feed the batch, so the Upload Image form is not rendered for it. */
@@ -123,6 +136,7 @@ export default function DynamicBatchImageList({
   availableImages,
   selectedImageIds,
   roleOverrides: roleOverridesProp,
+  noteOverrides: noteOverridesProp,
   passthroughParams,
   basePath,
   contextType,
@@ -140,6 +154,8 @@ export default function DynamicBatchImageList({
   // REFROLE.INTENT.1 — job-level role overlay, id -> role. Never written to
   // the library; lives only in the URL's sibling param + sessionStorage.
   const [roleOverrides, setRoleOverrides] = useState<Record<string, string>>(roleOverridesProp ?? {});
+  // SHOTPROMPT.REFS.2 — job-level note overlay, id -> note. Same rule.
+  const [notes, setNotes] = useState<Record<string, string>>(noteOverridesProp ?? {});
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Combine all available images into flat picker items
@@ -149,6 +165,8 @@ export default function DynamicBatchImageList({
   const ssKey = buildBatchKey(workflowId, batchNodeId);
   // REFROLE.INTENT.1 — sibling sessionStorage key for the role overlay.
   const roleSsKey = `${ssKey}.roles`;
+  // SHOTPROMPT.REFS.2 — sibling sessionStorage key for the note overlay.
+  const noteSsKey = `${ssKey}.notes`;
 
   // Seed sessionStorage from initial URL params on mount so the hidden input
   // can read a fresh value on the very first Generate click after page load.
@@ -163,8 +181,14 @@ export default function DynamicBatchImageList({
         const serialized = serializeBatchRoleOverridesParam(initialRoles);
         sessionStorage.setItem(roleSsKey, serialized);
       }
+      // SHOTPROMPT.REFS.2 — same seeding for the note overlay.
+      if (sessionStorage.getItem(noteSsKey) === null) {
+        const initialNotes = noteOverridesProp ?? {};
+        const serializedNotes = serializeBatchImageNotesParam(initialNotes);
+        sessionStorage.setItem(noteSsKey, serializedNotes);
+      }
     } catch { /* sessionStorage unavailable */ }
-  }, [ssKey, roleSsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ssKey, roleSsKey, noteSsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * REFROLE.INTENT.1 — `nextRoleOverrides` defaults to pruning the current
@@ -173,17 +197,34 @@ export default function DynamicBatchImageList({
    * selection-changing caller below elides a removed image's override for
    * free. `handleRoleChange` is the only caller that passes an explicit map
    * (ids unchanged, only the overlay itself changes).
+   *
+   * SHOTPROMPT.REFS.2 — `nextNotes` follows the exact same rule
+   * (`pruneBatchImageNotes`): a note for an image no longer selected is
+   * elided along with it, never resurrected.
    */
-  function pushState(newIds: string[], nextRoleOverrides?: Record<string, string>) {
+  function pushState(
+    newIds: string[],
+    nextRoleOverrides?: Record<string, string>,
+    nextNotes?: Record<string, string>
+  ) {
     const prunedRoles = nextRoleOverrides ?? pruneBatchRoleOverrides(roleOverrides, newIds);
     setRoleOverrides(prunedRoles);
+    const prunedNotes = nextNotes ?? pruneBatchImageNotes(notes, newIds);
+    setNotes(prunedNotes);
 
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(passthroughParams)) {
-      if (!k.startsWith("batchImages_") && !k.startsWith("batchImageRoles_") && k !== "jobId") params.set(k, v);
+      if (
+        !k.startsWith("batchImages_") &&
+        !k.startsWith("batchImageRoles_") &&
+        !k.startsWith("batchImageNotes_") &&
+        k !== "jobId"
+      )
+        params.set(k, v);
     }
     const urlKey = buildBatchParamKey(batchNodeId);
     const roleUrlKey = buildBatchRoleOverrideParamKey(batchNodeId);
+    const noteUrlKey = buildBatchNoteParamKey(batchNodeId);
     // Retake Round 2 — once the user has explicitly acted on this batch
     // (this function only ever runs from an explicit action), the param
     // stays PRESENT even when it empties out, on the Sequence Storyboard
@@ -199,6 +240,11 @@ export default function DynamicBatchImageList({
     if (serializedRoles) {
       params.set(roleUrlKey, serializedRoles);
     }
+    const serializedNotes = serializeBatchImageNotesParam(prunedNotes);
+    // SHOTPROMPT.REFS.2 — same additive-only convention as the role overlay.
+    if (serializedNotes) {
+      params.set(noteUrlKey, serializedNotes);
+    }
     router.replace(`${basePath}?${params.toString()}`, { scroll: false });
 
     // Sync sessionStorage immediately so DynamicBatchFormSync can read it
@@ -210,6 +256,7 @@ export default function DynamicBatchImageList({
         sessionStorage.removeItem(ssKey);
       }
       sessionStorage.setItem(roleSsKey, serializedRoles);
+      sessionStorage.setItem(noteSsKey, serializedNotes);
     } catch {
       // sessionStorage unavailable — ignore, URL-based sync is fallback.
     }
@@ -261,6 +308,27 @@ export default function DynamicBatchImageList({
       delete next[id];
     }
     pushState(selected, next);
+  }
+
+  // SHOTPROMPT.REFS.2 — a controlled keystroke-level update to local state
+  // only, so the URL/sessionStorage/router.replace round trip does not run
+  // on every character typed. `handleNoteBlur` commits the current `notes`
+  // state via `pushState` once the user leaves the field.
+  function handleNoteInputChange(id: string, value: string) {
+    const bounded = value.length > MAX_BATCH_IMAGE_NOTE_LENGTH ? value.slice(0, MAX_BATCH_IMAGE_NOTE_LENGTH) : value;
+    setNotes((prev) => {
+      const next = { ...prev };
+      if (bounded.trim()) {
+        next[id] = bounded;
+      } else {
+        delete next[id];
+      }
+      return next;
+    });
+  }
+
+  function handleNoteBlur() {
+    pushState(selected, roleOverrides, notes);
   }
 
   function handleMoveUp(index: number) {
@@ -378,79 +446,94 @@ export default function DynamicBatchImageList({
             {selected.map((id, index) => (
               <div
                 key={id}
-                className="flex items-center gap-2 rounded border border-[#232629] bg-[#1a1d20] px-2 py-1.5"
+                className="flex flex-col gap-1 rounded border border-[#232629] bg-[#1a1d20] px-2 py-1.5"
               >
-                <span className="text-[10px] text-[#5a6168] font-mono w-16 shrink-0 text-left">
-                  {buildBatchSlotLabels(index)}
-                </span>
-                <div className="w-7 h-7 rounded overflow-hidden bg-[#141618] shrink-0 flex items-center justify-center">
-                  <ThumbnailHoverPreview
-                    src={refImageUrl(getImagePath(id))}
-                    alt={getLabel(id)}
-                    className="w-full h-full"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-[#5a6168] font-mono w-16 shrink-0 text-left">
+                    {buildBatchSlotLabels(index)}
+                  </span>
+                  <div className="w-7 h-7 rounded overflow-hidden bg-[#141618] shrink-0 flex items-center justify-center">
+                    <ThumbnailHoverPreview
                       src={refImageUrl(getImagePath(id))}
                       alt={getLabel(id)}
-                      className="w-full h-full object-contain"
-                    />
-                  </ThumbnailHoverPreview>
-                </div>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-xs text-[#a4abb2] truncate">
-                    {getLabel(id)}
-                  </span>
-                  {getRoleLabel(id) && (
-                    <span className="text-[10px] text-[#4b5158] truncate">
-                      {getRoleLabel(id)}
+                      className="w-full h-full"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={refImageUrl(getImagePath(id))}
+                        alt={getLabel(id)}
+                        className="w-full h-full object-contain"
+                      />
+                    </ThumbnailHoverPreview>
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-xs text-[#a4abb2] truncate">
+                      {getLabel(id)}
                     </span>
-                  )}
+                    {getRoleLabel(id) && (
+                      <span className="text-[10px] text-[#4b5158] truncate">
+                        {getRoleLabel(id)}
+                      </span>
+                    )}
+                  </div>
+                  {/* REFROLE.INTENT.1 — job-level role overlay for this
+                      generation only; never writes to the library. Default
+                      option ("(library role)") clears the override. */}
+                  <select
+                    value={roleOverrides[id] ?? ""}
+                    onChange={(e) => handleRoleChange(id, e.target.value)}
+                    title="Override this image's role for this generation only"
+                    className="shrink-0 rounded border border-[#2c3035] bg-[#141618] text-[10px] text-[#a4abb2] px-1.5 py-1 max-w-[9.5rem]"
+                  >
+                    <option value="">(library role)</option>
+                    {NAMED_GUIDE_MODE_ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveUp(index)}
+                      disabled={index === 0}
+                      className="text-[10px] text-[#5a6168] hover:text-[#e7e9ec] transition-colors px-1.5 py-1 rounded hover:bg-[#2a2f35] disabled:opacity-20 disabled:cursor-default"
+                      title="Move Up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveDown(index)}
+                      disabled={index === selected.length - 1}
+                      className="text-[10px] text-[#5a6168] hover:text-[#e7e9ec] transition-colors px-1.5 py-1 rounded hover:bg-[#2a2f35] disabled:opacity-20 disabled:cursor-default"
+                      title="Move Down"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(id)}
+                      className="text-[10px] text-[#6e767d] hover:text-[#cf7b6b] transition-colors px-1.5 py-0.5 rounded hover:bg-[#2a1a1a]"
+                      title="Remove"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                {/* REFROLE.INTENT.1 — job-level role overlay for this
-                    generation only; never writes to the library. Default
-                    option ("(library role)") clears the override. */}
-                <select
-                  value={roleOverrides[id] ?? ""}
-                  onChange={(e) => handleRoleChange(id, e.target.value)}
-                  title="Override this image's role for this generation only"
-                  className="shrink-0 rounded border border-[#2c3035] bg-[#141618] text-[10px] text-[#a4abb2] px-1.5 py-1 max-w-[9.5rem]"
-                >
-                  <option value="">(library role)</option>
-                  {NAMED_GUIDE_MODE_ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleMoveUp(index)}
-                    disabled={index === 0}
-                    className="text-[10px] text-[#5a6168] hover:text-[#e7e9ec] transition-colors px-1.5 py-1 rounded hover:bg-[#2a2f35] disabled:opacity-20 disabled:cursor-default"
-                    title="Move Up"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMoveDown(index)}
-                    disabled={index === selected.length - 1}
-                    className="text-[10px] text-[#5a6168] hover:text-[#e7e9ec] transition-colors px-1.5 py-1 rounded hover:bg-[#2a2f35] disabled:opacity-20 disabled:cursor-default"
-                    title="Move Down"
-                  >
-                    ▼
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(id)}
-                    className="text-[10px] text-[#6e767d] hover:text-[#cf7b6b] transition-colors px-1.5 py-0.5 rounded hover:bg-[#2a1a1a]"
-                    title="Remove"
-                  >
-                    Remove
-                  </button>
-                </div>
+                {/* SHOTPROMPT.REFS.2 — job-level free-text note for this
+                    generation only; never writes to the library. Lands at
+                    the end of this image's Subject Definition line. */}
+                <input
+                  type="text"
+                  value={notes[id] ?? ""}
+                  onChange={(e) => handleNoteInputChange(id, e.target.value)}
+                  onBlur={handleNoteBlur}
+                  maxLength={MAX_BATCH_IMAGE_NOTE_LENGTH}
+                  placeholder="Note for this image (optional) — e.g. reference for the first image of the shot"
+                  title="Add a short note explaining why this image was sent, for this generation only"
+                  className="ml-[4.5rem] rounded border border-[#2c3035] bg-[#141618] text-[10px] text-[#a4abb2] px-1.5 py-1 placeholder:text-[#4b5158]"
+                />
               </div>
             ))}
           </div>
@@ -550,7 +633,13 @@ export default function DynamicBatchImageList({
             value={(() => {
               const p = new URLSearchParams();
               for (const [k, v] of Object.entries(passthroughParams)) {
-                if (!k.startsWith("batchImages_") && !k.startsWith("batchImageRoles_") && k !== "jobId") p.set(k, v);
+                if (
+                  !k.startsWith("batchImages_") &&
+                  !k.startsWith("batchImageRoles_") &&
+                  !k.startsWith("batchImageNotes_") &&
+                  k !== "jobId"
+                )
+                  p.set(k, v);
               }
               const key = buildBatchParamKey(batchNodeId);
               if (selected.length > 0) p.set(key, selected.join(","));
@@ -559,6 +648,10 @@ export default function DynamicBatchImageList({
               const roleKey = buildBatchRoleOverrideParamKey(batchNodeId);
               const serializedRoles = serializeBatchRoleOverridesParam(roleOverrides);
               if (serializedRoles) p.set(roleKey, serializedRoles);
+              // SHOTPROMPT.REFS.2 — same round trip for the note overlay.
+              const noteKey = buildBatchNoteParamKey(batchNodeId);
+              const serializedNotes = serializeBatchImageNotesParam(notes);
+              if (serializedNotes) p.set(noteKey, serializedNotes);
               return `${basePath}?${p.toString()}`;
             })()}
           />

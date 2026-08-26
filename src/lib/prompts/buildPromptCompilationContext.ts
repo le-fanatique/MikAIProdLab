@@ -75,6 +75,14 @@ export type PromptCompilationReferenceImageInput = {
   variantState?: string | null;
   usageNotes?: string | null;
   approvedForGeneration?: boolean | null;
+  /**
+   * SHOTPROMPT.REFS.2 — the job-level free-text note overlay
+   * (`batchImageNotes_<nodeId>`), never persisted to `shot_reference_images`
+   * or `asset_reference_images`. Distinct from `usageNotes` (the library's
+   * own stored field): this is job-only, ephemeral, and rendered at the end
+   * of the Subject Definition line for this reference.
+   */
+  note?: string | null;
 };
 
 export type PromptCompilationImageTag = {
@@ -91,6 +99,8 @@ export type PromptCompilationImageTag = {
   variantState: string | null;
   usageNotes: string | null;
   approvedForGeneration: boolean | null;
+  /** SHOTPROMPT.REFS.2 — see the input field's own comment. */
+  note: string | null;
 };
 
 /**
@@ -255,6 +265,7 @@ function buildReferences(
     const role = trimOrNull(ref.role);
     const variantState = trimOrNull(ref.variantState);
     const usageNotes = trimOrNull(ref.usageNotes);
+    const note = trimOrNull(ref.note);
     const approvedForGeneration =
       ref.source === "asset" ? ref.approvedForGeneration ?? null : null;
 
@@ -277,6 +288,7 @@ function buildReferences(
       variantState,
       usageNotes,
       approvedForGeneration,
+      note,
     });
   }
 

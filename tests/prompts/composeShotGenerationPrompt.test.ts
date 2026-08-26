@@ -164,7 +164,11 @@ describe("composeShotGenerationPrompt", () => {
     expect(result.text).toContain("Avoid: - no bright colors");
   });
 
-  it("omits Subject Definition when no casting reference carries an assetName", () => {
+  // SHOTPROMPT.REFS.2 — the mirror defect this ticket corrects: a reference
+  // actually sent with no casting assetName (a plan/Shot reference image)
+  // used to produce no Subject Definition line at all, and no section. It
+  // must now produce a tag-only line, and the section must be present.
+  it("still declares a Subject Definition line for a sent reference with no casting assetName — the tag alone, never the image's own label", () => {
     const context = buildPromptCompilationContext({
       shot: { shotPrompt: "Empty rooftop at dawn." },
       castAssets: [],
@@ -173,7 +177,9 @@ describe("composeShotGenerationPrompt", () => {
       sources: { casting: false, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
     });
     const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
-    expect(result.sections.some((s) => s.id === "subjectDefinition")).toBe(false);
+    expect(result.sections.some((s) => s.id === "subjectDefinition")).toBe(true);
+    expect(result.text).toContain("Subject Definition:\n@Image1");
+    expect(result.text).not.toContain("Rooftop wide");
   });
 
   it("never includes Timeline for an image Shot, even with Prompt Segments", () => {
@@ -224,12 +230,12 @@ describe("composeShotGenerationPrompt — findings (PROMPT.DOCTOR.1)", () => {
     );
   });
 
-  // Zero findings from `checkPromptConsistency`'s own five checks (the
+  // Zero findings from `checkPromptConsistency`'s own six checks (the
   // guarantee `tests/llmWorkspace/promptConsistency.test.ts` proves in
   // isolation) — `guideDefault`'s own word-budget/camera findings are a
   // separate, pre-existing concern this ticket does not touch, so this
   // assertion is scoped to the new checks, not to every finding in general.
-  it("reports none of the five new consistency findings on a clean composition", () => {
+  it("reports none of the six consistency findings on a clean composition", () => {
     const context = buildPromptCompilationContext({
       shot: { actionPitch: "Mara steadies the console." },
       castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character", description: "Lead." }],
@@ -258,6 +264,7 @@ describe("composeShotGenerationPrompt — findings (PROMPT.DOCTOR.1)", () => {
       "castAssetNotNamed",
       "assetWithoutAnchor",
       "lightingChainUnused",
+      "imageSentUnexplained",
     ];
     expect(result.findings.filter((f) => newCheckCodes.includes(f.code))).toEqual([]);
   });
@@ -467,6 +474,85 @@ describe("REFROLE.INTENT.1 — the role override changes the rendered named mode
     const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
     expect(result.text).toContain("Mara (character) — @Image1");
     expect(result.text).not.toContain("as background environment");
+  });
+});
+
+// SHOTPROMPT.REFS.2 — Part A + B filet: every reference actually sent gets a
+// Subject Definition line, and a job-level note reaches the end of that line.
+describe("SHOTPROMPT.REFS.2 — every image sent gets a Subject Definition line, and a note reaches it", () => {
+  // The author's exact case: four images sent (three casting, one from the
+  // plan) — the old bug only declared three.
+  const availableImages: RuntimeImageOption[] = [
+    { id: "asset-1-1", source: "asset", imagePath: "/a.png", label: "A", role: "environment", assetName: "Reactor Control Room", assetType: "environment" },
+    { id: "asset-1-2", source: "asset", imagePath: "/b.png", label: "B", role: "environment", assetName: "Sensor Console", assetType: "prop" },
+    { id: "asset-1-3", source: "asset", imagePath: "/c.png", label: "C", role: "character", assetName: "Azelle", assetType: "character" },
+    { id: "shot-367", source: "shot", imagePath: "/d.png", label: "Generated Output", role: null },
+  ];
+
+  it("the author's exact case: four references sent, one from the plan, yields four lines, the last carrying only its tag", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-1", "asset-1-2", "asset-1-3", "shot-367"],
+      availableImages,
+      imageInputs: [],
+    });
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [],
+      references,
+      assetBibles: [],
+      sources: { casting: false, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    const subjectSection = result.sections.find((s) => s.id === "subjectDefinition")!;
+    const lines = subjectSection.text.split("\n");
+    expect(lines).toEqual([
+      "Reactor Control Room (environment) — @Image1 as background environment",
+      "Sensor Console (prop) — @Image2 as background environment",
+      "Azelle (character) — @Image3 as character reference",
+      "@Image4",
+    ]);
+    // Never the image's own label ("Generated Output") as a stand-in name.
+    expect(result.text).not.toContain("Generated Output");
+  });
+
+  it("a plan image with role first_frame and a note renders '@ImageN as first frame — <note>'", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-1", "asset-1-2", "asset-1-3", "shot-367"],
+      availableImages,
+      roleOverrides: { "shot-367": "first_frame" },
+      noteOverrides: { "shot-367": "reference for the first image of the shot" },
+      imageInputs: [],
+    });
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [],
+      references,
+      assetBibles: [],
+      sources: { casting: false, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    expect(result.text).toContain("@Image4 as first frame — reference for the first image of the shot");
+  });
+
+  it("a note on a casting reference lands at the end of its line, after the named mode", () => {
+    const references = buildOrderedShotReferenceInputs({
+      hasDynamicBatch: true,
+      batchSelectedIds: ["asset-1-3"],
+      availableImages,
+      noteOverrides: { "asset-1-3": "keep the scar visible" },
+      imageInputs: [],
+    });
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A shot." },
+      castAssets: [{ assetId: 1, assetName: "Azelle", assetType: "character" }],
+      references,
+      assetBibles: [],
+      sources: { casting: true, references: true, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    expect(result.text).toContain("Azelle (character) — @Image1 as character reference — keep the scar visible");
   });
 });
 
