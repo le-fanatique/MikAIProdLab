@@ -27,63 +27,19 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Le chantier « Upgrade du prompt de Shot », ouvert le 2026-08-24.** Son
-cadrage est `docs/SHOT_PROMPT_SD25_AUDIT.md` — un audit de la composition du
-prompt d'un Shot contre Seedance 2.5, contre le skill `sd25-pe` et contre le
-guide 2.0 qui nous sert de norme de conformisation. Il liste huit ajustements
-ordonnés, dont **une seule migration** (la carte de prompt sur `assets`).
+**Rien.** Le chantier « Upgrade du prompt de Shot » est clos le 2026-08-26 :
+**dix-neuf commits**, `ad54c8a` → `ea593c3`, deux migrations appliquées par
+l'auteur, 1891 tests. Cadrage : `docs/SHOT_PROMPT_SD25_AUDIT.md` ; ce qu'il a
+coûté à apprendre : `docs/PROJECT_STATE.md`.
 
-La règle de conception à tenir dès le premier ticket, parce qu'une passe sur
-le storyboard image puis vidéo suivra : **un seul compositeur, paramétré par
-le nombre de shots, dont le shot isolé est le cas N = 1.**
+Ce qui reste appartient à l'auteur et est détaillé dans
+`.agents/supervised_task.md` : le rig d'éclairage de trois environnements sur
+six, douze cartes de prompt sur quatorze, et deux vérifications qu'aucun agent
+ne peut faire à sa place — ce sont des appels modèle sur son projet.
 
-**Trois tickets livrés, aucune migration**, et la file non bloquée est
-épuisée. Détail dans `docs/PROJECT_STATE.md`.
-
-| Ticket | Commit | Livré |
-| --- | --- | --- |
-| `SHOTGEN.INSTRUCTION.1` | `bd7ee02` | la consigne cesse d'obliger à redécrire le casting, et demande `lighting` |
-| `SHOTPROMPT.HEADER.1` | `bcc6af0` | l'en-tête nomme les sujets, le Style ne se répète plus par shot |
-| `SHOTPROMPT.CONFORM.1` | `c00ebe9` | `conformReferences` supprimé, caps et budget alignés sur 2.5 |
-
-**Deux ajustements de l'audit sont sortis de la file**, et c'est la
-supervision qui les a arrêtés :
-
-- **`#6` — annulé.** Il proposait de cesser de concaténer les axes caméra et
-  la prose de `camera_subject`. C'est une décision explicite de l'auteur du
-  2026-08-21, inscrite dans `cameraInstruction.ts` avec la consigne qu'il
-  faudrait sa parole pour la défaire. L'audit l'avait proposée sans avoir lu ce
-  paragraphe. **Réouvrir demande le go de l'auteur.**
-- **`#8` — reporté après `#7`.** Le livrer seul viderait `Constraints:` de la
-  seule contrainte négative qui atteint le moteur aujourd'hui.
-
-**Bloqué sur l'auteur, et c'est le seul chemin :**
-
-- **`#2` — remplir le `lighting` des six environnements de Space Corsair.**
-  Tous à `null`. Ce n'est pas du code. **Débloqué par `ASSET.LIGHTING.PLACE.1`
-  (`a7f66c4`)** : le champ est désormais éditable depuis la page de l'asset, et
-  une carte d'assist propose un rig lu depuis une image de référence approuvée
-  quand il y en a une. Avant ce ticket, deux des trois façons du §5.9 étaient
-  inatteignables.
-- **`#4`, la carte de prompt, et `#7`, les contraintes au niveau shot** — les
-  deux seules migrations de l'audit. Jamais appliquées automatiquement :
-  générer, montrer le SQL, attendre `db:migrate`.
-- **`#3b`, brancher le shot isolé sur le compositeur** — délibérément gardé
-  pour **après `#4`**. Sans la carte, le bloc Subject d'un shot isolé déverse
-  les champs longs de la bible dans le prompt : l'audit §8 mesure 299 mots là
-  où la cible en fait 250. Le livrer avant la carte produirait un prompt que
-  l'auteur jugerait sur ses défauts.
-
-Ticket actif : voir `.agents/supervised_task.md`.
-
-Deux hotfix sont sortis de l'audit et sont déjà commités et poussés
-(`3bf6150`) — la troncature de `camera_position` et la déclaration périmée de
-`createGeneratedShots` dans le registre d'actions. Détail dans
-`docs/PROJECT_STATE.md`.
-
-**Reporté, pas abandonné** : une revue des documents pour qu'un audit de ce
-genre ne repasse plus à côté d'autant de mécanismes déjà livrés. L'auteur l'a
-demandée le 2026-08-24 puis a choisi d'enchaîner sur le dev d'abord.
+**Le prochain chantier est la passe storyboard image et vidéo.** La règle qui
+lui évite de tout refaire est déjà tenue : un seul compositeur paramétré par le
+nombre de shots, dont le shot isolé est le cas N = 1.
 
 Deux chantiers clos le 2026-08-23 : « Galerie de templates de
 génération » (**huit tickets**, commités, poussés et migrés) puis

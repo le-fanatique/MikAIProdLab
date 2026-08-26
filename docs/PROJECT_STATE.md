@@ -1,6 +1,99 @@
 # MikAI Project State
 
-Last updated: 2026-08-24
+Last updated: 2026-08-26
+
+## The Shot prompt chantier — what it changed, and what it taught
+
+Nineteen commits, `ad54c8a` → `ea593c3`, 2026-08-24 to 2026-08-26. Two
+migrations, each shown before the author applied it. Cadrage:
+`docs/SHOT_PROMPT_SD25_AUDIT.md`.
+
+A Shot's prompt was `shotPrompt` and a `Timeline:` block. It now carries Style,
+a `Subject Definition` binding each subject to its `@ImageN` with a named mode,
+the six-part composition, and an `Avoid` part. On the author's own Shot, the
+`Subject` block went from **268 words to 64**.
+
+### What actually cost the most to learn
+
+**Six of the audit's own findings were wrong, and each was wrong the same way.**
+It reasoned from the entity schema, from the `sd25-pe` skill's model of the
+world, or from a ticket document — while the behaviour lived in the path.
+
+- `@ImageN` was to be numbered from the stored order; the engine numbers from
+  the author's own Dynamic Batch selection, and `orderStoryboardReferences`
+  already held that rule, correct and extracted.
+- The camera was called debt; B19 had already aligned it on 2.5, and
+  adjustment #6 turned out to contradict an explicit author decision recorded
+  in `cameraInstruction.ts` with the words *"Removing it would need the
+  author's word, not a tidy-up"*. **Cancelled.**
+- Lighting was called a missing ingredient; the three-level chain existed and
+  worked — it was simply empty everywhere.
+- A `【Unused Assets】` block was specified; those images are never uploaded, so
+  it announced tags absent from the model's own request. **Vacant by
+  construction.**
+- `lighting.fromImage` was gated on an approved image; that approval gate
+  belongs to `PROJECT_STYLE.REFERENCE_BOARD`, and the registry says so in
+  writing — `ASSET.REFERENCE_IMAGES` never had one.
+- #8 was sequenced behind #7 on a dependency that stopped existing the moment
+  the Avoid routing shipped.
+
+`docs/WHERE_THE_RULES_LIVE.md` was written on 2026-08-24 to stop exactly this.
+**It did not stop its own author from repeating the mistake the same day, twice
+more.** A map only serves the reader who opens it; the reading contract is what
+makes it open.
+
+### What the executors caught that the supervision had missed
+
+Three times, an executor's honest report was worth more than a clean one.
+
+- It flagged a doubt about `【Unused Assets】` instead of assuming the ticket
+  right — and the doubt was correct.
+- It reported having *reasoned* its mutations rather than run them, which is
+  what made the supervision run them.
+- It flagged that seven call sites never selected `promptCard`, so the Prompt
+  Card would have shipped dead: the author would have filled the field and his
+  prompt would not have changed by a word. That is the very defect this
+  chantier exists to correct — data resolved then discarded — and it had no
+  place in the ticket that fights it.
+
+It also corrected a factual claim in a ticket: `updateShotLighting` has **no**
+`columns.written` correspondence assertion, contrary to what the supervision
+wrote. Only some actions do. **The others are debt**, named here rather than
+fixed out of scope.
+
+### Tooling lessons, paid for
+
+- **Never restore a mutation with `git checkout <file>`** when the file carries
+  uncommitted work — it discarded an executor's five lines. Copy it aside first.
+- A mutation that does not compile proves nothing. Several supervision
+  mutations silently failed to apply and reported false greens before being
+  redone properly.
+- The end-to-end form written for the Prompt Card — run the real generation
+  core against a disposable DB, mock only the network primitive, read the
+  queued text back out of the job snapshot — is the one that catches a feature
+  shipped dead. `tests/comfy/runShotGeneration.promptCard.test.ts` is the model
+  to copy.
+
+### Deliberate non-decisions, so they are not "fixed" later
+
+- **`shots.negative_constraints` is filled by no model.** `sd25-pe`
+  Non-Negotiable 8 forbids adding generic negative constraints the user did not
+  request; a model would emit `no text, no labels` on every Shot. Its value is
+  its specificity, and that comes from the author. This is not an asymmetry
+  with `lighting` waiting to be corrected.
+- **The `Avoid` label deviates from 2.5's `Constraints`** on purpose: the
+  author's own vocabulary is `Avoid`, and the prompt is not read only by
+  Seedance.
+- **`assets.forbidden_variations` left the composed prompt but nothing else.**
+  Thirty-seven files still reference it; it stays written, edited, and read by
+  style alignment and the bible assists.
+
+### Still open, and belonging to the author
+
+The lighting rig on his six environments (three filled, and the resolution
+chain reads the **Sequence's** cast environments, not the Shot's — deferred by
+him to a new Sequence); twelve Prompt Cards, now assisted; and the manual
+judgement of two generations no agent can make for him.
 
 ## `ASSET.LIGHTING.PLACE.1` — two of §5.9's three ways were unreachable
 
