@@ -327,6 +327,15 @@ export type FormatSequenceGenerationPackageTextOptions = {
      * carries whatever it inherited.
      */
     lighting: { byShotId: Record<number, string | null> };
+    /**
+     * SHOT.NEGATIVE.1 — each Shot's own `negativeConstraints`, straight
+     * through: no precedence to resolve (unlike lighting, this never falls
+     * back to the Sequence or an Asset), and never filled by a model
+     * (`storyboardShot.ts`'s own header). Optional: omitting it (as no caller
+     * did before this ticket) renders `Avoid:` from Style alone, exactly as
+     * before.
+     */
+    negativeConstraints?: { byShotId: Record<number, string | null> };
   };
 };
 
@@ -363,6 +372,7 @@ export function formatSequenceGenerationPackageText(
             cameraLens: s.continuity.cameraLens,
           },
           lighting: storyboardComposition.lighting.byShotId[s.shotId] ?? null,
+          negativeConstraints: storyboardComposition.negativeConstraints?.byShotId[s.shotId] ?? null,
         }).text || "(no compiled prompt)"
       : s.compiledPrompt.text || "(no compiled prompt)";
     const warningsBlock =

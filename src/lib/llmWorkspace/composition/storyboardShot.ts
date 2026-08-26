@@ -104,6 +104,19 @@ export type StoryboardShotCompositionInput = {
    * no longer joins it (see `buildConstraints`).
    */
   styleAvoid?: string | null;
+  /**
+   * SHOT.NEGATIVE.1 — the plan's own exclusions (`shots.negative_constraints`,
+   * Seedance 2.5's "Constraints": *"things you don't want to have in the
+   * video"*), never a project-wide rule (those are `styleAvoid` above, and
+   * still live in Project Style). No precedence to resolve here, unlike
+   * lighting — the Shot's own field, straight through. **Never filled by a
+   * model** — see this module's own header on `buildConstraints`, and
+   * `sd25-pe`'s Non-Negotiable 8: a model asked for constraints produces
+   * generic ones on every Shot, which is the value this field exists to
+   * replace with the author's own specificity. `null`/blank contributes
+   * nothing.
+   */
+  negativeConstraints?: string | null;
   profileId?: ConformationProfileId;
 };
 
@@ -192,9 +205,18 @@ function buildSubject(cast: PromptCompilationCastAsset[]): string | null {
  * What remains: Project Style rules with `strength: "Avoid"` — a real,
  * already-stored negative constraint (STYLE.COMPILE.POLARITY.1) that used to
  * render under `Style:` (SHOTPROMPT.STYLE.1) and now renders here instead.
+ *
+ * SHOT.NEGATIVE.1 — the plan's own exclusions (`negativeConstraints`) join
+ * this part as a second ingredient, **after** the Style rules: the general
+ * rule first, the plan's more specific one last, refining the frame the
+ * general rule set. Absent when both are empty, never a fabricated empty
+ * `Avoid:`.
  */
-function buildConstraints(styleAvoid: string | null | undefined): string | null {
-  return nonEmpty(styleAvoid ?? null);
+function buildConstraints(
+  styleAvoid: string | null | undefined,
+  negativeConstraints: string | null | undefined
+): string | null {
+  return joinFragments([nonEmpty(styleAvoid ?? null), nonEmpty(negativeConstraints ?? null)], "\n");
 }
 
 /**
@@ -275,7 +297,11 @@ export function composeStoryboardShot(
     // (`docs/WHERE_THE_RULES_LIVE.md`). The part id stays `constraints` — an
     // internal key, not the displayed word. SHOTPROMPT.NEGATIVE.1 — per-asset
     // `forbiddenVariations` no longer reaches this part (see `buildConstraints`).
-    { id: "constraints", label: "Avoid", text: buildConstraints(input.styleAvoid) },
+    {
+      id: "constraints",
+      label: "Avoid",
+      text: buildConstraints(input.styleAvoid, input.negativeConstraints),
+    },
   ];
 
   const parts: StoryboardCompositionPart[] = candidates

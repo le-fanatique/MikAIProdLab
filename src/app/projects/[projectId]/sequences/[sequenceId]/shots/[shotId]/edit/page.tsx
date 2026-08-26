@@ -159,6 +159,14 @@ export default async function EditShotPage({ params }: Props) {
           defaultValue={shot.lighting}
           placeholder='e.g. "At the start the character is in shadow, at the end lit by the screens"'
         />
+        <FormField
+          label="Avoid (this shot only)"
+          name="negative_constraints"
+          type="textarea"
+          rows={2}
+          defaultValue={shot.negativeConstraints}
+          placeholder='e.g. "no other crew member visible, no reflection in the window" — project-wide rules belong in Project Style, not here'
+        />
 
         <div className="flex gap-3 pt-2">
           <button

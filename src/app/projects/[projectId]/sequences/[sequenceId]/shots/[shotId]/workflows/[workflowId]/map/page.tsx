@@ -495,6 +495,8 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
     lighting: shotLighting.byShotId[shid] ?? null,
     projectStyle: resolvedProjectStyle.styleText,
     projectStyleAvoid: resolvedProjectStyle.avoidText,
+    // SHOT.NEGATIVE.1 — the plan's own exclusions, no resolver needed.
+    negativeConstraints: shot.negativeConstraints ?? null,
   });
 
   // STYLE.1.E.SURFACES.1 — same trusted consumer selection as ShotGenerationPanel

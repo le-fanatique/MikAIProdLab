@@ -259,6 +259,40 @@ describe("composeStoryboardShot", () => {
     expect(result.text).not.toContain("Never long hair.");
   });
 
+  // SHOT.NEGATIVE.1 — the plan's own exclusions join the Avoid part as a
+  // second ingredient, after the Style rules.
+  describe("buildConstraints — the plan's own negativeConstraints (SHOT.NEGATIVE.1)", () => {
+    it("joins Style Avoid first, then the plan's negativeConstraints, when both exist", () => {
+      const result = composeStoryboardShot(
+        inputWith({ styleAvoid: "- No bright colors.", negativeConstraints: "no other crew member visible" })
+      );
+      const constraints = result.parts.find((p) => p.id === "constraints")!;
+      expect(constraints.text).toBe("- No bright colors.\nno other crew member visible");
+    });
+
+    it("renders only negativeConstraints when there is no Style Avoid rule", () => {
+      const result = composeStoryboardShot(
+        inputWith({ styleAvoid: null, negativeConstraints: "no reflection in the window" })
+      );
+      const constraints = result.parts.find((p) => p.id === "constraints")!;
+      expect(constraints.text).toBe("no reflection in the window");
+    });
+
+    it("renders only Style Avoid when the plan has no negativeConstraints", () => {
+      const result = composeStoryboardShot(
+        inputWith({ styleAvoid: "- No bright colors.", negativeConstraints: null })
+      );
+      const constraints = result.parts.find((p) => p.id === "constraints")!;
+      expect(constraints.text).toBe("- No bright colors.");
+    });
+
+    it("is absent, not empty, when both Style Avoid and negativeConstraints are missing", () => {
+      const result = composeStoryboardShot(inputWith({ styleAvoid: null, negativeConstraints: null }));
+      expect(result.parts.some((p) => p.id === "constraints")).toBe(false);
+      expect(result.text).not.toContain("Avoid:");
+    });
+  });
+
   it("surfaces the conformation findings rather than acting on them", () => {
     const result = composeStoryboardShot(
       inputWith({ lighting: null })

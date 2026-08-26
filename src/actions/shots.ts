@@ -111,6 +111,11 @@ export async function updateShot(
   // tests/actions/updateShot.test.ts ("preserves lighting on a save that
   // does not touch its field").
   const lighting = (formData.get("lighting") as string) || null;
+  // SHOT.NEGATIVE.1 — same trap in reverse as `lighting` above: this action
+  // rewrites every field below on every call, so `negativeConstraints` MUST
+  // also be present in the Edit Shot form or every save would silently
+  // clear it.
+  const negativeConstraints = (formData.get("negative_constraints") as string) || null;
 
   if (!title?.trim()) return;
 
@@ -143,6 +148,7 @@ export async function updateShot(
       continuityIn,
       continuityOut,
       lighting,
+      negativeConstraints,
       shotPrompt: resolvedShotPrompt,
       updatedAt: new Date().toISOString(),
     })

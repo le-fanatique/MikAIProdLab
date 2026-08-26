@@ -48,6 +48,8 @@ function fullShotForm(shot: Awaited<ReturnType<typeof readShot>>, overrides: Rec
     continuity_in: shot.continuityIn ?? "",
     continuity_out: shot.continuityOut ?? "",
     lighting: shot.lighting ?? "",
+    // SHOT.NEGATIVE.1 — same S4 trap in reverse as `lighting` above.
+    negative_constraints: shot.negativeConstraints ?? "",
     ...overrides,
   });
 }
@@ -128,6 +130,61 @@ describe("updateShot — lighting joins the existing multi-column form/action", 
     );
 
     expect((await readShot(ctx, shotId)).lighting).toBeNull();
+  });
+});
+
+describe("updateShot — negativeConstraints joins the existing multi-column form/action (SHOT.NEGATIVE.1)", () => {
+  it("writes negativeConstraints when the form submits a new value for it", async () => {
+    const shotId = await insertShot(ctx, sequenceId, {
+      title: "Shot F",
+      negativeConstraints: "no other crew member visible",
+    });
+    const before = await readShot(ctx, shotId);
+
+    await captureShotRedirect(() =>
+      updateShot(
+        shotId,
+        sequenceId,
+        projectId,
+        fullShotForm(before, { negative_constraints: "no reflection in the window" })
+      )
+    );
+
+    expect((await readShot(ctx, shotId)).negativeConstraints).toBe("no reflection in the window");
+  });
+
+  it("preserves negativeConstraints on a full-form resubmit that only changes the title — the S4 proof", async () => {
+    const shotId = await insertShot(ctx, sequenceId, {
+      title: "Shot G",
+      negativeConstraints: "no other crew member visible",
+      description: "Untouched description",
+      shotPrompt: "Untouched description",
+      shotSize: "MS",
+    });
+    const before = await readShot(ctx, shotId);
+
+    await captureShotRedirect(() =>
+      updateShot(shotId, sequenceId, projectId, fullShotForm(before, { title: "Shot G renamed" }))
+    );
+
+    const after = await readShot(ctx, shotId);
+    expect(after.negativeConstraints).toBe("no other crew member visible");
+    expect(after.title).toBe("Shot G renamed");
+    expect(changedColumns(before, after).filter((c) => c !== "updatedAt")).toEqual(["title"]);
+  });
+
+  it("clears negativeConstraints to null on a blank submission, same as the other free-text fields", async () => {
+    const shotId = await insertShot(ctx, sequenceId, {
+      title: "Shot H",
+      negativeConstraints: "no other crew member visible",
+    });
+    const before = await readShot(ctx, shotId);
+
+    await captureShotRedirect(() =>
+      updateShot(shotId, sequenceId, projectId, fullShotForm(before, { negative_constraints: "" }))
+    );
+
+    expect((await readShot(ctx, shotId)).negativeConstraints).toBeNull();
   });
 });
 

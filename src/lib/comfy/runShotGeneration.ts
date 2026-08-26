@@ -370,6 +370,8 @@ export async function runShotGenerationCore(args: ShotGenerationArgs, styleInten
     lighting: shotLighting.byShotId[shotId] ?? null,
     projectStyle: styleConsumer !== null ? resolvedProjectStyle.styleText : null,
     projectStyleAvoid: styleConsumer !== null ? resolvedProjectStyle.avoidText : null,
+    // SHOT.NEGATIVE.1 — the plan's own exclusions, no resolver needed.
+    negativeConstraints: shot.negativeConstraints ?? null,
   });
 
   let preparedStyle: PreparedGenerationStyleSource | null = null;

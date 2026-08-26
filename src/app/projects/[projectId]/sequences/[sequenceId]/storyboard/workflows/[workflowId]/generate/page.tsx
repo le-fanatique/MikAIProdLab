@@ -471,7 +471,11 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   // behavior before this ticket) never pays for these two extra queries and
   // never changes a single byte of `packageText` below.
   let storyboardComposition:
-    | { projectStyle: string | null; lighting: StoryboardLighting }
+    | {
+        projectStyle: string | null;
+        lighting: StoryboardLighting;
+        negativeConstraints: { byShotId: Record<number, string | null> };
+      }
     | undefined;
   // The findings §5.6's output discipline reports, per Shot — display-only,
   // never a blocker (§5.4): computed straight from the same inputs handed to
@@ -489,7 +493,11 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
       sid,
       rangedShots.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
     );
-    storyboardComposition = { projectStyle, lighting };
+    // SHOT.NEGATIVE.1 — the plan's own exclusions, no precedence to resolve.
+    const negativeConstraints = {
+      byShotId: Object.fromEntries(rangedShots.map((s) => [s.id, s.negativeConstraints ?? null])),
+    };
+    storyboardComposition = { projectStyle, lighting, negativeConstraints };
 
     storyboardFindings = pkg.shots.map((s) => ({
       shotLabel: s.shotCode ?? s.title,
@@ -504,6 +512,7 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               cameraLens: s.continuity.cameraLens,
             },
         lighting: lighting.byShotId[s.shotId] ?? null,
+        negativeConstraints: negativeConstraints.byShotId[s.shotId] ?? null,
       }).findings,
     }));
   }
@@ -515,7 +524,12 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
   const packageText = formatSequenceGenerationPackageText(pkg, {
     includeWarnings: false,
     ...(storyboardComposition
-      ? { storyboardComposition: { lighting: storyboardComposition.lighting } }
+      ? {
+          storyboardComposition: {
+            lighting: storyboardComposition.lighting,
+            negativeConstraints: storyboardComposition.negativeConstraints,
+          },
+        }
       : {}),
   });
 

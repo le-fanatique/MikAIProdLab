@@ -39,6 +39,8 @@ type ShotRow = {
   orderIndex: number;
   /** SHOTPROMPT.SHOT.1 — the Shot's own lighting field, for `resolveStoryboardLighting`. */
   lighting: string | null;
+  /** SHOT.NEGATIVE.1 — the plan's own exclusions, no precedence to resolve. */
+  negativeConstraints: string | null;
 };
 
 type Props = {
@@ -304,8 +306,12 @@ export default async function SequenceGenerationPackagePanel({
     sequenceId,
     shots.map((s) => ({ id: s.id, lighting: s.lighting }))
   );
+  // SHOT.NEGATIVE.1 — the plan's own exclusions, no precedence to resolve.
+  const negativeConstraints = {
+    byShotId: Object.fromEntries(shots.map((s) => [s.id, s.negativeConstraints ?? null])),
+  };
   const formattedText = formatSequenceGenerationPackageText(pkg, {
-    storyboardComposition: { lighting },
+    storyboardComposition: { lighting, negativeConstraints },
   });
   const trimmedProjectStyle = projectStyle?.trim() || null;
   const displayedText = trimmedProjectStyle ? `Style:\n${trimmedProjectStyle}\n\n${formattedText}` : formattedText;

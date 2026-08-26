@@ -452,6 +452,8 @@ export default async function ShotGenerationPanel({
     lighting: shotLighting.byShotId[shid] ?? null,
     projectStyle: resolvedProjectStyle.styleText,
     projectStyleAvoid: resolvedProjectStyle.avoidText,
+    // SHOT.NEGATIVE.1 — the plan's own exclusions, no resolver needed.
+    negativeConstraints: shot.negativeConstraints ?? null,
   });
 
   // STYLE.1.E.SURFACES.1 — same trusted consumer selection as the server

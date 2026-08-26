@@ -130,6 +130,12 @@ export type ComposeShotGenerationPromptInput = {
    * `null`/blank renders nothing.
    */
   projectStyleAvoid?: string | null;
+  /**
+   * SHOT.NEGATIVE.1 — the Shot's own `negativeConstraints` column, straight
+   * through to `composeStoryboardShot`'s own input of the same name. No
+   * resolution here (unlike `lighting`): the caller reads the column itself.
+   */
+  negativeConstraints?: string | null;
   profileId?: StoryboardShotCompositionInput["profileId"];
 };
 
@@ -203,6 +209,7 @@ export function composeShotGenerationPrompt(input: ComposeShotGenerationPromptIn
     continuity: input.continuity,
     lighting: input.lighting,
     styleAvoid: input.projectStyleAvoid,
+    negativeConstraints: input.negativeConstraints,
     profileId: input.profileId,
   });
 

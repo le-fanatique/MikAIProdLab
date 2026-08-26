@@ -447,7 +447,11 @@ async function buildSequenceStoryboardGenerationContext(
   // composition is actually requested: the legacy default never pays for
   // these two extra queries, and never changes a single byte of its output.
   let storyboardComposition:
-    | { projectStyle: string | null; lighting: StoryboardLighting }
+    | {
+        projectStyle: string | null;
+        lighting: StoryboardLighting;
+        negativeConstraints: { byShotId: Record<number, string | null> };
+      }
     | undefined;
   if (useGuideComposition) {
     // SHOTPROMPT.STYLE.1 — out of this ticket's scope (the Sequence
@@ -461,7 +465,12 @@ async function buildSequenceStoryboardGenerationContext(
       sequenceId,
       rangedShots.map((s) => ({ id: s.id, lighting: s.lighting ?? null }))
     );
-    storyboardComposition = { projectStyle, lighting };
+    // SHOT.NEGATIVE.1 — the plan's own exclusions, no precedence to resolve
+    // (unlike lighting): each Shot's own column, straight through.
+    const negativeConstraints = {
+      byShotId: Object.fromEntries(rangedShots.map((s) => [s.id, s.negativeConstraints ?? null])),
+    };
+    storyboardComposition = { projectStyle, lighting, negativeConstraints };
   }
 
   // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — the text sent to the Sequence
@@ -471,7 +480,12 @@ async function buildSequenceStoryboardGenerationContext(
   const packageText = formatSequenceGenerationPackageText(pkg, {
     includeWarnings: false,
     ...(storyboardComposition
-      ? { storyboardComposition: { lighting: storyboardComposition.lighting } }
+      ? {
+          storyboardComposition: {
+            lighting: storyboardComposition.lighting,
+            negativeConstraints: storyboardComposition.negativeConstraints,
+          },
+        }
       : {}),
   });
 

@@ -88,6 +88,13 @@ export const shots = sqliteTable("shots", {
   // LLMW.LIGHTING.1 (B15a) — §5.9 of docs/LLM_WORKSPACE_PRODUCT_VISION.md.
   // Nullable, no default: the Shot's own lighting, at the finest grain.
   lighting: text("lighting"),
+  // SHOT.NEGATIVE.1 — the plan's own exclusions ("Constraints" in the
+  // Seedance 2.5 formula), never project-wide rules (those live in Project
+  // Style, see `projectStyleDrafts.worldNegativeConstraints` /
+  // `visualNegativeConstraints`). Nullable, no default; never filled by a
+  // model — see `buildConstraints` in
+  // `src/lib/llmWorkspace/composition/storyboardShot.ts` for why.
+  negativeConstraints: text("negative_constraints"),
   approvedVideoPath: text("approved_video_path"),
   // Non-destructive editorial trim of the approved video (seconds, nullable)
   trimInSeconds: real("trim_in_seconds"),
