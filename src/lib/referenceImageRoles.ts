@@ -73,6 +73,11 @@ export const REFERENCE_IMAGE_ROLES: readonly ReferenceImageRoleDefinition[] = [
   // Subject / Environment
   { value: "character", label: "Character", category: "subject_environment", availableFor: ["shot", "asset"] },
   { value: "environment", label: "Environment", category: "subject_environment", availableFor: ["shot", "asset"] },
+  // REFROLE.PROP.1 — a prop is a subject like `character` and `environment`,
+  // never a library view like `prop_state` below. Deliberately not touching
+  // that value: it stays asset-only and receives no guide mode
+  // (`conformation/profiles/guideDefault.ts`).
+  { value: "prop", label: "Prop", category: "subject_environment", availableFor: ["shot", "asset"] },
 
   // Style / Direction
   { value: "style", label: "Style", category: "style_direction", availableFor: ["shot", "asset"] },

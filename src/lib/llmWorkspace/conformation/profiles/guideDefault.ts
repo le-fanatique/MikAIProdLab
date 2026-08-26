@@ -42,6 +42,25 @@ import type {
  *
  * The other fourteen catalogue roles are absent for the same reason: the guide
  * names five modes, so five roles have one.
+ *
+ * **`prop` is the one deliberate exception (REFROLE.PROP.1), and it is an
+ * extension beyond the guide, not a correction of this table's own count.**
+ * The five modes above come from the *2.0* Complete Prompting Guide, which
+ * `docs/SHOT_PROMPT_SD25_AUDIT.md` §2 establishes has no subject-token system
+ * at all — "five modes because the guide names five" was a fact about 2.0.
+ * **2.5 does not reason by closed list.** Its own formula is
+ * `Define the robot in [Image 1] as <subject 1>`, and ByteDance's own examples
+ * read `@Image 1 defines Sol's identity and work clothes` — one phrase per
+ * subject, not a pick from a fixed five. A closed list of five is therefore a
+ * 2.0 artefact, not a 2.5 constraint, and a prop is a subject exactly like
+ * `character` or `environment`. Do not "fix" this table back down to five on
+ * rereading the paragraph above — that paragraph describes 2.0's own reason,
+ * still true of the other fourteen roles, not a limit this table must obey.
+ *
+ * `prop_state` (asset-only, library "view of a prop's state") deliberately
+ * gets no entry here: it is not a generation role, and giving it one would be
+ * the same confusion that left every one of the author's approved prop images
+ * without a named mode in the first place.
  */
 const ROLE_TO_GUIDE_MODE: Readonly<Record<string, string>> = {
   first_frame: "as first frame",
@@ -49,6 +68,7 @@ const ROLE_TO_GUIDE_MODE: Readonly<Record<string, string>> = {
   character: "as character reference",
   style: "as style reference",
   environment: "as background environment",
+  prop: "as prop reference",
 };
 
 /**
