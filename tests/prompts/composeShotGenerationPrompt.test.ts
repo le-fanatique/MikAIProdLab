@@ -196,6 +196,98 @@ describe("composeShotGenerationPrompt", () => {
   });
 });
 
+// PROMPT.DOCTOR.1 — the two findings sources this composer previously
+// computed and threw away (`composeStoryboardShot`'s own `guideDefault`
+// findings) plus the new `checkPromptConsistency` ones, merged into the one
+// field every caller can now display.
+describe("composeShotGenerationPrompt — findings (PROMPT.DOCTOR.1)", () => {
+  it("carries composeStoryboardShot's own conformation findings through, rather than discarding them", () => {
+    // No lighting at all -> guideDefault's own "lightingMissing".
+    const result = composeShotGenerationPrompt(baseInput({ lighting: null, projectStyle: null }));
+    expect(result.findings.some((f) => f.code === "lightingMissing")).toBe(true);
+  });
+
+  it("also carries checkPromptConsistency's own findings — a cast asset with no reference and no Prompt Card", () => {
+    const context = buildPromptCompilationContext({
+      shot: { actionPitch: "Something happens off-screen." },
+      castAssets: [{ assetId: 5, assetName: "Ghost Prop", assetType: "prop", description: "Unused." }],
+      references: [],
+      assetBibles: [],
+      sources: { casting: true, references: false, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(baseInput({ context, projectStyle: null }));
+    expect(result.findings.some((f) => f.code === "assetWithoutAnchor" && f.message.includes("Ghost Prop"))).toBe(
+      true
+    );
+    expect(result.findings.some((f) => f.code === "subjectNotDeclared" && f.message.includes("Ghost Prop"))).toBe(
+      true
+    );
+  });
+
+  // Zero findings from `checkPromptConsistency`'s own five checks (the
+  // guarantee `tests/llmWorkspace/promptConsistency.test.ts` proves in
+  // isolation) — `guideDefault`'s own word-budget/camera findings are a
+  // separate, pre-existing concern this ticket does not touch, so this
+  // assertion is scoped to the new checks, not to every finding in general.
+  it("reports none of the five new consistency findings on a clean composition", () => {
+    const context = buildPromptCompilationContext({
+      shot: { actionPitch: "Mara steadies the console." },
+      castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character", description: "Lead." }],
+      references: [{ refId: "asset-1-2", source: "asset", assetId: 1, assetName: "Mara", role: "character" }],
+      assetBibles: [{ assetId: 1, assetName: "Mara", promptCard: "Weathered fur, calloused hands." }],
+      sources: { casting: true, references: true, assetBibles: true, sequenceContext: false, projectContext: false },
+    });
+    const result = composeShotGenerationPrompt(
+      baseInput({
+        context,
+        projectStyle: null,
+        lighting: "Cold console glow.",
+        continuity: {
+          shotSize: "MS",
+          cameraPosition: "eye level",
+          cameraMovement: "static",
+          movementSpeed: null,
+          cameraSubject: null,
+          cameraLens: null,
+        },
+      })
+    );
+    const newCheckCodes = [
+      "subjectNotDeclared",
+      "duplicateText",
+      "castAssetNotNamed",
+      "assetWithoutAnchor",
+      "lightingChainUnused",
+    ];
+    expect(result.findings.filter((f) => newCheckCodes.includes(f.code))).toEqual([]);
+  });
+
+  // §5.4 — never blocking: composition still runs to completion and still
+  // produces text even when findings are present.
+  it("never blocks composition — the text is still produced even when findings exist", () => {
+    const result = composeShotGenerationPrompt(baseInput({ lighting: null, projectStyle: null }));
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.text.length).toBeGreaterThan(0);
+  });
+
+  it("reports lightingChainUnused only when the caller states the chain had an unused candidate", () => {
+    const context = buildPromptCompilationContext({
+      shot: { shotPrompt: "A door closes." },
+      castAssets: [],
+      references: [],
+      assetBibles: [],
+      sources: { casting: false, references: false, assetBibles: false, sequenceContext: false, projectContext: false },
+    });
+    const withoutSignal = composeShotGenerationPrompt(baseInput({ context, projectStyle: null, lighting: null }));
+    expect(withoutSignal.findings.some((f) => f.code === "lightingChainUnused")).toBe(false);
+
+    const withSignal = composeShotGenerationPrompt(
+      baseInput({ context, projectStyle: null, lighting: null, lightingChainHadUnusedCandidate: true })
+    );
+    expect(withSignal.findings.some((f) => f.code === "lightingChainUnused")).toBe(true);
+  });
+});
+
 describe("buildOrderedShotReferenceInputs — @ImageN follows the batch selection, never DB order", () => {
   const availableImages: RuntimeImageOption[] = [
     { id: "shot-1", source: "shot", imagePath: "/a.png", label: "A", role: null },

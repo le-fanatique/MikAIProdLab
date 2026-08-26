@@ -64,6 +64,8 @@ import {
   type StoryboardLighting,
 } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
 import { composeStoryboardShot } from "@/lib/llmWorkspace/composition/storyboardShot";
+import { checkPromptConsistency } from "@/lib/llmWorkspace/composition/promptConsistency";
+import { resolveSequenceEnvironmentAssets } from "@/lib/llmWorkspace/variables/registry";
 import StoryboardCompositionChoice from "@/components/StoryboardCompositionChoice";
 import StoryboardShotRangeChoice from "@/components/StoryboardShotRangeChoice";
 
@@ -499,9 +501,14 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
     };
     storyboardComposition = { projectStyle, lighting, negativeConstraints };
 
-    storyboardFindings = pkg.shots.map((s) => ({
-      shotLabel: s.shotCode ?? s.title,
-      findings: composeStoryboardShot({
+    // PROMPT.DOCTOR.1, Part A, check 5 — one query for the whole Sequence,
+    // reused by every Shot below: `resolveSequenceEnvironmentAssets` is the
+    // same query `resolveStoryboardLighting` itself calls, never duplicated.
+    const sequenceEnvironmentAssets = await resolveSequenceEnvironmentAssets(sid);
+
+    storyboardFindings = pkg.shots.map((s) => {
+      const shotLighting = lighting.byShotId[s.shotId] ?? null;
+      const composition = composeStoryboardShot({
         context: s.context,
         continuity: {
               shotSize: s.continuity.shotSize,
@@ -511,10 +518,22 @@ export default async function SequenceStoryboardGeneratePage({ params, searchPar
               cameraSubject: s.continuity.cameraSubject,
               cameraLens: s.continuity.cameraLens,
             },
-        lighting: lighting.byShotId[s.shotId] ?? null,
+        lighting: shotLighting,
         negativeConstraints: negativeConstraints.byShotId[s.shotId] ?? null,
-      }).findings,
-    }));
+      });
+      // PROMPT.DOCTOR.1 — `checkPromptConsistency`'s composition-consistency
+      // findings, merged with `composeStoryboardShot`'s own conformation
+      // findings into the one display below (fuses the two sources).
+      const consistencyFindings = checkPromptConsistency({
+        composition,
+        context: s.context,
+        lightingChainHadUnusedCandidate: shotLighting === null && sequenceEnvironmentAssets.length > 0,
+      });
+      return {
+        shotLabel: s.shotCode ?? s.title,
+        findings: [...composition.findings, ...consistencyFindings],
+      };
+    });
   }
 
   // Lot A (SEQGEN.STORYBOARD.CASTING.FIX1) — no `Warnings:` block in the

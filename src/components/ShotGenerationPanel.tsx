@@ -31,6 +31,7 @@ import { buildOrderedShotReferenceInputs, composeShotGenerationPrompt } from "@/
 import { buildBatchRoleOverrideParamKey, parseBatchRoleOverridesParam } from "@/lib/comfy/dynamicBatchRoleOverrides";
 import { resolveProjectStyleTextForComposition } from "@/lib/projectStyle/resolveProjectStyleTextForComposition";
 import { resolveStoryboardLighting } from "@/lib/llmWorkspace/composition/resolveStoryboardLighting";
+import { resolveSequenceEnvironmentAssets } from "@/lib/llmWorkspace/variables/registry";
 import { prepareGenerationStyleSource } from "@/lib/projectStyle/generationStylePreparation";
 import ProjectStyleGenerationPreview from "@/components/projectStyle/ProjectStyleGenerationPreview";
 import ProjectStyleAppendCheckbox from "@/components/projectStyle/ProjectStyleAppendCheckbox";
@@ -441,6 +442,15 @@ export default async function ShotGenerationPanel({
     resolveProjectStyleTextForComposition(pid),
     resolveStoryboardLighting(sid, [{ id: shid, lighting: shot.lighting }]),
   ]);
+  const resolvedShotLighting = shotLighting.byShotId[shid] ?? null;
+
+  // PROMPT.DOCTOR.1, Part A, check 5 — only queried when there is actually
+  // nothing to check against: a resolved lighting value already means the
+  // chain produced one. `resolveSequenceEnvironmentAssets` is the same query
+  // `resolveStoryboardLighting` itself calls once its own precedence check
+  // fails; reused, never duplicated.
+  const lightingChainHadUnusedCandidate =
+    resolvedShotLighting === null ? (await resolveSequenceEnvironmentAssets(sid)).length > 0 : false;
 
   // SHOTPROMPT.STYLE.1 — the compositeur is the sole source of Style TEXT
   // in this preview (`ProjectStyleGenerationPreview`'s own CSS toggle is
@@ -458,11 +468,12 @@ export default async function ShotGenerationPanel({
       cameraSubject: shot.cameraSubject,
       cameraLens: shot.cameraLens,
     },
-    lighting: shotLighting.byShotId[shid] ?? null,
+    lighting: resolvedShotLighting,
     projectStyle: resolvedProjectStyle.styleText,
     projectStyleAvoid: resolvedProjectStyle.avoidText,
     // SHOT.NEGATIVE.1 — the plan's own exclusions, no resolver needed.
     negativeConstraints: shot.negativeConstraints ?? null,
+    lightingChainHadUnusedCandidate,
   });
 
   // STYLE.1.E.SURFACES.1 — same trusted consumer selection as the server
@@ -840,6 +851,7 @@ export default async function ShotGenerationPanel({
             batchNodeId={batchNodeId}
             batchRoleOverrides={batchRoleOverrides}
             workflowKind={workflow.kind}
+            findings={composedPrompt.findings}
           />
         )}
         </WorkflowProfilePanel>

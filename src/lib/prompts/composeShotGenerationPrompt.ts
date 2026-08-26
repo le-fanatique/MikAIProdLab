@@ -45,6 +45,11 @@ import {
   type StoryboardShotCompositionInput,
 } from "@/lib/llmWorkspace/composition/storyboardShot";
 import { getGuideModeForRole } from "@/lib/llmWorkspace/conformation/profiles/guideDefault";
+import {
+  checkPromptConsistency,
+  type PromptConsistencyFinding,
+} from "@/lib/llmWorkspace/composition/promptConsistency";
+import type { ConformationFinding } from "@/lib/llmWorkspace/conformation";
 import { orderStoryboardReferences } from "./orderStoryboardReferences";
 import type { RuntimeImageOption } from "@/lib/comfy/mapWorkflowInputs";
 import { resolveOverriddenRole } from "@/lib/comfy/dynamicBatchRoleOverrides";
@@ -218,6 +223,13 @@ export type ComposeShotGenerationPromptInput = {
    */
   negativeConstraints?: string | null;
   profileId?: StoryboardShotCompositionInput["profileId"];
+  /**
+   * PROMPT.DOCTOR.1, Part A, check 5 — see
+   * `checkPromptConsistency`'s own `lightingChainHadUnusedCandidate` doc.
+   * Optional and defaulting to no finding: this module reads no database, so
+   * the caller (which already resolves the lighting chain) supplies it.
+   */
+  lightingChainHadUnusedCandidate?: boolean;
 };
 
 export type ComposedShotGenerationPromptSectionId = "style" | "subjectDefinition" | "composition" | "timeline";
@@ -237,6 +249,16 @@ export type ComposedShotGenerationPrompt = {
   usedTimeline: boolean;
   /** English diagnostics, deduplicated: `compileShotPrompt`'s own (Timeline/empty-prompt) plus `buildPromptCompilationContext`'s own ("requested but produced no content"). */
   warnings: string[];
+  /**
+   * PROMPT.DOCTOR.1 — `composeStoryboardShot`'s own conformation findings
+   * (the engine's output discipline, `guideDefault.inspect`) plus
+   * `checkPromptConsistency`'s own (this composition's internal
+   * consistency), merged into the one shape both already share
+   * (`code`/`severity`/`message`). Previously computed by this module and
+   * thrown away — every caller can now display them, informational only,
+   * never a gate on Generate.
+   */
+  findings: Array<ConformationFinding | PromptConsistencyFinding>;
 };
 
 function dedupePreservingOrder(values: string[]): string[] {
@@ -324,11 +346,18 @@ export function composeShotGenerationPrompt(input: ComposeShotGenerationPromptIn
     })
     .join("\n\n");
 
+  const consistencyFindings = checkPromptConsistency({
+    composition: storyboardComposition,
+    context,
+    lightingChainHadUnusedCandidate: input.lightingChainHadUnusedCandidate,
+  });
+
   return {
     text,
     kind: input.kind,
     sections,
     usedTimeline: compiledShotPrompt.usedTimeline,
     warnings: dedupePreservingOrder([...compiledShotPrompt.warnings, ...context.warnings]),
+    findings: [...storyboardComposition.findings, ...consistencyFindings],
   };
 }

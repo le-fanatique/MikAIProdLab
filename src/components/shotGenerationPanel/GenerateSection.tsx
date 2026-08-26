@@ -29,6 +29,14 @@ type Props = {
   /** REFROLE.INTENT.1 — the current job-level role overlay, `id -> role`. */
   batchRoleOverrides: Record<string, string>;
   workflowKind: string;
+  /**
+   * PROMPT.DOCTOR.1 — `composeShotGenerationPrompt`'s merged findings (the
+   * engine's `guideDefault.inspect` output discipline plus
+   * `checkPromptConsistency`'s composition-consistency checks). Informational
+   * only, exactly like the Sequence Storyboard generate page's own block —
+   * never a gate on Generate.
+   */
+  findings: Array<{ code: string; severity: "info" | "warn"; message: string }>;
 };
 
 /** "Preview" + "Generate" blocks: payload preview, Cloud preflight/Style/error banners, the generation form itself (IND.CLIENTSPLIT.1, moved verbatim from ShotGenerationPanel.tsx). */
@@ -53,6 +61,7 @@ export default function GenerateSection({
   batchNodeId,
   batchRoleOverrides,
   workflowKind,
+  findings,
 }: Props) {
   return (
     <>
@@ -66,6 +75,26 @@ export default function GenerateSection({
 
       {/* Generate */}
       <div className="border-t border-[#232629] pt-4">
+        {/* PROMPT.DOCTOR.1 — same block, same wording, as the Sequence
+            Storyboard generate page's own findings display: one renderer,
+            two sources. */}
+        {findings.length > 0 && (
+          <div className="mb-3 pb-3 border-b border-[#1e2124] flex flex-col gap-2">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-[#6e767d]">
+              Findings — informational, never blocking
+            </span>
+            <ul className="ml-3 list-disc">
+              {findings.map((f, i) => (
+                <li
+                  key={`${f.code}-${i}`}
+                  className={f.severity === "warn" ? "text-xs text-[#cf7b6b]" : "text-xs text-[#6e767d]"}
+                >
+                  {f.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {generationError && (
           <div className="rounded border border-[#3a2020] bg-[#1a0e0e] px-3 py-2 mb-3">
             <p className="text-xs text-[#cf7b6b] leading-relaxed">{generationError}</p>
