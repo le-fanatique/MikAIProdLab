@@ -356,9 +356,14 @@ describe("composeStoryboardShot", () => {
       inputWith({ lighting: null })
     );
 
-    // A short body and no lighting are reported.
+    // No lighting is reported.
     expect(result.findings.map((f) => f.code)).toContain("lightingMissing");
-    expect(result.findings.map((f) => f.code)).toContain("wordBudget");
+    // PROMPT.DOCTOR.2 — `wordBudget` must NOT fire here: this function
+    // composes the seven-part storyboard template, never the guide's
+    // mono-plan formula the budget is scoped to
+    // (`isGuideMonoPlanFormula: false`, always). Until this ticket it wrongly
+    // declared the opposite and fired on every real Shot.
+    expect(result.findings.map((f) => f.code)).not.toContain("wordBudget");
     // B19e — and `primaryCamera` is NOT, which is the point. This fixture
     // names a shot size and one movement, which is correct usage; the guide
     // asks for one *move* per shot, not for one camera field to be filled.
@@ -367,6 +372,63 @@ describe("composeStoryboardShot", () => {
     expect(result.findings.map((f) => f.code)).not.toContain("primaryCamera");
     // Reported, never enforced: the text is produced whole either way.
     expect(result.text.length).toBeGreaterThan(0);
+  });
+
+  // PROMPT.DOCTOR.2 — the ticket's own filet. The author's real composed
+  // Shot: all seven parts filled (subject, general description, action,
+  // environment, camera, lighting, avoid), 289 words in the body, well past
+  // the guide's 150-word hard cap. Before this ticket, `guideDefault` flagged
+  // it on every one of his Shots because `composeStoryboardShot` mis-declared
+  // its own composition as the guide's mono-plan formula. The seven-part
+  // storyboard template is not that formula and the budget must not fire on
+  // it, however long the body runs.
+  it("does not report wordBudget on the author's real, 289-word, seven-part composed Shot", () => {
+    const result = composeStoryboardShot(
+      inputWith({
+        context: contextWith({
+          shot: {
+            title: "Rooftop standoff",
+            description:
+              "Azelle crosses the exposed gantry under a broken skylight, one boot skidding on rain-slicked steel plating as red emergency strobes wash the corridor walls, and the wind funnels through the shattered vents behind her carrying grit and the distant groan of failing structural supports across the whole upper deck.",
+            actionPitch:
+              "Azelle steadies herself against the vibration and scans the failing consoles, then drags Mara upright by the collar as the floor tilts, both of them bracing against the railing while sparks rain down from a severed conduit overhead and the whole platform lurches a second time.",
+            shotPrompt:
+              "Mara braces against the railing, breath ragged, eyes fixed on the widening crack in the floor plating as Azelle hauls her toward the exit hatch, the two of them stumbling past shattered glass and torn cabling while the emergency lighting flickers between red and black.",
+            durationSeconds: 5,
+          },
+          castAssets: [{ assetId: 1, assetName: "Mara", assetType: "character", description: "Lead, mid-30s." }],
+          sequenceContext: {
+            locationHint:
+              "The upper maintenance deck of a derelict orbital station, exposed gantries, torn insulation panels, and a shattered skylight venting atmosphere in slow pulses.",
+            mood: "Frantic, claustrophobic, the sense of a structure failing in real time around the characters.",
+          },
+        }),
+        continuity: {
+          shotSize: "Medium Wide Shot",
+          cameraPosition: "Low Angle",
+          cameraMovement: "handheld push in",
+          movementSpeed: "fast",
+          cameraSubject: "Mara and Azelle",
+          cameraLens: "35mm",
+        },
+        lighting:
+          "Harsh red emergency strobes cutting through drifting smoke, deep shadow pooling in the corridor recesses, occasional white sparks flaring from the severed conduit overhead.",
+        styleAvoid: "- No bright, clean lighting.\n- No stable, static framing.",
+      })
+    );
+
+    expect(result.parts.map((p) => p.id)).toEqual([
+      "subject",
+      "generalDescription",
+      "action",
+      "environment",
+      "camera",
+      "lighting",
+      "constraints",
+    ]);
+    const wordCount = result.text.trim().split(/\s+/).filter((w) => w.length > 0).length;
+    expect(wordCount).toBeGreaterThan(150);
+    expect(result.findings.map((f) => f.code)).not.toContain("wordBudget");
   });
 
   it("reports no lighting finding when lighting is set", () => {

@@ -135,6 +135,25 @@ describe("checkPromptConsistency", () => {
     expect(findings.some((f) => f.code === "castAssetNotNamed" && f.message.includes("Mara"))).toBe(true);
   });
 
+  // PROMPT.DOCTOR.2 — the author's own case: "Sensor Console" is cast, and the
+  // action describes it descriptively ("failing consoles") rather than naming
+  // the asset's exact card name. A partial, plural-tolerant word match must
+  // find "console"/"consoles" and stay silent.
+  it("does not flag a cast asset described rather than named verbatim in the Action text (plural, partial match)", () => {
+    const context = buildPromptCompilationContext({
+      shot: { actionPitch: "Azelle scans the failing consoles as the alarm blares." },
+      castAssets: [{ assetId: 1, assetName: "Sensor Console", assetType: "prop", description: "Blinking console." }],
+      references: [{ refId: "r1", source: "asset", assetId: 1, assetName: "Sensor Console", role: "environment" }],
+      assetBibles: [],
+      sources: { ...ALL_SOURCES },
+    });
+    const composition = composeStoryboardShot({ context, continuity: NO_CONTINUITY, lighting: null });
+
+    const findings = checkPromptConsistency({ composition, context });
+
+    expect(findings.some((f) => f.code === "castAssetNotNamed")).toBe(false);
+  });
+
   it("does not flag a cast asset that is named in the Action text", () => {
     const context = buildPromptCompilationContext({
       shot: { actionPitch: "Mara braces against the railing as the room shakes." },

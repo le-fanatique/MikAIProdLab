@@ -124,14 +124,21 @@ export type ConformationInspectionRequest = ConformationRequest & {
    */
   fileTagCount: number;
   /**
-   * Whether `body` is a single Shot's plan. SHOTPROMPT.CONFORM.1 — the guide's
-   * 60-100 word budget targets its **mono-plan formula** and explicitly exempts
-   * its own shot-script format from any word limit. `inspect` has no way to
-   * tell a single Shot's body from a multi-shot package's on its own, so the
-   * caller states it. Defaults to not-single (`undefined`/`false`): a caller
-   * that says nothing gets no word-budget finding, never a wrong one.
+   * Whether `body` is written to the guide's own **mono-plan formula** — the
+   * one-sentence `Subject, Action, Environment, camera, style, avoid` the
+   * Seedance 2.0 guide's 60-100 word budget was written for.
+   * SHOTPROMPT.CONFORM.1 first drew this line; PROMPT.DOCTOR.2 renamed the
+   * flag because `isSinglePlan` said "a single plan", when what it actually
+   * gates is "the guide's mono-plan formula, where the budget applies" — a
+   * Shot **is** a single plan either way, whichever composition wrote its
+   * body. `inspect` has no way to tell which formula produced `body` on its
+   * own, so the caller states it. Defaults to not-that-formula
+   * (`undefined`/`false`): a caller that says nothing gets no word-budget
+   * finding, never a wrong one. The budget rule itself is not weakened —
+   * still enforced in full for a caller that does write the guide's formula
+   * and says so.
    */
-  isSinglePlan?: boolean;
+  isGuideMonoPlanFormula?: boolean;
 };
 
 /**

@@ -38,9 +38,10 @@ function compliantRequest(): ConformationInspectionRequest {
     body: words(80),
     lighting: "Golden hour, warm rim light",
     fileTagCount: 3,
-    // These fixtures probe the word budget itself, so they state the single-
-    // plan body the budget is scoped to (SHOTPROMPT.CONFORM.1).
-    isSinglePlan: true,
+    // These fixtures probe the word budget itself, so they state the guide's
+    // own mono-plan formula the budget is scoped to (SHOTPROMPT.CONFORM.1,
+    // PROMPT.DOCTOR.2).
+    isGuideMonoPlanFormula: true,
   };
 }
 
@@ -88,14 +89,14 @@ describe("guide.default — output discipline (inspect)", () => {
     expect(profile.inspect({ ...compliantRequest(), body: words(100) })).toEqual([]);
   });
 
-  it("wordBudget: an out-of-budget body triggers it for a single plan, but not for a multi-shot package", () => {
+  it("wordBudget: an out-of-budget body triggers it when the caller writes the guide's mono-plan formula, but not otherwise", () => {
     const outOfBudget = { ...compliantRequest(), body: words(10) };
 
-    const single = profile.inspect({ ...outOfBudget, isSinglePlan: true });
-    expect(single.map((f) => f.code)).toContain("wordBudget");
+    const guideFormula = profile.inspect({ ...outOfBudget, isGuideMonoPlanFormula: true });
+    expect(guideFormula.map((f) => f.code)).toContain("wordBudget");
 
-    const multi = profile.inspect({ ...outOfBudget, isSinglePlan: false });
-    expect(multi.map((f) => f.code)).not.toContain("wordBudget");
+    const otherComposition = profile.inspect({ ...outOfBudget, isGuideMonoPlanFormula: false });
+    expect(otherComposition.map((f) => f.code)).not.toContain("wordBudget");
   });
 
   it("primaryCamera: zero camera phrases triggers it", () => {
@@ -179,7 +180,7 @@ describe("guide.default — output discipline (inspect)", () => {
       body: words(10),
       lighting: null,
       fileTagCount: FILE_TAG_CAP + 1,
-      isSinglePlan: true,
+      isGuideMonoPlanFormula: true,
     });
 
     expect(findings.map((f) => f.code)).toEqual([

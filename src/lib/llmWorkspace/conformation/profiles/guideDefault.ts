@@ -140,12 +140,13 @@ function countCameraPhrases(cameraPhrases: string[]): number {
 function inspect(request: ConformationInspectionRequest): ConformationFinding[] {
   const findings: ConformationFinding[] = [];
 
-  // SHOTPROMPT.CONFORM.1 (ajustement #3c): the guide's 60-100 word budget
-  // targets the mono-plan formula and explicitly exempts shot-script formats
-  // from any word limit. `inspect` cannot tell a single Shot's body from a
-  // multi-shot package's on its own, so the caller states it via
-  // `isSinglePlan` — only counted when true.
-  if (request.isSinglePlan) {
+  // SHOTPROMPT.CONFORM.1 (ajustement #3c), renamed by PROMPT.DOCTOR.2: the
+  // guide's 60-100 word budget targets its own **mono-plan formula**, never
+  // any other composition — `composeStoryboardShot`'s seven-part template is
+  // not that formula and never will be (`docs/WHERE_THE_RULES_LIVE.md`).
+  // `inspect` cannot tell which formula produced `body` on its own, so the
+  // caller states it via `isGuideMonoPlanFormula` — only counted when true.
+  if (request.isGuideMonoPlanFormula) {
     const wordCount = countWords(request.body);
     if (wordCount > WORD_HARD_CAP) {
       findings.push({

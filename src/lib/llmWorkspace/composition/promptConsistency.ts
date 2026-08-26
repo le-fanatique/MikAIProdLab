@@ -67,8 +67,8 @@ export type PromptConsistencyCheckInput = {
    * even though the Shot's own resolved lighting ended up empty. The caller
    * already runs that resolution and reads no database twice for it — this
    * module stays pure. Defaults to `false`: a caller that says nothing gets
-   * no finding, never a wrong one (the same contract `isSinglePlan` follows
-   * in `ConformationInspectionRequest`).
+   * no finding, never a wrong one (the same contract `isGuideMonoPlanFormula`
+   * follows in `ConformationInspectionRequest`).
    */
   lightingChainHadUnusedCandidate?: boolean;
 };
@@ -81,6 +81,43 @@ function normalizeKey(value: string): string {
 /** Collapses internal whitespace too, for fragment-level comparison. */
 function normalizeFragment(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Splits a string into lowercased word tokens, dropping punctuation. Used by
+ * `hasSignificantWordMatch` below — never a linguistic tokenizer, just enough
+ * to compare a name's words against an action sentence's own words.
+ */
+function wordTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * A word and its naive singular/plural counterpart — "console" <-> "consoles".
+ * Deliberately not a stemmer: an `s` suffix is the one pluralization the
+ * ticket asks this check to tolerate, nothing more.
+ */
+function wordForms(word: string): string[] {
+  if (word.endsWith("s") && word.length > 3) {
+    return [word, word.slice(0, -1)];
+  }
+  return [word, `${word}s`];
+}
+
+/**
+ * PROMPT.DOCTOR.2 — check 3's actual match: does **any** significant word of
+ * `name` (case- and plural-insensitive) appear in `text`? Not a similarity
+ * engine — the ticket is explicit that a simple word-level match is enough,
+ * and the author's own case is what it is built to pass: `name` is
+ * "Sensor Console", `text` contains "...the failing consoles...", and
+ * "console"/"consoles" is the shared word.
+ */
+function hasSignificantWordMatch(name: string, text: string): boolean {
+  const textWords = new Set(wordTokens(text));
+  return wordTokens(name).some((word) => wordForms(word).some((form) => textWords.has(form)));
 }
 
 /**
@@ -157,11 +194,15 @@ export function checkPromptConsistency(input: PromptConsistencyCheckInput): Prom
     }
   }
 
-  // Check 3 — a cast Asset never named in the action text.
+  // Check 3 — a cast Asset never named in the action text. PROMPT.DOCTOR.2:
+  // a partial, word-level match, tolerant to plural and case
+  // (`hasSignificantWordMatch`) — an author almost never writes an asset's
+  // exact card name in a sentence of action ("scans the failing consoles"
+  // for a "Sensor Console"), and the exact-substring match this used to run
+  // fired on that real case.
   if (actionText && actionText.trim().length > 0) {
-    const normalizedAction = actionText.toLowerCase();
     for (const asset of context.castAssets) {
-      if (!normalizedAction.includes(normalizeKey(asset.assetName))) {
+      if (!hasSignificantWordMatch(asset.assetName, actionText)) {
         findings.push({
           code: "castAssetNotNamed",
           severity: "info",

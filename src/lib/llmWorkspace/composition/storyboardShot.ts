@@ -345,9 +345,18 @@ export function composeStoryboardShot(
     // absent because nothing composes video references into this prompt yet,
     // and audio has no entity at all (§5.6).
     fileTagCount: conformationReferences.length,
-    // This function composes exactly one Shot's plan — always a single plan,
-    // never a multi-shot package. SHOTPROMPT.CONFORM.1.
-    isSinglePlan: true,
+    // PROMPT.DOCTOR.2 — this function composes the seven-part storyboard
+    // template (`docs/SHOT_PROMPT_SD25_AUDIT.md` §8, ~250-word target), never
+    // the guide's one-sentence mono-plan formula the 60-150 word budget was
+    // written for. SHOTPROMPT.CONFORM.1 had this right in spirit (the check
+    // should not fire on a multi-shot package) but wrong in the flag it set:
+    // a Shot composed by this function is a single plan, and was declaring
+    // `isSinglePlan: true` for exactly that reason — which made the budget
+    // fire on every one of the author's real Shots, since none of them write
+    // the guide's formula either. The budget check stays available for a
+    // caller that does write that formula; this one says, correctly, that it
+    // does not.
+    isGuideMonoPlanFormula: false,
   });
 
   return { text, parts, findings };
