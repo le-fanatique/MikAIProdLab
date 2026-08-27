@@ -29,6 +29,16 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 **Rien.**
 
+**Clos le 2026-08-28, un commit `b826e89`, aucune migration** :
+`WF.LIBRARY.FAVDEFAULT.1`. La bibliothèque de workflows — l'overlay
+« Change Workflow » — s'ouvre désormais sur **Favorites** au lieu de **All**,
+et retombe sur All quand aucun favori n'est offert dans le contexte. Le vrai
+défaut était ailleurs : le lien « All » et le champ caché du formulaire de
+recherche retiraient `cat` de l'URL, ce qui rendait All inatteignable une
+fois le défaut changé. Aucun test ne pouvait l'attraper ; c'est prouvé dans
+un navigateur, sur les deux surfaces. Ce que ça a coûté à apprendre :
+`docs/PROJECT_STATE.md`.
+
 **Clos le 2026-08-27, un commit `bbe7770`, aucune migration** :
 `COMFY.DIRECTPORTS.1` et `COMFY.EMPTYSEL.1`. La détection des entrées image
 répétables reconnaît désormais une convention de nommage de port au lieu d'une

@@ -1,6 +1,53 @@
 # MikAI Project State
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
+
+## `WF.LIBRARY.FAVDEFAULT.1` — un défaut d'ouverture, et un piège hors de portée des tests
+
+One commit, `b826e89`, 2026-08-28. No migration. 196 files, 2001 tests
+(baseline 1994, +7). Requested by the author: the workflow library must open
+on **Favorites**, not **All**.
+
+**The library concerned is `WorkflowSelectorPanel` (`WF.LIBRARY.1`)** — the
+full-screen overlay behind "Change Workflow", the only surface with an "All"
+sidebar entry. Two callers, the shot page and the asset page.
+`WorkflowTemplateGallery` (Settings and the four `…/workflows` pages) has no
+"All" and no `cat` param; it was not touched.
+
+**The default is a rule, not a setting.** No checkbox, no persisted
+preference. `cat` absent or unrecognized now resolves to `"favorites"` when
+that entry exists in this context, `"all"` otherwise — and the fallback
+invents nothing, because `buildLibraryCategories` already emits `favorites`
+only when at least one exists (`WF.FAVORITE.1` §5/§6). Un-starring the last
+favorite therefore returns to All on its own, with no guard and no message.
+
+**The decision left the component.** `resolveLibraryCategory` is pure and
+tested; `LibraryBody` only propagates its result. That is the direct answer to
+the debt named by the previous ticket — a decision wired into components no
+test can reach.
+
+### What this cost to learn
+
+**The real defect was not the default; it was the two places that wrote the
+URL.** As long as the "All" link *dropped* `cat`, clicking All returned to the
+default, so All was unreachable — and the search form's hidden `cat` field,
+conditioned on a non-null category, did the same to any search launched from
+All. Both now write `cat` unconditionally.
+
+**That fix is provable in a browser and nowhere else.** Of the three mutations
+run, M1 broke 1 test and M2 broke 3; **M3 — restoring the old `categoryHref` —
+broke none**, with the full 2001-test suite green. There is no DOM harness, by
+decision (`mikai-method` §5), and one was not installed for this. The
+Playwright pass on both surfaces is that point's only evidence.
+
+**A scoping measurement can go stale in a minute.** The executor reported 26
+shot-context workflows against the 27 measured at scoping, and said so instead
+of smoothing it over. Two `db.backup()` snapshots named the cause:
+`Gemini_PropSheet` (id 55) had `contexts` changed from `null` to `["asset"]`
+at `2026-08-27T21:40:51Z`, in the running app — which is why the asset count
+stayed 22 while the shot count fell by one. Not a defect, and not the test
+suite, which `tests/setup/dbGuard.ts` keeps away from the development
+database. The browser count was right; the scoping figure had aged.
 
 ## `COMFY.DIRECTPORTS.1` and `COMFY.EMPTYSEL.1` — a convention, and a deadlock
 
