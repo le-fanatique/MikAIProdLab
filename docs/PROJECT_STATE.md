@@ -1,6 +1,66 @@
 # MikAI Project State
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
+
+## `COMFY.DIRECTPORTS.1` and `COMFY.EMPTYSEL.1` — a convention, and a deadlock
+
+One commit, `bbe7770`, 2026-08-27. No migration. Two tickets together because
+they touch the same files and the second fixes a defect the first made
+reachable.
+
+**The mechanism already existed.** `buildGenerationPayload` has dispatched
+between an explicit Dynamic Batch node and direct numbered ports since
+`SEQGEN.STORYBOARD.3-FIX2`, and the direct expansion was already prefix-
+agnostic: it derives the next port key from the template port key. Only
+detection was locked, to `OpenAIGPTImageNodeV2` and `model.images.image_N`.
+The author's ByteDance node exposes `model.reference_images.image_N`, so it
+fell through to `none` in silence.
+
+**The convention is the port suffix, never the node class.** The anchor on
+`image_` is load-bearing and must stay: the same nodes expose `video_N`,
+`audio_N` and `asset_N`, and a bare `_(\d+)$` pattern wires an image onto a
+video port. A test proves it.
+
+**Nodes fed by the same source are a group, not an ambiguity** — the author's
+own reading of his workflow, 2026-08-27, and a better answer than the three
+tie-breaks the supervisor had proposed. One `LoadImage` feeding both a Gemini
+node and a GPT node is one reference set feeding two models: adding an image
+writes `image_2` on both. The chain is cloned once per image, never once per
+member; each member increments its own key, so a group mixing prefixes works.
+Refusal survives only for genuinely different sources.
+
+**The direct mode had never worked anywhere but one page.** Six surfaces
+compared a sentence to tell "no image selected" from a broken workflow, and
+the excepted sentence was one mode's only. In direct mode the notice became a
+detection error, which suppresses the picker — demanding an image while
+removing the means to add one. A seventh surface excepted nothing at all. Only
+the video-storyboard page escaped, because it pre-fills its selection: it
+worked by accident. Both messages are now named constants behind one shared
+predicate.
+
+### What this cost to learn
+
+**A measurement that replicates the code measures the replica.** The first
+pass's count of affected workflows re-implemented detection instead of calling
+it, checked only class and port pattern, and so counted only flips to success —
+missing two regressions on workflows the author uses. The rule now carried by
+the ticket: measure by calling the real functions, always.
+
+**A test that cannot fail is not coverage, and it was named.** Of the six
+mutations run across the two tickets, five broke tests (4, 2, 3, 3, 2) and one
+broke none: wiring the predicate into five surfaces instead of six. The
+predicate is covered; its wiring into the six Server Components is not, for
+want of a DOM harness the project deliberately does not have (`mikai-method`
+§5). That gap is exactly what let the defect ship the first time.
+
+**Both expansion modules had no test at all.** They have 22 now.
+
+### Deliberate, so no future session "fixes" it
+
+The author rejected a checkbox declaring the mode on the workflow page: the
+JSON already carries the fact, a manual flag can be set wrong, and it would not
+have answered the question that actually blocked him — which port prefix to
+write. Detection stays automatic; the mode is displayed, not declared.
 
 ## The Shot prompt chantier — what it changed, and what it taught
 

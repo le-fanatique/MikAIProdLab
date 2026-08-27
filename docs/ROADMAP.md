@@ -27,7 +27,17 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Rien.** Le chantier « Upgrade du prompt de Shot » est clos le 2026-08-26 :
+**Rien.**
+
+**Clos le 2026-08-27, un commit `bbe7770`, aucune migration** :
+`COMFY.DIRECTPORTS.1` et `COMFY.EMPTYSEL.1`. La détection des entrées image
+répétables reconnaît désormais une convention de nommage de port au lieu d'une
+classe de nœud, des nœuds partageant leur source amont forment un groupe, et
+« ajoute une image » a cessé d'être traité comme une panne de workflow — ce qui
+masquait le sélecteur et rendait le mode inutilisable partout sauf sur une
+page. Ce que ça a coûté à apprendre : `docs/PROJECT_STATE.md`.
+
+Le chantier « Upgrade du prompt de Shot » est clos le 2026-08-26 :
 **dix-neuf commits**, `ad54c8a` → `ea593c3`, deux migrations appliquées par
 l'auteur, 1891 tests. Cadrage : `docs/SHOT_PROMPT_SD25_AUDIT.md` ; ce qu'il a
 coûté à apprendre : `docs/PROJECT_STATE.md`.
