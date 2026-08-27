@@ -208,9 +208,11 @@ précédent datait du 2 août et a été écrit avant deux chantiers.
 
 **Project Style — suites bornées**
 
-- `STYLE.2.LOOK.CORRECTIONS.CORE.1` puis `.UI.1` — propositions de correction du
-  Working Draft depuis les Look Tests, sans mutation automatique ni modification
-  des versions publiées.
+**Rien. `STYLE.2.LOOK.CORRECTIONS.CORE.1` et `.UI.1` sont livrés** — vérifié
+sur le code le 2026-08-28, sous d'autres noms : `STYLE.LLM.LOOKFEEDBACK.CORE.1`
+(le descripteur `style.adjustFromLookResult`) et `STYLE.LLM.LOOKFEEDBACK.UI.1`
+(`StyleDirectorNotePanel.tsx`). Même découpe CORE puis UI, et les quatre
+exigences de l'entrée sont tenues. Détail : `docs/PROJECT_STATE.md`.
 
 `STYLE.2.REFERENCE_ANALYSIS.UI.HARDENING.1` **est clos le 2026-08-22**
 (`e418865`) — voir la section 6.
@@ -344,9 +346,14 @@ surfaces, et un helper testé.
 Ce que ça a appris est dans `docs/PROJECT_STATE.md` — dont un défaut
 d'approbation multiple qu'aucun test ne pouvait voir.
 
-`STYLE.2.LOOK.CORRECTIONS.CORE.1`/`.UI.1` **restent ouverts** et ne sont pas
-remplacés par ce chantier : proposer des règles depuis une note du directeur
-n'est pas analyser un résultat pour en déduire une correction.
+**Cette phrase était fausse et a été corrigée le 2026-08-28** : elle disait
+que `STYLE.2.LOOK.CORRECTIONS.CORE.1`/`.UI.1` restaient ouverts, au motif que
+proposer des règles depuis une note du directeur n'est pas analyser un
+résultat. C'est vrai de `style.adjustDirected` — et ça oublie
+`style.adjustFromLookResult`, **ticket 4a du même chantier**, ancré sur un
+résultat de Look Test et livré le jour même par `16fd555` (« réagir au rendu
+depuis le Look Dev Bench »). Le chantier couvrait les deux gestes ; seul le
+second avait été compté. Les deux entrées sont donc livrées.
 
 **`SEQGEN.STORYBOARD.EXTRACT.SHOTRANGE.1` — clos le 2026-08-22**, un commit :
 `868869f`. Aucune migration.

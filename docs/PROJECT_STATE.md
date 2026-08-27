@@ -2,6 +2,50 @@
 
 Last updated: 2026-08-28
 
+## `STYLE.2.LOOK.CORRECTIONS` — livré depuis cinq jours, et la roadmap le niait
+
+No commit, no code: a verification pass on 2026-08-28, asked for by the author
+before opening the entry as a ticket. **Both `STYLE.2.LOOK.CORRECTIONS.CORE.1`
+and `.UI.1` were already shipped**, on 2026-08-23/24, under different names.
+
+| The entry asks for | Where it lives |
+| --- | --- |
+| corrections proposed for the Working Draft | `styleAdjustFromLookResult.ts` — its own header carries the id **`STYLE.LLM.LOOKFEEDBACK.CORE.1`** |
+| from the Look Tests | `anchor: { kind: "entity", entity: "lookResult" }`, with a `LOOK.RESULT` context variable grounding the note in a real render |
+| no automatic mutation | rules are approved one by one through `applyProposedRules.ts`; nothing is written until the director approves |
+| published versions untouched | `insertDraftRule.ts` writes `projectStyleRules` and bumps `projectStyleDrafts` only. `projectStyleVersions` is never touched |
+
+The UI half is `StyleDirectorNotePanel.tsx`, whose header carries
+**`STYLE.LLM.LOOKFEEDBACK.UI.1`** — the same CORE-then-UI split the roadmap
+entry described, under the chantier's own naming.
+
+### What this cost to learn
+
+**The roadmap did not merely go stale — it argued the delivery away.** At the
+Project Style assistant's closure it stated these two entries *"restent
+ouverts… proposer des règles depuis une note du directeur n'est pas analyser un
+résultat pour en déduire une correction."* That sentence is true of
+`style.adjustDirected`, and it silently omits `style.adjustFromLookResult` —
+**ticket 4a of the very same chantier**, landed the same day by `16fd555`
+("réagir au rendu depuis le Look Dev Bench"). The chantier delivered both
+gestures; the closure note counted one and reasoned from it.
+
+A reasoned denial is more expensive than a blank entry: it reads as though the
+question was examined, so the next session trusts it instead of grepping. This
+one survived five days and would have produced a ticket rebuilding a shipped
+feature.
+
+**The names were the whole obstacle.** Nothing about `STYLE.2.LOOK.CORRECTIONS`
+appears in the source; the work shipped as `STYLE.LLM.LOOKFEEDBACK.*`. Grepping
+the roadmap's own identifier finds nothing and *looks like* proof of absence —
+`mikai-method` §10b again, one layer up: read the effect, not the name, and
+module headers carry the id that the roadmap does not.
+
+**This is the third roadmap entry found already delivered** — after
+`GEN.VRAM.1` and `LLM.VRAM.1` on 2026-08-21. The rule that follows: verify an
+entry's premise against the code *before* writing its ticket, not while
+implementing it.
+
 ## `REPO.VITEST.WORKERS.1` — un plafond levé, et l'outil pour le rebaisser
 
 One commit, `85511ef`, 2026-08-28. No migration, no dependency. The suite ran
