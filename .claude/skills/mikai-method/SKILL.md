@@ -60,6 +60,21 @@ This is how the false intervals were found: five shots reading
 `"MS - Medium Shot of Max on phone call"` were being parsed as a start-to-end
 interval, and no invented example had shown it.
 
+**And run the real functions over that data, never a re-implementation of their
+logic.** A probe that re-derives what the code does measures the probe. On
+2026-08-27 a workflow impact count replicated a detection function, skipped the
+chain validation that function performs, and so could only observe flips *to a
+success* — reporting 2 affected workflows while missing 2 regressions on
+workflows the author actively uses, one of them turning a working workflow into
+a hard error. Right data, wrong code: §3's first half does not protect against
+this one.
+
+Write the probe as a throwaway test file under `tests/` that imports the real
+modules, run it with vitest, write the result to a temp file, then delete the
+probe. For a before/after comparison, reconstruct the *previous* behaviour from
+the diff rather than from memory, and say plainly which half is the
+reconstruction.
+
 ## 4. Migrations are never applied automatically
 
 The user runs `db:migrate`. Always. Generate, paste the **complete** SQL in the
