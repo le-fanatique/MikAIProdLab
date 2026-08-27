@@ -44,6 +44,14 @@ export type BatchExpansionPreview = {
   templateChainTitles: string[];
   selectedImageCount: number;
   clonedNodeCount: number;
+  /**
+   * COMFY.DIRECTPORTS.1, Part D — which expansion mode `buildGenerationPayload`
+   * detected for this node, so the author can see what MikAI recognized
+   * without opening the workflow JSON. Optional: only ShotGenerationPanel
+   * threads it through today; every other caller keeps rendering the same
+   * preview as before.
+   */
+  mode?: "dynamic-batch" | "direct-repeatable-inputs";
 };
 
 // ---------------------------------------------------------------------------
@@ -399,7 +407,14 @@ export default function DynamicBatchImageList({
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] text-[#5a6168]">Batch node</span>
-              <span className="text-xs text-[#a4abb2]">{preview!.batchTitle}</span>
+              <span className="text-xs text-[#a4abb2]">
+                {preview!.batchTitle}
+                {preview!.mode && (
+                  <span className="ml-1.5 text-[10px] text-[#5a6168]">
+                    ({preview!.mode === "dynamic-batch" ? "Dynamic Batch" : "Direct repeatable inputs"})
+                  </span>
+                )}
+              </span>
             </div>
             {preview!.templateChainTitles.length > 0 && (
               <div className="flex flex-col gap-0.5">
@@ -540,11 +555,18 @@ export default function DynamicBatchImageList({
         </div>
       )}
 
-      {/* T3 — Improved warning message */}
+      {/* T3 — Improved warning message. COMFY.EMPTYSEL.1, Part C — names the
+          actual mode this workflow was detected in, via `preview.mode`
+          (COMFY.DIRECTPORTS.1 §8); falls back to the original Dynamic Batch
+          wording when a caller doesn't thread `mode` through yet, so every
+          caller but the one this ticket targets keeps its exact current
+          text. */}
       {selected.length === 0 && (
         <div className="rounded border border-[#5c4a24]/60 bg-[#141008] px-3 py-2">
           <p className="text-xs text-[#b89a5a]">
-            Add at least one image to the Dynamic Batch before generating.
+            {preview?.mode === "direct-repeatable-inputs"
+              ? "Add at least one image to the direct repeatable image inputs before generating."
+              : "Add at least one image to the Dynamic Batch before generating."}
           </p>
         </div>
       )}

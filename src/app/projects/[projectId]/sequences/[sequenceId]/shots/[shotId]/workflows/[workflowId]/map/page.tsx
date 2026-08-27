@@ -26,6 +26,7 @@ import { buildRuntimeImageOptions } from "@/lib/comfy/mapWorkflowInputs";
 import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
 import {
   buildGenerationPayload,
+  isEmptySelectionError,
   detectDynamicBatchUiInfo,
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
@@ -630,7 +631,7 @@ export default async function WorkflowMappingPage({ params, searchParams }: Prop
   // Dynamic Batch node exists and nothing is selected yet, show no preview
   // rather than the unexpanded/incomplete one.
   const payloadPreview = built?.ok ? built.patch : null;
-  if (built && !built.ok && !batchError && built.error !== "Add at least one image to Dynamic Image Batch before generating.") {
+  if (built && !built.ok && !batchError && !isEmptySelectionError(built.error)) {
     batchError = { kind: "detection", message: built.error };
   }
 

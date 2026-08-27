@@ -19,7 +19,7 @@ import type { BatchImageGroup, BatchExpansionPreview } from "@/components/Dynami
 import DynamicBatchFormSync from "@/components/DynamicBatchFormSync";
 import { parseComfyWorkflow } from "@/lib/comfy/parseWorkflow";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
-import { buildGenerationPayload, detectDynamicBatchUiInfo } from "@/lib/comfy/buildGenerationPayload";
+import { buildGenerationPayload, detectDynamicBatchUiInfo, isEmptySelectionError } from "@/lib/comfy/buildGenerationPayload";
 import { classifyImageInputCompatibility } from "@/lib/comfy/imageInputCompatibility";
 import {
   buildSequenceVideoGenerationContext,
@@ -254,7 +254,7 @@ export default async function SequenceVideoGeneratePage({ params, searchParams }
   const mappings = built?.ok ? built.mappings : [];
   const displayMappings = built?.ok ? built.displayMappings : mappings;
   const payloadPreview = built?.ok ? built.patch : null;
-  if (built && !built.ok && !batchError) {
+  if (built && !built.ok && !batchError && !isEmptySelectionError(built.error)) {
     batchError = { kind: "detection", message: built.error };
   }
 

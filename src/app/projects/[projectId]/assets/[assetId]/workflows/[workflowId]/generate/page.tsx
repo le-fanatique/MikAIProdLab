@@ -20,6 +20,7 @@ import {
 } from "@/lib/comfy/mapWorkflowInputs";
 import {
   buildGenerationPayload,
+  isEmptySelectionError,
   detectDynamicBatchUiInfo,
   summarizeGenerationMutations,
 } from "@/lib/comfy/buildGenerationPayload";
@@ -242,7 +243,7 @@ export default async function AssetGeneratePage({ params, searchParams }: Props)
 
   // Same "no misleading intermediate payload" rule as the panels.
   const payloadPreview = built?.ok ? built.patch : null;
-  if (built && !built.ok && !batchError && built.error !== "Add at least one image to Dynamic Image Batch before generating.") {
+  if (built && !built.ok && !batchError && !isEmptySelectionError(built.error)) {
     batchError = { kind: "detection", message: built.error };
   }
 

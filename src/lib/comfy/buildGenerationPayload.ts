@@ -26,12 +26,14 @@ import {
   detectDynamicBatchInput,
   traceUpstreamTemplateChain,
   expandDynamicBatchWorkflow,
+  DYNAMIC_BATCH_EMPTY_SELECTION_MESSAGE,
   type DynamicBatchExpansionImage,
   type DynamicBatchExpansionResult,
 } from "@/lib/comfy/expandDynamicBatch";
 import {
   detectDirectRepeatableInput,
   expandDirectRepeatableInputsWorkflow,
+  DIRECT_REPEATABLE_EMPTY_SELECTION_MESSAGE,
 } from "@/lib/comfy/expandDirectRepeatableInputs";
 import { patchWorkflowPayload, type WorkflowPayloadPatchResult, type WorkflowPayloadPatch } from "@/lib/comfy/patchWorkflowPayload";
 
@@ -44,8 +46,9 @@ import { patchWorkflowPayload, type WorkflowPayloadPatchResult, type WorkflowPay
 // Priority: an explicit `(Dynamic Batch Input)` marker always wins (existing
 // workflows keep their exact current behavior, unchanged) — direct
 // repeatable inputs are only considered when no such marker exists, and are
-// themselves purely structural (numbered `model.images.image_N` ports on an
-// OpenAIGPTImageNodeV2 node, never the workflow's name or id).
+// themselves purely structural (numbered `image_N`-suffixed ports on any
+// node, regardless of class_type — COMFY.DIRECTPORTS.1; never the
+// workflow's name or id).
 // ---------------------------------------------------------------------------
 
 type ImageExpansionMode =
@@ -122,6 +125,32 @@ function resolveImageExpansionMode(workflowJson: string): ImageExpansionMode {
   }
 
   return { kind: "none" };
+}
+
+// ---------------------------------------------------------------------------
+// isEmptySelectionError — COMFY.EMPTYSEL.1
+//
+// True only for the exact "nothing selected yet" sentence either expansion
+// mode returns when its own batch node/ports were detected but
+// `selectedImages` is empty — never for a real detection failure (an
+// ambiguous batch, an unresolvable chain, a malformed port). Every surface
+// that used to compare `built.error` against a single hardcoded literal
+// (the Dynamic Batch one only, missing the direct-repeatable-inputs one)
+// calls this instead, so the two modes are recognized identically and a
+// third mode added later only has to update this one predicate.
+//
+// Placed here, not in either expand module, because this is the one file
+// both `expandDynamicBatch.ts` and `expandDirectRepeatableInputs.ts` are
+// already imported into, and the one file every calling surface already
+// imports — adding it anywhere else would either create a new import for
+// six call sites or a cycle back into one of the expand modules.
+// ---------------------------------------------------------------------------
+
+export function isEmptySelectionError(message: string | null | undefined): boolean {
+  return (
+    message === DYNAMIC_BATCH_EMPTY_SELECTION_MESSAGE ||
+    message === DIRECT_REPEATABLE_EMPTY_SELECTION_MESSAGE
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ import { loadRuntimeVideoOptionsForShot } from "@/lib/shotVideoLibrary/loadRunti
 import { filterAvailableImagesBySelection } from "@/lib/comfy/filterAvailableImagesBySelection";
 import {
   buildGenerationPayload,
+  isEmptySelectionError,
   detectDynamicBatchUiInfo,
 } from "@/lib/comfy/buildGenerationPayload";
 import type { DynamicBatchExpansionImage } from "@/lib/comfy/expandDynamicBatch";
@@ -360,6 +361,7 @@ export default async function ShotGenerationPanel({
       templateChainTitles: batchUiInfo.templateChainTitles,
       selectedImageCount: 0,
       clonedNodeCount: 0,
+      mode: batchUiInfo.mode,
     };
   } else if (batchUiInfo.kind === "error") {
     batchError = { kind: "detection", message: batchUiInfo.message };
@@ -660,7 +662,7 @@ export default async function ShotGenerationPanel({
   // (unexpected) Dynamic Batch error is surfaced via batchError too, so
   // nothing fails silently.
   const payloadPreview = built?.ok ? built.patch : null;
-  if (built && !built.ok && !batchError && built.error !== "Add at least one image to Dynamic Image Batch before generating.") {
+  if (built && !built.ok && !batchError && !isEmptySelectionError(built.error)) {
     batchError = { kind: "detection", message: built.error };
   }
 

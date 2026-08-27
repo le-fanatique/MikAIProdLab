@@ -9,6 +9,15 @@
 // Types
 // ---------------------------------------------------------------------------
 
+// COMFY.EMPTYSEL.1 — the exact sentence returned when this mode's own batch
+// node is detected but nothing is selected yet. Exported as a named
+// constant, never a literal repeated at each call site, so
+// `isEmptySelectionError` (buildGenerationPayload.ts) and this module's own
+// `expandDynamicBatchWorkflow` can never drift apart on what the sentence
+// says. The wording itself is unchanged by this ticket.
+export const DYNAMIC_BATCH_EMPTY_SELECTION_MESSAGE =
+  "Add at least one image to Dynamic Image Batch before generating.";
+
 // SEQGEN.STORYBOARD.3-FIX2 — exported so expandDirectRepeatableInputs.ts
 // (a dedicated sibling module, never merged into this file's own
 // exportedDynamicBatchWorkflow to avoid making it ambiguous) can reuse the
@@ -432,7 +441,7 @@ export function expandDynamicBatchWorkflow(params: {
   if (selectedImages.length === 0) {
     return {
       ok: false,
-      error: "Add at least one image to Dynamic Image Batch before generating.",
+      error: DYNAMIC_BATCH_EMPTY_SELECTION_MESSAGE,
     };
   }
 
