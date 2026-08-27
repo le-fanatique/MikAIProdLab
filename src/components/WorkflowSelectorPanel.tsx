@@ -33,8 +33,13 @@ import WorkflowTemplateCard from "@/components/WorkflowTemplateCard";
 import WorkflowLibraryGrid from "@/components/WorkflowLibraryGrid";
 import WorkflowFavoriteButton from "@/components/WorkflowFavoriteButton";
 import { type WorkflowGalleryEntry } from "@/components/WorkflowTemplateGallery";
-import { parseWorkflowTags, isWorkflowCategoryId, type WorkflowContextId } from "@/lib/comfy/workflowCatalog";
-import { selectGalleryWorkflows, buildLibraryCategories } from "@/lib/comfy/workflowGallery";
+import { parseWorkflowTags, type WorkflowContextId } from "@/lib/comfy/workflowCatalog";
+import {
+  selectGalleryWorkflows,
+  buildLibraryCategories,
+  resolveLibraryCategory,
+  type LibraryCategoryEntry,
+} from "@/lib/comfy/workflowGallery";
 
 type Props = {
   workflows: readonly WorkflowGalleryEntry[];
@@ -145,29 +150,37 @@ function LibraryBody({
 }) {
   const categories = buildLibraryCategories(workflows, contexts);
 
-  const selectedCategoryId =
-    category && (isWorkflowCategoryId(category) || category === "uncategorized" || category === "favorites")
-      ? category
-      : null;
+  // WF.LIBRARY.FAVDEFAULT.1 §4.1 — the library opens on Favorites by
+  // default (falling back to All when Favorites isn't offered here), and
+  // an explicit `cat` always wins when it names an entry present in this
+  // context's sidebar. The decision itself lives in the pure, tested
+  // `resolveLibraryCategory` — this component only propagates its result.
+  const selectedCategoryId = resolveLibraryCategory(category, categories);
 
   // Context + search filtered, then narrowed to the selected sidebar
-  // category (if any) — "All" shows every section flattened, without
-  // sub-headers, since the sidebar is already the category navigation.
-  // WF.FAVORITE.1 §5 — "Favorites" is not one of `selectGalleryWorkflows`'s
-  // sections (it is a flag, not a category — §0), so it is filtered
-  // separately rather than by matching a `section.categoryId`.
+  // category — "all" shows every section flattened, without sub-headers,
+  // since the sidebar is already the category navigation. WF.FAVORITE.1 §5
+  // — "Favorites" is not one of `selectGalleryWorkflows`'s sections (it is a
+  // flag, not a category — §0), so it is filtered separately rather than by
+  // matching a `section.categoryId`.
   const sections = selectGalleryWorkflows(workflows, { contexts, search });
   const visibleWorkflows =
     selectedCategoryId === "favorites"
       ? sections.flatMap((section) => section.workflows).filter((wf) => wf.isFavorite)
-      : sections
-          .filter((section) => selectedCategoryId === null || section.categoryId === selectedCategoryId)
-          .flatMap((section) => section.workflows);
+      : selectedCategoryId === "all"
+        ? sections.flatMap((section) => section.workflows)
+        : sections
+            .filter((section) => section.categoryId === selectedCategoryId)
+            .flatMap((section) => section.workflows);
 
   const trimmedSearch = search.trim();
 
-  const categoryHref = (id: string | null) =>
-    buildHref(basePath, { ...frozenParams, q: search || undefined, cat: id ?? undefined });
+  // WF.LIBRARY.FAVDEFAULT.1 §4.2 — the trap this ticket names: `cat` is now
+  // written for every entry, "All" included. Dropping it for "All" would let
+  // the URL fall back to the default (Favorites) on the next load, so a
+  // click on "All" would silently return to Favorites.
+  const categoryHref = (id: LibraryCategoryEntry["id"]) =>
+    buildHref(basePath, { ...frozenParams, q: search || undefined, cat: id });
 
   const workflowHref = (id: number) =>
     buildHref(basePath, { ...frozenParams, workflowId: String(id) });
@@ -176,12 +189,11 @@ function LibraryBody({
     <>
       <aside className="w-56 shrink-0 border-r border-[#232629] overflow-y-auto py-6 px-3 flex flex-col gap-1">
         {categories.map((cat) => {
-          const isActive =
-            (cat.id === "all" && selectedCategoryId === null) || cat.id === selectedCategoryId;
+          const isActive = cat.id === selectedCategoryId;
           return (
             <Link
               key={cat.id}
-              href={categoryHref(cat.id === "all" ? null : cat.id)}
+              href={categoryHref(cat.id)}
               className={`flex items-center justify-between rounded px-3 py-1.5 text-sm transition-colors ${
                 isActive
                   ? "bg-[#1a1d20] text-[#e7e9ec]"
@@ -203,7 +215,7 @@ function LibraryBody({
             {Object.entries(frozenParams).map(([key, value]) => (
               <input key={key} type="hidden" name={key} value={value} />
             ))}
-            {selectedCategoryId && <input type="hidden" name="cat" value={selectedCategoryId} />}
+            <input type="hidden" name="cat" value={selectedCategoryId} />
             <input
               type="text"
               name="q"

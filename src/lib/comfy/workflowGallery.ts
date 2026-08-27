@@ -222,3 +222,26 @@ export function buildLibraryCategories<T extends GalleryWorkflowRow>(
 
   return entries;
 }
+
+// ---------------------------------------------------------------------------
+// resolveLibraryCategory — WF.LIBRARY.FAVDEFAULT.1 §4.1
+//
+// The library's default-category decision, pulled out of the component so it
+// is testable without a DOM (no jsdom harness in this repo, by decision —
+// see `.claude/skills/mikai-method` §5). A `param` that names an entry
+// actually present in `categories` (built by `buildLibraryCategories` for
+// this context) wins outright — "all" and "favorites" included. Anything
+// else — absent, empty, unrecognized, or a valid category id that simply
+// isn't offered in this context — falls back to the default: "favorites" if
+// that entry exists here, "all" otherwise.
+// ---------------------------------------------------------------------------
+
+export function resolveLibraryCategory(
+  param: string | null,
+  categories: readonly LibraryCategoryEntry[]
+): LibraryCategoryEntry["id"] {
+  if (param !== null && categories.some((cat) => cat.id === param)) {
+    return param as LibraryCategoryEntry["id"];
+  }
+  return categories.some((cat) => cat.id === "favorites") ? "favorites" : "all";
+}

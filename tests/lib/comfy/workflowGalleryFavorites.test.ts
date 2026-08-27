@@ -1,6 +1,11 @@
 // WF.FAVORITE.1 §5/§6 — the gallery's "Favorites" section.
 import { describe, it, expect } from "vitest";
-import { groupGalleryWorkflowsWithFavorites, type GalleryWorkflowRow } from "@/lib/comfy/workflowGallery";
+import {
+  groupGalleryWorkflowsWithFavorites,
+  resolveLibraryCategory,
+  type GalleryWorkflowRow,
+  type LibraryCategoryEntry,
+} from "@/lib/comfy/workflowGallery";
 
 function row(overrides: Partial<GalleryWorkflowRow> = {}): GalleryWorkflowRow {
   return {
@@ -80,5 +85,51 @@ describe("groupGalleryWorkflowsWithFavorites — respects context/search filteri
       contexts: ["shot-keyframe"],
     });
     expect(sections).toHaveLength(0);
+  });
+});
+
+// WF.LIBRARY.FAVDEFAULT.1 §4.1/§5 — resolveLibraryCategory: the library
+// opens on Favorites by default, and falls back to All when Favorites is not
+// offered in this context (no favorite starred, or it was un-starred).
+describe("resolveLibraryCategory", () => {
+  const withFavorites: readonly LibraryCategoryEntry[] = [
+    { id: "favorites", label: "Favorites", count: 4 },
+    { id: "all", label: "All", count: 27 },
+    { id: "video", label: "Video", count: 10 },
+  ];
+
+  const withoutFavorites: readonly LibraryCategoryEntry[] = [
+    { id: "all", label: "All", count: 27 },
+    { id: "video", label: "Video", count: 10 },
+  ];
+
+  it("1. no param, Favorites present → favorites", () => {
+    expect(resolveLibraryCategory(null, withFavorites)).toBe("favorites");
+  });
+
+  it("2. no param, Favorites absent → all", () => {
+    expect(resolveLibraryCategory(null, withoutFavorites)).toBe("all");
+  });
+
+  it('3. param = "all" → all, even though Favorites exists (explicit click survives)', () => {
+    expect(resolveLibraryCategory("all", withFavorites)).toBe("all");
+  });
+
+  it('4. param = "video", present in this context → video', () => {
+    expect(resolveLibraryCategory("video", withFavorites)).toBe("video");
+  });
+
+  it('5. param = "favorites" but the entry no longer exists → all', () => {
+    expect(resolveLibraryCategory("favorites", withoutFavorites)).toBe("all");
+  });
+
+  it("6. param is unrecognized garbage → the default (favorites, present here)", () => {
+    expect(resolveLibraryCategory("n-importe-quoi", withFavorites)).toBe("favorites");
+  });
+
+  it("7. param is a valid WorkflowCategoryId but absent from this context → the default, not itself", () => {
+    // "storyboard" is a real WorkflowCategoryId, but neither fixture offers
+    // it — the fallback is the default, never the literal id.
+    expect(resolveLibraryCategory("storyboard", withoutFavorites)).toBe("all");
   });
 });
