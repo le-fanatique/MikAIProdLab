@@ -29,6 +29,14 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 **Rien.**
 
+**Clos le 2026-08-28, un commit `85511ef`, aucune migration, aucune
+dépendance** : `REPO.VITEST.WORKERS.1`. La suite passe de **63 s à ~14 s** —
+le plafond de 4 workers posé le 2026-08-18 est levé à `"75%"`. La panne qu'il
+prévenait ne s'est pas reproduite en 43 passages, mais le livrable n'est pas
+la ligne de config : c'est `npm run test:repeat`, qui rejoue la suite N fois
+et traite toute variation des totaux comme une anomalie. Ce que ça a coûté à
+apprendre : `docs/PROJECT_STATE.md`.
+
 **Clos le 2026-08-28, un commit `b826e89`, aucune migration** :
 `WF.LIBRARY.FAVDEFAULT.1`. La bibliothèque de workflows — l'overlay
 « Change Workflow » — s'ouvre désormais sur **Favorites** au lieu de **All**,

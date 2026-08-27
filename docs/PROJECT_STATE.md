@@ -2,6 +2,57 @@
 
 Last updated: 2026-08-28
 
+## `REPO.VITEST.WORKERS.1` — un plafond levé, et l'outil pour le rebaisser
+
+One commit, `85511ef`, 2026-08-28. No migration, no dependency. The suite ran
+in **63 s**; it now runs in **~14 s**. `maxWorkers: 4` became `"75%"`.
+
+**The cap had a reason, and it was not erased.** `716fc55` (2026-08-18) capped
+concurrency because the suite "stopped answering at random" at full
+parallelism — thrown errors, and *raw pass/fail count drift across identical
+runs on a clean tree*. That observation is kept, dated, in the config comment.
+
+**Two things say the original diagnosis aimed slightly wide.** Every test file
+already gets its own temporary SQLite database (`tests/actions/helpers/tempDb.ts`,
+`mkdtempSync`), so no lock is shareable between workers and the classic
+`SQLITE_BUSY` contention cannot occur through that path. And no `pool` was ever
+configured: Vitest 4's default is `forks`, so the comment's claim about the
+"threads" pool had never been true. Vitest itself was `^4.1.10` both then and
+now — no version bump explains anything.
+
+**The failure did not reproduce**: 13 consecutive full runs at 48 workers, then
+30 at `"75%"`, 196/196 files and 2001/2001 tests every single time.
+
+### What this cost to learn
+
+**Thirty green runs are not proof, and the ticket's deliverable is the tool
+that says so.** `npm run test:repeat N` (`scripts/test-repeat.mjs`, Node
+built-ins only) replays the suite N times and treats **any variation in the
+totals** as an anomaly, equal to a thrown error — keeping the faulty run's full
+output under the git-ignored `data/`. Without it, raising the cap would only
+have retaken the 2026-08-18 bet in the other direction.
+
+**A detector never seen detecting is decoration.** The executor proved the
+harness passes; it never proved it fails. The supervisor closed that by
+injecting a fake run sequence — 2001 tests, then **1998 with zero failures**,
+then 2001 — and the drift detector fired on both transitions. That silent
+shape, where every test "passes" while three are missing, is exactly what an
+exit-code-only harness would let through, and it is the only signal anyone
+ever had about the 2026-08-18 fault.
+
+**A proof of contention run during contention proves nothing.** The executor's
+first 30-run attempt overlapped a still-running verification pass — two
+`vitest` instances at once, found via `wmic`. It killed both, deleted the
+evidence that contaminated run had produced, and re-ran alone from a clean
+process table, reporting the whole episode rather than keeping the convenient
+result.
+
+**Only one variable was changed.** `pool`, `isolate`, `fileParallelism` and
+`sequence.concurrent` were deliberately left alone, so that a future anomaly
+stays attributable to something. An earlier supervisor proposal to split the
+suite into two lanes was dropped once the measurement showed it only solved a
+problem the cap itself created.
+
 ## `WF.LIBRARY.FAVDEFAULT.1` — un défaut d'ouverture, et un piège hors de portée des tests
 
 One commit, `b826e89`, 2026-08-28. No migration. 196 files, 2001 tests
