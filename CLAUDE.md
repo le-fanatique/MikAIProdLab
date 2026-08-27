@@ -23,15 +23,21 @@ Under it:
 - a ticket sitting in `.agents/current_task.md` is a protocol mismatch: say so
   and ask the user, do not silently implement it.
 
-**Chantier 1 runs chained — decided by the user 2026-08-18.** The queue is
-B12 → E1 → B15 → B16 → B13 → B14 → B20
-(`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3). The user reviews **the whole
-chantier at its end**, not ticket by ticket. So on approving a ticket the
-supervisor commits, pushes, writes the durable documentation, prepares the next
-and starts it — without waiting. It stops only for the four interrupt cases in
-`.agents/SUPERVISION_PROTOCOL.md` §5, of which the schema case will fire on
-B12a and B15 by construction: **migrations are never applied automatically** —
-generate, show the user the SQL, and wait for him to run `db:migrate`.
+**No chained queue is running — updated 2026-08-27.** Chantier 1 finished on
+2026-08-20 (`docs/PROJECT_STATE.md`), and until 2026-08-27 this section still
+described its queue B12 → E1 → B15 → B16 → B13 → B14 → B20 as live, telling a
+fresh session to chain tickets *without waiting*. That instruction was a week
+stale and is removed.
+
+**The rule is one ticket at a time, and an explicit user go before each
+commit.** Do not prepare or start the next ticket on your own initiative;
+after a push, close the status in the three files (`mikai-method` §9) and
+stop. If a future chantier is to run chained again, the user says so by
+rewriting this paragraph — nothing else may reinstate it.
+
+**Migrations are never applied automatically**, chained or not: generate, show
+the user the SQL, and wait for him to run `db:migrate`. The four interrupt
+cases in `.agents/SUPERVISION_PROTOCOL.md` §5 still apply.
 
 ## Start Here
 
