@@ -2,6 +2,80 @@
 
 Last updated: 2026-08-28
 
+## The intermittent suite failure, captured at last — and it is not concurrency
+
+Three times on 2026-08-28 `npx vitest run` answered `199 failed` / `200 failed`
+with **no Tests line**, going green on the next run. The third occurrence was
+captured in full, and the signature is unambiguous:
+
+```
+Failed Suites 200
+TypeError: Cannot read properties of undefined (reading 'config')
+Error: Vitest failed to find the runner.
+```
+
+**Every suite fails at import time; zero tests execute.** That is a module
+resolution failure, not a flaky test and not worker contention — so it is a
+different animal from what `716fc55` capped concurrency for on 2026-08-18
+(thrown errors *plus* pass/fail count drift, with tests actually running).
+**`REPO.VITEST.WORKERS.1` is cleared by this**: `maxWorkers: "75%"` cannot
+produce an import-time resolution failure.
+
+**The correlated marker is the drive letter's case.** The failing run's header
+reads `f:/AI/MikAIProdLab`; all ~65 green runs read `F:/AI/MikAIProdLab`. On
+Windows that difference makes Vite resolve `vitest` under two distinct roots,
+so the instance a test file imports is not the instance holding the worker
+state — which produces exactly those two messages. The supervisor could not
+force the lowercase form on demand, so this is **a strong hypothesis with a
+captured signature, not a proven cause**.
+
+What to do if it recurs: **do not pipe the output through `grep`.** Re-run
+keeping everything, or use `npm run test:repeat 30` and read
+`data/test-repeat-anomalies/`. Check the drive letter in the `RUN` header
+first — a lowercase `f:` is the tell, and an immediate re-run has been green
+every time.
+
+## `REPO.PLAYWRIGHT.1` — the browser harness stops being rediscovered each time
+
+One commit, `a60d36b`, 2026-08-28. No migration. 200 files, 2044 tests. The
+author explicitly authorised the `package.json` change, which `AGENTS.md`
+forbids by default.
+
+**What it cost before.** Playwright was neither a dependency nor a script, so
+every browser verification resolved it by hand from the npx global cache —
+which holds four copies. On 2026-08-28 one of them pointed at a Chromium
+revision that was not installed and refused to launch. Three tickets paid that
+resolution in a single day.
+
+**`playwright-core`, pinned exactly to `1.62.1`.** Not `playwright`: that
+package carries a postinstall that downloads browsers, while `playwright-core`
+launches whichever are already present. 1.62.1 expects chromium 1234 and
+ffmpeg 1011, exactly what this machine has, so `npm install` downloaded
+nothing. The pin is exact on purpose — a range would reopen the drift this
+closes.
+
+**The module never starts or stops the dev server**, deliberately: a server
+left running by a script costs more than the two lines a caller would copy. It
+checks that the server answers, and it always closes the browser.
+
+### What this cost to learn
+
+**The gesture worth sharing was the one that produces the evidence.** The first
+version left `page.screenshot` to the caller, and its own demonstration capture
+showed the top of the project page instead of the form it claimed to prove —
+found by the supervisor opening the PNG rather than reading its description.
+Every future ticket would have produced the same useless viewport shot. The
+module now exposes a capture that frames on a selector when given one and
+falls back to a full page, and returns the path it wrote.
+
+**A header that gives a weak reason invites a wrong ticket.** The capture-name
+sanitiser duplicates `buildFilmResultDownloadFilename`, and the header first
+justified this as "out of scope for this ticket" — which would send a future
+session to attempt a unification that cannot work. The real reason is
+structural and was verified: no `.mjs` script here imports `src/`, and no
+TypeScript loader exists for them. The header now says that, and that fixing
+one sanitiser obliges fixing the other by hand.
+
 ## `FILM.EXPORT.1` complet — la sélection, et deux leçons de supervision
 
 Three commits, 2026-08-28, no migration: `bb4fb94` (download), `17c3c8c`
@@ -55,15 +129,11 @@ not a block; fixed with a two-level sort key.
 
 ### Two things left open, on purpose
 
-**The suite answered `199 failed (199)` twice**, with no Tests line — the shape
-of a collection failure, not of failing tests — and went green on immediate
-retry both times. Roughly sixty deliberate green runs since, including
-`npm run test:repeat 10` and five repetitions of the exact command shape, could
-not reproduce it. **The evidence was destroyed both times because the
-supervisor piped the output through `grep`** — exactly what `test:repeat`'s
-anomaly capture exists to prevent, done by hand. If it recurs: re-run keeping
-the full output, or use the harness, and read
-`data/test-repeat-anomalies/`. Unexplained is the honest status.
+**The suite answered aberrantly three times, and the third was captured.**
+The first two were lost because the supervisor piped the output through
+`grep` — exactly what `test:repeat`'s anomaly capture exists to prevent, done
+by hand. Keeping the full output the third time produced the signature; it is
+recorded in its own section below, and it is **not** the 2026-08-18 fault.
 
 **Browser verification wrote six draft rows (21-26) into the author's real
 project 18.** Creating a draft is the action under test, so this is expected
