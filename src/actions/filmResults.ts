@@ -26,6 +26,7 @@ import {
   computeFilmResultTotalDuration,
   FilmResultManifestError,
 } from "@/lib/film/filmResultManifest";
+import { parseSelectedSequenceIds } from "@/lib/film/filmResultSelectionForm";
 import {
   serializeFilmResultManifest,
   serializeFilmProjectSnapshot,
@@ -195,4 +196,18 @@ export async function createFilmResultDraftFromActiveSequenceResults(
 
   revalidatePath(`/projects/${projectId}`);
   return { ok: true, id: row.id, warnings: manifest.warnings };
+}
+
+/**
+ * Thin Server Action for the Film Result selection form
+ * (FILM.EXPORT.SELECT.UI.1, src/app/projects/[projectId]/page.tsx): reads
+ * the submitted selection with parseSelectedSequenceIds and delegates to
+ * createFilmResultDraftFromActiveSequenceResults above. No business rule of
+ * its own — project-membership validation and the "restricts, never
+ * forces" selection semantics stay in buildFilmResultManifest.
+ */
+export async function createFilmResultDraftFromSelectionAction(projectId: number, formData: FormData): Promise<void> {
+  await createFilmResultDraftFromActiveSequenceResults(projectId, {
+    sequenceIds: parseSelectedSequenceIds(formData),
+  });
 }

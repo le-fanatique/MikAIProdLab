@@ -27,6 +27,7 @@ import {
   FilmResultManifestError,
 } from "@/lib/film/filmResultManifest";
 import { renderFilmResultFromManifest, RenderFilmResultError } from "@/lib/film/renderFilmResult";
+import { parseSelectedSequenceIds } from "@/lib/film/filmResultSelectionForm";
 import { db } from "@/db";
 import { filmResults } from "@/db/schema";
 import type { NewFilmResult } from "@/db/schema";
@@ -115,4 +116,19 @@ export async function publishFilmResultFromActiveSequenceResults(
     durationSeconds: renderResult.durationSeconds,
     warnings: allWarnings,
   };
+}
+
+/**
+ * Thin Server Action for the Film Result selection form
+ * (FILM.EXPORT.SELECT.UI.1, src/app/projects/[projectId]/page.tsx): reads
+ * the submitted selection with parseSelectedSequenceIds and delegates to
+ * publishFilmResultFromActiveSequenceResults above, always with
+ * `setActive: true` — same behavior as the RenderFilmResultButton it
+ * replaces. No business rule of its own.
+ */
+export async function renderFilmResultFromSelectionAction(projectId: number, formData: FormData): Promise<void> {
+  await publishFilmResultFromActiveSequenceResults(projectId, {
+    setActive: true,
+    sequenceIds: parseSelectedSequenceIds(formData),
+  });
 }

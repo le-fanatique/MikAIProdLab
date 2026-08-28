@@ -11,19 +11,29 @@ import Card from "@/components/Card";
 import EmptyState from "@/components/EmptyState";
 import DeleteButton from "@/components/DeleteButton";
 import SequenceResultActionForm from "@/components/SequenceResultActionForm";
-import CreateFilmResultDraftButton from "@/components/CreateFilmResultDraftButton";
-import RenderFilmResultButton from "@/components/RenderFilmResultButton";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import Collapsible from "@/components/Collapsible";
 import VideoFrameReviewPlayer from "@/components/VideoFrameReviewPlayer";
 import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { deleteProject } from "@/actions/projects";
-import { listFilmResults, setActiveFilmResult, archiveFilmResult } from "@/actions/filmResults";
-import { buildFilmResultManifest, computeFilmResultTotalDuration, FilmResultManifestError } from "@/lib/film/filmResultManifest";
+import {
+  listFilmResults,
+  setActiveFilmResult,
+  archiveFilmResult,
+  createFilmResultDraftFromSelectionAction,
+} from "@/actions/filmResults";
+import { renderFilmResultFromSelectionAction } from "@/actions/filmPublish";
+import {
+  buildFilmResultManifest,
+  computeFilmResultTotalDuration,
+  FilmResultManifestError,
+} from "@/lib/film/filmResultManifest";
 import { refImageUrl } from "@/lib/refImageUrl";
 import {
   parseFilmResultManifest,
   parseFilmResultWarnings,
   filmManifestSourceModeLabel,
+  type FilmResultManifest,
 } from "@/types/filmResult";
 
 function SectionLabel({ label, action }: { label: string; action?: ReactNode }) {
@@ -96,13 +106,15 @@ export default async function ProjectPage({ params }: Props) {
 
   // Live preview of what a render right now would look like — read-only, no
   // FFmpeg, just the same DB-only manifest build the render itself uses
-  // (src/lib/film/filmResultManifest.ts). Only used to warn the user in
-  // RenderFilmResultButton's confirm dialog before they actually trigger a
+  // (src/lib/film/filmResultManifest.ts). Used both as the selection form's
+  // default checked state (FILM.EXPORT.SELECT.UI.1, below) and to warn the
+  // user in the render confirm dialog before they actually trigger a
   // render; a failure here (e.g. zero sequences) is non-fatal to the page.
+  let renderPreviewManifest: FilmResultManifest | null = null;
   let renderPreviewMissingCount = 0;
   let renderPreviewTotalCount = 0;
   try {
-    const renderPreviewManifest = await buildFilmResultManifest(id);
+    renderPreviewManifest = await buildFilmResultManifest(id);
     renderPreviewTotalCount = renderPreviewManifest.sequences.length;
     renderPreviewMissingCount = renderPreviewManifest.sequences.filter((s) => !s.included).length;
   } catch (err) {
@@ -110,6 +122,23 @@ export default async function ProjectPage({ params }: Props) {
     // No sequences at all — nothing to warn about; the button will fail
     // with its own clear error if clicked.
   }
+
+  // FILM.EXPORT.SELECT.UI.1: renderPreviewManifest (built with no selection,
+  // so `included` reflects "has an active Sequence Result") still backs the
+  // per-row availability label below -- that display never changed. The
+  // checkbox DEFAULT did: the author decided that submitting the form
+  // untouched must reproduce exactly what the project's Film Result looked
+  // like before this ticket -- same film, same warnings -- so every
+  // checkbox now starts CHECKED regardless of availability. Deselecting an
+  // unavailable sequence is now a deliberate act, which is what keeps the
+  // core's `deselected` flag meaningful (FILM.EXPORT.SELECT.CORE.1: "a
+  // deselection is a choice, never a default" -- a default that deselects
+  // would empty that flag of its own meaning). No second manifest is built
+  // for display.
+  const previewBySequenceId = new Map((renderPreviewManifest?.sequences ?? []).map((s) => [s.sequenceId, s] as const));
+  const createFilmResultDraftAction = createFilmResultDraftFromSelectionAction.bind(null, id);
+  const renderFilmResultAction = renderFilmResultFromSelectionAction.bind(null, id);
+  const filmResultSelectionFormId = "film-result-selection-form";
 
   return (
     <div>
@@ -312,22 +341,86 @@ export default async function ProjectPage({ params }: Props) {
       {/* ── Film Result ───────────────────────────────────── */}
       {/* UX.1.PRODUCT.SURFACES.1: moved below Overview/Sequences/Assets/
           Production — Film Result is the assembled output the project is
-          building toward, not the entry point. Content, actions and the
-          empty-state copy below are unchanged from before this ticket. */}
-      <SectionLabel
-        label="Film Result"
-        action={
-          <div className="flex items-center gap-2">
-            <CreateFilmResultDraftButton projectId={id} />
-            <RenderFilmResultButton
-              projectId={id}
-              hasExistingFilmResult={filmResultsList.length > 0}
-              missingOrOutdatedCount={renderPreviewMissingCount}
-              totalSequenceCount={renderPreviewTotalCount}
-            />
+          building toward, not the entry point. */}
+      <SectionLabel label="Film Result" />
+
+      {/* FILM.EXPORT.SELECT.UI.1: a plain server-rendered <form> — no
+          harness in this repo for a DOM-driven client component
+          (mikai-method §5), and none is installed for this ticket. Every
+          sequence gets a checkbox (all sharing the "sequenceIds" name, so
+          the platform itself collects the checked ones) and a numeric
+          position field; the order is computed server-side by
+          parseSelectedSequenceIds (src/lib/film/filmResultSelectionForm.ts)
+          from the submitted FormData. No useState/useEffect/useRef carries
+          the selection. Replaces CreateFilmResultDraftButton and
+          RenderFilmResultButton (removed — see executor report §3.4). */}
+      {seqs.length > 0 && (
+        <form
+          id={filmResultSelectionFormId}
+          action={createFilmResultDraftAction}
+          className="rounded-lg border border-[#232629] bg-[#141618] px-5 py-4 mb-6"
+        >
+          <p className="text-xs text-[#6e767d] mb-3">
+            Every sequence is checked by default, so submitting without changing anything reproduces the current
+            Film Result exactly. Uncheck a sequence to leave it out on purpose -- no warning. A checked sequence
+            with no active Sequence Result still produces one.
+          </p>
+          <div className="flex flex-col gap-1.5 mb-4">
+            {seqs.map((seq, i) => {
+              const preview = previewBySequenceId.get(seq.id);
+              const hasActiveResult = preview?.included ?? false;
+              return (
+                <div key={seq.id} className="flex items-center gap-3 text-sm">
+                  <input type="hidden" name="projectOrder" value={seq.id} />
+                  <input
+                    type="checkbox"
+                    name="sequenceIds"
+                    value={seq.id}
+                    defaultChecked // every sequence starts checked -- see comment above; availability is shown, not enforced
+                    aria-label={`Include ${seq.title}`}
+                    className="shrink-0"
+                  />
+                  <span className="flex-1 min-w-0 truncate text-[#a4abb2]">{seq.title}</span>
+                  <span className={`shrink-0 text-xs ${hasActiveResult ? "text-[#6b9e72]" : "text-[#cf7b6b]"}`}>
+                    {hasActiveResult ? "Available" : "No active result"}
+                  </span>
+                  <label className="shrink-0 flex items-center gap-1.5 text-xs text-[#4b5158]">
+                    Position
+                    <input
+                      type="number"
+                      name={`position-${seq.id}`}
+                      defaultValue={i}
+                      min={0}
+                      aria-label={`Position for ${seq.title}`}
+                      className="w-16 rounded border border-[#2c3035] bg-[#0f1113] px-2 py-1 text-[#e7e9ec]"
+                    />
+                  </label>
+                </div>
+              );
+            })}
           </div>
-        }
-      />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="submit"
+              formAction={createFilmResultDraftAction}
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              Create Film Result Draft
+            </button>
+            <ConfirmSubmitButton
+              formAction={renderFilmResultAction}
+              confirmMessage={
+                renderPreviewMissingCount > 0
+                  ? `Render a new Film Result from the selected sequences?\n\nWarning: ${renderPreviewMissingCount} of ${renderPreviewTotalCount} sequence${renderPreviewTotalCount === 1 ? "" : "s"} ${renderPreviewMissingCount === 1 ? "has" : "have"} no active result — the Film Result will be incomplete unless deselected.`
+                  : "Render a new Film Result from the selected sequences?"
+              }
+              className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+            >
+              {filmResultsList.length > 0 ? "Render Again" : "Render Film Result"}
+            </ConfirmSubmitButton>
+          </div>
+        </form>
+      )}
 
       <Card className="mb-6">
         {activeFilmResult ? (
@@ -396,13 +489,18 @@ export default async function ProjectPage({ params }: Props) {
                 <p className="text-xs text-[#cda24f]">
                   This result is outdated — one or more Sequence Results have changed since it was published.
                 </p>
-                <RenderFilmResultButton
-                  projectId={id}
-                  hasExistingFilmResult={filmResultsList.length > 0}
-                  missingOrOutdatedCount={renderPreviewMissingCount}
-                  totalSequenceCount={renderPreviewTotalCount}
-                  label="Render New Film Result"
-                />
+                <ConfirmSubmitButton
+                  form={filmResultSelectionFormId}
+                  formAction={renderFilmResultAction}
+                  confirmMessage={
+                    renderPreviewMissingCount > 0
+                      ? `Render a new Film Result from the selected sequences?\n\nWarning: ${renderPreviewMissingCount} of ${renderPreviewTotalCount} sequence${renderPreviewTotalCount === 1 ? "" : "s"} ${renderPreviewMissingCount === 1 ? "has" : "have"} no active result — the Film Result will be incomplete unless deselected.`
+                      : "Render a new Film Result from the selected sequences?"
+                  }
+                  className="rounded border border-[#cda24f]/40 text-[#cda24f] px-3 py-1.5 text-xs hover:border-[#cda24f]/70 transition-colors"
+                >
+                  Render New Film Result
+                </ConfirmSubmitButton>
               </div>
             )}
             {activeFilmResult.notes && (
