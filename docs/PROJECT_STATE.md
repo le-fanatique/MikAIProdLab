@@ -2,6 +2,74 @@
 
 Last updated: 2026-08-28
 
+## `FILM.EXPORT.1` complet — la sélection, et deux leçons de supervision
+
+Three commits, 2026-08-28, no migration: `bb4fb94` (download), `17c3c8c`
+(selection core), `f635572` (selection UI). 199 files, 2028 tests.
+
+**What "contrôlé" turned out to mean.** The author defined it on 2026-08-28:
+**what goes into the film**, and **getting the file out** — explicitly not the
+encoding (`1280×720 / 24 fps` stays hardcoded) and not the handling of
+sequences with no result. Scoping first found that a film renderer
+(`FILM.RESULT.1.B`) and an NLE JSON export (`NLE.BRIDGE.1`) already existed,
+so the entry's premise was half false before a line was written.
+
+**No migration was ever needed.** `FilmResultManifestSequence` already carried
+`included` and `orderIndex`, the manifest is stored as JSON on the row, and
+`renderFilmResult.ts:137` filters on `included` **following array order**. The
+selection is expressible entirely in the manifest.
+
+**The trap was that the draft is not the render's input.**
+`publishFilmResultFromActiveSequenceResults` rebuilds the manifest and never
+opens the draft, so a selection reaching only the draft would have changed
+nothing about the rendered film.
+
+**The form carries no state.** No DOM harness exists here by decision, so the
+selection is checkboxes sharing a `name` plus a per-row position field, with
+the order computed server-side by a pure tested function. The only client code
+is the render confirmation, reusing the pre-existing stateless
+`ConfirmSubmitButton` — a first pass had overwritten that component before
+`tsc` caught it, so the ticket adds no new component at all.
+
+### What this cost to learn
+
+**A ticket that contradicts itself is repaired upstream, not in the code.**
+§3.3 asked for a default that checks only available sequences; §5.2 asked that
+an unchanged submission reproduce pre-ticket behaviour. Both cannot hold. The
+executor followed the explicit rule, measured the divergence, and escalated
+instead of picking a side — the correct response to a contradictory
+instruction, and the contradiction was the supervisor's own drafting. The
+author chose all-checked-by-default, so a deselection stays a deliberate act
+and the core's `deselected` flag keeps meaning "a choice, never a default".
+Verified from the database rather than the report: draft 25 (unchanged
+submission) = included [54], nothing deselected, **5 warnings**, identical to
+before; draft 26 (five unchecked by hand) = **0 warnings**.
+
+**A comment that promises a guarantee the code does not keep is worse than no
+comment.** The form parser fell back to `Number.MAX_SAFE_INTEGER + id` while
+its header claimed a deterministic tie-break by id value.
+`MAX_SAFE_INTEGER + 1 === MAX_SAFE_INTEGER + 2` is `true`, so distinct ids
+collapsed and fell through to stable-sort arrival order — precisely what the
+header said it avoided. Unreachable from the real form, hence a revision and
+not a block; fixed with a two-level sort key.
+
+### Two things left open, on purpose
+
+**The suite answered `199 failed (199)` twice**, with no Tests line — the shape
+of a collection failure, not of failing tests — and went green on immediate
+retry both times. Roughly sixty deliberate green runs since, including
+`npm run test:repeat 10` and five repetitions of the exact command shape, could
+not reproduce it. **The evidence was destroyed both times because the
+supervisor piped the output through `grep`** — exactly what `test:repeat`'s
+anomaly capture exists to prevent, done by hand. If it recurs: re-run keeping
+the full output, or use the harness, and read
+`data/test-repeat-anomalies/`. Unexplained is the honest status.
+
+**Browser verification wrote six draft rows (21-26) into the author's real
+project 18.** Creating a draft is the action under test, so this is expected
+residue rather than a defect, but it is residue in live data and the author
+decides whether to remove it.
+
 ## `FILM.EXPORT.DOWNLOAD.1` — sortir le film, et un en-tête HTTP comme surface
 
 One commit, `bb4fb94`, 2026-08-28. No migration, no dependency. 197 files,

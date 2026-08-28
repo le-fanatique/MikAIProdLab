@@ -29,7 +29,15 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 **Rien.**
 
-**Clos le 2026-08-28, un commit `bb4fb94`, aucune migration** :
+**`FILM.EXPORT.1` est CLOS le 2026-08-28**, trois commits, aucune migration :
+`bb4fb94` (téléchargement), `17c3c8c` (cœur de la sélection), `f635572`
+(sélecteur). Un Film Result se télécharge sous `<Projet>-<id>.mp4`, et on
+choisit depuis la page Projet quelles séquences entrent dans le film et dans
+quel ordre. Cadrage, décisions et ce que ça a coûté à apprendre :
+`docs/PROJECT_STATE.md`.
+
+Détail du premier des trois — **clos le 2026-08-28, un commit `bb4fb94`,
+aucune migration** :
 `FILM.EXPORT.DOWNLOAD.1`, premier des trois tickets qui composent
 `FILM.EXPORT.1`. Un Film Result rendu se télécharge depuis la page Projet
 sous `<Projet>-<id>.mp4` au lieu de rester dans `uploads` sous un UUID.
