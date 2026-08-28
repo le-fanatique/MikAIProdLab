@@ -2,6 +2,70 @@
 
 Last updated: 2026-08-28
 
+## `FILM.EXPORT.DOWNLOAD.1` — sortir le film, et un en-tête HTTP comme surface
+
+One commit, `bb4fb94`, 2026-08-28. No migration, no dependency. 197 files,
+2011 tests (baseline 196/2001, +10). First of the three tickets `FILM.EXPORT.1`
+was split into, after the author defined "contrôlé" on 2026-08-28 as **what
+goes into the film** and **getting the file out** — explicitly not the
+encoding, not the handling of sequences without a result.
+
+**A rendered Film Result lived in `public/uploads/` under a UUID with no way
+to retrieve it.** A Download link on the Project page now serves it as
+`<Project>-<id>.mp4`.
+
+**A dedicated route, not an opt-in on `/api/uploads/[...path]`.** That generic
+route is a file-tree server with no DB access, so it cannot know the project
+name; passing the name as a query param would hand the filename decision back
+to the client. The new route takes only a Film Result id, reads `videoPath`
+from the row, and reuses `resolveExistingAbsolutePath` — no path segment ever
+comes from the client. It streams rather than buffering a whole film. The
+generic route is untouched, `Range` and sidecar CORS included.
+
+### What this cost to learn
+
+**The filename is a header value, so it is a pure tested function and not
+three lines in a route.** A `"` or a CRLF surviving into
+`Content-Disposition` is header injection. The supervisor proved the guard by
+calling the real function on hostile input rather than reading the report:
+`A"; drop<CRLF>X-Injected: 1` → `A;-dropX-Injected-1-14.mp4`,
+`../../../../etc/passwd` → `etc-passwd-14.mp4`, `....//....//x` → `x-14.mp4`,
+empty and non-Latin → the fallback. Three mutations, none silent.
+
+**An inferred decision quietly missed the ticket's written requirement.** The
+executor chose ASCII-only sanitisation, which *dropped* accented characters
+instead of transliterating them: "Le Château d'Orion" became `Le-Chteau`,
+"Rêve d'Été" became `Rve-d't`. §2.1 asked for a *readable* name, and this
+author names projects in French. It broke nothing today — all four current
+projects are pure ASCII, checked in the database — which is why it was a
+revision and not a block. NFD normalisation now runs before the unchanged
+ASCII filter; the nine original cases return identical values, re-verified
+rather than assumed.
+
+### Named, not fixed — `resolveExistingAbsolutePath` confines nothing
+
+`src/lib/editorial/renderBasicSequenceResult.ts:70` does
+`path.resolve(cwd, "storage" | "public", relativePath)` with **no check that
+the result stays inside the uploads tree**. Its safety rests entirely on
+`videoPath` being app-written (`outputPathFor`, a UUID).
+
+That was true before this ticket and remains true. What changed is that the
+assumption now carries an **HTTP surface**: until now the helper only ran
+server-side during a render. Nothing is open today — the client supplies an id
+and never a path — but the day a `videoPath` could come from an import, a
+restore, or a form, confinement becomes mandatory, and nothing in the
+repository says so. Recorded here rather than fixed, so a ticket that widens
+where `videoPath` comes from knows what it must add.
+
+### What remains of `FILM.EXPORT.1`
+
+`FILM.EXPORT.SELECT.CORE.1` then `.UI.1` — choosing which sequences enter the
+film and in what order. Scoped in advance, and **no migration is needed**:
+`FilmResultManifestSequence` already carries `included` and `orderIndex`, the
+manifest is stored as JSON on the draft row, and `renderFilmResult.ts:137`
+filters on `included` **following the array order**. The selection is
+expressible in the manifest without touching the renderer.
+
 ## `STYLE.2.LOOK.CORRECTIONS` — livré depuis cinq jours, et la roadmap le niait
 
 No commit, no code: a verification pass on 2026-08-28, asked for by the author

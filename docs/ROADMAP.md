@@ -29,6 +29,19 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 **Rien.**
 
+**Clos le 2026-08-28, un commit `bb4fb94`, aucune migration** :
+`FILM.EXPORT.DOWNLOAD.1`, premier des trois tickets qui composent
+`FILM.EXPORT.1`. Un Film Result rendu se télécharge depuis la page Projet
+sous `<Projet>-<id>.mp4` au lieu de rester dans `uploads` sous un UUID.
+
+**`FILM.EXPORT.1` a été cadré le 2026-08-28** : l'auteur a défini « contrôlé »
+comme **ce qui entre dans le film** et **sortir le fichier** — et a écarté
+l'encodage (`1280×720 / 24 fps` reste tel quel) ainsi que le traitement des
+séquences sans résultat. Il reste donc `FILM.EXPORT.SELECT.CORE.1` puis
+`.UI.1` : choisir quelles séquences entrent et dans quel ordre. **Aucune
+migration nécessaire**, le manifeste porte déjà ce qu'il faut — voir
+`docs/PROJECT_STATE.md`.
+
 **Clos le 2026-08-28, un commit `85511ef`, aucune migration, aucune
 dépendance** : `REPO.VITEST.WORKERS.1`. La suite passe de **63 s à ~14 s** —
 le plafond de 4 workers posé le 2026-08-18 est levé à `"75%"`. La panne qu'il
