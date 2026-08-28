@@ -159,7 +159,8 @@ export async function outdateFilmResultsForProject(
  * are deliberately separate steps, same convention as createSequenceResult.
  */
 export async function createFilmResultDraftFromActiveSequenceResults(
-  projectId: number
+  projectId: number,
+  options: { sequenceIds?: number[] } = {}
 ): Promise<{ ok: true; id: number; warnings: string[] } | { ok: false; error: string }> {
   if (!(await assertProjectExists(projectId))) {
     return { ok: false, error: "Project not found." };
@@ -167,7 +168,7 @@ export async function createFilmResultDraftFromActiveSequenceResults(
 
   let manifest;
   try {
-    manifest = await buildFilmResultManifest(projectId);
+    manifest = await buildFilmResultManifest(projectId, { sequenceIds: options.sequenceIds });
   } catch (err) {
     return { ok: false, error: err instanceof FilmResultManifestError ? err.message : "Failed to build Film Result manifest." };
   }

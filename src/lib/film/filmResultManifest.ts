@@ -34,10 +34,30 @@ export class FilmResultManifestError extends Error {
  * Sequence Result is still listed (included: false, with a
  * missingReason) rather than silently skipped — the manifest's job is to
  * show the whole picture, not just the happy path.
+ *
+ * `options.sequenceIds` (FILM.EXPORT.SELECT.CORE.1) is an optional ordered
+ * selection of sequence ids to include:
+ *   - absent (undefined) → identical to today's behavior: every sequence
+ *     of the project is a candidate, in project order. This is the most
+ *     important safety property of the option — every existing caller that
+ *     passes nothing must keep getting exactly the manifest it got before;
+ *   - present → only these sequences are candidates, and `sequences[]`
+ *     places the selected ones in the order given here (project order for
+ *     the rest, appended after). The selection RESTRICTS, it never FORCES:
+ *     a selected sequence with no active Sequence Result still comes back
+ *     `included: false`, with its `missingReason` and warning intact — the
+ *     author asked for it and it could not make it in, and must be told.
+ *     A sequence left OUT of the selection is a choice, not a gap: no
+ *     warning, no missingReason, only the `deselected` flag;
+ *   - an id that isn't one of the project's sequences is an error
+ *     (FilmResultManifestError), not a silent drop;
+ *   - an empty selection is accepted and yields a manifest with nothing
+ *     included — rendering it fails downstream with its own existing
+ *     message, which is the correct behavior here.
  */
 export async function buildFilmResultManifest(
   projectId: number,
-  options: { now?: () => string } = {}
+  options: { now?: () => string; sequenceIds?: number[] } = {}
 ): Promise<FilmResultManifest> {
   const now = options.now ?? (() => new Date().toISOString());
 
@@ -54,11 +74,30 @@ export async function buildFilmResultManifest(
     throw new FilmResultManifestError(`Project ${projectId} has no sequences — nothing to include in a Film Result.`);
   }
 
+  const projectOrderIndexById = new Map(seqList.map((seq, i) => [seq.id, i] as const));
+
+  let orderedSeqList = seqList;
+  const deselectedIds = new Set<number>();
+  if (options.sequenceIds) {
+    const seqById = new Map(seqList.map((seq) => [seq.id, seq] as const));
+    for (const id of options.sequenceIds) {
+      if (!seqById.has(id)) {
+        throw new FilmResultManifestError(`Sequence ${id} does not belong to project ${projectId}.`);
+      }
+    }
+    const selectedIds = new Set(options.sequenceIds);
+    const selected = options.sequenceIds.map((id) => seqById.get(id)!);
+    const rest = seqList.filter((seq) => !selectedIds.has(seq.id));
+    for (const seq of rest) deselectedIds.add(seq.id);
+    orderedSeqList = [...selected, ...rest];
+  }
+
   const warnings: string[] = [];
   const manifestSequences: FilmResultManifestSequence[] = [];
 
-  for (let i = 0; i < seqList.length; i++) {
-    const seq = seqList[i];
+  for (const seq of orderedSeqList) {
+    const orderIndex = projectOrderIndexById.get(seq.id)!;
+    const isDeselected = deselectedIds.has(seq.id);
 
     const results = await db
       .select()
@@ -66,12 +105,33 @@ export async function buildFilmResultManifest(
       .where(eq(sequenceResults.sequenceId, seq.id))
       .orderBy(desc(sequenceResults.createdAt));
     const active = results.find((r) => r.status === "active") ?? null;
+    const mostRecent = results[0] ?? null; // already ordered createdAt desc
+
+    if (isDeselected) {
+      // A deselected sequence is a choice, not a gap — never included, even
+      // if it has an active Sequence Result (the selection RESTRICTS, it
+      // never FORCES an unlisted sequence in either): no missingReason, no
+      // warning.
+      manifestSequences.push({
+        sequenceId: seq.id,
+        sequenceTitle: seq.title,
+        orderIndex,
+        sequenceResultId: (active ?? mostRecent)?.id ?? null,
+        sequenceResultStatus: (active ?? mostRecent)?.status ?? null,
+        sequenceResultSourceMode: (active ?? mostRecent)?.sourceMode ?? null,
+        videoPath: null,
+        durationSeconds: null,
+        included: false,
+        deselected: true,
+      });
+      continue;
+    }
 
     if (active) {
       manifestSequences.push({
         sequenceId: seq.id,
         sequenceTitle: seq.title,
-        orderIndex: i,
+        orderIndex,
         sequenceResultId: active.id,
         sequenceResultStatus: active.status,
         sequenceResultSourceMode: active.sourceMode,
@@ -82,7 +142,6 @@ export async function buildFilmResultManifest(
       continue;
     }
 
-    const mostRecent = results[0] ?? null; // already ordered createdAt desc
     const missingReason = mostRecent
       ? mostRecent.status === "outdated"
         ? "Sequence Result is outdated."
@@ -94,7 +153,7 @@ export async function buildFilmResultManifest(
     manifestSequences.push({
       sequenceId: seq.id,
       sequenceTitle: seq.title,
-      orderIndex: i,
+      orderIndex,
       sequenceResultId: mostRecent?.id ?? null,
       sequenceResultStatus: mostRecent?.status ?? null,
       sequenceResultSourceMode: mostRecent?.sourceMode ?? null,

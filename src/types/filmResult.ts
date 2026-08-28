@@ -13,6 +13,13 @@ export type FilmResultStatus = "draft" | "published" | "active" | "archived" | "
 export const FILM_RESULT_MANIFEST_SCHEMA_VERSION = "mikai-film-result-manifest-v1";
 export const FILM_PROJECT_SNAPSHOT_SCHEMA_VERSION = "mikai-film-project-snapshot-v1";
 
+// `orderIndex` is always the sequence's position in the PROJECT (its
+// sequences.orderIndex), never "position in the film" — even when a
+// selection (FILM.EXPORT.SELECT.CORE.1) reorders `sequences[]`. The film's
+// actual order is the array order: renderFilmResult.ts never reads
+// orderIndex, it concatenates manifest.sequences in array order. Recycling
+// orderIndex into "film order" would silently break that renderer for any
+// caller who still relies on it meaning "project order".
 export type FilmResultManifestSequence = {
   sequenceId: number;
   sequenceTitle?: string;
@@ -24,6 +31,12 @@ export type FilmResultManifestSequence = {
   durationSeconds: number | null;
   included: boolean;
   missingReason?: string;
+  /** true when a selection (FILM.EXPORT.SELECT.CORE.1) was passed to
+   * buildFilmResultManifest and this sequence was left out of it — a
+   * deliberate choice, not a problem, so it carries no missingReason and no
+   * warning. Absent entirely when no selection was used, or when the
+   * sequence was part of the selection. */
+  deselected?: boolean;
 };
 
 export type FilmResultManifest = {

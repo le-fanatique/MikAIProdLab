@@ -43,7 +43,7 @@ export type PublishFilmResultResult =
 
 export async function publishFilmResultFromActiveSequenceResults(
   projectId: number,
-  options: { setActive?: boolean } = {}
+  options: { setActive?: boolean; sequenceIds?: number[] } = {}
 ): Promise<PublishFilmResultResult> {
   const ffmpegStatus = await checkFfmpegAvailability();
   if (!ffmpegStatus.ok) {
@@ -52,7 +52,7 @@ export async function publishFilmResultFromActiveSequenceResults(
 
   let manifest;
   try {
-    manifest = await buildFilmResultManifest(projectId);
+    manifest = await buildFilmResultManifest(projectId, { sequenceIds: options.sequenceIds });
   } catch (err) {
     return { ok: false, error: err instanceof FilmResultManifestError ? err.message : "Failed to build Film Result manifest." };
   }
