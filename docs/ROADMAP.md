@@ -29,6 +29,19 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 **Rien.**
 
+**Clos le 2026-08-28, un commit `a60d36b`, aucune migration** :
+`REPO.PLAYWRIGHT.1`. `playwright-core` est désormais une devDependency
+épinglée à l'exact, et `scripts/playwright-harness.mjs` porte l'amorçage que
+chaque vérification navigateur réécrivait — `npm run playwright:verify` le
+prouve en cinq secondes. **Cadre tes captures sur un sélecteur** : une capture
+de haut de page ne prouve rien.
+
+**La panne intermittente de la suite a enfin une signature**, capturée le
+2026-08-28 : les 200 suites échouent **à l'import** sur `Vitest failed to find
+the runner`, avec la lettre de lecteur en minuscule dans l'en-tête `RUN`. Ce
+n'est pas un problème de concurrence, et `REPO.VITEST.WORKERS.1` s'en trouve
+disculpé. Détail et conduite à tenir : `docs/PROJECT_STATE.md`.
+
 **`FILM.EXPORT.1` est CLOS le 2026-08-28**, trois commits, aucune migration :
 `bb4fb94` (téléchargement), `17c3c8c` (cœur de la sélection), `f635572`
 (sélecteur). Un Film Result se télécharge sous `<Projet>-<id>.mp4`, et on
