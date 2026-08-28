@@ -382,6 +382,14 @@ export default async function ProjectPage({ params }: Props) {
                   </span>
                 </span>
               )}
+              {activeFilmResult.videoPath && (
+                <a
+                  href={`/api/film-results/${activeFilmResult.id}/download`}
+                  className="rounded border border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors px-2 py-1"
+                >
+                  Download
+                </a>
+              )}
             </div>
             {activeFilmResult.status === "outdated" && (
               <div className="rounded border border-[#cda24f]/30 bg-[#cda24f]/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
@@ -527,6 +535,14 @@ export default async function ProjectPage({ params }: Props) {
                               >
                                 Play
                               </Link>
+                            )}
+                            {r.videoPath && (
+                              <a
+                                href={`/api/film-results/${r.id}/download`}
+                                className="rounded border border-[#2c3035] text-[#a4abb2] hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors text-xs px-2 py-1"
+                              >
+                                Download
+                              </a>
                             )}
                             {r.status !== "archived" ? (
                               <>
