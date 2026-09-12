@@ -14,6 +14,7 @@ import LatestApprovedButton from "@/components/editorial/LatestApprovedButton";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getMikAIPublicBaseUrl, getOpenReelSidecarUrl } from "@/lib/settings";
 import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
+import { openReelSidecarStartCommand } from "@/lib/openReelSidecarStartCommand";
 import {
   parseVideoSourceMode,
   resolveVideoSourcesForShotList,
@@ -282,8 +283,7 @@ export default async function SequenceEditorialPage({ params, searchParams }: Pr
         </p>
         <Collapsible label="Show OpenReel start command">
           <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
-{`cd F:/AI/mikai-openreel-sidecar
-npx -y pnpm@11.7.0 dev`}
+            {openReelSidecarStartCommand()}
           </pre>
         </Collapsible>
       </Card>

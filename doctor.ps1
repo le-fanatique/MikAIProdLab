@@ -232,7 +232,128 @@ try {
 }
 
 # ---------------------------------------------------------------------------
-# 10. Summary
+# 10. pnpm (OpenReel sidecar)
+# ---------------------------------------------------------------------------
+Write-Step "pnpm (OpenReel sidecar)"
+
+if (Test-Cmd "pnpm") {
+    $pnpmVer = pnpm --version 2>&1
+    Write-OK "pnpm $pnpmVer"
+} else {
+    Write-Warn "pnpm not found - required by install.sh for the OpenReel sidecar. Install: corepack enable ; corepack prepare pnpm --activate"
+}
+
+# ---------------------------------------------------------------------------
+# 11. Python / OpenCV (storyboard panel extraction)
+# ---------------------------------------------------------------------------
+Write-Step "Python / OpenCV (storyboard panel extraction)"
+
+$pyBin = "python3"
+if (Test-Path ".env.local") {
+    $envLinesPy = Get-Content ".env.local" -ErrorAction SilentlyContinue
+    foreach ($line in $envLinesPy) {
+        if ($line -match "^OPENCV_PYTHON_BIN\s*=\s*(.+)$") { $pyBin = $Matches[1].Trim() }
+    }
+}
+
+if (Test-Cmd $pyBin) {
+    Write-OK "$pyBin found"
+    & $pyBin -c "import cv2, numpy" *>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "opencv-python-headless and numpy importable by $pyBin"
+    } else {
+        Write-Warn "opencv-python-headless/numpy not importable by $pyBin - storyboard panel extraction will fail. Install: pip install opencv-python-headless numpy"
+    }
+} else {
+    Write-Warn "$pyBin not found - storyboard panel extraction will fail. Install Python 3, or set OPENCV_PYTHON_BIN in .env.local."
+}
+
+# ---------------------------------------------------------------------------
+# 12. FFmpeg / FFprobe (bundled binaries)
+# ---------------------------------------------------------------------------
+Write-Step "FFmpeg / FFprobe (bundled binaries)"
+
+if (Test-Cmd "node") {
+    $ffmpegInfo = node -e "
+try {
+  const p = require('./node_modules/ffmpeg-ffprobe-static');
+  console.log((p.ffmpegPath || '') + '|' + (p.ffprobePath || ''));
+} catch (e) {
+  console.log('|');
+}
+" 2>$null
+    $parts = $ffmpegInfo -split '\|'
+    $ffmpegBin = $parts[0]
+    $ffprobeBin = $parts[1]
+    if ($ffmpegBin -and (Test-Path $ffmpegBin) -and $ffprobeBin -and (Test-Path $ffprobeBin)) {
+        Write-OK "ffmpeg/ffprobe binaries present"
+        Write-Info "ffmpeg: $ffmpegBin"
+    } else {
+        Write-Warn "ffmpeg/ffprobe binaries missing for this platform - run: npm.cmd ci"
+    }
+} else {
+    Write-Warn "node not found - ffmpeg/ffprobe check skipped."
+}
+
+# ---------------------------------------------------------------------------
+# 13. Playwright browser cache (verification passes only)
+# ---------------------------------------------------------------------------
+Write-Step "Playwright browser cache (verification passes only)"
+
+$pwCache = $env:PLAYWRIGHT_BROWSERS_PATH
+if ([string]::IsNullOrWhiteSpace($pwCache)) {
+    $pwCache = Join-Path $env:LOCALAPPDATA "ms-playwright"
+}
+if ((Test-Path $pwCache) -and (Get-ChildItem $pwCache -Directory -Filter "chromium*" -ErrorAction SilentlyContinue)) {
+    Write-OK "Playwright browser cache found at $pwCache"
+} else {
+    Write-Warn "Playwright browser cache not found at $pwCache - npm run playwright:verify will fail. Install a Chromium build compatible with playwright-core (see scripts/playwright-harness.mjs)."
+}
+
+# ---------------------------------------------------------------------------
+# 14. OpenReel sidecar checkout
+# ---------------------------------------------------------------------------
+Write-Step "OpenReel sidecar checkout"
+
+if ((Test-Path "config/openreel-sidecar-release.json") -and (Test-Cmd "node")) {
+    $pinCommit = node -e "
+try {
+  console.log(JSON.parse(require('fs').readFileSync('config/openreel-sidecar-release.json', 'utf8')).commit || '');
+} catch (e) {
+  console.log('');
+}
+" 2>$null
+
+    $sidecarDir = "../mikai-openreel-sidecar"
+    if (Test-Path ".env.local") {
+        $envLinesSidecar = Get-Content ".env.local" -ErrorAction SilentlyContinue
+        foreach ($line in $envLinesSidecar) {
+            if ($line -match "^MIKAI_OPENREEL_DIR\s*=\s*(.+)$") { $sidecarDir = $Matches[1].Trim() }
+        }
+    }
+
+    if (Test-Path $sidecarDir) {
+        if (Test-Cmd "git") {
+            $sidecarHead = git -C $sidecarDir rev-parse HEAD 2>&1
+            if ($LASTEXITCODE -eq 0 -and $pinCommit -and ($sidecarHead -eq $pinCommit)) {
+                Write-OK "sidecar checkout at $sidecarDir is at the pinned commit ($pinCommit)"
+            } elseif ($LASTEXITCODE -eq 0) {
+                Write-Warn "sidecar checkout at $sidecarDir is at $sidecarHead, pin expects $pinCommit - run .\install.bat or .\update.bat"
+            } else {
+                Write-Warn "sidecar checkout at $sidecarDir is not a git checkout - run .\install.bat"
+            }
+        } else {
+            Write-Warn "git not found - sidecar pin check skipped."
+        }
+    } else {
+        Write-Warn "sidecar checkout not found at $sidecarDir - run .\install.bat"
+    }
+} else {
+    Write-Warn "config/openreel-sidecar-release.json or node not available - sidecar pin check skipped."
+}
+
+# ---------------------------------------------------------------------------
+# 15. Summary
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan

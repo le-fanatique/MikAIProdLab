@@ -35,6 +35,7 @@ import { deriveMediaLabel } from "@/lib/media/mediaLabel";
 import { listSequenceResults, setActiveSequenceResult, archiveSequenceResult } from "@/actions/sequenceResults";
 import { parseResultWarnings, sequenceResultSourceModeLabel } from "@/types/sequenceResult";
 import { buildAdvancedEditorHref, editorialExportHrefFor } from "@/lib/editorial/advancedEditorLink";
+import { openReelSidecarStartCommand } from "@/lib/openReelSidecarStartCommand";
 import { getSequenceStyleState, type GetSequenceStyleStateResult } from "@/actions/sequenceStyle";
 import SequenceStylePanel from "@/components/projectStyle/SequenceStylePanel";
 
@@ -456,8 +457,7 @@ export default async function SequencePage({ params, searchParams }: Props) {
         </p>
         <Collapsible label="Show OpenReel start command">
           <pre className="text-xs text-[#6e767d] bg-[#101214] border border-[#232629] rounded p-3 overflow-x-auto">
-{`cd F:/AI/mikai-openreel-sidecar
-npx -y pnpm@11.7.0 dev`}
+            {openReelSidecarStartCommand()}
           </pre>
         </Collapsible>
       </Card>

@@ -198,7 +198,139 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 10. Summary
+# 10. pnpm (OpenReel sidecar)
+# ---------------------------------------------------------------------------
+step "pnpm (OpenReel sidecar)"
+
+if command -v pnpm &>/dev/null; then
+  ok "pnpm $(pnpm --version)"
+else
+  warn "pnpm not found - required by install.sh for the OpenReel sidecar. Install: corepack enable && corepack prepare pnpm --activate"
+fi
+
+# ---------------------------------------------------------------------------
+# 11. Python / OpenCV (storyboard panel extraction)
+# ---------------------------------------------------------------------------
+step "Python / OpenCV (storyboard panel extraction)"
+
+PY_BIN="python3"
+if [ -f ".env.local" ]; then
+  ENV_PY_BIN=$(grep -E "^OPENCV_PYTHON_BIN\s*=" .env.local 2>/dev/null | sed 's/^OPENCV_PYTHON_BIN\s*=\s*//' | tr -d '[:space:]')
+  [ -n "$ENV_PY_BIN" ] && PY_BIN="$ENV_PY_BIN"
+fi
+
+if command -v "$PY_BIN" &>/dev/null; then
+  ok "$PY_BIN found"
+  if "$PY_BIN" -c "import cv2, numpy" &>/dev/null; then
+    ok "opencv-python-headless and numpy importable by $PY_BIN"
+  else
+    warn "opencv-python-headless/numpy not importable by $PY_BIN - storyboard panel extraction will fail. Install: pip install opencv-python-headless numpy (use a venv, or --break-system-packages, on Ubuntu 24.04)."
+  fi
+else
+  warn "$PY_BIN not found - storyboard panel extraction will fail. Install python3, or set OPENCV_PYTHON_BIN in .env.local."
+fi
+
+# ---------------------------------------------------------------------------
+# 12. FFmpeg / FFprobe (bundled binaries)
+# ---------------------------------------------------------------------------
+step "FFmpeg / FFprobe (bundled binaries)"
+
+if command -v node &>/dev/null; then
+  FFMPEG_INFO=$(node -e "
+try {
+  const p = require('./node_modules/ffmpeg-ffprobe-static');
+  console.log((p.ffmpegPath || '') + '|' + (p.ffprobePath || ''));
+} catch (e) {
+  console.log('|');
+}
+" 2>/dev/null)
+  FFMPEG_BIN="${FFMPEG_INFO%%|*}"
+  FFPROBE_BIN="${FFMPEG_INFO##*|}"
+  if [ -n "$FFMPEG_BIN" ] && [ -f "$FFMPEG_BIN" ] && [ -x "$FFMPEG_BIN" ] && [ -n "$FFPROBE_BIN" ] && [ -f "$FFPROBE_BIN" ] && [ -x "$FFPROBE_BIN" ]; then
+    ok "ffmpeg/ffprobe binaries present and executable"
+    info "ffmpeg: $FFMPEG_BIN"
+  else
+    warn "ffmpeg/ffprobe binaries missing or not executable for this platform - run: npm ci"
+  fi
+else
+  warn "node not found - ffmpeg/ffprobe check skipped."
+fi
+
+# ---------------------------------------------------------------------------
+# 13. Playwright browser cache (verification passes only)
+# ---------------------------------------------------------------------------
+step "Playwright browser cache (verification passes only)"
+
+has_chromium_build() {
+  [ -d "$1" ] && [ -n "$(find "$1" -maxdepth 1 -type d -name 'chromium*' 2>/dev/null)" ]
+}
+
+# PLAYWRIGHT_BROWSERS_PATH always wins when set. Otherwise this doctor also
+# runs under Git Bash on Windows, where playwright-core caches browsers
+# under %LOCALAPPDATA%\ms-playwright, not ~/.cache/ms-playwright — the Linux
+# default alone produced a WARN on every Windows run of this script, which
+# is exactly the kind of warning nobody keeps reading. This does not make
+# doctor.sh a Windows doctor: doctor.ps1 remains the authoritative check
+# there, this is only a second, non-authoritative location to try before
+# warning.
+if [ -n "$PLAYWRIGHT_BROWSERS_PATH" ]; then
+  PW_CACHE="$PLAYWRIGHT_BROWSERS_PATH"
+elif has_chromium_build "$HOME/.cache/ms-playwright"; then
+  PW_CACHE="$HOME/.cache/ms-playwright"
+elif [ -n "$LOCALAPPDATA" ] && has_chromium_build "$LOCALAPPDATA/ms-playwright"; then
+  PW_CACHE="$LOCALAPPDATA/ms-playwright"
+else
+  PW_CACHE="$HOME/.cache/ms-playwright"
+fi
+
+if has_chromium_build "$PW_CACHE"; then
+  ok "Playwright browser cache found at $PW_CACHE"
+else
+  warn "Playwright browser cache not found at $PW_CACHE - npm run playwright:verify will fail. Install a Chromium build compatible with playwright-core (see scripts/playwright-harness.mjs)."
+fi
+
+# ---------------------------------------------------------------------------
+# 14. OpenReel sidecar checkout
+# ---------------------------------------------------------------------------
+step "OpenReel sidecar checkout"
+
+if [ -f "config/openreel-sidecar-release.json" ] && command -v node &>/dev/null; then
+  PIN_COMMIT=$(node -e "
+try {
+  console.log(JSON.parse(require('fs').readFileSync('config/openreel-sidecar-release.json', 'utf8')).commit || '');
+} catch (e) {
+  console.log('');
+}
+" 2>/dev/null)
+
+  SIDECAR_DIR="../mikai-openreel-sidecar"
+  if [ -f ".env.local" ]; then
+    ENV_SIDECAR_DIR=$(grep -E "^MIKAI_OPENREEL_DIR\s*=" .env.local 2>/dev/null | sed 's/^MIKAI_OPENREEL_DIR\s*=\s*//' | tr -d '[:space:]')
+    [ -n "$ENV_SIDECAR_DIR" ] && SIDECAR_DIR="$ENV_SIDECAR_DIR"
+  fi
+
+  if [ -d "$SIDECAR_DIR" ]; then
+    if command -v git &>/dev/null; then
+      SIDECAR_HEAD=$(git -C "$SIDECAR_DIR" rev-parse HEAD 2>/dev/null || echo "")
+      if [ -n "$PIN_COMMIT" ] && [ "$SIDECAR_HEAD" = "$PIN_COMMIT" ]; then
+        ok "sidecar checkout at $SIDECAR_DIR is at the pinned commit ($PIN_COMMIT)"
+      elif [ -n "$SIDECAR_HEAD" ]; then
+        warn "sidecar checkout at $SIDECAR_DIR is at $SIDECAR_HEAD, pin expects $PIN_COMMIT - run ./install.sh or ./update.sh"
+      else
+        warn "sidecar checkout at $SIDECAR_DIR is not a git checkout - run ./install.sh"
+      fi
+    else
+      warn "git not found - sidecar pin check skipped."
+    fi
+  else
+    warn "sidecar checkout not found at $SIDECAR_DIR - run ./install.sh"
+  fi
+else
+  warn "config/openreel-sidecar-release.json or node not available - sidecar pin check skipped."
+fi
+
+# ---------------------------------------------------------------------------
+# 15. Summary
 # ---------------------------------------------------------------------------
 echo ""
 echo "======================================"

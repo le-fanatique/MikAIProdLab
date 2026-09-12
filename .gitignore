@@ -53,6 +53,9 @@ yarn-error.log*
 !/storage/.gitkeep
 /storage/outputs/*
 !/storage/outputs/.gitkeep
+/storage/uploads/*
+!/storage/uploads/
+!/storage/uploads/.gitkeep
 
 # vercel
 .vercel
