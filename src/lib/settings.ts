@@ -9,7 +9,12 @@ import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
 // Module-level provider prefix map (used by new chat config functions)
 // ---------------------------------------------------------------------------
 
-const PROVIDER_PREFIXES: Record<LLMProvider, string> = {
+// DEVOPS.CONFIG.EXPORT.1 — exported so scripts/config-transport.mjs's own
+// copy (imposed by the scripts/ -> src/ import wall) can derive its secret
+// key list from every provider this Record actually declares, rather than
+// from a hand-picked snapshot of which rows happened to be filled in one
+// database. See that script's SECRET_APP_SETTINGS_KEYS.
+export const PROVIDER_PREFIXES: Record<LLMProvider, string> = {
   ollama: "llm_ollama_",
   openrouter: "llm_openrouter_",
   "openai-compatible": "llm_openai_compatible_",

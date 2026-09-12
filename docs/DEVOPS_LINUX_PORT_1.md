@@ -114,37 +114,67 @@ retapé à la main ; git ne les transporte jamais.
 actif, l'URL ComfyUI, l'URL du sidecar OpenReel, les workflows ComfyUI
 importés et les templates du LLM Workspace. La base d'un clone frais est
 vide de tout cela : l'application démarre, mais ne connaît aucun workflow,
-aucun provider, aucun template. Ce manque est réel et **n'est pas** corrigé
-par ce ticket — il est nommé et volontairement renvoyé à un ticket séparé,
-`DEVOPS.CONFIG.EXPORT.1` (export/import portant exactement sur ces trois
-tables). Voir l'audit, §4, pour la raison pour laquelle
-`scripts/data-backup.mjs` n'est pas le bon outil pour cela à lui seul : il
-déplace la base entière plus les quatre racines média, pas un sous-ensemble
-config-only.
+aucun provider, aucun template. `DEVOPS.CONFIG.EXPORT.1` a comblé ce manque :
+`scripts/config-transport.mjs` (`npm run config:export` / `config:import`)
+déplace exactement ces trois tables, plus les vignettes de workflow, sans les
+projets.
 
-**Contournement disponible dès aujourd'hui, avec son coût exact** :
+**Sur la machine Windows source :**
+
+```bash
+npm run config:export
+```
+
+Lit un instantané cohérent de la base (jamais le `.db` en place) et écrit un
+répertoire horodaté sous `data/config-exports/` : le manifeste, et les
+vignettes de workflow qu'il référence. Les six clés API que le code peut
+écrire (`comfyui_api_key`, `comfyui_cloud_api_key`, `llm_api_key`,
+`llm_ollama_api_key`, `llm_openrouter_api_key`,
+`llm_openai_compatible_api_key`) sont **omises par défaut** — la sortie
+console les nomme explicitement. Ajouter `-- --with-secrets` pour les
+inclure si le transfert est fait par un canal de confiance (ex. `scp` direct
+entre les deux machines, jamais par un dossier synchronisé grand public).
+
+Copier le répertoire produit vers la machine Ubuntu (`scp -r`, clé USB,
+dossier synchronisé — les vignettes ne pèsent que quelques dizaines de Ko).
+
+**Sur la machine Ubuntu cible, après `./install.sh` et `npm run db:migrate`
+au moins une fois (la table `comfy_workflows` doit exister) :**
+
+```bash
+npm run config:import -- <répertoire-copié> --target .
+```
+
+Exige une sauvegarde de la base cible avant d'écrire (le même garde-fou que
+`mikai:install`/`mikai:update`) — sur une installation neuve, sans base
+existante, cette étape est sautée automatiquement. Sur une installation
+neuve (le cas réel ici), les ID de workflow sont préservés tels quels et les
+six réglages `default_workflow_*` restent valides sans réécriture. Une clé
+`app_settings` déjà présente sur la cible est conservée telle quelle, sauf
+`-- --overwrite-app-settings`. Les clés API omises à l'export restent à
+ressaisir dans Settings après l'import — la sortie console les rappelle.
+
+**Ce que cet import n'amène pas : les projets ni leurs médias**, par
+construction — c'est le périmètre que l'auteur a explicitement exclu (§3).
+Aucun projet, aucune séquence, aucun plan, aucun asset, aucune image ni
+vidéo ne voyage par cette commande.
+
+**Contournement toujours disponible, avec son coût exact** :
 `data/mikailab.db` fait **6 Mo**. Le copier à la main (par exemple via `scp`
 depuis la machine Windows, puis en le plaçant à `data/mikailab.db` sur
 Ubuntu avant de démarrer l'application) donne une installation entièrement
-configurée en une seule étape — y compris les workflows, les providers et
-les templates nécessaires pour faire tourner l'application. Cette copie
-amène aussi chaque ligne de projet qui y fait référence, ce qui est
-exactement ce que « je n'ai pas besoin de récupérer les projets en cours »
-exclut ; ce n'est pas interdit, seulement pas requis.
+configurée en une seule étape, mais amène aussi chaque ligne de projet, ce
+que `config:import` n'inclut jamais. Cette copie amène aussi chaque ligne de
+projet qui y fait référence, ce qui est exactement ce que « je n'ai pas
+besoin de récupérer les projets en cours » exclut ; ce n'est pas interdit,
+seulement pas requis, et le résultat est dégradé (§3) : les lignes de
+projet copiées référencent des fichiers image et vidéo qui n'existent pas
+sur la machine cible, donc les projets apparaîtront avec leurs images et
+leurs vidéos cassées, pas avec des projets vides.
 
-**Ce que cette copie n'amène pas : les médias.** `data/mikailab.db` ne
-contient que la base de données — pas `public/uploads` ni
-`public/outputs`, qui restent hors périmètre par décision de l'auteur (§3).
-Les lignes de projet copiées référencent donc des fichiers image et vidéo
-qui n'existent pas sur la machine cible : les projets apparaîtront avec
-leurs images et leurs vidéos cassées, pas avec des projets vides. C'est la
-moitié de l'avertissement qui surprend si elle n'est pas dite, donc elle est
-dite ici : copier la base sans copier les médias donne des projets à
-l'apparence cassée, pas des projets propres amputés de leur historique
-récent.
-
-Rien dans `install.sh` n'effectue cette copie — c'est un geste manuel, fait
-ou non, à la discrétion de la personne qui installe.
+Rien dans `install.sh` n'effectue l'une ou l'autre de ces copies — ce sont
+des gestes manuels, faits ou non, à la discrétion de la personne qui
+installe.
 
 ## 5. ComfyUI et Ollama restés sur la machine Windows
 

@@ -14,7 +14,10 @@ export type WorkflowDefaults = {
   lookDevelopmentId: number | null;
 };
 
-const DEFAULT_KEYS = [
+// DEVOPS.CONFIG.EXPORT.1 — exported so scripts/config-transport.mjs's own
+// copy (imposed by the scripts/ -> src/ import wall) can be held solidary
+// with this one by a test that imports both. See that script's header.
+export const DEFAULT_KEYS = [
   "default_workflow_asset_image",
   "default_workflow_shot_image",
   "default_workflow_shot_video",

@@ -27,6 +27,8 @@
     "backup:verify": "node scripts/data-backup.mjs verify",
     "backup:list": "node scripts/data-backup.mjs list",
     "backup:restore": "node scripts/data-backup.mjs restore",
+    "config:export": "node scripts/config-transport.mjs export",
+    "config:import": "node scripts/config-transport.mjs import",
     "mikai:install": "node scripts/mikai-deploy.mjs install",
     "mikai:update": "node scripts/mikai-deploy.mjs update",
     "mikai:start": "node scripts/mikai-deploy.mjs start",
