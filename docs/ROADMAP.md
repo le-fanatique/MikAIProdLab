@@ -27,29 +27,30 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**`DEVOPS.LINUX.PORT.1` — ouvert le 2026-09-12.** Installer le dépôt sur une
-machine Ubuntu depuis GitHub, et rendre l'opération reproductible. L'auteur a
-écarté la récupération des projets en cours : les 43 Go de `data/backups`, les
-968 Mo de `public/uploads` et les 2,9 Go de `public/outputs` sont hors
-périmètre.
+**`DEVOPS.LINUX.PORT.1` — P0 livré le 2026-09-12 (`7e9218d`, `772576a`),
+aucune migration. P1 attend l'auteur.** Installer le dépôt sur une machine
+Ubuntu depuis GitHub, et rendre l'opération reproductible. L'auteur a écarté la
+récupération des projets en cours.
 
-L'audit à froid a établi que **la faisabilité n'est pas la question** — les
-chaînes `install.sh` / `setup-linux.sh` / `doctor.sh` existent déjà, aucun blob
-texte n'est en CRLF, aucune collision de casse n'existe, `process.platform`
-n'apparaît jamais dans `src/`, le lockfile porte les cibles Linux, et ComfyUI
-est atteint uniquement en HTTP, donc peut rester sur la machine Windows.
+L'audit à froid a établi que **la faisabilité n'était pas la question** — les
+chaînes `install.sh` / `setup-linux.sh` / `doctor.sh` existaient déjà, aucun
+blob texte n'était en CRLF, `process.platform` n'apparaît jamais dans `src/`,
+et ComfyUI est atteint uniquement en HTTP, donc peut rester sur la machine
+Windows. Analyse : `docs/DEVOPS_LINUX_PORT_1_AUDIT.md`. Procédure
+d'installation : `docs/DEVOPS_LINUX_PORT_1.md`.
 
-Ce qui est traité (P0, prouvable depuis Windows) : le bit exécutable manquant
-sur `install.sh` / `start.sh` / `update.sh`, un `.gitattributes`, les
-vérifications absentes de `doctor.sh` et `doctor.ps1` (`pnpm`, `python3` +
-OpenCV, ffmpeg, navigateurs Playwright, checkout du sidecar — toutes en
-`warn`), la déduplication du chemin Windows `cd F:/AI/mikai-openreel-sidecar`
-écrit à l'identique dans deux pages, `storage/uploads/.gitkeep`, et un document
-de portage `docs/DEVOPS_LINUX_PORT_1.md`.
+P0 a livré le bit exécutable de `install.sh` / `start.sh` / `update.sh`, un
+`.gitattributes`, six vérifications ajoutées à `doctor.sh` et `doctor.ps1`
+(toutes en `warn`), la déduplication du chemin Windows
+`cd F:/AI/mikai-openreel-sidecar` écrit à l'identique dans deux pages, et
+`storage/uploads/.gitkeep`.
 
-Ce qui ne se tranche que sur la machine Ubuntu (P1, à la charge de l'auteur) :
-la casse des imports (`npx tsc --noEmit` sur ext4), les installs réseau de
-`better-sqlite3` et `ffmpeg-ffprobe-static`, et l'accès au dépôt du sidecar.
+**Reste à faire, et c'est la main de l'auteur : P1**, le déroulé réel sur la
+machine Ubuntu. Trois risques ne se tranchent que là — la casse des imports sur
+ext4, les installs réseau de `better-sqlite3` et `ffmpeg-ffprobe-static`, et
+l'accès au dépôt du sidecar. **La validation manuelle de l'interface P0.3 est
+également différée** (l'auteur, 2026-09-12) : les deux `Collapsible` « Show
+OpenReel start command » doivent afficher `cd ../mikai-openreel-sidecar`.
 
 **Le point dur est nommé et sorti du ticket :** `app_settings`,
 `comfy_workflows` et `llm_templates` vivent dans `data/mikailab.db`, pas dans
@@ -58,9 +59,9 @@ provider et sans clé. `scripts/data-backup.mjs` sait les transporter, mais en
 tout-ou-rien avec les quatre racines média. D'où **`DEVOPS.CONFIG.EXPORT.1`**,
 un export/import ne portant que ces trois tables — ticket séparé, pas encore
 ouvert. Contournement d'ici là : `data/mikailab.db` fait 6 Mo et se copie à la
-main, au prix d'emporter aussi les projets.
+main, au prix d'emporter aussi les projets — et sans les médias, donc avec des
+images et des vidéos cassées.
 
-Cadrage complet : `.agents/supervised_task.md`.
 
 **Clos le 2026-08-28, un commit `a60d36b`, aucune migration** :
 `REPO.PLAYWRIGHT.1`. `playwright-core` est désormais une devDependency

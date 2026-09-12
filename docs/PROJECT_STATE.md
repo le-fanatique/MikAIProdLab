@@ -1,6 +1,65 @@
 # MikAI Project State
 
-Last updated: 2026-08-28
+Last updated: 2026-09-12
+
+## `DEVOPS.LINUX.PORT.1` P0 — ce que le dépôt cachait sur sa propre portabilité
+
+L'auteur doit installer MikAI sur une machine Ubuntu via GitHub, sans reprendre
+les projets en cours. L'audit à froid (`docs/DEVOPS_LINUX_PORT_1_AUDIT.md`,
+`7e9218d`) a d'abord retourné la question : **la faisabilité n'était pas le
+sujet.** Les deux chaînes d'installation existaient déjà, aucun blob texte
+n'était en CRLF malgré `core.autocrlf=true`, aucune collision de casse
+n'existait, `process.platform` n'apparaissait nulle part dans `src/`, le
+lockfile portait les cibles Linux, et ComfyUI n'est atteint qu'en HTTP — donc
+il peut rester sur la machine Windows sans une ligne de changement.
+
+P0 (`772576a`) a retiré les obstacles visibles depuis Windows : le bit
+exécutable de `install.sh`, `start.sh` et `update.sh` (les trois étaient en
+`100644` quand leurs voisins étaient en `100755` — `./install.sh` donnait
+`Permission denied` au premier geste), un `.gitattributes`, six vérifications
+ajoutées aux deux `doctor`, la déduplication de la commande de démarrage du
+sidecar, et `storage/uploads/.gitkeep`. Plus deux documents :
+`DEVOPS_LINUX_PORT_1_AUDIT.md` pour l'analyse, `DEVOPS_LINUX_PORT_1.md` pour la
+procédure.
+
+### What this cost to learn
+
+**Le vrai obstacle n'était pas dans le code, il était dans la base.**
+`app_settings`, `comfy_workflows` et `llm_templates` vivent dans
+`data/mikailab.db`, que git ignore. Un clone donne donc une application qui
+démarre et ne sait rien faire : aucun workflow, aucun provider, aucune clé.
+`scripts/data-backup.mjs` sait les transporter, mais en tout-ou-rien avec les
+quatre racines média — c'est l'outil de sauvegarde d'une installation, pas
+celui d'un portage sans les projets. D'où **`DEVOPS.CONFIG.EXPORT.1`**, nommé
+et laissé hors du ticket plutôt qu'improvisé dedans.
+
+**Le modèle `.gitignore` que le ticket dictait était faux, et l'exécuteur l'a
+dit.** Les deux lignes `/storage/outputs/*` + `!/storage/outputs/.gitkeep` ne
+suffisent pas pour un fichier neuf : `/storage/*` exclut le répertoire, et git
+ne descend jamais dans un répertoire exclu. Une troisième ligne, la négation
+sur le répertoire lui-même, est nécessaire. Les exceptions voisines ne le
+montraient pas parce que leurs `.gitkeep` étaient déjà suivis — un fichier déjà
+suivi ignore `.gitignore`. Le ticket dictait aussi une preuve fausse
+(`git check-ignore -v` « ne doit rien rendre ») : avec `-v`, git affiche la
+règle de négation qui matche et sort en 0. Sans `-v`, il sort en 1. C'est ce
+dernier qui prouve quelque chose.
+
+**Trois risques ne se tranchent pas depuis Windows, et le dire valait mieux que
+de les couvrir :** la casse des imports sur ext4 (NTFS est insensible, un
+`import "@/lib/Settings"` compile ici et casse là-bas), les installs réseau de
+`better-sqlite3` et `ffmpeg-ffprobe-static`, et l'accès au dépôt du sidecar.
+P1 les attend, et P1 est la main de l'auteur.
+
+**Le sidecar est resté un répertoire frère, et ce n'était pas une décision
+d'architecture.** La question « pourquoi ne pas le cloner dans le dossier
+MikAI ? » a été posée et mesurée : le sidecar fait 1466 fichiers `.ts`/`.tsx`
+et 397 fichiers de test. `tsconfig.json` inclut `**/*.ts` en n'excluant que
+`node_modules`, `vitest.config.mts` n'a ni `include` ni `exclude`, et les
+`globalIgnores` d'ESLint ne couvrent que `.next`, `out` et `build`. L'imbriquer
+aujourd'hui ferait avaler ces fichiers par `tsc`, par vitest et par eslint.
+C'est faisable en quatre lignes d'exclusion, mais cela rendrait quatre fichiers
+de configuration solidaires du sidecar — et le gain d'installation serait nul,
+`install.sh` le clonant déjà où qu'il soit. Écarté par l'auteur, 2026-09-12.
 
 ## The intermittent suite failure, captured at last — and it is not concurrency
 
