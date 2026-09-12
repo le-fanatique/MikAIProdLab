@@ -1,6 +1,52 @@
 # MikAI Project State
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
+
+## `DEVOPS.CONFIG.EXPORT.1` — porter la configuration, et un filtre de secrets bâti sur le mauvais critère
+
+`npm run config:export` / `config:import` (`scripts/config-transport.mjs`,
+`e26f668`) déplacent `app_settings`, `comfy_workflows` et `llm_templates` d'une
+installation à une autre sans emporter les projets. C'est ce qui manquait pour
+qu'un clone soit utilisable : `DEVOPS.LINUX.PORT.1` avait établi qu'il démarre
+sans workflow, sans provider et sans clé.
+
+### What this cost to learn
+
+**Le sujet n'était pas la copie des trois tables.** Six lignes d'`app_settings`
+— les `default_workflow_*` — contiennent des ID de `comfy_workflows`, et les ID
+réels sont troués par des suppressions passées
+(`1,3,4,5,6,11,...,15,...,22,23,...,51,...`). Un import dans une base neuve en
+`autoIncrement` les renumérote et fait pointer les six défauts sur les mauvais
+workflows. **Sans erreur** : `parseWorkflowDefaultId`
+(`src/lib/workflowDefaults.ts:26`) rend `null` sur une valeur absurde, donc la
+panne se constate des semaines plus tard, quand un défaut a disparu. L'import
+préserve les ID quand la table cible est vide — le cas réel — et construit
+sinon une table de correspondance. Un défaut dont le workflow source manque
+n'est jamais inventé : la clé est omise.
+
+**Un filtre de secrets ne se dérive pas des lignes remplies.** La première
+version du ticket nommait quatre clés API « non négociables », tirées du relevé
+de la base au moment de la mesure. Or `resolveApiKeyForProviderFromMap`
+(`src/lib/settings.ts:100`) lit `` `${prefix}api_key` `` pour les trois entrées
+de `PROVIDER_PREFIXES` : `llm_ollama_api_key` et
+`llm_openai_compatible_api_key` étaient donc des chemins d'écriture réels, vides
+ce jour-là et non filtrés. Le jour où l'un des deux est renseigné,
+`config:export` sans `--with-secrets` l'écrit en clair dans un fichier fait pour
+être déplacé. **Le critère correct est ce que le code peut écrire, jamais ce
+qu'une base contient.** La liste se dérive désormais de `PROVIDER_PREFIXES`, et
+un provider ajouté à `LLMProvider` est couvert par le typage.
+
+L'exécuteur avait signalé la lacune et **refusé de l'élargir seul**, le ticket
+ayant déclaré la liste non négociable. C'était la bonne conduite : une liste de
+secrets ne s'étend pas à l'initiative d'un exécuteur. La correction est venue
+de la supervision, qui avait écrit la mauvaise liste.
+
+**Le mur `scripts/` vers `src/` impose deux duplications**, `DEFAULT_KEYS` et
+`PROVIDER_PREFIXES` — aucun `.mjs` de `scripts/` ne charge du TypeScript, même
+mur que celui documenté dans `scripts/playwright-harness.mjs`. Chacune est
+tenue par un test qui importe les deux copies et tombe si elles divergent.
+Vitest importe un `.mjs` de `scripts/` sans cérémonie : c'est la voie, quand la
+duplication est imposée par le runtime.
 
 ## `DEVOPS.LINUX.PORT.1` P0 — ce que le dépôt cachait sur sa propre portabilité
 

@@ -27,23 +27,26 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**`DEVOPS.LINUX.PORT.1` — P0 livré le 2026-09-12 (`7e9218d`, `772576a`),
-aucune migration. P1 attend l'auteur.** Installer le dépôt sur une machine
-Ubuntu depuis GitHub, et rendre l'opération reproductible. L'auteur a écarté la
-récupération des projets en cours.
+**`DEVOPS.CONFIG.EXPORT.1` — CLOS le 2026-09-13**, un commit `e26f668`,
+aucune migration, aucune dépendance. `npm run config:export` / `config:import`
+déplacent `app_settings`, `comfy_workflows` et `llm_templates` d'une
+installation à une autre **sans emporter les projets**. Les secrets sont omis
+par défaut (`--with-secrets` les inclut), les vignettes de workflow suivent, et
+les six réglages `default_workflow_*` — qui contiennent des ID de workflow —
+sont préservés ou remappés selon l'état de la cible. Procédure :
+`docs/DEVOPS_LINUX_PORT_1.md` §4. Ce que ça a coûté à apprendre — dont un filtre
+de secrets bâti sur le mauvais critère, corrigé avant livraison :
+`docs/PROJECT_STATE.md`.
 
-L'audit à froid a établi que **la faisabilité n'était pas la question** — les
-chaînes `install.sh` / `setup-linux.sh` / `doctor.sh` existaient déjà, aucun
-blob texte n'était en CRLF, `process.platform` n'apparaît jamais dans `src/`,
-et ComfyUI est atteint uniquement en HTTP, donc peut rester sur la machine
-Windows. Analyse : `docs/DEVOPS_LINUX_PORT_1_AUDIT.md`. Procédure
-d'installation : `docs/DEVOPS_LINUX_PORT_1.md`.
+**`DEVOPS.LINUX.PORT.1` — P0 livré le 2026-09-12 (`7e9218d`, `772576a`,
+`5deeaad`), aucune migration. P1 attend l'auteur.** Installer le dépôt sur une
+machine Ubuntu depuis GitHub. L'audit à froid a établi que **la faisabilité
+n'était pas la question** — analyse : `docs/DEVOPS_LINUX_PORT_1_AUDIT.md`.
 
 P0 a livré le bit exécutable de `install.sh` / `start.sh` / `update.sh`, un
 `.gitattributes`, six vérifications ajoutées à `doctor.sh` et `doctor.ps1`
 (toutes en `warn`), la déduplication du chemin Windows
-`cd F:/AI/mikai-openreel-sidecar` écrit à l'identique dans deux pages, et
-`storage/uploads/.gitkeep`.
+`cd F:/AI/mikai-openreel-sidecar`, et `storage/uploads/.gitkeep`.
 
 **Reste à faire, et c'est la main de l'auteur : P1**, le déroulé réel sur la
 machine Ubuntu. Trois risques ne se tranchent que là — la casse des imports sur
@@ -51,17 +54,6 @@ ext4, les installs réseau de `better-sqlite3` et `ffmpeg-ffprobe-static`, et
 l'accès au dépôt du sidecar. **La validation manuelle de l'interface P0.3 est
 également différée** (l'auteur, 2026-09-12) : les deux `Collapsible` « Show
 OpenReel start command » doivent afficher `cd ../mikai-openreel-sidecar`.
-
-**Le point dur est nommé et sorti du ticket :** `app_settings`,
-`comfy_workflows` et `llm_templates` vivent dans `data/mikailab.db`, pas dans
-git. Un clone donne donc une application qui démarre sans aucun workflow, sans
-provider et sans clé. `scripts/data-backup.mjs` sait les transporter, mais en
-tout-ou-rien avec les quatre racines média. D'où **`DEVOPS.CONFIG.EXPORT.1`**,
-un export/import ne portant que ces trois tables — ticket séparé, pas encore
-ouvert. Contournement d'ici là : `data/mikailab.db` fait 6 Mo et se copie à la
-main, au prix d'emporter aussi les projets — et sans les médias, donc avec des
-images et des vidéos cassées.
-
 
 **Clos le 2026-08-28, un commit `a60d36b`, aucune migration** :
 `REPO.PLAYWRIGHT.1`. `playwright-core` est désormais une devDependency
