@@ -365,6 +365,21 @@ describe("importConfig — an app_settings key already present on the target", (
     expect(row.value).toBe("http://existing-target:8188");
   });
 
+  it("is never named in loopbackAppSettings when skipped — the target keeps its own (non-loopback) value, nothing was written", async () => {
+    // seedSource's comfyui_base_url ("http://127.0.0.1:8188") would parse as
+    // a loopback URL, but this key is skipped here (target already has it,
+    // --overwrite-app-settings not passed): the warning must not fire for a
+    // value that was never written to the target DB.
+    const { exportDir, targetRoot, targetDbPath } = await setup();
+    const { run } = fakeRun();
+    const result = await importConfig({ importDir: exportDir, targetRoot, run, env: {} });
+    assertOk(result);
+    expect(result.skippedExistingAppSettingsKeys).toContain("comfyui_base_url");
+    expect(result.loopbackAppSettings).toEqual([]);
+    const row = (readRows(targetDbPath, "SELECT value FROM app_settings WHERE key = 'comfyui_base_url'") as { value: string }[])[0];
+    expect(row.value).toBe("http://existing-target:8188"); // still the target's own value, not the loopback one from the source
+  });
+
   it("is overwritten when --overwrite-app-settings is passed", async () => {
     const { exportDir, targetRoot, targetDbPath } = await setup();
     const { run } = fakeRun();
@@ -482,6 +497,50 @@ describe("thumbnail handling", () => {
       }[]
     )[0];
     expect(row.thumbnail_path).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEVOPS.CONFIG.LOOPBACK.1 — importConfig's loopbackAppSettings output
+// ---------------------------------------------------------------------------
+
+describe("importConfig — loopbackAppSettings", () => {
+  it("names comfyui_base_url (a 127.0.0.1 value carried by seedSource) as pointing at this machine", async () => {
+    const sourceRoot = makeTempRoot("mikai-cfg-src-");
+    const srcDbPath = path.join(sourceRoot, "mikailab.db");
+    migrateFreshDb(srcDbPath);
+    seedSource(srcDbPath);
+    const outputRoot = makeTempRoot("mikai-cfg-out-");
+    const exportResult = await exportConfig({ sourceRoot, dbPath: srcDbPath, outputRoot });
+    if (!exportResult.ok) throw new Error(exportResult.reason);
+
+    const targetRoot = makeTempRoot("mikai-cfg-tgt-");
+    migrateFreshDb(path.join(targetRoot, "data", "mikailab.db"));
+    const { run } = fakeRun();
+
+    const result = await importConfig({ importDir: exportResult.exportDir, targetRoot, run, env: {} });
+    assertOk(result);
+    expect(result.loopbackAppSettings).toEqual([{ key: "comfyui_base_url", value: "http://127.0.0.1:8188" }]);
+  });
+
+  it("is empty when no imported app_settings value is a loopback URL", async () => {
+    const sourceRoot = makeTempRoot("mikai-cfg-src-");
+    const srcDbPath = path.join(sourceRoot, "mikailab.db");
+    migrateFreshDb(srcDbPath);
+    const raw = new Database(srcDbPath);
+    raw.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?)`).run("llm_openrouter_base_url", "https://openrouter.ai/api/v1");
+    raw.close();
+    const outputRoot = makeTempRoot("mikai-cfg-out-");
+    const exportResult = await exportConfig({ sourceRoot, dbPath: srcDbPath, outputRoot });
+    if (!exportResult.ok) throw new Error(exportResult.reason);
+
+    const targetRoot = makeTempRoot("mikai-cfg-tgt-");
+    migrateFreshDb(path.join(targetRoot, "data", "mikailab.db"));
+    const { run } = fakeRun();
+
+    const result = await importConfig({ importDir: exportResult.exportDir, targetRoot, run, env: {} });
+    assertOk(result);
+    expect(result.loopbackAppSettings).toEqual([]);
   });
 });
 

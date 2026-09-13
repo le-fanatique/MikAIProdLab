@@ -428,6 +428,67 @@ export function validateConfigManifest(manifest) {
 }
 
 // ---------------------------------------------------------------------------
+// Loopback host detection (DEVOPS.CONFIG.LOOPBACK.1)
+//
+// `config:import` recopies every app_settings value verbatim, including a
+// service URL like `comfyui_base_url = http://127.0.0.1:8188`. On the target
+// machine, `127.0.0.1`/`localhost` name the target machine, not whatever
+// service ran there on the source — the import looks complete and silently
+// points at nothing. This never rewrites or guesses a replacement value (the
+// tool cannot know the right address) and never makes a network request (an
+// import must not depend on any service being reachable at import time): it
+// only names, in the CLI output, which imported values need the author's own
+// look — docs/DEVOPS_LINUX_PORT_1.md §5 already describes that look.
+// ---------------------------------------------------------------------------
+
+/** True when `hostname` — as returned by `new URL(...).hostname` (already
+ * lowercased; an IPv6 host keeps its brackets, e.g. "[::1]") — denotes "this
+ * machine" rather than a reachable service: `localhost`, any address in
+ * `127.0.0.0/8` (not only `127.0.0.1`), `::1` bracketed or not, or
+ * `0.0.0.0`. Deliberately not widened to private ranges (`192.168.x`,
+ * `10.x`, `172.16-31.x`) or to Tailscale (`100.64.0.0/10`): those addresses
+ * depend on the host too but can still be reachable from the target machine,
+ * and flagging them would put a real warning next to routine noise — see
+ * the ticket's §2. */
+export function isLoopbackHost(hostname) {
+  if (typeof hostname !== "string" || hostname.length === 0) return false;
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "0.0.0.0" || h === "::1" || h === "[::1]") return true;
+  const ipv4 = /^(\d{1,3})\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.exec(h);
+  if (ipv4) return Number(ipv4[1]) === 127;
+  return false;
+}
+
+/**
+ * Scans `appSettings` (an array of `{ key, value }`, the shape both the
+ * manifest and the DB rows share) and returns the entries whose value parses
+ * as an absolute `http:`/`https:` URL with a loopback host. Not restricted to
+ * a fixed list of keys (ticket §5) — a value that does not parse as such a
+ * URL is ignored silently, which is not an error: most app_settings values
+ * are not URLs at all. Parsing uses `URL`, never a substring search, so a
+ * hostname that merely contains "localhost" is never mistaken for one.
+ * @param {Array<{ key: string, value: string }>} appSettings
+ * @returns {Array<{ key: string, value: string }>}
+ */
+export function findLoopbackAppSettings(appSettings) {
+  const flagged = [];
+  for (const row of appSettings ?? []) {
+    if (!row || typeof row.key !== "string" || typeof row.value !== "string") continue;
+    let url;
+    try {
+      url = new URL(row.value);
+    } catch {
+      continue; // not an absolute URL — silently out of scope, not an error
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+    if (isLoopbackHost(url.hostname)) {
+      flagged.push({ key: row.key, value: row.value });
+    }
+  }
+  return flagged;
+}
+
+// ---------------------------------------------------------------------------
 // IMPORT
 // ---------------------------------------------------------------------------
 
@@ -452,6 +513,7 @@ export function validateConfigManifest(manifest) {
  *       droppedThumbnails: Array<Record<string, any>>,
  *       skippedExistingAppSettingsKeys: string[],
  *       omittedDefaultWorkflowKeys: string[],
+ *       loopbackAppSettings: Array<{ key: string, value: string }>,
  *       backup: Record<string, any>,
  *     }
  *   | { ok: false, reason: string, errors?: string[] }
@@ -688,6 +750,14 @@ export async function importConfig(opts) {
     droppedThumbnails,
     skippedExistingAppSettingsKeys,
     omittedDefaultWorkflowKeys,
+    // Named, never rewritten, never network-checked — see the section above.
+    // Only over keys actually written to the target: a key skipped above
+    // (already present on the target, --overwrite-app-settings not passed)
+    // keeps the target's own value, so flagging its imported-but-unwritten
+    // value would warn about a write that never happened.
+    loopbackAppSettings: findLoopbackAppSettings(
+      manifest.appSettings.filter((row) => !skippedExistingAppSettingsKeys.includes(row.key))
+    ),
     backup,
   };
 }
@@ -828,6 +898,13 @@ async function main() {
     if (result.omittedDefaultWorkflowKeys.length > 0) {
       console.log(`  ${result.omittedDefaultWorkflowKeys.length} default_workflow_* key(s) omitted (source workflow not imported):`);
       console.log(`    ${result.omittedDefaultWorkflowKeys.join(", ")}`);
+    }
+    if (result.loopbackAppSettings.length > 0) {
+      console.log(`  ${result.loopbackAppSettings.length} app_settings value(s) now point at this machine, not the source machine:`);
+      for (const { key, value } of result.loopbackAppSettings) {
+        console.log(`    - ${key} = ${value} (this address now means the target machine, not wherever it meant on the source)`);
+      }
+      console.log(`  See docs/DEVOPS_LINUX_PORT_1.md §5 for what to do about it.`);
     }
     process.exit(0);
   }
