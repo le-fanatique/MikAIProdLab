@@ -2,6 +2,44 @@
 
 Last updated: 2026-09-13
 
+## `DEVOPS.CONFIG.LOOPBACK.1` — un avertissement, et la discipline de ne pas en faire du bruit
+
+`config:import` nomme désormais les réglages d'URL dont l'hôte est une boucle
+locale (`431dc00`). Sur la machine cible, `http://127.0.0.1:8188` désigne la
+machine cible : l'utilisateur obtenait une configuration d'apparence complète
+pointant sur une machine qui n'écoute pas, et le constat arrivait longtemps
+après l'import.
+
+### What this cost to learn
+
+**La valeur du ticket est entièrement dans ce qu'il refuse de faire.** Trois
+refus, et chacun aurait été une régression :
+
+- **ne rien réécrire.** L'outil ne peut pas savoir quelle adresse mettre à la
+  place, et une valeur devinée aurait l'air d'avoir été vérifiée ;
+- **n'interroger aucun réseau.** Un import ne dépend d'aucun réseau, et un
+  service simplement arrêté au moment de l'import produirait une fausse alerte ;
+- **ne signaler que la boucle locale.** `llm_base_url` pointe sur une adresse
+  Tailscale `100.118.47.125` : elle dépend de l'hôte, mais fonctionne depuis la
+  cible si Tailscale y est installé. Élargir aux plages privées aurait produit
+  du bruit sur une configuration valide. Même raisonnement que les six
+  vérifications de `doctor.sh`, mises en `warn` et non en `err`.
+
+**Un avertissement doit porter sur ce qui a été écrit, pas sur ce qui a été
+transporté.** La première version alimentait la détection avec tout le manifeste,
+donc une clé **sautée** — la cible l'avait déjà, `--overwrite-app-settings` non
+passé — était signalée alors que la cible gardait sa propre valeur, souvent
+correcte. Le cas n'apparaît pas au premier import, celui de l'installation
+neuve ; il apparaît au second, sur une machine déjà configurée. Un
+avertissement qui se déclenche sur une écriture qui n'a pas eu lieu est
+exactement le bruit que les trois refus ci-dessus écartaient.
+
+**Et toujours pas de liste de clés en dur** : toute valeur qui s'analyse en URL
+absolue `http`/`https` est examinée. L'hôte est déterminé en analysant l'URL,
+jamais par sous-chaîne — `mycompany-localhost-proxy.example.com` contient
+`localhost` et n'est pas une boucle locale. Le `/8` est couvert en entier, pas
+seulement `127.0.0.1`.
+
 ## `DEVOPS.CONFIG.EXPORT.1` — porter la configuration, et un filtre de secrets bâti sur le mauvais critère
 
 `npm run config:export` / `config:import` (`scripts/config-transport.mjs`,

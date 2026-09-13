@@ -27,6 +27,15 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
+**`DEVOPS.CONFIG.LOOPBACK.1` — CLOS le 2026-09-13**, un commit `431dc00`,
+aucune migration, aucune dépendance. `config:import` nomme désormais les
+réglages d'URL dont l'hôte est une boucle locale — `comfyui_base_url`,
+`llm_ollama_base_url` — parce que sur la machine cible ces adresses désignent
+la machine cible. Il ne réécrit rien, n'interroge pas le réseau, et ne signale
+ni les plages privées ni Tailscale : une alerte qu'on apprend à ignorer ne sert
+plus à rien. La détection ne porte que sur les clés effectivement écrites.
+Procédure : `docs/DEVOPS_LINUX_PORT_1.md` §5.
+
 **`DEVOPS.CONFIG.EXPORT.1` — CLOS le 2026-09-13**, un commit `e26f668`,
 aucune migration, aucune dépendance. `npm run config:export` / `config:import`
 déplacent `app_settings`, `comfy_workflows` et `llm_templates` d'une
@@ -261,7 +270,6 @@ précédent datait du 2 août et a été écrit avant deux chantiers.
 
 **Éditorial et film**
 
-- `FILM.EXPORT.1` — export final contrôlé ;
 - `FILM.AUDIO.1` — pistes audio, musique et mix de preview ;
 - `EDITORIAL.BACKPROP.1` — appliquer volontairement certaines décisions de
   montage aux Shots narratifs.
