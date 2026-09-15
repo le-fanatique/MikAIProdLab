@@ -291,6 +291,21 @@ exigences de l'entrée sont tenues. Détail : `docs/PROJECT_STATE.md`.
   continuité, casting et cohérence du monde. Périmètre à préciser en discussion
   produit. Remplace `STORY.CONTINUITY.1` et `SHOT.COVERAGE.1`.
 
+**Outils externes**
+
+- `INVOKE.ROUNDTRIP` — **aller-retour d'image MikAI ⇄ InvokeAI.** Demandé par
+  l'auteur le 2026-09-15 : « Push to Invoke » sur n'importe quelle image
+  MikAI, retouche dans Invoke, renvoi dans la même entité. Sans modifier
+  Invoke (6.14.0) : un board Invoke par entité propriétaire sert d'adresse de
+  retour ; le renvoi se fait par clic droit sur le calque du canvas →
+  « Run Workflow » → « Send to MikAI », un workflow de nœuds natifs installé
+  par MikAI ; l'import est automatique au retour du focus sur MikAI, par
+  comptage seul par board. Shot et asset reçoivent l'image comme référence ;
+  les autres propriétaires, dans leur propre table. Hors LLM Workspace.
+  **Spécification close, en attente d'un go** : aucun ticket préparé. Demande
+  une migration. Constats sur Invoke, décisions de l'auteur et découpage en
+  trois tickets : `docs/INVOKE_ROUNDTRIP_SPEC.md`.
+
 **Confort opérationnel**
 
 - `DEVOPS.MIKAI.SERVICE.OPTIONAL.1` — exemples de service persistant (systemd et
