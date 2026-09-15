@@ -290,6 +290,19 @@ exigences de l'entrée sont tenues. Détail : `docs/PROJECT_STATE.md`.
 - `DIRECTOR.ASSIST.1` — analyse transversale de la narration, couverture,
   continuité, casting et cohérence du monde. Périmètre à préciser en discussion
   produit. Remplace `STORY.CONTINUITY.1` et `SHOT.COVERAGE.1`.
+- `LLMW.CHAIN` — **enchaîner des workflows LLM par blocs et connexions.**
+  Demandé par l'auteur le 2026-09-14, sur l'ergonomie de « Chain dependent
+  tasks » de Cline : des colonnes, des blocs, des liens tirés vers la droite.
+  **Les colonnes sont des niveaux de profondeur, pas des états** : `[Project]
+  ─► [Sequence] ─► (champ)` se lit « in the project, for each sequence, get
+  the field » ; `[Project] ─► [Sequence] ─► [Shot]` se lit « … for each shot
+  of each sequence ». La même grammaire désigne le contexte, relie ce contexte
+  à un descripteur existant, et enchaîne les opérations avec une validation
+  humaine par bloc. C'est la sortie « canvas à nœuds » que
+  `docs/LLM_WORKSPACE_ARCHITECTURE.md` §7 gardait ouverte. **À démarrer après
+  la clôture de `DEVOPS.LINUX.PORT.1`**, par un ticket de cadrage : huit
+  décisions attendent l'auteur. Plan, grammaire (§4, la section qui compte),
+  découpage et preuves d'acceptation : `docs/LLM_WORKSPACE_CHAIN_BOARD_PLAN.md`.
 
 **Outils externes**
 
