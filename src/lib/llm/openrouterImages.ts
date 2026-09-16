@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ImageModelInfo, LLMConfig } from "@/types/llm";
+import { extractFetchErrorCause } from "./fetchErrorCause";
 
 // ---------------------------------------------------------------------------
 // OpenRouter image model discovery — GET {baseUrl}/images/models
@@ -9,6 +10,18 @@ import type { ImageModelInfo, LLMConfig } from "@/types/llm";
 function buildUrl(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   return `${base}${path}`;
+}
+
+/**
+ * Builds the failure message for `fetchOpenRouterImageModels`'s fetch catch.
+ * Cause present, it is intercalated; cause absent, the message stays exactly
+ * what it was before `LLM.ERROR.CAUSE.2`.
+ */
+export function describeImageModelDiscoveryFailure(err: unknown): string {
+  const cause = extractFetchErrorCause(err);
+  return cause
+    ? `Could not reach OpenRouter for image model discovery: ${cause}.`
+    : "Could not reach OpenRouter for image model discovery.";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,7 +166,7 @@ export async function fetchOpenRouterImageModels(
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Image model discovery timed out.");
     }
-    throw new Error("Could not reach OpenRouter for image model discovery.");
+    throw new Error(describeImageModelDiscoveryFailure(err));
   } finally {
     clearTimeout(timer);
   }

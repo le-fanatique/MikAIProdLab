@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractFetchErrorCause } from "../../src/lib/llm/openaiCompatible";
+import { extractFetchErrorCause } from "../../src/lib/llm/fetchErrorCause";
 
 // ---------------------------------------------------------------------------
 // `LLM.ERROR.CAUSE.1` — the net, written before the function.

@@ -1,4 +1,43 @@
 import type { ChatCallOptions, ChatMessage, LLMConfig, LLMPrompt } from "@/types/llm";
+import { extractFetchErrorCause } from "./fetchErrorCause";
+
+/**
+ * Builds the connect-failure message shared by `callOllama` and
+ * `callOllamaChat`. Cause present, it is intercalated; cause absent, the
+ * message stays exactly what it was before `LLM.ERROR.CAUSE.2`.
+ */
+export function describeOllamaConnectFailure(err: unknown, baseUrl: string): string {
+  const cause = extractFetchErrorCause(err);
+  return cause
+    ? `Cannot connect to Ollama at ${baseUrl}: ${cause}. Make sure Ollama is running.`
+    : `Cannot connect to Ollama at ${baseUrl}. Make sure Ollama is running.`;
+}
+
+/**
+ * Builds the failure message for `fetchOllamaModelNames`'s fetch catch. Kept
+ * separate from `describeOllamaConnectFailure`: that message form has no
+ * `baseUrl` in it ("Could not reach Ollama." vs "Cannot connect to Ollama at
+ * ...") so it cannot reuse the same template without changing the no-cause
+ * wording.
+ */
+export function describeOllamaModelListFailure(err: unknown): string {
+  const cause = extractFetchErrorCause(err);
+  return cause
+    ? `Could not reach Ollama: ${cause}. Make sure Ollama is running.`
+    : "Could not reach Ollama. Make sure Ollama is running.";
+}
+
+/**
+ * Builds the `error` field for `unloadOllamaModel`, which never throws. Today
+ * that field is `err.message` (the uninformative "fetch failed" surface
+ * message) for an `Error`, or a fixed fallback otherwise; that base text is
+ * preserved exactly, with the cause appended when one is found.
+ */
+export function describeOllamaUnloadFailure(err: unknown): string {
+  const cause = extractFetchErrorCause(err);
+  const base = err instanceof Error ? err.message : "Network error unloading Ollama model.";
+  return cause ? `${base}: ${cause}.` : base;
+}
 
 /**
  * Calls the Ollama /api/chat endpoint.
@@ -36,9 +75,7 @@ export async function callOllama(
         `Request timed out after ${config.timeoutMs}ms. The model may be loading or overloaded.`
       );
     }
-    throw new Error(
-      `Cannot connect to Ollama at ${config.baseUrl}. Make sure Ollama is running.`
-    );
+    throw new Error(describeOllamaConnectFailure(err, config.baseUrl));
   } finally {
     clearTimeout(timer);
   }
@@ -133,9 +170,7 @@ export async function callOllamaChat(
         `Request timed out after ${config.timeoutMs}ms. The model may be loading or overloaded.`
       );
     }
-    throw new Error(
-      `Cannot connect to Ollama at ${config.baseUrl}. Make sure Ollama is running.`
-    );
+    throw new Error(describeOllamaConnectFailure(err, config.baseUrl));
   } finally {
     clearTimeout(timer);
   }
@@ -205,7 +240,7 @@ export async function unloadOllamaModel(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Network error unloading Ollama model.",
+      error: describeOllamaUnloadFailure(err),
     };
   }
 }
@@ -225,7 +260,7 @@ export async function fetchOllamaModelNames(
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Connection timed out. Make sure Ollama is running.");
     }
-    throw new Error("Could not reach Ollama. Make sure Ollama is running.");
+    throw new Error(describeOllamaModelListFailure(err));
   } finally {
     clearTimeout(timer);
   }
