@@ -1,6 +1,50 @@
 # MikAI Project State
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
+
+## `LLM.ERROR.CAUSE.2` — le reste du dépôt jetait encore la cause
+
+`LLM.ERROR.CAUSE.1` avait câblé `extractFetchErrorCause` sur trois chemins.
+Il en restait six, corrigés le 2026-09-17 (`e4786a2`). Aucune migration,
+aucune dépendance.
+
+`fetchOpenAICompatibleModelNames`, `callOllama`, `callOllamaChat`,
+`fetchOllamaModelNames`, `unloadOllamaModel` — qui renvoie toujours
+`{ ok: false, error }` sans jeter — et `fetchOpenRouterImageModels`.
+
+**Ce qu'a appris la préparation du ticket.** La note d'arbitrage laissée par
+`LLM.ERROR.CAUSE.1` désignait « les deux `catch` de
+`testOpenAICompatibleConnection` », le bouton « test de connexion » des
+réglages. Lecture faite, cette fonction n'appelle aucun `fetch` : ses deux
+`catch` relaient le `err.message` produit par `fetchOpenAICompatibleModelNames`
+et par `callOpenAICompatibleChat`. Corriger la ligne du dessous a suffi, et la
+toucher elle aurait été du bruit. **Une note d'arbitrage est une piste, pas un
+constat** — elle est écrite en fin de ticket, hors périmètre, donc sans que le
+code ait été ouvert. Relire avant d'en faire un périmètre.
+
+**Où vit la fonction.** Elle est sortie dans `src/lib/llm/fetchErrorCause.ts`,
+corps inchangé. La faire importer depuis `openaiCompatible.ts` aurait fait
+dépendre le transport Ollama du transport OpenAI sans raison. Le module neuf
+n'a pas d'`import "server-only"` — `openrouterImages.ts` l'a, `ollama.ts` ne
+l'a pas, et l'ajouter aurait cassé le second. `openaiCompatible.ts` ne la
+ré-exporte plus : un seul propriétaire, un seul chemin d'import.
+
+**Pourquoi cinq fonctions et pas une.** `describeConnectionFailure` n'était
+réutilisable sur aucun des six : chaque site a sa propre formulation **sans
+cause**, et le ticket gelait ces textes au byte près pour ne rien régresser.
+Une fonction unique aurait uniformisé les messages — un changement que
+personne n'avait demandé, dans un ticket qui ne le disait pas.
+
+11 tests neufs, écrits rouges avant de toucher au moindre `catch`, chacun
+prouvé par mutation (la fonction rendue sans cause, au moins un test tombe).
+Suite complète 2101 → 2112, aucune assertion existante modifiée. Les 11
+erreurs `@typescript-eslint/no-explicit-any` de `openaiCompatible.ts`
+préexistent au ticket, reconstatées après `git stash -u`, laissées intactes.
+
+Reste tel quel, et assumé : `unloadOllamaModel` rend
+`fetch failed: SELF_SIGNED_CERT_IN_CHAIN.`, moins soigné que les autres parce
+que sa base est l'ancien `err.message` brut. C'est un chemin de coulisses
+(libération de VRAM), pas un écran de diagnostic.
 
 ## `LLM.ERROR.CAUSE.1` — un message d'erreur qui accusait le mauvais coupable
 

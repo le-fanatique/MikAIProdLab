@@ -27,15 +27,32 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
+**Aucun ticket de code en cours.** Le seul chantier ouvert est `P1` de
+`DEVOPS.LINUX.PORT.1` — le déroulé sur la machine Ubuntu et la validation
+manuelle de `P0.3`, que seul l'auteur peut faire. Voir plus bas.
+
+**`LLM.ERROR.CAUSE.2` — CLOS le 2026-09-17**, un commit `e4786a2`, aucune
+migration, aucune dépendance. Les six chemins de `fetch` que
+`LLM.ERROR.CAUSE.1` avait laissés nomment à leur tour la cause réelle :
+`fetchOpenAICompatibleModelNames` — ce qui répare du même coup le bouton
+« test de connexion » des réglages, qui ne fait aucun `fetch` et ne faisait que
+relayer ce message —, `callOllama`, `callOllamaChat`, `fetchOllamaModelNames`,
+`unloadOllamaModel` et `fetchOpenRouterImageModels`. `extractFetchErrorCause`
+vit maintenant dans `src/lib/llm/fetchErrorCause.ts`, corps inchangé, pour
+qu'`ollama.ts` et `openrouterImages.ts` l'utilisent sans dépendre du transport
+OpenAI. Sans cause résolvable, chaque message reste byte-identique. 11 tests
+neufs, chacun prouvé par mutation ; suite 2101 → 2112.
+
 **`LLM.ERROR.CAUSE.1` — CLOS le 2026-09-16**, un commit `0524e06`, aucune
 migration, aucune dépendance. Les trois chemins d'échec de
 `src/lib/llm/openaiCompatible.ts` nomment la cause réelle d'un `fetch` raté —
 `SELF_SIGNED_CERT_IN_CHAIN`, `ENOTFOUND`, `ECONNREFUSED` — au lieu de la jeter
 derrière `Check your settings.`. Né du coût de `DEVOPS.TLS.SYSTEMCA.1` : toute
 son enquête était évitable, la cause était dans `err.cause` depuis le début. Le
-même défaut subsiste dans `ollama.ts`, `openrouterImages.ts` et le bouton de
-test de connexion des réglages — nommés, hors périmètre, en attente d'un
-arbitrage de l'auteur. Ce que ça a coûté à apprendre : `docs/PROJECT_STATE.md`.
+même défaut subsistait dans `ollama.ts`, `openrouterImages.ts` et le bouton de
+test de connexion des réglages ; l'auteur a arbitré le 2026-09-16 et
+`LLM.ERROR.CAUSE.2` les a couverts. Ce que ça a coûté à apprendre :
+`docs/PROJECT_STATE.md`.
 
 **`DEVOPS.TLS.SYSTEMCA.1` — CLOS le 2026-09-16**, un commit `48fea9a`, aucune
 migration, aucune dépendance. `npm run dev`, `dev:host` et `start` passent par
