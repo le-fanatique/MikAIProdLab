@@ -1,6 +1,70 @@
 # MikAI Project State
 
-Last updated: 2026-09-13
+Last updated: 2026-09-16
+
+## `DEVOPS.TLS.SYSTEMCA.1` — Node ne lit pas le magasin de certificats de l'OS
+
+Les scripts `dev`, `dev:host` et `start` passent par `scripts/with-system-ca.mjs`,
+qui ajoute `--use-system-ca` à `NODE_OPTIONS` avant de lancer `next` (`48fea9a`,
+2026-09-16). Aucune migration, aucune dépendance.
+
+### Ce que ça a coûté à apprendre
+
+**Le message d'erreur désignait le mauvais coupable, et c'est ça qui a coûté
+cher.** Le symptôme était `✗ Cannot connect to LLM server at
+https://openrouter.ai/api/v1. Check your settings.` — une phrase qui envoie
+chercher dans les réglages MikAI, la clé API et le réseau, alors qu'aucun des
+trois n'était en cause. Elle vient de `src/lib/llm/openaiCompatible.ts`, qui
+attrape **toute** exception non-`AbortError` du `fetch` et la remplace par ce
+texte, en jetant `err.cause`. Un seul `err.cause.code` dans le message aurait
+affiché `SELF_SIGNED_CERT_IN_CHAIN` et donné la réponse immédiatement.
+
+**La cause.** Kaspersky intercepte le HTTPS et resigne les certificats avec
+`CN=Kaspersky Anti-Virus Personal Root Certificate`. Ce root est dans le
+magasin Windows. `curl` et le navigateur le lisent, donc ils rendent HTTP 200 ;
+Node lit son propre bundle CA compilé, ignore le magasin de l'OS, et rejette la
+chaîne. D'où le piège de diagnostic : **tout ce qu'on utilise pour vérifier « le
+réseau marche » marche, et seul Node casse.**
+
+Le contraste qui tranche, à garder pour la prochaine fois :
+
+```text
+node -e "fetch('https://openrouter.ai/api/v1/models')…"     → FAIL SELF_SIGNED_CERT_IN_CHAIN
+NODE_OPTIONS=--use-system-ca node -e "…"                     → OK 200
+```
+
+**Pourquoi ça marchait avant.** `Kaspersky 21.26` s'est installé le 2026-08-08
+et mis à jour le 2026-09-16 ; l'analyse des connexions chiffrées est venue avec.
+Aucun contournement CA n'avait jamais existé dans le dépôt — `git log -S` et
+`git grep` sur `NODE_EXTRA_CA_CERTS`, `use-system-ca` et
+`NODE_TLS_REJECT_UNAUTHORIZED` ne rendent rien.
+
+**Pourquoi le correctif est dans le dépôt et pas dans l'environnement.**
+Demande explicite de l'auteur : un clone sur un autre ordinateur doit
+fonctionner sans manipulation. Une variable posée à la main ou un `.pem` exporté
+hors du dépôt ne survivent pas au clone. Les deux ont été proposés et écartés
+pour cette raison.
+
+**Deux choix du lanceur qui ne sont pas des détails :**
+
+- **le support du flag est détecté par un essai réel**, pas par un numéro de
+  version : un Node qui ne connaît pas `--use-system-ca` refuse de démarrer si
+  on le lui passe. En cas d'absence, avertissement puis démarrage quand même —
+  un lanceur qui refuse de lancer l'application est pire que le défaut qu'il
+  corrige ;
+- **`NODE_OPTIONS` existant est préservé, jamais écrasé**, et le flag n'est pas
+  doublé s'il est déjà là. C'est la seule logique du ticket qui méritait un
+  filet, et les deux mutations imposées ont fait tomber 2 tests sur 4 puis 1 sur
+  4.
+
+`npx next` et non `next` : hors d'un contexte de script npm, `node_modules/.bin`
+n'est pas dans le `PATH`, et la commande de preuve échouait. Même motif que
+`scripts/run-prod-lab.mjs` pour le sidecar OpenReel.
+
+**Ce qui reste ouvert.** Les trois sites de `src/lib/llm/openaiCompatible.ts`
+(lignes 72, 147, 372) avalent toujours la cause réelle. Toute panne TLS ou
+réseau future réaffichera la même phrase trompeuse. Ticket séparé,
+`LLM.ERROR.CAUSE.1`.
 
 ## `DEVOPS.CONFIG.LOOPBACK.1` — un avertissement, et la discipline de ne pas en faire du bruit
 

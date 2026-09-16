@@ -27,6 +27,16 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
+**`DEVOPS.TLS.SYSTEMCA.1` — CLOS le 2026-09-16**, un commit `48fea9a`, aucune
+migration, aucune dépendance. `npm run dev`, `dev:host` et `start` passent par
+`scripts/with-system-ca.mjs`, qui ajoute `--use-system-ca` à `NODE_OPTIONS`
+avant de lancer `next`. Sans ça, un intercepteur HTTPS local — Kaspersky ici —
+resigne le trafic avec un root CA que Node ignore, et **tout** appel LLM
+sortant échoue en `SELF_SIGNED_CERT_IN_CHAIN` sous le message trompeur
+`Cannot connect to LLM server`. Le correctif vit dans le dépôt pour qu'un clone
+sur une autre machine marche sans manipulation. Ce que ça a coûté à apprendre,
+et le contraste de diagnostic à réutiliser : `docs/PROJECT_STATE.md`.
+
 **`DEVOPS.CONFIG.LOOPBACK.1` — CLOS le 2026-09-13**, un commit `431dc00`,
 aucune migration, aucune dépendance. `config:import` nomme désormais les
 réglages d'URL dont l'hôte est une boucle locale — `comfyui_base_url`,
