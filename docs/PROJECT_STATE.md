@@ -2,6 +2,53 @@
 
 Last updated: 2026-09-16
 
+## `LLM.ERROR.CAUSE.1` — un message d'erreur qui accusait le mauvais coupable
+
+Les trois chemins d'échec de `src/lib/llm/openaiCompatible.ts` nomment désormais
+la cause réelle d'un `fetch` raté au lieu de la jeter (`0524e06`, 2026-09-16).
+Aucune migration, aucune dépendance.
+
+```text
+avant : Cannot connect to LLM server at <url>. Check your settings.
+après : Cannot connect to LLM server at <url>: SELF_SIGNED_CERT_IN_CHAIN. Check your settings.
+```
+
+### Ce que ça a coûté à apprendre
+
+**Ce ticket est né du coût d'un autre.** `DEVOPS.TLS.SYSTEMCA.1` a demandé une
+enquête complète — magasin de certificats, comparaison `curl` contre Node,
+dates d'installation de l'antivirus — pour un correctif de trois lignes. Toute
+cette enquête était évitable : `SELF_SIGNED_CERT_IN_CHAIN` était dans
+`err.cause` depuis la première seconde, et le `catch` l'a remplacé par une
+phrase qui désigne les réglages MikAI. **Un message d'erreur qui accuse le
+mauvais composant ne fait pas perdre une minute, il fait perdre une enquête.**
+
+**Ce que la fonction refuse est aussi important que ce qu'elle rend.** Elle ne
+rend jamais `"fetch failed"` : c'est le message du `TypeError` de surface de
+Node, il ne dit rien de plus que « l'appel a échoué », et l'afficher aurait
+recréé le défaut corrigé, avec en plus l'apparence d'un diagnostic. La reprise
+de revue a porté exactement là-dessus — la première version rejetait ce
+littéral quand il arrivait comme `message` d'un objet et l'acceptait quand il
+arrivait comme `cause` chaîne. Même valeur, deux traitements.
+
+**Une règle, un endroit.** Les trois `catch` passent par un seul
+`describeConnectionFailure`. Trois copies d'une même règle sont le défaut
+récurrent de ce dépôt (`mikai-method` §10b) ; le ticket existait en partie pour
+ne pas en créer une quatrième.
+
+Détails de la fonction : descente de la chaîne `err.cause` plafonnée à cinq
+niveaux, garde de cycle par `Set`, préférence de `code` sur `message`,
+troncature à 200 caractères, `unknown` en entrée et jamais de `throw` — elle ne
+tourne que dans un `catch`, où rien n'est garanti sur la valeur lancée.
+
+**Ce qui reste ouvert, et le cas qui pique.** Le même défaut vit encore dans
+`ollama.ts` (`callOllama`, la seconde fonction d'appel chat,
+`fetchOllamaModelNames`, `unloadOllamaModel`), dans `openrouterImages.ts`, et
+dans `testOpenAICompatibleConnection` — **le bouton « test de connexion » des
+réglages**, c'est-à-dire précisément l'endroit où l'utilisateur va chercher un
+diagnostic quand quelque chose ne marche pas. Nommés et volontairement non
+corrigés : le ticket les mettait hors périmètre. Décision de l'auteur.
+
 ## `DEVOPS.TLS.SYSTEMCA.1` — Node ne lit pas le magasin de certificats de l'OS
 
 Les scripts `dev`, `dev:host` et `start` passent par `scripts/with-system-ca.mjs`,

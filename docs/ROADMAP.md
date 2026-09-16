@@ -27,6 +27,16 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
+**`LLM.ERROR.CAUSE.1` — CLOS le 2026-09-16**, un commit `0524e06`, aucune
+migration, aucune dépendance. Les trois chemins d'échec de
+`src/lib/llm/openaiCompatible.ts` nomment la cause réelle d'un `fetch` raté —
+`SELF_SIGNED_CERT_IN_CHAIN`, `ENOTFOUND`, `ECONNREFUSED` — au lieu de la jeter
+derrière `Check your settings.`. Né du coût de `DEVOPS.TLS.SYSTEMCA.1` : toute
+son enquête était évitable, la cause était dans `err.cause` depuis le début. Le
+même défaut subsiste dans `ollama.ts`, `openrouterImages.ts` et le bouton de
+test de connexion des réglages — nommés, hors périmètre, en attente d'un
+arbitrage de l'auteur. Ce que ça a coûté à apprendre : `docs/PROJECT_STATE.md`.
+
 **`DEVOPS.TLS.SYSTEMCA.1` — CLOS le 2026-09-16**, un commit `48fea9a`, aucune
 migration, aucune dépendance. `npm run dev`, `dev:host` et `start` passent par
 `scripts/with-system-ca.mjs`, qui ajoute `--use-system-ca` à `NODE_OPTIONS`
