@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:host": "next dev -H 0.0.0.0 -p 3000",
+    "dev": "node scripts/with-system-ca.mjs dev",
+    "dev:host": "node scripts/with-system-ca.mjs dev -H 0.0.0.0 -p 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/with-system-ca.mjs start",
     "lint": "eslint",
     "test": "vitest run",
     "test:repeat": "node scripts/test-repeat.mjs",
