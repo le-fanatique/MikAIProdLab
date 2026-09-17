@@ -6,6 +6,7 @@ import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import { updateShotReferenceImage } from "@/actions/shotReferenceImages";
+import { pushShotReferenceImageToInvoke } from "@/actions/invoke";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getReferenceImageRoleGroups } from "@/lib/referenceImageRoles";
 
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ projectId: string; sequenceId: string; shotId: string; imageId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; invokeError?: string; invokePushed?: string; invokeBoardName?: string; invokeUrl?: string }>;
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -34,7 +35,7 @@ const labelClass = "text-xs font-medium uppercase tracking-wider text-[#6e767d]"
 
 export default async function EditShotReferenceImagePage({ params, searchParams }: Props) {
   const { projectId, sequenceId, shotId, imageId } = await params;
-  const { error } = await searchParams;
+  const { error, invokeError, invokePushed, invokeBoardName, invokeUrl } = await searchParams;
   const pid = parseInt(projectId, 10);
   const sid = parseInt(sequenceId, 10);
   const shid = parseInt(shotId, 10);
@@ -56,6 +57,7 @@ export default async function EditShotReferenceImagePage({ params, searchParams 
   if (!image || image.shotId !== shid) notFound();
 
   const action = updateShotReferenceImage.bind(null, iid, shid, sid, pid);
+  const pushToInvokeAction = pushShotReferenceImageToInvoke;
 
   return (
     <div>
@@ -82,6 +84,29 @@ export default async function EditShotReferenceImagePage({ params, searchParams 
         </div>
       )}
 
+      {invokeError && (
+        <div className="mb-5 rounded border border-[#cf7b6b]/30 bg-[#cf7b6b]/5 px-4 py-3">
+          <p className="text-sm text-[#cf7b6b]">{invokeError}</p>
+        </div>
+      )}
+
+      {invokePushed === "1" && invokeBoardName && invokeUrl && (
+        <div className="mb-5 rounded border border-[#6b9e72]/30 bg-[#6b9e72]/5 px-4 py-3 flex flex-col gap-2">
+          <p className="text-sm text-[#6b9e72]">
+            Sent to Invoke board &quot;{invokeBoardName}&quot;. Right-click it → New Canvas from Image. When done,
+            right-click the layer → Run Workflow → Send to MikAI.
+          </p>
+          <a
+            href={invokeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors w-fit"
+          >
+            Open Invoke ↗
+          </a>
+        </div>
+      )}
+
       <div className="mb-5 max-w-lg">
         <p className={`${labelClass} mb-2`}>Current Image</p>
         <img
@@ -89,6 +114,23 @@ export default async function EditShotReferenceImagePage({ params, searchParams 
           alt={image.label ?? image.sourceFilename ?? "Reference image"}
           className="rounded border border-[#2c3035] max-h-48 object-contain bg-[#141618]"
         />
+        <form action={pushToInvokeAction} className="mt-3">
+          <input type="hidden" name="projectId" value={pid} />
+          <input type="hidden" name="sequenceId" value={sid} />
+          <input type="hidden" name="shotId" value={shid} />
+          <input type="hidden" name="imageId" value={iid} />
+          <input
+            type="hidden"
+            name="returnTo"
+            value={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/${iid}/edit`}
+          />
+          <button
+            type="submit"
+            className="rounded border border-[#2c3035] text-[#a4abb2] px-3 py-1.5 text-sm hover:border-[#3a4046] hover:text-[#e7e9ec] transition-colors"
+          >
+            Push to Invoke
+          </button>
+        </form>
       </div>
 
       <form action={action} className="flex flex-col gap-5 max-w-lg">

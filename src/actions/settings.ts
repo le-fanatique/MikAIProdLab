@@ -12,6 +12,8 @@ import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
 import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
 import { COMFY_CLOUD_BASE_URL, isKnownLLMProvider } from "@/lib/settings";
 import { getCloudObjectInfo } from "@/lib/comfy/comfyCloudClient";
+import { normalizeInvokeBaseUrl, getInvokeAppVersion, assertInvokeSingleUser, getConfiguredInvokeBaseUrl } from "@/lib/invoke/invokeServerClient";
+import { ensureSendToMikaiWorkflowInstalled } from "@/lib/invoke/invokeWorkflowInstall";
 import {
   addPreset,
   deletePreset,
@@ -406,6 +408,106 @@ export async function saveOpenReelSidecarUrl(
     return { ok: true, value: cleaned };
   } catch {
     return { ok: false, error: "Failed to save OpenReel Sidecar URL. Please try again." };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Save InvokeAI base URL / Test Connection (INVOKE.PUSH.1)
+// ---------------------------------------------------------------------------
+
+const INVOKE_BASE_URL_DEFAULT = "http://127.0.0.1:9090";
+
+export async function saveInvokeBaseUrl(
+  url: string
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    // Empty on save restores the fallback rather than storing an unusable value.
+    await upsertSetting("invoke_base_url", INVOKE_BASE_URL_DEFAULT);
+    return { ok: true, value: INVOKE_BASE_URL_DEFAULT };
+  }
+
+  let cleaned: string;
+  try {
+    cleaned = normalizeInvokeBaseUrl(trimmed);
+  } catch {
+    return { ok: false, error: "Invalid URL. Must start with http:// or https://." };
+  }
+
+  try {
+    await upsertSetting("invoke_base_url", cleaned);
+    return { ok: true, value: cleaned };
+  } catch {
+    return { ok: false, error: "Failed to save Invoke URL. Please try again." };
+  }
+}
+
+/**
+ * INVOKE.PUSH.1-FIX1 — the browser-facing Invoke URL (see
+ * `src/lib/invoke/invokePublicBaseUrl.ts`). Empty is a **valid stored value**
+ * here, and the common one: it means "the browser reaches Invoke at the same
+ * URL the server does". So, unlike `saveInvokeBaseUrl`, clearing this field
+ * stores nothing rather than restoring a default.
+ */
+export async function saveInvokePublicBaseUrl(
+  url: string
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    try {
+      await upsertSetting("invoke_public_base_url", "");
+      return { ok: true, value: "" };
+    } catch {
+      return { ok: false, error: "Failed to save the public Invoke URL. Please try again." };
+    }
+  }
+
+  let cleaned: string;
+  try {
+    cleaned = normalizeInvokeBaseUrl(trimmed);
+  } catch {
+    return { ok: false, error: "Invalid URL. Must start with http:// or https://." };
+  }
+
+  try {
+    await upsertSetting("invoke_public_base_url", cleaned);
+    return { ok: true, value: cleaned };
+  } catch {
+    return { ok: false, error: "Failed to save the public Invoke URL. Please try again." };
+  }
+}
+
+/**
+ * §1.3 — calls `GET /api/v1/app/version`, writes nothing about connectivity
+ * itself. On success, §1.4's "installed at the first successful Test
+ * Connection" is honored here: if no "Send to MikAI" workflow id is stored
+ * yet, one is installed now (with no board default — no entity has been
+ * pushed yet). A failure to install the workflow does not turn a successful
+ * connection test into a failure; it is reported alongside the version.
+ */
+export async function testInvokeConnection(): Promise<
+  { ok: true; message: string } | { ok: false; error: string }
+> {
+  let version: string;
+  try {
+    const baseUrl = await getConfiguredInvokeBaseUrl();
+    await assertInvokeSingleUser(baseUrl);
+    const result = await getInvokeAppVersion();
+    version = result.version;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: `InvokeAI connection failed: ${message}` };
+  }
+
+  try {
+    await ensureSendToMikaiWorkflowInstalled(null);
+    return { ok: true, message: `InvokeAI connection successful (version ${version}).` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return {
+      ok: true,
+      message: `InvokeAI connection successful (version ${version}), but installing the "Send to MikAI" workflow failed: ${message}`,
+    };
   }
 }
 

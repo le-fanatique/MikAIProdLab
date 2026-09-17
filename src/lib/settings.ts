@@ -3,6 +3,7 @@ import { appSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { LLMConfig, LLMProvider, ProviderSettings } from "@/types/llm";
 import type { RuntimeProvider } from "@/lib/comfy/runtimeProvider";
+import { resolveInvokePublicBaseUrl } from "@/lib/invoke/invokePublicBaseUrl";
 import { normalizeRuntimeProvider } from "@/lib/comfy/runtimeProvider";
 
 // ---------------------------------------------------------------------------
@@ -646,6 +647,61 @@ export async function getOpenReelSidecarUrl(): Promise<string> {
   if (fromEnv) return fromEnv;
 
   return OPENREEL_SIDECAR_URL_DEFAULT;
+}
+
+// ---------------------------------------------------------------------------
+// InvokeAI base URL (INVOKE.PUSH.1)
+// ---------------------------------------------------------------------------
+
+const INVOKE_BASE_URL_DEFAULT = "http://127.0.0.1:9090";
+
+/**
+ * Full URL (protocol + host + port, no trailing slash) of the InvokeAI
+ * instance MikAI pushes images to and installs the "Send to MikAI" workflow
+ * on. Modeled on `getOpenReelSidecarUrl` above, minus its env-var
+ * fallback: unlike OpenReel, no prior configuration mechanism exists for
+ * Invoke, so there is no legacy env var to honor.
+ *
+ * Priority: DB setting -> hardcoded 127.0.0.1:9090 default (InvokeAI's own
+ * default port, verified against the installed 6.14.0 `invokeai.yaml` on
+ * 2026-09-17, which carries no user override).
+ */
+export async function getInvokeBaseUrl(): Promise<string> {
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, "invoke_base_url"));
+  const stored = rows[0]?.value?.trim().replace(/\/+$/, "");
+  if (stored) return stored;
+
+  return INVOKE_BASE_URL_DEFAULT;
+}
+
+/**
+ * INVOKE.PUSH.1-FIX1 — the URL the *browser* uses to open Invoke's own UI
+ * after a push, which is not always the one the MikAI server calls. Empty
+ * (the default) means "same as `getInvokeBaseUrl()`"; it is filled in only
+ * when MikAI is reached remotely — a Cloudflare tunnel, Tailscale, a LAN
+ * address — where a loopback URL would give the browser a tab it cannot
+ * open. Same split, same reason, as `getOpenReelSidecarUrl` /
+ * `getMikAIPublicBaseUrl`. Resolution rule:
+ * `src/lib/invoke/invokePublicBaseUrl.ts`.
+ */
+export async function getInvokePublicBaseUrl(): Promise<string> {
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, "invoke_public_base_url"));
+  return resolveInvokePublicBaseUrl(rows[0]?.value, await getInvokeBaseUrl());
+}
+
+/** The raw stored value, empty when unset — what the settings form must show, as opposed to the resolved URL above. */
+export async function getStoredInvokePublicBaseUrl(): Promise<string> {
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, "invoke_public_base_url"));
+  return rows[0]?.value?.trim().replace(/\/+$/, "") ?? "";
 }
 
 // ---------------------------------------------------------------------------

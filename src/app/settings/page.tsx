@@ -10,10 +10,11 @@ import ResearchProviderSettingsForm from "@/components/ResearchProviderSettingsF
 import NomenclatureSettingsForm from "@/components/NomenclatureSettingsForm";
 import OpenReelSidecarSettingsForm from "@/components/OpenReelSidecarSettingsForm";
 import MikAIPublicBaseUrlSettingsForm from "@/components/MikAIPublicBaseUrlSettingsForm";
+import InvokeSettingsForm from "@/components/InvokeSettingsForm";
 import FfmpegHealthCheckForm from "@/components/FfmpegHealthCheckForm";
 import ThemeModeToggle from "@/components/theme/ThemeModeToggle";
 import SettingsTabs from "@/components/SettingsTabs";
-import { getAllLLMSettings, getActiveProvider, getComfySettings, getComfyLocalPresets, getCustomThemePresets, getLLMConfig, getChatProviderInfo, getResearchProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
+import { getAllLLMSettings, getActiveProvider, getComfySettings, getComfyLocalPresets, getCustomThemePresets, getLLMConfig, getChatProviderInfo, getResearchProviderInfo, getNomenclatureSettings, getOpenReelSidecarUrl, getMikAIPublicBaseUrl, getInvokeBaseUrl, getStoredInvokePublicBaseUrl, COMFY_CLOUD_BASE_URL } from "@/lib/settings";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { saveWorkflowDefaults } from "@/actions/settings";
 import { fetchLLMModelNames } from "@/lib/llm";
@@ -44,6 +45,8 @@ export default async function SettingsPage({ searchParams }: Props) {
   const nomenclatureSettings = await getNomenclatureSettings();
   const openReelSidecarUrl = await getOpenReelSidecarUrl();
   const mikaiPublicBaseUrl = await getMikAIPublicBaseUrl();
+  const invokeBaseUrl = await getInvokeBaseUrl();
+  const invokePublicBaseUrl = await getStoredInvokePublicBaseUrl();
 
   const [{ workflowCount }, allWorkflows, defaults, { llmTemplateCount }] = await Promise.all([
     db.select({ workflowCount: sql<number>`count(*)` }).from(comfyWorkflows).then(([r]) => r),
@@ -464,6 +467,10 @@ export default async function SettingsPage({ searchParams }: Props) {
                   <div className="border-t border-[#232629] pt-6">
                     <MikAIPublicBaseUrlSettingsForm initialUrl={mikaiPublicBaseUrl} />
                   </div>
+                </Card>
+
+                <Card title="Image Editor (InvokeAI)" className="mb-6">
+                  <InvokeSettingsForm initialUrl={invokeBaseUrl} initialPublicUrl={invokePublicBaseUrl} />
                 </Card>
               </>
             ),

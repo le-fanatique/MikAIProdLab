@@ -1,0 +1,78 @@
+import { int, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+
+// ---------------------------------------------------------------------------
+// INVOKE.PUSH.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §5, §6.
+//
+// "The Invoke board is the return address": every MikAI entity that can push
+// an image to InvokeAI owns exactly one board there, and any image landing
+// in that board is understood to belong back to that entity (lot 2 reads
+// this table to poll; lot 1 only ever creates/reads it).
+//
+// This lot only ever writes `ownerType` "shot" / "asset" (lot 3 widens the
+// enum to sequence storyboard / project style / … — do not pre-add those
+// values speculatively here, docs/INVOKE_ROUNDTRIP_SPEC.md §8 keeps them out
+// of scope for this ticket).
+// ---------------------------------------------------------------------------
+
+export const invokeBoards = sqliteTable(
+  "invoke_boards",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    ownerType: text("owner_type", { enum: ["shot", "asset"] }).notNull(),
+    ownerId: int("owner_id").notNull(),
+    /** InvokeAI's own board id (its `board_id`, a string, never MikAI's `id`). */
+    boardId: text("board_id").notNull(),
+    boardName: text("board_name").notNull(),
+    /**
+     * Last total image count this board was seen to have (§5.3's count-only
+     * poll: `GET /api/v1/images/?board_id=…&limit=0`). Column posed now,
+     * written and read starting lot 2 — this ticket only ever inserts 0 and
+     * never re-reads it.
+     */
+    lastKnownImageCount: int("last_known_image_count").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [
+    // One board per owning entity.
+    unique("invoke_boards_owner_unique").on(table.ownerType, table.ownerId),
+    // One entity per Invoke board — a board id InvokeAI issued is never
+    // shared between two MikAI entities.
+    unique("invoke_boards_board_id_unique").on(table.boardId),
+  ]
+);
+
+export type InvokeBoard = typeof invokeBoards.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// What MikAI has pushed to Invoke — so lot 2's import never re-imports an
+// image MikAI itself just sent out. The unique constraint on `imageName` is
+// what carries the idempotence (docs/INVOKE_ROUNDTRIP_SPEC.md §6,
+// `generation_job_outputs_job_index_unique` named as the precedent), not an
+// application-level check.
+// ---------------------------------------------------------------------------
+
+export const invokePushedImages = sqliteTable(
+  "invoke_pushed_images",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    invokeBoardId: int("invoke_board_id")
+      .notNull()
+      .references(() => invokeBoards.id, { onDelete: "cascade" }),
+    /** InvokeAI's `image_name` for the pushed image — unique: a given Invoke image is only ever pushed once by MikAI. */
+    imageName: text("image_name").notNull(),
+    /** The MikAI-side source path of the image that was pushed (public/-relative, like every other stored reference path in this repository). */
+    sourceImagePath: text("source_image_path").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("invoke_pushed_images_image_name_unique").on(table.imageName)]
+);
+
+export type InvokePushedImage = typeof invokePushedImages.$inferSelect;
