@@ -25,7 +25,14 @@ instruction or modified.
 4. Implement the smallest complete change the ticket describes. Remove
    replaced code in the same diff unless the ticket requires a compatibility
    path.
-5. Run the ticket's checks, in the order the ticket lists them.
+5. Run the ticket's checks, in the order the ticket lists them. Your tier is
+   the **standard** one of `.agents/SUPERVISION_PROTOCOL.md` §2b: targeted
+   tests on every behaviour the ticket changes, mutation on each, then
+   `tsc --noEmit`, the whole suite, the build. §2b also lists what is **not**
+   worth a test — do not add one the compiler already proves, one that asserts
+   a fixture against itself, or one per branch where one per behaviour is
+   enough. Never lighten §2b's floor: writes to user data, migrations,
+   ownership and confinement guards, paid calls, pure decision functions.
 6. Remove any temporary harness, script, or process you created.
 7. Write `.agents/executor_report.md` and stop.
 

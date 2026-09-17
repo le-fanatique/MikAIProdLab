@@ -59,6 +59,84 @@ Do **not** use it for:
 The test: **if the ticket cannot state a check that proves it correct, it does
 not belong in this protocol.**
 
+## 2b. How Much Proof A Ticket Buys
+
+Added 2026-09-17, on the user's decision. Proof costs tokens, and tokens spent
+proving something that could not plausibly break are tokens not spent on the
+work. **Proof is sized to what a bug would cost the user, not to the size of
+the diff.** This section says how to size it, and what may never be sized down.
+
+### The floor — never lightened, whoever implements
+
+Whatever the model, whatever the ticket, these keep a characterization test
+**and** a mutation that proves it fails:
+
+- any path that **writes or deletes user data** — a DB mutation, a file
+  overwrite, an unlink;
+- any **migration**, and any code reading a column it adds;
+- any **ownership, confinement or authorization guard** (`projectId` checks,
+  path confinement, "is this row mine");
+- anything that **spends the user's money** — a paid model call, a paid
+  browser run;
+- any **pure decision function** a feature's correctness rests on: targeting,
+  ordering, resolution, eligibility.
+
+This list is not a principle, it is a scar list. `updateShot` silently stopped
+writing `camera_pitch` with 358 tests green. Five shots were parsed as
+intervals they were not. A batch list went stale and re-paid a model call. Each
+one sits in a category above.
+
+### The three tiers
+
+| Tier | When | What it costs |
+| --- | --- | --- |
+| **Standard** | `mikai-executor` (Sonnet) implements | Targeted tests on every behaviour the ticket changes, mutation on each, then `tsc --noEmit`, whole suite, build |
+| **Light** | The **supervisor (Opus)** implements the ticket itself | The floor above, fully. Beyond it: one test per behaviour actually at risk, no mutation, and `tsc --noEmit` + the targeted test paths. The whole suite and the build run **once, before the commit**, not after each edit |
+| **Heavy** | Migration, deletion path, or a contract a later phase inherits | Standard, plus verification against real data on a consistent snapshot, plus a stated rollback |
+
+**Why the supervisor's own work is proved more lightly.** A large part of the
+standard tier exists to catch a cheaper model misreading a ticket it did not
+write. When the supervisor implements, that reader and that author are the same
+actor, holding the whole contract, reviewing as it writes. That specific risk
+is gone, so the test that only guarded against it buys less than it costs.
+**Nothing else changes.** A regression on a user-visible path is exactly as
+expensive whichever model produced it — which is what the floor is for, and why
+the floor is stated before the tiers and not after.
+
+The tier is **not** a licence to skip the net on work the supervisor took
+precisely because it was risky (§3, Arbitration). Work lands in the
+supervisor's hands for two opposite reasons: it is contract-defining (light
+tier, because no test can prove it anyway — the review is the proof), or it is
+dangerous (heavy tier). Read which one applies before lightening anything.
+
+### Not worth a test — say so instead of writing one
+
+Write the cheaper check, or none, when:
+
+- **`tsc` already proves it.** A test asserting that a typed field exists, or
+  that a union is exhaustive, proves the compiler runs;
+- **the assertion is a fixture reproducing itself** — a snapshot of a constant,
+  a string equality against the literal three lines above;
+- **the branch is unreachable from any caller.** Prove the caller instead;
+- **the code is a presentational extraction** with no state and no decision:
+  `tsc` across the seam is the proof (`mikai-method` §5);
+- **nobody calls the module.** A net pays the day the code is modified;
+  untouched code costs nothing (`mikai-method` §8);
+- **one test covers three branches of one behaviour.** One test per behaviour,
+  not one per branch.
+
+Paid browser validation runs only where **rendering or interaction is the
+deliverable**, on a throwaway project, with the cost reported. An engine-only
+ticket gets none.
+
+### It is stated, not silent
+
+The ticket names its tier and its reason, in one line. The review
+(`.agents/supervisor_review.md`) says which tier was applied and what was
+deliberately not tested. **A proof that was skipped is written down as
+skipped** — §7 does not bend for economy. The difference between a sized proof
+and a thin one is whether the omission is named.
+
 ## 3. Roles
 
 ### Supervisor (Opus, main thread)

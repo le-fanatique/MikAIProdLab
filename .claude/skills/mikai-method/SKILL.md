@@ -46,6 +46,15 @@ This is not ceremony. It has caught real gaps in this repository:
 
 Report which mutations were run and how many tests each one broke.
 
+**How much of this a given ticket buys is sized, not uniform** — added
+2026-09-17 on the user's decision. `.agents/SUPERVISION_PROTOCOL.md` §2b holds
+the sizing: a floor that never lightens (writes to user data, migrations,
+ownership and confinement guards, paid calls, pure decision functions), a
+standard tier for `mikai-executor` work, a lighter one for a ticket the
+supervisor implements itself, and a list of things not worth a test at all.
+Read it before deciding what to prove — and before deciding what not to. The
+floor is where this section's scars live, so nothing in that sizing touches it.
+
 ## 3. Verify against the real data, not against examples
 
 Examples confirm what you already believe. Real rows do not.

@@ -121,7 +121,10 @@ Run targeted tests first. Broaden validation according to risk and the ticket.
 - every new file, export, helper, and package has a real use;
 - no new avoidable duplication, cycle, orphan, or untracked TODO;
 - touched modules are no more indebted than before the change;
-- targeted behavior and failure paths validated;
+- targeted behavior and failure paths validated, **sized by
+  `.agents/SUPERVISION_PROTOCOL.md` §2b** — a floor that never lightens, a
+  standard tier for executor work, a lighter one when the supervisor
+  implements, and a list of what is not worth a test at all;
 - changed TypeScript/JavaScript files pass targeted lint when applicable;
 - required static checks pass;
 - temporary harnesses/processes cleaned up;
