@@ -2,6 +2,50 @@
 
 Last updated: 2026-09-17
 
+## `ASSET.PROMPTCARD.BATCH.2` — une règle produit revisitée plutôt que contournée
+
+Livré le 2026-09-17 (`8666c5d`), aucune migration, aucune dépendance.
+`Apply All Prompt Cards (N)` dans l'état de revue du panneau « Batch Prompt
+Card ».
+
+**Ce que le ticket a eu à trancher d'abord.** `BATCH.1` avait refusé
+l'`Apply All` au nom de §6.1 et §6.3 de
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` — rien d'écrit avant approbation,
+aucune écriture autonome ou silencieuse. La demande de l'auteur obligeait à
+relire la règle plutôt qu'à la contourner. Lecture faite : **un clic après
+que les N propositions ont été rendues à l'écran est une approbation humaine
+explicite**, de N propositions à la fois. Ce qui change est le grain, pas la
+nature. Et §6.1 se déclarait elle-même « binding until explicitly revisited ».
+
+**Donc la règle a été modifiée, pas ignorée.** §6.1 porte un paragraphe daté
+du 2026-09-17 qui autorise un `Apply All` de lot sous trois conditions :
+chaque proposition rendue avant le clic, le contrôle présent dans le seul
+état de revue, et une confirmation avant tout écrasement. La leçon vaut
+au-delà de ce ticket : **quand une demande heurte une règle écrite, le choix
+est de modifier la règle par écrit ou de refuser la demande — jamais de
+livrer un écran qui la contredit en silence.** Un dépôt où l'écran et le
+document divergent ment à la session suivante.
+
+**Le risque réel n'était pas la règle, c'était l'écrasement en masse.** D'où
+la confirmation en place, déclenchée seulement quand au moins une cible porte
+déjà une Prompt Card, et qui nomme le nombre d'écrasements. Pas de
+`window.confirm`, pas de modale : une ligne qui remplace le bouton.
+
+**Une décision, un module, deuxième fois.** `selectApplyAllTargets` décide
+qui est touché — proposition réussie, pas déjà appliquée, dans l'ordre de la
+revue — et marque ce qui écrase. Le composant assemble les trois ensembles et
+lit le résultat. Le chemin d'écriture existant a été extrait en `applyOne`
+sans changer le flux mono-asset, un seul `router.refresh()` clôt la passe, et
+un asset déjà en cours d'écriture individuelle est sauté par le verrou plutôt
+qu'écrit deux fois.
+
+**La preuve n'a plus coûté un asset réel.** Contrairement à `BATCH.1`, le
+ticket imposait de créer des assets jetables. Trois l'ont été, dans un projet
+dédié. C'est la consigne à reconduire dans tout ticket qui demande une preuve
+« en base ».
+
+Suite 2118 → 2125, sept tests neufs prouvés par mutation.
+
 ## `ASSET.PROMPTCARD.BATCH.1` — un batch qui repayait l'appel modèle
 
 Livré le 2026-09-17 (`33622c0`), aucune migration, aucune dépendance. Le

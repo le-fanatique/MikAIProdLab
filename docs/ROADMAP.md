@@ -31,6 +31,17 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 `DEVOPS.LINUX.PORT.1` — le déroulé sur la machine Ubuntu et la validation
 manuelle de `P0.3`, que seul l'auteur peut faire. Voir plus bas.
 
+**`ASSET.PROMPTCARD.BATCH.2` — CLOS le 2026-09-17**, un commit `8666c5d`,
+aucune migration, aucune dépendance. Le panneau « Batch Prompt Card » porte un
+bouton `Apply All Prompt Cards (N)` dans son seul état de revue, avec une
+confirmation en place quand au moins une cible écrase une valeur existante.
+`selectApplyAllTargets` est la seule décision de ciblage, et le composant ne
+la refiltre pas. **`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §6.1 a été
+revisitée par l'auteur** : elle autorise désormais un `Apply All` de lot sous
+trois conditions nommées, au lieu d'être contredite en silence par un écran.
+Le batch d'alignement reste sans `Apply All` — il écrit cinq champs par asset.
+Suite 2118 → 2125.
+
 **`ASSET.PROMPTCARD.BATCH.1` — CLOS le 2026-09-17**, un commit `33622c0`,
 aucune migration, aucune dépendance. Un panneau repliable « Batch Prompt Card »
 sur la page Assets propose une Prompt Card pour une sélection d'assets, sur le
