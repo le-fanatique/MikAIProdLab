@@ -1,6 +1,92 @@
 # MikAI Project State
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
+
+## `INVOKE.PUSH.2` — un bouton là où l'auteur regarde, et une leçon sur l'hydratation
+
+Livré le 2026-09-18 (`b82d7e9`), aucune migration, aucune dépendance.
+
+**Ce que le ticket a livré.** `Push to Invoke` à côté de `Delete` dans les
+listes d'images de référence (asset, shot), et sur les deux storyboards. Un
+brouillon de shot (`storyboard_images`) et un brouillon de séquence
+(`sequence_storyboard_images`) reçoivent **chacun leur propre board**, distinct
+de celui du shot ou de l'asset : le board est l'adresse de retour, donc c'est
+lui qui décidera dans quelle table le lot 2 réimportera. Les partager aurait
+rendu ce choix impossible plus tard. `owner_type` élargi sans migration — la
+colonne ne porte aucune contrainte `CHECK`, vérifié dans le SQL de `0068`.
+
+**La leçon vaut au-delà de ce ticket : à distance, l'hydratation du bundle
+client peut échouer, et alors tout handler React est mort.** Symptôme observé
+par l'auteur : le repli `Recent Look Tests` ne se dépliait pas à travers un
+tunnel, alors qu'il fonctionnait sur `localhost`. Cause : un script injecté
+par l'antivirus dans le HTML, que React désigne explicitement dans son message
+d'hydratation. Ce qui a tranché le diagnostic, c'est que le `Push to Invoke`
+du même écran fonctionnait, lui : c'est un `<form action={serverAction}>`, que
+Next sert sans JavaScript.
+
+D'où la correction : `<details>` / `<summary>` natif au lieu d'un `useState` +
+`onClick`. `<details>` garde ses enfants montés — vérifié, 53 descendants dont
+les cinq lignes de tests présents dans le DOM alors que le repli est fermé —
+donc le registre de rerun, les pollers et l'état de publication survivent,
+exactement comme avec la classe `hidden` qu'il remplace.
+
+**Ce que ça implique pour la suite** : d'autres écrans reposant sur un handler
+React sont probablement figés à distance pour la même raison. Ce ticket n'a
+corrigé que celui que l'auteur a nommé. `mikai-method` §5 recommandait déjà de
+préférer ce que la plateforme sait faire sans état — cet incident en donne la
+raison la plus concrète du dépôt.
+
+**Ce qu'Invoke ne permettra pas**, redit ici parce que la demande reviendra :
+ouvrir automatiquement une image poussée en calque raster est hors de portée
+sans modifier Invoke. Aucun deep link, aucune route hors `/`, `/login`,
+`/profile`, `/setup`, et `recall` ne transporte ni canvas ni calque.
+
+Suite 2172 → 2181. Trois écrans vérifiés au navigateur contre l'InvokeAI
+6.14.0 de l'auteur.
+
+## `INVOKE.PUSH.1` — l'aller MikAI vers InvokeAI, et ce qu'un vrai serveur a appris
+
+Livré le 2026-09-18 (`c361ad6`), migration `0068` appliquée, aucune
+dépendance. Lot 1 de `docs/INVOKE_ROUNDTRIP_SPEC.md` §8 : un bouton
+`Push to Invoke` sur une image de référence de shot ou d'asset, le board
+Invoke de l'entité comme adresse de retour, et le workflow `Send to MikAI`
+installé par MikAI via l'API d'Invoke.
+
+**Deux défauts n'ont été trouvés que contre un Invoke réel.** L'implémentation
+lisait les signatures d'API dans le code installé (6.14.0) — méthode correcte,
+et pourtant insuffisante deux fois :
+
+- un `Blob` construit sans option `type` part en `application/octet-stream`,
+  et `upload_image` répond `415 {"detail":"Not an image"}` avant de lire un
+  octet. Mesuré sur le serveur : `octet-stream` → 415, `image/png` → 201.
+  Aucun test hors réseau ne pouvait le voir, parce que le refus vient du
+  serveur, pas du format ;
+- une seule URL ne peut pas servir deux chemins réseau. Le serveur MikAI
+  appelle Invoke en boucle locale, le navigateur doit ouvrir son interface :
+  à distance, l'utilisateur recevait un onglet impossible à ouvrir. D'où
+  `invoke_public_base_url`, vide par défaut — même scission que
+  `getOpenReelSidecarUrl` / `getMikAIPublicBaseUrl`, et pour la même raison.
+
+**Ce qu'Invoke ne permet pas, vérifié et non supposé.** Pas de deep link (le
+seul `location.hash` du bundle appartient à react-router ; la PR #7277 a été
+fermée sans merge), pas de route autre que `/`, `/login`, `/profile`,
+`/setup`, et `POST /api/v1/recall/…` ne connaît ni calque raster ni canvas —
+seulement prompts, paramètres, `control_layers`, `reference_images`,
+`ip_adapters`. Ouvrir automatiquement une image en calque éditable est donc
+hors de portée sans modifier Invoke, ce que §4 du cahier des charges a
+écarté. Le retour passe par deux gestes natifs : `New Canvas from Image`,
+puis clic droit sur le calque → `Run Workflow` → `Send to MikAI`.
+
+**Le filtre du menu `Run Workflow` a été lu dans le bundle, pas deviné** :
+un `form.elements`, un nœud `canvas_output`, et un champ de formulaire
+pointant un input de type `ImageField`. Les trois sont satisfaits par le
+workflow tel que le serveur le stocke, et l'exécution a été confirmée par
+l'auteur — deux images d'origine `internal` sont arrivées dans les boards
+MikAI.
+
+Suite 2125 → 2172. **L'import reste à faire** : le lot 2 (synchronisation au
+retour de focus, comptage par board, import automatique) n'est pas amorcé,
+donc une image renvoyée depuis Invoke n'apparaît pas encore dans MikAI.
 
 ## `ASSET.PROMPTCARD.BATCH.2` — une règle produit revisitée plutôt que contournée
 

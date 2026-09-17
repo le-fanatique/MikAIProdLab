@@ -28,8 +28,26 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 ## 1. En cours
 
 **Aucun ticket de code en cours.** Le seul chantier ouvert est `P1` de
-`DEVOPS.LINUX.PORT.1` — le déroulé sur la machine Ubuntu et la validation
-manuelle de `P0.3`, que seul l'auteur peut faire. Voir plus bas.
+`DEVOPS.LINUX.PORT.1` —
+le déroulé sur la machine Ubuntu et la validation manuelle de `P0.3`, que
+seul l'auteur peut faire. Voir plus bas.
+
+**`INVOKE.PUSH.2` — CLOS le 2026-09-18**, un commit `b82d7e9`, aucune
+migration, aucune dépendance. `Push to Invoke` dans les listes d'images de
+référence d'un asset et d'un shot, et sur les deux storyboards — brouillon de
+shot et brouillon de séquence, chacun avec son propre board parce que c'est
+le board qui décidera de la table de réimport du lot 2. Le repli
+`Recent Look Tests` est passé en `<details>` natif : à distance l'hydratation
+du bundle échoue et tout handler React est mort, ce que la plateforme ne
+subit pas. Suite 2172 → 2181.
+
+**`INVOKE.PUSH.1` — CLOS le 2026-09-18**, un commit `c361ad6`, migration
+`0068` appliquée. Lot 1 de `docs/INVOKE_ROUNDTRIP_SPEC.md` : push d'une image
+de shot ou d'asset vers le board Invoke de son entité, réglage d'URL avec
+test de connexion, workflow `Send to MikAI` installé par MikAI. Aller-retour
+exercé contre l'InvokeAI 6.14.0 de l'auteur. **Le lot 2 — synchronisation et
+import — n'est pas amorcé** : une image renvoyée depuis Invoke n'apparaît pas
+encore dans MikAI. Suite 2125 → 2172.
 
 **`ASSET.PROMPTCARD.BATCH.2` — CLOS le 2026-09-17**, un commit `8666c5d`,
 aucune migration, aucune dépendance. Le panneau « Batch Prompt Card » porte un
