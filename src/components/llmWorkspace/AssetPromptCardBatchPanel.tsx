@@ -14,9 +14,18 @@
 // docs/LLM_WORKSPACE_PRODUCT_VISION.md): nothing is written before approval.
 // A batch propose is NOT an automatic apply on N Assets. It is: generate a
 // Prompt Card proposal for each selected Asset, review it one card per Asset,
-// then approve PER ASSET, explicitly. There is no "Apply All" here —
-// deliberately absent, same as `AssetAlignmentBatchPanel.tsx`
-// (STYLE.ALIGN.BATCH.1), the model for this file.
+// then approve — per Asset, or all at once via "Apply All" once every
+// proposal has been rendered to the screen (ASSET.PROMPTCARD.BATCH.2, §6.1's
+// dated paragraph on `docs/LLM_WORKSPACE_PRODUCT_VISION.md`: reviewed-then-
+// applied-in-bulk is still an explicit human approval, not an autonomous or
+// silent write). `AssetAlignmentBatchPanel.tsx` (STYLE.ALIGN.BATCH.1) stays
+// without one — that operation writes five fields per Asset, not one, and
+// the author never asked for it there.
+//
+// "Who Apply All touches" is decided by the pure
+// `selectApplyAllTargets` (`assetPromptCardBatch.ts`), never refiltered here:
+// a successfully generated Asset not yet applied in this pass, in review
+// order, flagged when it would overwrite an existing Prompt Card.
 //
 // Generation is sequential (one Asset after another), with a readable
 // progress count. A failure on one Asset does not stop the others — each
@@ -40,7 +49,7 @@ import { useRouter } from "next/navigation";
 import { runWorkspaceOperation } from "@/actions/llmWorkspace/runOperationAction";
 import { buildAssetPromptCardCommitArgs } from "@/lib/llmWorkspace/actions/proposalCommit";
 import { ACTION_BINDINGS } from "@/lib/llmWorkspace/actions/bindings";
-import { isPromptCardMissing } from "@/lib/llmWorkspace/assetPromptCardBatch";
+import { isPromptCardMissing, selectApplyAllTargets, type ApplyAllTarget } from "@/lib/llmWorkspace/assetPromptCardBatch";
 import AssetTypeBadge from "@/components/AssetTypeBadge";
 import { LLM_APPLY_ACTION_CLASS } from "@/lib/uiClasses";
 
@@ -97,6 +106,10 @@ export default function AssetPromptCardBatchPanel({ projectId, assets, isConfigu
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [genResults, setGenResults] = useState<Record<number, ItemGenState>>({});
   const [applyResults, setApplyResults] = useState<Record<number, ItemApplyState>>({});
+  // ASSET.PROMPTCARD.BATCH.2 — "Apply All" state: whether the in-place
+  // overwrite confirmation is showing, and progress while the pass runs.
+  const [applyAllConfirming, setApplyAllConfirming] = useState(false);
+  const [applyAllProgress, setApplyAllProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Synchronous single-flight latch per Asset, acquired before Apply's first
   // `await` — a React state check alone cannot prevent two same-tick events
@@ -108,6 +121,9 @@ export default function AssetPromptCardBatchPanel({ projectId, assets, isConfigu
   const applyLocksRef = useRef<Set<number>>(new Set());
   // Synchronous single-flight latch for the whole generate run.
   const generateInFlightRef = useRef(false);
+  // Synchronous single-flight latch for the whole "Apply All" pass, same
+  // idiom as `generateInFlightRef` above.
+  const applyAllInFlightRef = useRef(false);
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -175,40 +191,93 @@ export default function AssetPromptCardBatchPanel({ projectId, assets, isConfigu
     setBatchState("done");
   }
 
+  // Shared write path for a single Asset — the same call `handleApply` used
+  // inline before ASSET.PROMPTCARD.BATCH.2, factored out so "Apply All" can
+  // run it sequentially without duplicating the try/catch or the
+  // `ItemApplyState` transitions. Never calls `router.refresh()` itself —
+  // callers decide when: `handleApply` after its own single write,
+  // `runApplyAll` once after the whole loop (§3.c.5 of the ticket).
+  async function applyOne(id: number, promptCard: string): Promise<boolean> {
+    try {
+      const args = buildAssetPromptCardCommitArgs({ assetId: id, projectId, promptCard });
+      const result = await ACTION_BINDINGS.updateAssetPromptCardInline(...args);
+
+      if (!result.ok) {
+        // Pre-commit refusal (e.g. the Asset vanished) — release the
+        // latch, this is a legitimate retry point.
+        applyLocksRef.current.delete(id);
+        setApplyResults((prev) => ({ ...prev, [id]: { kind: "error", message: result.error } }));
+        return false;
+      }
+
+      setApplyResults((prev) => ({ ...prev, [id]: { kind: "applied" } }));
+      return true;
+    } catch (err) {
+      applyLocksRef.current.delete(id);
+      setApplyResults((prev) => ({
+        ...prev,
+        [id]: { kind: "error", message: err instanceof Error ? err.message : "Unexpected error. Please try again." },
+      }));
+      return false;
+    }
+  }
+
   function handleApply(id: number, promptCard: string) {
     if (applyLocksRef.current.has(id)) return;
     applyLocksRef.current.add(id);
     setApplyResults((prev) => ({ ...prev, [id]: { kind: "applying" } }));
 
     void (async () => {
-      try {
-        const args = buildAssetPromptCardCommitArgs({ assetId: id, projectId, promptCard });
-        const result = await ACTION_BINDINGS.updateAssetPromptCardInline(...args);
-
-        if (!result.ok) {
-          // Pre-commit refusal (e.g. the Asset vanished) — release the
-          // latch, this is a legitimate retry point.
-          applyLocksRef.current.delete(id);
-          setApplyResults((prev) => ({ ...prev, [id]: { kind: "error", message: result.error } }));
-          return;
-        }
-
-        setApplyResults((prev) => ({ ...prev, [id]: { kind: "applied" } }));
-        // §3.8 of the ticket: refresh server data so `assets` (this page's
-        // own `select()`, re-run by the Server Component) reflects the
-        // written Prompt Card. Without this, `assets` stays the initial
+      const ok = await applyOne(id, promptCard);
+      if (ok) {
+        // §3.8 of BATCH.1's ticket: refresh server data so `assets` (this
+        // page's own `select()`, re-run by the Server Component) reflects
+        // the written Prompt Card. Without this, `assets` stays the initial
         // render's snapshot: after "Back to Selection" the applied Asset
         // still reads as missing, and "Select Missing" re-selects it —
         // repaying a model call for an Asset that already carries its card.
         router.refresh();
-      } catch (err) {
-        applyLocksRef.current.delete(id);
-        setApplyResults((prev) => ({
-          ...prev,
-          [id]: { kind: "error", message: err instanceof Error ? err.message : "Unexpected error. Please try again." },
-        }));
       }
     })();
+  }
+
+  // ASSET.PROMPTCARD.BATCH.2 — sequential "Apply All", one Asset after
+  // another in review order. A failure on one does not stop the pass (§3.c.4
+  // of the ticket): `applyOne` already records the per-Asset error and
+  // returns, and the loop moves on. Exactly one `router.refresh()`, after the
+  // whole loop, never one per Asset (§3.c.5).
+  async function runApplyAll(targets: ApplyAllTarget[]) {
+    if (applyAllInFlightRef.current) return;
+    applyAllInFlightRef.current = true;
+    setApplyAllProgress({ done: 0, total: targets.length });
+
+    for (const target of targets) {
+      const gen = genResults[target.id];
+      if (applyLocksRef.current.has(target.id) || !gen || gen.kind !== "success") {
+        // Already applied (individually, mid-pass) or no longer a valid
+        // target — skip without touching its state.
+        setApplyAllProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+        continue;
+      }
+      applyLocksRef.current.add(target.id);
+      setApplyResults((prev) => ({ ...prev, [target.id]: { kind: "applying" } }));
+      await applyOne(target.id, gen.promptCard);
+      setApplyAllProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+    }
+
+    applyAllInFlightRef.current = false;
+    setApplyAllProgress(null);
+    router.refresh();
+  }
+
+  function handleApplyAllClick() {
+    if (applyAllTargets.length === 0 || applyAllInFlightRef.current) return;
+    if (applyAllTargets.some((t) => t.overwrites) && !applyAllConfirming) {
+      setApplyAllConfirming(true);
+      return;
+    }
+    setApplyAllConfirming(false);
+    void runApplyAll(applyAllTargets);
   }
 
   function handleStartOver() {
@@ -216,11 +285,23 @@ export default function AssetPromptCardBatchPanel({ projectId, assets, isConfigu
     setGenResults({});
     setApplyResults({});
     applyLocksRef.current = new Set();
+    applyAllInFlightRef.current = false;
+    setApplyAllConfirming(false);
+    setApplyAllProgress(null);
     setBatchState("idle");
     setProgress(null);
   }
 
   const selectedIds = assets.filter((a) => selected.has(a.id)).map((a) => a.id);
+
+  // ASSET.PROMPTCARD.BATCH.2 — the "who Apply All touches" decision lives
+  // entirely in `selectApplyAllTargets`; this component only assembles the
+  // three sets it asks for and reads the result, never refilters it.
+  const generatedIds = new Set(selectedIds.filter((id) => genResults[id]?.kind === "success"));
+  const appliedIds = new Set(selectedIds.filter((id) => applyResults[id]?.kind === "applied"));
+  const existingCardIds = new Set(assets.filter((a) => !isPromptCardMissing(a.promptCard)).map((a) => a.id));
+  const applyAllTargets = selectApplyAllTargets(selectedIds, generatedIds, appliedIds, existingCardIds);
+  const applyAllOverwriteCount = applyAllTargets.filter((t) => t.overwrites).length;
 
   return (
     <div className="flex flex-col gap-3">
@@ -399,7 +480,7 @@ export default function AssetPromptCardBatchPanel({ projectId, assets, isConfigu
                         <div>
                           <button
                             type="button"
-                            disabled={apply.kind === "applying"}
+                            disabled={apply.kind === "applying" || applyAllProgress !== null}
                             onClick={() => handleApply(id, gen.promptCard)}
                             className={applySubmitButtonClass}
                           >
@@ -414,7 +495,34 @@ export default function AssetPromptCardBatchPanel({ projectId, assets, isConfigu
             })}
           </div>
 
-          <div className="flex items-center gap-3 border-t border-[#1e2124] pt-3">
+          <div className="flex items-center gap-3 border-t border-[#1e2124] pt-3 flex-wrap">
+            {applyAllProgress ? (
+              <button type="button" disabled className={buttonClass}>
+                {`Applying… (${applyAllProgress.done}/${applyAllProgress.total})`}
+              </button>
+            ) : applyAllConfirming ? (
+              <div className="text-xs text-[#c9a24b] border border-[#4a3a1f] bg-[#1f1a10] rounded px-3 py-2 flex items-center gap-3 flex-wrap">
+                <span>
+                  {applyAllOverwriteCount === 1
+                    ? "1 of these will overwrite an existing Prompt Card. Continue?"
+                    : `${applyAllOverwriteCount} of these will overwrite an existing Prompt Card. Continue?`}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={handleApplyAllClick} className={buttonClass}>
+                    Confirm
+                  </button>
+                  <button type="button" onClick={() => setApplyAllConfirming(false)} className={linkButtonClass}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              applyAllTargets.length > 0 && (
+                <button type="button" onClick={handleApplyAllClick} className={buttonClass}>
+                  {`Apply All Prompt Cards (${applyAllTargets.length})`}
+                </button>
+              )
+            )}
             <button type="button" onClick={handleStartOver} className={linkButtonClass}>
               Back to Selection
             </button>

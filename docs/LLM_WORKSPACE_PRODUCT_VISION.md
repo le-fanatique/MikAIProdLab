@@ -691,6 +691,17 @@ until the user approves.
 Applies to creation as well: in UC1 the Shot is created **on approval**, not
 before.
 
+**2026-09-17 — batch `Apply All` is authorized, revisiting this section.** A
+single `Apply All` click over a whole reviewed batch is allowed when, and only
+when, three conditions hold: every one of the N proposals has already been
+rendered to the screen before the click; the control exists only in the
+review state, never during generation; and an application that would
+overwrite an existing value asks for confirmation first. Under these three
+conditions the click is still one explicit human approval — of N proposals at
+once instead of N separate ones — not an autonomous, silent, or
+background write. `AssetPromptCardBatchPanel` (`ASSET.PROMPTCARD.BATCH.2`) is
+the first case built this way.
+
 ### 6.2 No proposal history
 
 > Il n y a pas besoin de stocker l historique de proposition de resultat de la

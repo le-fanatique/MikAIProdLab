@@ -22,3 +22,36 @@ export function isPromptCardMissing(promptCard: string | null): boolean {
   if (promptCard === null) return true;
   return promptCard.trim() === "";
 }
+
+// ---------------------------------------------------------------------------
+// ASSET.PROMPTCARD.BATCH.2 — the "Apply All" decision
+//
+// Which of the assets the review screen is showing an "Apply All" click
+// actually touches, and which of those overwrite an existing Prompt Card.
+// Pure and DB/network-free, same discipline as `isPromptCardMissing` above:
+// the component calls this, it never refilters the same question itself.
+// ---------------------------------------------------------------------------
+
+export type ApplyAllTarget = { id: number; overwrites: boolean };
+
+/**
+ * @param order Display order of the review — the order targets are returned in.
+ * @param generated Ids whose generation succeeded (a proposal is on screen).
+ * @param alreadyApplied Ids already written in this pass — never reapplied.
+ * @param hasExistingCard Ids that already carry a Prompt Card before this
+ *   pass — applying to one of these overwrites a value.
+ */
+export function selectApplyAllTargets(
+  order: number[],
+  generated: ReadonlySet<number>,
+  alreadyApplied: ReadonlySet<number>,
+  hasExistingCard: ReadonlySet<number>
+): ApplyAllTarget[] {
+  const targets: ApplyAllTarget[] = [];
+  for (const id of order) {
+    if (!generated.has(id)) continue;
+    if (alreadyApplied.has(id)) continue;
+    targets.push({ id, overwrites: hasExistingCard.has(id) });
+  }
+  return targets;
+}
