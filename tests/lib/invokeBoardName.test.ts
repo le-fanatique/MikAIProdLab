@@ -49,4 +49,43 @@ describe("buildInvokeBoardName", () => {
   it("trims surrounding whitespace from the title/name", () => {
     expect(buildInvokeBoardName({ ownerType: "asset", id: 1, name: "  Guard  " })).toBe("MikAI · Asset 1 · Guard");
   });
+
+  // INVOKE.PUSH.2 — docs/INVOKE_ROUNDTRIP_SPEC.md §7 decision 6: a shot's
+  // storyboard draft board and a sequence's storyboard draft board are
+  // their own owner types, distinct from "shot"/"asset" above.
+  it("builds a shot storyboard board name using the shot code, distinct from the shot's own board", () => {
+    const storyboard = buildInvokeBoardName({
+      ownerType: "shot_storyboard",
+      id: 12,
+      shotCode: "Sh_1120",
+      title: "Arrival at the gate",
+    });
+    expect(storyboard).toBe("MikAI · Shot Sh_1120 storyboard · Arrival at the gate");
+    expect(storyboard).not.toBe(
+      buildInvokeBoardName({ ownerType: "shot", id: 12, shotCode: "Sh_1120", title: "Arrival at the gate" })
+    );
+  });
+
+  it("falls back to the numeric id for a shot storyboard board when the shot has no code", () => {
+    expect(
+      buildInvokeBoardName({ ownerType: "shot_storyboard", id: 12, shotCode: null, title: "Untitled" })
+    ).toBe("MikAI · Shot #12 storyboard · Untitled");
+  });
+
+  it("builds a sequence storyboard board name using the sequence code", () => {
+    expect(
+      buildInvokeBoardName({
+        ownerType: "sequence_storyboard",
+        id: 3,
+        sequenceCode: "Seq_003",
+        title: "Chase",
+      })
+    ).toBe("MikAI · Sequence Seq_003 storyboard · Chase");
+  });
+
+  it("falls back to the numeric id for a sequence storyboard board when the sequence has no code", () => {
+    expect(
+      buildInvokeBoardName({ ownerType: "sequence_storyboard", id: 3, sequenceCode: null, title: "Chase" })
+    ).toBe("MikAI · Sequence #3 storyboard · Chase");
+  });
 });

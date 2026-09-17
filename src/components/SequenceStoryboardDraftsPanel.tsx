@@ -23,6 +23,14 @@ type Props = {
   uploadError?: string | null;
   /** SEQGEN.VIDEO.1 — current Storyboard Assets selection, forwarded unchanged into "Generate Sequence Video" so casting references (optional there) survive the trip, same convention as the image workflow CTA. */
   storyboardRefs?: string;
+  // INVOKE.PUSH.2 — "Push to Invoke" for the Sequence's own storyboard
+  // draft board (`sequence_storyboard_images` — docs/INVOKE_ROUNDTRIP_SPEC.md
+  // §7 decision 6). Reuses pushSequenceStoryboardImageToInvoke as-is, same
+  // hidden-fields shape as ReferenceImagesPanel's own `pushToInvoke`.
+  pushToInvoke?: {
+    action: (formData: FormData) => Promise<void>;
+    getHiddenFields: (imageId: number) => Record<string, string>;
+  };
 };
 
 function fmtDate(iso: string): string {
@@ -63,6 +71,7 @@ export default function SequenceStoryboardDraftsPanel({
   deleteAction,
   uploadError,
   storyboardRefs,
+  pushToInvoke,
 }: Props) {
   return (
     <div className="flex flex-col gap-3">
@@ -145,6 +154,19 @@ export default function SequenceStoryboardDraftsPanel({
                   </svg>
                   Generate Sequence Video
                 </Link>
+                {pushToInvoke && (
+                  <form action={pushToInvoke.action} className="mt-0.5">
+                    {Object.entries(pushToInvoke.getHiddenFields(d.id)).map(([name, value]) => (
+                      <input key={name} type="hidden" name={name} value={value} />
+                    ))}
+                    <button
+                      type="submit"
+                      className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    >
+                      Push to Invoke
+                    </button>
+                  </form>
+                )}
                 <form action={deleteAction} className="mt-0.5">
                   <input type="hidden" name="sequenceId" value={String(sequenceId)} />
                   <input type="hidden" name="imageId" value={String(d.id)} />

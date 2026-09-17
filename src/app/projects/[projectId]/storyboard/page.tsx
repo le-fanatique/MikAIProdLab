@@ -29,6 +29,8 @@ import SequenceStoryboardDraftsPanel, {
 import SequenceVideoDraftsPanel, { type SequenceVideoDraftItem } from "@/components/media/SequenceVideoDraftsPanel";
 import SequenceGenerationPackagePanel from "@/components/prompts/SequenceGenerationPackagePanel";
 import { uploadSequenceStoryboardImage, deleteSequenceStoryboardImage } from "@/actions/sequenceStoryboard";
+import { pushShotStoryboardImageToInvoke, pushSequenceStoryboardImageToInvoke } from "@/actions/invoke";
+import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { compileShotPrompt } from "@/lib/prompts/compileShotPrompt";
 import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
@@ -388,6 +390,14 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
   const storyboardApproveError = sp(resolvedSearchParams["storyboardApproveError"]);
   const storyboardRejected = sp(resolvedSearchParams["storyboardRejected"]) === "1";
 
+  // INVOKE.PUSH.2 — shared by both storyboards on this page (shot drafts via
+  // StoryboardGrid, Sequence drafts via SequenceStoryboardDraftsPanel): one
+  // push result banner, regardless of which of the two just pushed.
+  const invokeError = sp(resolvedSearchParams["invokeError"]);
+  const invokePushed = sp(resolvedSearchParams["invokePushed"]) === "1";
+  const invokeBoardName = sp(resolvedSearchParams["invokeBoardName"]);
+  const invokeUrl = sp(resolvedSearchParams["invokeUrl"]);
+
   // Selection made in Storyboard Assets — transported into each Shot's
   // "Generate"/"Regenerate" link so ShotGenerationPanel can filter its
   // available images down to exactly this ordered set (retake fix: this
@@ -435,6 +445,15 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
         </p>
       )}
 
+      {invokeError && (
+        <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#cf7b6b]/5 px-4 py-3">
+          <p className="text-sm text-[#cf7b6b]">{invokeError}</p>
+        </div>
+      )}
+      {invokePushed && invokeBoardName && invokeUrl && (
+        <InvokePushedBanner boardName={invokeBoardName} invokeUrl={invokeUrl} />
+      )}
+
       <SectionLabel label="Storyboard" />
       <div className="mb-3">
         <Link
@@ -452,6 +471,16 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
         shots={gridShots}
         returnTo={storyboardReturnTo}
         storyboardRefs={storyboardRefsParam}
+        pushToInvoke={{
+          action: pushShotStoryboardImageToInvoke,
+          getHiddenFields: (shotId, draftId) => ({
+            projectId: String(pid),
+            sequenceId: String(sid),
+            shotId: String(shotId),
+            imageId: String(draftId),
+            returnTo: storyboardReturnTo,
+          }),
+        }}
       />
 
       <SectionLabel label="Sequence Storyboard Drafts" />
@@ -474,6 +503,15 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
         deleteAction={deleteSequenceStoryboardImage}
         uploadError={sequenceStoryboardUploadError}
         storyboardRefs={storyboardRefsParam}
+        pushToInvoke={{
+          action: pushSequenceStoryboardImageToInvoke,
+          getHiddenFields: (imageId) => ({
+            projectId: String(pid),
+            sequenceId: String(sid),
+            imageId: String(imageId),
+            returnTo: storyboardReturnTo,
+          }),
+        }}
       />
 
       <SectionLabel label="Sequence Video Drafts" />

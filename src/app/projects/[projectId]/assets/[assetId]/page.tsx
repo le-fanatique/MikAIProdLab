@@ -15,6 +15,8 @@ import AssetGenerationPanel from "@/components/AssetGenerationPanel";
 import GenerationPanelShell from "@/components/GenerationPanelShell";
 import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/actions/assetReferenceImages";
+import { pushAssetReferenceImageToInvoke } from "@/actions/invoke";
+import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/llmWorkspace/AssetDescriptionEnhancePanel";
@@ -78,6 +80,17 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const rawAttachError = resolvedSearchParams["attachError"];
   const attachError =
     typeof rawAttachError === "string" ? rawAttachError : Array.isArray(rawAttachError) ? rawAttachError[0] : undefined;
+
+  // INVOKE.PUSH.2 — same single-string extraction as every other flag on
+  // this page (never assumed to be a plain string: Next.js typing allows
+  // `string | string[] | undefined` for every search param).
+  function singleParam(raw: string | string[] | undefined): string | undefined {
+    return typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  }
+  const invokeError = singleParam(resolvedSearchParams["invokeError"]);
+  const invokePushed = singleParam(resolvedSearchParams["invokePushed"]);
+  const invokeBoardName = singleParam(resolvedSearchParams["invokeBoardName"]);
+  const invokeUrl = singleParam(resolvedSearchParams["invokeUrl"]);
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -519,6 +532,14 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
       {/* ── References ────────────────────────────────────── */}
       <SectionLabel label="References" />
+      {invokeError && (
+        <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#cf7b6b]/5 px-4 py-3">
+          <p className="text-sm text-[#cf7b6b]">{invokeError}</p>
+        </div>
+      )}
+      {invokePushed === "1" && invokeBoardName && invokeUrl && (
+        <InvokePushedBanner boardName={invokeBoardName} invokeUrl={invokeUrl} />
+      )}
       {attachedReference !== undefined && /^\d+$/.test(attachedReference) && (
         <div className="mb-4 rounded border border-[#6b9e72]/30 bg-[#1a2e1e] px-4 py-3">
           <p className="text-sm text-[#6b9e72]">
@@ -541,6 +562,15 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
           getApprovalAction={(imageId, nextApproved) =>
             setAssetReferenceImageApproval.bind(null, imageId, aid, pid, nextApproved)
           }
+          pushToInvoke={{
+            action: pushAssetReferenceImageToInvoke,
+            getHiddenFields: (imageId) => ({
+              projectId: String(pid),
+              assetId: String(aid),
+              imageId: String(imageId),
+              returnTo: detailBaseUrl,
+            }),
+          }}
         />
       </Card>
 

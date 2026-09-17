@@ -15,7 +15,13 @@ const ELLIPSIS = "…";
 
 export type InvokeBoardNameInput =
   | { ownerType: "shot"; id: number; shotCode: string | null; title: string }
-  | { ownerType: "asset"; id: number; name: string };
+  | { ownerType: "asset"; id: number; name: string }
+  // INVOKE.PUSH.2 — docs/INVOKE_ROUNDTRIP_SPEC.md §7 decision 6: a shot's
+  // storyboard draft board and the shot's own board are deliberately
+  // distinct addresses (see src/db/schema/invoke.ts's `ownerType` comment),
+  // so this is its own variant, not a flag on the `"shot"` one above.
+  | { ownerType: "shot_storyboard"; id: number; shotCode: string | null; title: string }
+  | { ownerType: "sequence_storyboard"; id: number; sequenceCode: string | null; title: string };
 
 function truncateToLimit(prefix: string, tail: string): string {
   const full = `${prefix}${tail}`;
@@ -38,6 +44,16 @@ export function buildInvokeBoardName(input: InvokeBoardNameInput): string {
   if (input.ownerType === "shot") {
     const shotLabel = input.shotCode?.trim() || `#${input.id}`;
     return truncateToLimit(`MikAI · Shot ${shotLabel} · `, input.title.trim());
+  }
+
+  if (input.ownerType === "shot_storyboard") {
+    const shotLabel = input.shotCode?.trim() || `#${input.id}`;
+    return truncateToLimit(`MikAI · Shot ${shotLabel} storyboard · `, input.title.trim());
+  }
+
+  if (input.ownerType === "sequence_storyboard") {
+    const sequenceLabel = input.sequenceCode?.trim() || `#${input.id}`;
+    return truncateToLimit(`MikAI · Sequence ${sequenceLabel} storyboard · `, input.title.trim());
   }
 
   return truncateToLimit(`MikAI · Asset ${input.id} · `, input.name.trim());

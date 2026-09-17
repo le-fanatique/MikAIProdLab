@@ -9,17 +9,25 @@ import { sql } from "drizzle-orm";
 // in that board is understood to belong back to that entity (lot 2 reads
 // this table to poll; lot 1 only ever creates/reads it).
 //
-// This lot only ever writes `ownerType` "shot" / "asset" (lot 3 widens the
-// enum to sequence storyboard / project style / … — do not pre-add those
-// values speculatively here, docs/INVOKE_ROUNDTRIP_SPEC.md §8 keeps them out
-// of scope for this ticket).
+// INVOKE.PUSH.1 wrote only `ownerType` "shot" / "asset". INVOKE.PUSH.2 widens
+// the enum to "shot_storyboard" / "sequence_storyboard" — a shot storyboard
+// draft (`storyboard_images`) and a sequence storyboard draft
+// (`sequence_storyboard_images`) each get their own board, distinct from the
+// shot's own board: the return address is what decides which table a pushed
+// image re-imports into in lot 2 (docs/INVOKE_ROUNDTRIP_SPEC.md §7 decision
+// 6). This column carries no `CHECK` constraint in SQLite (Drizzle's
+// `{ enum: [...] }` is TypeScript-only), so widening it is not a migration —
+// verified against drizzle/0068_loving_adam_warlock.sql before this comment
+// was written.
 // ---------------------------------------------------------------------------
 
 export const invokeBoards = sqliteTable(
   "invoke_boards",
   {
     id: int("id").primaryKey({ autoIncrement: true }),
-    ownerType: text("owner_type", { enum: ["shot", "asset"] }).notNull(),
+    ownerType: text("owner_type", {
+      enum: ["shot", "asset", "shot_storyboard", "sequence_storyboard"],
+    }).notNull(),
     ownerId: int("owner_id").notNull(),
     /** InvokeAI's own board id (its `board_id`, a string, never MikAI's `id`). */
     boardId: text("board_id").notNull(),

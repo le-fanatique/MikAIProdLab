@@ -26,6 +26,20 @@ type Props = {
   returnTo: string;
   /** Comma-separated, ordered reference ids selected in Storyboard Assets (RuntimeImageOption id format) — forwarded into each Shot's generate link so ShotGenerationPanel can filter its available images to exactly this set. Empty string when nothing is selected (default behavior, unchanged). */
   storyboardRefs: string;
+  // INVOKE.PUSH.2 — "Push to Invoke" for the shot's own storyboard draft
+  // (`storyboard_images`, its own board — docs/INVOKE_ROUNDTRIP_SPEC.md §7
+  // decision 6). This tile has no existing "Delete" action to sit beside
+  // (a shot storyboard draft is never deleted here, only approved/rejected
+  // — see src/actions/storyboard.ts), so the button joins Approve/Open Shot
+  // in the tile's own action row instead. Only rendered when the tile
+  // actually displays a real `storyboard_images` draft (`displayDraftId`),
+  // since an explicit Storyboard Thumbnail selection has no such draft to
+  // push. Omitted entirely if not passed, same convention as this
+  // component's other optional wiring elsewhere in the codebase.
+  pushToInvoke?: {
+    action: (formData: FormData) => Promise<void>;
+    getHiddenFields: (shotId: number, draftId: number) => Record<string, string>;
+  };
 };
 
 function statusLabel(status: StoryboardGridStatus): string {
@@ -65,7 +79,7 @@ function statusClass(status: StoryboardGridStatus): string {
  * Media priority is fixed by the caller (approved draft, else most recent
  * draft, else none) — this component never fabricates a placeholder image.
  */
-export default function StoryboardGrid({ projectId, sequenceId, shots, returnTo, storyboardRefs }: Props) {
+export default function StoryboardGrid({ projectId, sequenceId, shots, returnTo, storyboardRefs, pushToInvoke }: Props) {
   if (shots.length === 0) {
     return (
       <p className="text-xs text-[#4b5158]">
@@ -145,6 +159,21 @@ export default function StoryboardGrid({ projectId, sequenceId, shots, returnTo,
                       className="text-[10px] text-[#6b9e72] hover:text-[#8bbf96] transition-colors"
                     >
                       Approve
+                    </button>
+                  </form>
+                )}
+                {pushToInvoke && shot.displayDraftId !== null && (
+                  <form action={pushToInvoke.action}>
+                    {Object.entries(pushToInvoke.getHiddenFields(shot.shotId, shot.displayDraftId)).map(
+                      ([name, value]) => (
+                        <input key={name} type="hidden" name={name} value={value} />
+                      )
+                    )}
+                    <button
+                      type="submit"
+                      className="text-[10px] text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                    >
+                      Push to Invoke
                     </button>
                   </form>
                 )}

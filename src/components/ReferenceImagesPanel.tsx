@@ -36,6 +36,17 @@ type Props = {
   // SEQGEN.PUSH.2 — explicit "Make Storyboard Thumbnail" action. Omitted
   // entirely by Asset Detail; when omitted, no thumbnail UI renders at all.
   getMakeThumbnailAction?: (imageId: number) => () => Promise<void>;
+  // INVOKE.PUSH.2 — "Push to Invoke", next to Delete. Reuses
+  // pushAssetReferenceImageToInvoke/pushShotReferenceImageToInvoke exactly
+  // as INVOKE.PUSH.1 wrote them: they read NAMED FormData fields
+  // (projectId/assetId or sequenceId+shotId/imageId/returnTo), not bound
+  // positional args, so `action` stays the raw unbound function and each
+  // row supplies its own hidden fields — same shape the two Edit pages
+  // already used for their single image, just parameterized per row here.
+  pushToInvoke?: {
+    action: (formData: FormData) => Promise<void>;
+    getHiddenFields: (imageId: number) => Record<string, string>;
+  };
 };
 
 export default function ReferenceImagesPanel({
@@ -45,6 +56,7 @@ export default function ReferenceImagesPanel({
   getDeleteAction,
   getApprovalAction,
   getMakeThumbnailAction,
+  pushToInvoke,
 }: Props) {
   if (images.length === 0) {
     return (
@@ -152,6 +164,19 @@ export default function ReferenceImagesPanel({
                   >
                     Edit
                   </Link>
+                  {pushToInvoke && (
+                    <form action={pushToInvoke.action}>
+                      {Object.entries(pushToInvoke.getHiddenFields(image.id)).map(([name, value]) => (
+                        <input key={name} type="hidden" name={name} value={value} />
+                      ))}
+                      <button
+                        type="submit"
+                        className="text-xs text-[#5b93d6] hover:text-[#8fbbe8] transition-colors"
+                      >
+                        Push to Invoke
+                      </button>
+                    </form>
+                  )}
                   <DeleteButton
                     action={getDeleteAction(image.id)}
                     confirm="Delete this reference image?"

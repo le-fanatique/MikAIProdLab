@@ -23,6 +23,8 @@ import { composeShotPrompt } from "@/lib/prompts/composeShotPrompt";
 import { buildDefaultShotPromptProposal } from "@/lib/prompts/defaultShotPrompt";
 import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteShotReferenceImage, setShotStoryboardThumbnail } from "@/actions/shotReferenceImages";
+import { pushShotReferenceImageToInvoke } from "@/actions/invoke";
+import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
 import { createShotReferenceVideo, deleteShotReferenceVideo } from "@/actions/shotReferenceVideos";
 import { addReferenceVideoToShotVideos } from "@/actions/shotVideoReferenceBridge";
 import { isEligibleShotTargetDuration } from "@/lib/shotReferenceVideos/videoValidation";
@@ -110,6 +112,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const refVideoDeleted = sp("refVideoDeleted");
   const refVideoDuplicated = sp("refVideoDuplicated");
   const libraryAddedFromReference = sp("libraryAddedFromReference");
+  const invokeError = sp("invokeError");
+  const invokePushed = sp("invokePushed");
+  const invokeBoardName = sp("invokeBoardName");
+  const invokeUrl = sp("invokeUrl");
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -951,6 +957,10 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             {referenceImageDeleteWarning && (
               <p className="mb-3 text-xs text-[#c9a24b] border border-[#3d3320] rounded px-3 py-2 bg-[#1a1712]">Warning: {referenceImageDeleteWarning}</p>
             )}
+            {invokeError && <p className="mb-3 text-xs text-[#cf7b6b] border border-[#3d2323] rounded px-3 py-2 bg-[#1a1212]">{invokeError}</p>}
+            {invokePushed === "1" && invokeBoardName && invokeUrl && (
+              <InvokePushedBanner boardName={invokeBoardName} invokeUrl={invokeUrl} />
+            )}
             <ReferenceImagesPanel
               images={refImages.map((img) => ({ ...img, isStoryboardThumbnail: storyboardThumbnail?.referenceImageId === img.id }))}
               addHref={`/projects/${pid}/sequences/${sid}/shots/${shid}/reference-images/new`}
@@ -963,6 +973,16 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
               getMakeThumbnailAction={(imageId) =>
                 setShotStoryboardThumbnail.bind(null, imageId, shid, sid, pid)
               }
+              pushToInvoke={{
+                action: pushShotReferenceImageToInvoke,
+                getHiddenFields: (imageId) => ({
+                  projectId: String(pid),
+                  sequenceId: String(sid),
+                  shotId: String(shid),
+                  imageId: String(imageId),
+                  returnTo: detailBaseUrl,
+                }),
+              }}
             />
           </Card>
         </Collapsible>

@@ -997,9 +997,14 @@ export default function LookDevelopmentBench({
   //    Tests, Comparison grid) — never a second, divergent copy of the data.
   const [comparisonIds, setComparisonIds] = useState<number[]>([]);
   const [comparisonRefreshToken, setComparisonRefreshToken] = useState(0);
-  // STYLE.1.POLISH.1 (C4) — closed by default; only controls CSS visibility,
-  // LookDevelopmentRecentTests itself always stays mounted (see render below).
-  const [recentTestsOpen, setRecentTestsOpen] = useState(false);
+  // INVOKE.PUSH.2 §1.3 — the STYLE.1.POLISH.1 (C4) `recentTestsOpen` React
+  // state/`hidden`-class toggle was replaced by a native `<details>`, which
+  // is dead over a tunnel whose JS never hydrates (an unhydrated `onClick`
+  // never fires); `<details>`/`<summary>` toggle at the platform level, no
+  // JS required. `<details>` keeps its children mounted while closed, same
+  // as the `hidden` class did — verified: MDN/HTML spec, `display: none`
+  // equivalent, never a DOM removal — so LookDevelopmentRecentTests' own
+  // rerun registry/pollers/publication state still survive a collapse.
 
   const handleToggleComparison = useCallback((lookTestId: number) => {
     setComparisonIds((prev) => {
@@ -1617,40 +1622,45 @@ export default function LookDevelopmentBench({
 
       {/* ── Recent Look Tests ───────────────────────────────────────── */}
       {/* STYLE.1.POLISH.1 (C4) — closed by default, but `LookDevelopmentRecentTests`
-          stays MOUNTED at all times (hidden via CSS only): it owns the
-          multi-rerun registry, pollers, publication state and Close/reopen
-          resumption. `Collapsible` (which unmounts its children) is never
-          used here — that would destroy all of it on every close. */}
+          stays MOUNTED at all times (hidden via `<details>`'s own native
+          rendering only, never a DOM removal): it owns the multi-rerun
+          registry, pollers, publication state and Close/reopen resumption.
+          `Collapsible` (which unmounts its children) is never used here —
+          that would destroy all of it on every close. INVOKE.PUSH.2 §1.3 —
+          native `<details>`/`<summary>` instead of a React `useState` +
+          `onClick`, so this toggle survives an unhydrated client bundle
+          (e.g. over a tunnel whose injected antivirus script breaks
+          hydration): the browser itself owns the open/closed toggle, no JS
+          required. No `open` attribute — closed by default, same as before. */}
       <section className="flex flex-col gap-4">
-        <button
-          type="button"
-          onClick={() => setRecentTestsOpen((v) => !v)}
-          aria-expanded={recentTestsOpen}
-          className="flex items-center gap-1.5 text-sm font-semibold text-[#e7e9ec] border-b border-[#232629] pb-2 w-full text-left"
-        >
-          <span className={`transition-transform ${recentTestsOpen ? "rotate-90" : ""}`}>›</span>
-          Recent Look Tests
-        </button>
-        <div className={recentTestsOpen ? undefined : "hidden"}>
-          <LookDevelopmentRecentTests
-            projectId={projectId}
-            tests={tests}
-            onOpen={handleOpenTest}
-            workflowNameById={workflowNameById}
-            workflows={initialWorkflows}
-            allReferences={initialReferences}
-            styleOptions={styleOptions}
-            comparisonIds={comparisonIds}
-            onToggleComparison={handleToggleComparison}
-            onNotesSaved={handleNotesSaved}
-            onStatusChanged={handleStatusChanged}
-            onDeleted={handleResultDeleted}
-            onDuplicated={handleDuplicated}
-            onQueued={handleRerunQueued}
-            onPublished={handleRerunPublished}
-            styleFeedbackCommitAdvisory={styleFeedbackCommitAdvisory}
-          />
-        </div>
+        <details className="group">
+          <summary
+            className="flex items-center gap-1.5 text-sm font-semibold text-[#e7e9ec] border-b border-[#232629] pb-2 w-full cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+          >
+            <span className="transition-transform group-open:rotate-90">›</span>
+            Recent Look Tests
+          </summary>
+          <div className="pt-4">
+            <LookDevelopmentRecentTests
+              projectId={projectId}
+              tests={tests}
+              onOpen={handleOpenTest}
+              workflowNameById={workflowNameById}
+              workflows={initialWorkflows}
+              allReferences={initialReferences}
+              styleOptions={styleOptions}
+              comparisonIds={comparisonIds}
+              onToggleComparison={handleToggleComparison}
+              onNotesSaved={handleNotesSaved}
+              onStatusChanged={handleStatusChanged}
+              onDeleted={handleResultDeleted}
+              onDuplicated={handleDuplicated}
+              onQueued={handleRerunQueued}
+              onPublished={handleRerunPublished}
+              styleFeedbackCommitAdvisory={styleFeedbackCommitAdvisory}
+            />
+          </div>
+        </details>
       </section>
     </div>
   );

@@ -22,7 +22,7 @@ import { getInvokePublicBaseUrl } from "@/lib/settings";
 // owner has already been verified to belong to its project.
 
 export interface PushImageToInvokeBoardArgs {
-  ownerType: "shot" | "asset";
+  ownerType: "shot" | "asset" | "shot_storyboard" | "sequence_storyboard";
   ownerId: number;
   boardNameInput: InvokeBoardNameInput;
   /** public/-relative path of the image to push. */
@@ -53,7 +53,7 @@ async function readImageBytes(imagePath: string): Promise<{ bytes: Buffer; filen
 }
 
 async function resolveOrCreateBoard(args: {
-  ownerType: "shot" | "asset";
+  ownerType: "shot" | "asset" | "shot_storyboard" | "sequence_storyboard";
   ownerId: number;
   boardNameInput: InvokeBoardNameInput;
 }): Promise<{ id: number; boardId: string; boardName: string }> {

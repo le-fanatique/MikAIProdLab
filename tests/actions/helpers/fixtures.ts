@@ -264,6 +264,26 @@ export async function readSplitSegments({ db, schema }: TempDb, splitRunId: numb
 // IND.VIDEOSPLIT.1 builders above.
 // ---------------------------------------------------------------------------
 
+// INVOKE.PUSH.2 — `storyboard_images` (Shot-level draft) builder, same
+// "insert only NOT NULL columns plus whatever the caller wants to observe"
+// convention as every builder above. No dedicated builder existed yet: prior
+// tickets only ever wrote this table through the real action under test.
+export async function insertStoryboardImage(
+  { db, schema }: TempDb,
+  shotId: number,
+  values: Partial<typeof schema.storyboardImages.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.storyboardImages)
+    .values({
+      shotId,
+      imagePath: "uploads/storyboard-images/fixture.jpg",
+      ...values,
+    })
+    .returning({ id: schema.storyboardImages.id });
+  return row.id;
+}
+
 export async function insertSequenceStoryboardImage(
   { db, schema }: TempDb,
   sequenceId: number,

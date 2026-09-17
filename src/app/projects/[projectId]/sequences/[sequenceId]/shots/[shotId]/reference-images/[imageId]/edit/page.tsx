@@ -7,6 +7,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PageHeader from "@/components/PageHeader";
 import { updateShotReferenceImage } from "@/actions/shotReferenceImages";
 import { pushShotReferenceImageToInvoke } from "@/actions/invoke";
+import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { getReferenceImageRoleGroups } from "@/lib/referenceImageRoles";
 
@@ -91,20 +92,7 @@ export default async function EditShotReferenceImagePage({ params, searchParams 
       )}
 
       {invokePushed === "1" && invokeBoardName && invokeUrl && (
-        <div className="mb-5 rounded border border-[#6b9e72]/30 bg-[#6b9e72]/5 px-4 py-3 flex flex-col gap-2">
-          <p className="text-sm text-[#6b9e72]">
-            Sent to Invoke board &quot;{invokeBoardName}&quot;. Right-click it → New Canvas from Image. When done,
-            right-click the layer → Run Workflow → Send to MikAI.
-          </p>
-          <a
-            href={invokeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-[#5b93d6] hover:text-[#8fbbe8] transition-colors w-fit"
-          >
-            Open Invoke ↗
-          </a>
-        </div>
+        <InvokePushedBanner boardName={invokeBoardName} invokeUrl={invokeUrl} />
       )}
 
       <div className="mb-5 max-w-lg">
