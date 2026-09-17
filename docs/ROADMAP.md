@@ -31,6 +31,19 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 `DEVOPS.LINUX.PORT.1` — le déroulé sur la machine Ubuntu et la validation
 manuelle de `P0.3`, que seul l'auteur peut faire. Voir plus bas.
 
+**`ASSET.PROMPTCARD.BATCH.1` — CLOS le 2026-09-17**, un commit `33622c0`,
+aucune migration, aucune dépendance. Un panneau repliable « Batch Prompt Card »
+sur la page Assets propose une Prompt Card pour une sélection d'assets, sur le
+modèle exact de « Batch Align with Project Style » : `Select Missing ·
+Select All · Clear`, note de réalisation unique pour le lot, génération
+séquentielle avec compteur, **approbation par asset et jamais d'`Apply All`**
+(`docs/LLM_WORKSPACE_PRODUCT_VISION.md` §6.1). L'opération LLM était
+**couverte en l'état** par le workspace — `asset.promptCard`,
+`runWorkspaceOperation`, `updateAssetPromptCardInline` consommés tels quels,
+aucun descripteur ni prompt touché : le ticket n'était qu'une surface de
+sélection et de revue. Suite 2112 → 2118. Ce que la revue a rattrapé :
+`docs/PROJECT_STATE.md`.
+
 **`LLM.ERROR.CAUSE.2` — CLOS le 2026-09-17**, un commit `e4786a2`, aucune
 migration, aucune dépendance. Les six chemins de `fetch` que
 `LLM.ERROR.CAUSE.1` avait laissés nomment à leur tour la cause réelle :

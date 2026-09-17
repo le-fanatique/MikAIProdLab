@@ -2,6 +2,48 @@
 
 Last updated: 2026-09-17
 
+## `ASSET.PROMPTCARD.BATCH.1` — un batch qui repayait l'appel modèle
+
+Livré le 2026-09-17 (`33622c0`), aucune migration, aucune dépendance. Le
+panneau « Batch Prompt Card » de la page Assets, calqué sur « Batch Align with
+Project Style ».
+
+**Le test workspace a coupé le ticket en deux.** Posé avant toute conception
+(`CLAUDE.md` § Start Here, `mikai-method` §10), il a répondu **couvert en
+l'état** : `asset.promptCard`, `runWorkspaceOperation` et
+`updateAssetPromptCardInline` existaient et se consomment tels quels. Ce qui
+restait n'était pas de la mécanique LLM mais une surface de sélection et de
+revue — et le ticket a pu interdire d'emblée de toucher au descripteur, au
+prompt, aux variables et au registre d'actions. C'est exactement ce que §8 de
+`docs/LLM_WORKSPACE_PRODUCT_VISION.md` vise.
+
+**Ce que la revue a rattrapé, et qui coûtait de l'argent réel.** La première
+livraison ne rafraîchissait pas les données serveur après un `Apply`. La prop
+`assets` restait celle du rendu initial, donc après « Back to Selection »
+l'asset traité affichait encore `No Prompt Card` et `Select Missing` le
+recochait : un second lot **repayait un appel modèle** pour un asset qui
+portait déjà sa carte. Un `router.refresh()` l'a soldé. La leçon est générale :
+**dans un panneau de lot, une liste périmée n'est pas une gêne d'affichage,
+c'est une facture** — le critère de pré-sélection lit la prop, pas la base.
+Second point de la même reprise : `isConfigured` n'était câblé que sur
+`disabled`, donc sans LLM configuré l'auteur voyait un bouton grisé sans raison.
+
+**Une décision, un module.** `isPromptCardMissing`
+(`src/lib/llmWorkspace/assetPromptCardBatch.ts`) décide à la fois le libellé de
+ligne et ce que coche `Select Missing`. Écrire le critère deux fois est le
+défaut récurrent de ce dépôt ; ici les deux appels partent du même export.
+
+**Le coût de la preuve, à prévoir la prochaine fois.** Exiger « la valeur
+réellement écrite en base » impose une écriture réelle sur un projet réel. La
+vérification a écrasé la Prompt Card de l'Asset 44 (Azelle, projet 18), deux
+fois. L'auteur a demandé la restauration ; elle a été faite après
+`npm run backup:create` (`mikai-backup-2026-09-17T00-54-40-038Z`), garde sur
+`project_id` et `name` en plus de l'`id`, `updated_at` remis à sa valeur
+d'origine. **Un ticket qui demande une preuve en base doit nommer l'asset
+sacrifiable, ou demander la valeur d'origine avant d'écrire.**
+
+Suite 2112 → 2118, six tests neufs prouvés par mutation.
+
 ## `LLM.ERROR.CAUSE.2` — le reste du dépôt jetait encore la cause
 
 `LLM.ERROR.CAUSE.1` avait câblé `extractFetchErrorCause` sur trois chemins.
