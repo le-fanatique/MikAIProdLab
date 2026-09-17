@@ -15,6 +15,7 @@ import { deleteAsset } from "@/actions/assets";
 import { getLLMSettings } from "@/lib/settings";
 import AssetAlignmentBatchPanel, { type BatchAlignmentAssetItem } from "@/components/projectStyle/AssetAlignmentBatchPanel";
 import { getAssetAlignmentStatusAction } from "@/actions/assetAlignment";
+import AssetPromptCardBatchPanel, { type BatchPromptCardAssetItem } from "@/components/llmWorkspace/AssetPromptCardBatchPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,17 @@ export default async function AssetsPage({ params, searchParams }: Props) {
       }
     })
   );
+
+  // ASSET.PROMPTCARD.BATCH.1 — `assetList` already comes from a full
+  // `select()`, so `promptCard` is already loaded: a plain `map`, no
+  // additional query and no Server Action call at render, unlike the
+  // alignment batch items above (which must resolve a per-Asset status).
+  const promptCardBatchItems: BatchPromptCardAssetItem[] = assetList.map((asset) => ({
+    id: asset.id,
+    name: asset.name,
+    type: asset.type,
+    promptCard: asset.promptCard,
+  }));
 
   const rawCreatedCount = resolvedSearchParams["assetsCreated"];
   const createdCountStr =
@@ -250,6 +262,24 @@ export default async function AssetsPage({ params, searchParams }: Props) {
           <Collapsible label="Batch Align with Project Style">
             <Card title="Batch Align with Project Style">
               <AssetAlignmentBatchPanel projectId={pid} assets={alignmentBatchItems} />
+            </Card>
+          </Collapsible>
+        </div>
+      )}
+
+      {/* ASSET.PROMPTCARD.BATCH.1 — same placement rationale as the block
+          above: this operation is about Assets, and this page already owns
+          the full roster, so no asset list has to be duplicated elsewhere to
+          make the selection possible. */}
+      {assetList.length > 0 && (
+        <div className="mt-6 mb-6">
+          <Collapsible label="Batch Prompt Card">
+            <Card title="Batch Prompt Card">
+              <AssetPromptCardBatchPanel
+                projectId={pid}
+                assets={promptCardBatchItems}
+                isConfigured={!!llmSettings.model.trim()}
+              />
             </Card>
           </Collapsible>
         </div>
