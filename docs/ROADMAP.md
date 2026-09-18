@@ -32,6 +32,13 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 le déroulé sur la machine Ubuntu et la validation manuelle de `P0.3`, que
 seul l'auteur peut faire. Voir plus bas.
 
+**`INVOKE.SYNC.1` — CLOS le 2026-09-18**, un commit `ebc5b67`, migration `0069`
+appliquée. L'aller-retour MikAI ⇄ InvokeAI est complet : une image retouchée
+dans Invoke revient dans la table de son entité, par comptage seul puis import
+transactionnel. Deux chemins de déclenchement, dont un `<form>` qui fonctionne
+sans JavaScript. Suite 2181 → 2206. **Lot 3 non commencé** : aucun propriétaire
+d'images au-delà des quatre types actuels.
+
 **`INVOKE.PUSH.2` — CLOS le 2026-09-18**, un commit `b82d7e9`, aucune
 migration, aucune dépendance. `Push to Invoke` dans les listes d'images de
 référence d'un asset et d'un shot, et sur les deux storyboards — brouillon de

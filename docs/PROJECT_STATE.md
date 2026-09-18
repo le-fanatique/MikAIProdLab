@@ -2,6 +2,54 @@
 
 Last updated: 2026-09-18
 
+## `INVOKE.SYNC.1` — l'aller-retour est bouclé
+
+Livré le 2026-09-18 (`ebc5b67`), migration `0069` appliquée (une table,
+`invoke_imported_images`, purement additive), aucune dépendance. Une image
+retouchée dans InvokeAI revient désormais dans la table de son entité
+propriétaire — référence d'asset ou de shot, brouillon de storyboard de shot ou
+de séquence.
+
+**Le coût est un comptage, pas une liste.**
+`GET /images/?board_id=…&limit=0&is_intermediate=false` ne renvoie que le total.
+Total inchangé : ni liste, ni téléchargement, ni écriture. C'est ce qui rend le
+mécanisme gratuit pendant que l'auteur travaille dans Invoke, et un test le fige
+— sans lui, un refactor le perdrait sans que rien n'échoue.
+
+**L'écriture est transactionnelle.** La ligne de destination et la ligne
+`invoke_imported_images` sont insérées ensemble, donc une course perdue sur
+l'unicité annule aussi la destination : jamais de demi-import. Le fichier est
+écrit avant la transaction — SQLite ne couvre pas le disque — et supprimé si
+elle échoue. Le nouveau total n'est mémorisé qu'après un passage sans erreur,
+pour qu'un échec laisse le board redétectable.
+
+**Deux chemins de déclenchement, et le second n'est pas du confort.**
+Automatique au chargement et au retour du focus ; manuel par un
+`<form action={serverAction}>`. À distance, l'hydratation du bundle client
+échoue et tout handler React est mort (voir `INVOKE.PUSH.2` plus bas) : sans le
+formulaire, le retour ne fonctionnerait pas là où l'auteur travaille le plus
+souvent. **C'est la deuxième fois en deux tickets que cette contrainte décide
+d'une conception. Il faut la traiter comme une règle du produit, pas comme un
+incident** : tout mécanisme dont dépend une donnée doit avoir un chemin qui
+survit à une hydratation ratée.
+
+**Un défaut trouvé en pilotant un vrai navigateur, pas en test.** Le redirect
+d'une Server Action remonte le composant client, ce qui réinitialisait
+l'anti-rebond en mémoire : tant qu'une erreur persistait, la page rebouclait sur
+Invoke. Horodatage passé en `sessionStorage`, qui survit au remount.
+
+Suite 2181 → 2206. Aller-retour complet exercé contre l'InvokeAI 6.14.0 de
+l'auteur sur un asset jetable, créé puis supprimé des deux côtés : l'image
+poussée n'est pas réimportée, la seconde l'est une fois, une seconde
+synchronisation ne bouge rien.
+
+**Effet de bord assumé de la première exécution** : la synchronisation a
+rapatrié cinq images accumulées pendant les tests dans les Assets Arthur et
+Kate du projet 999202 — les deux vrais retours `Send to MikAI` de l'auteur, plus
+trois images qu'il avait déposées dans le board Kate par un autre moyen
+(métadonnées `null`, donc pas des pushes MikAI). Comportement voulu, appliqué à
+un historique de test.
+
 ## `INVOKE.PUSH.2` — un bouton là où l'auteur regarde, et une leçon sur l'hydratation
 
 Livré le 2026-09-18 (`b82d7e9`), aucune migration, aucune dépendance.
