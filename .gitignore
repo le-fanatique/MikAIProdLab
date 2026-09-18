@@ -124,3 +124,10 @@ next-env.d.ts
 # running against, which is the only way to tell later whether the guide
 # changed under us.
 .claude/skills/sd25-pe/
+
+# Lanceur d'accès distant, propre à la machine de l'auteur : il code en dur le
+# dossier d'InvokeAI, le nom du tunnel Cloudflare et le domaine. `start.bat`,
+# `install.bat` et `update.bat` sont génériques et restent suivis ; celui-ci ne
+# l'est pas. Ce qu'il a appris est consigné dans docs/REMOTE_ACCESS_SETUP.md,
+# qui, lui, est suivi.
+/start-remote.bat
