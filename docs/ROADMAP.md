@@ -276,6 +276,7 @@ produit, et personne d'autre ne peut la prendre.
 
 | Sujet | Ce qui manque |
 | --- | --- |
+| **Bureau distant Guacamole** — `docs/REMOTE_DESKTOP_GUACAMOLE_SPEC.md` | mis de côté par l'auteur le 2026-09-18. L'hôte `desk.creativeprodlab.org` est déjà routé et répond 502 ; tout le reste est décrit, rien n'est lancé. Le test décisif est le passage des WebSockets depuis le poste d'entreprise |
 | **B18** — contraintes négatives | l'auteur l'a lui-même classé hors MVP. Vrai manque, pas une urgence |
 | **B20e** — migration de l'analyse Reference Board | ses bloqueurs se sont révélés être de l'orchestration, pas du format (`docs/LLM_WORKSPACE_ARCHITECTURE.md` §11.3). Un chantier à concevoir avec lui, pas un ticket à préparer |
 | **Finetuning du prompt storyboard** | ouvert le 2026-08-20. Ordre des parties, ce que chaque partie émet, budget de mots du guide, coût en tokens par plan. **Ne pas ouvrir avant que plusieurs séquences aient été produites avec la nouvelle composition** — son intérêt est entièrement dans les données réelles |
