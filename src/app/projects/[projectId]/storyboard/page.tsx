@@ -31,6 +31,8 @@ import SequenceGenerationPackagePanel from "@/components/prompts/SequenceGenerat
 import { uploadSequenceStoryboardImage, deleteSequenceStoryboardImage } from "@/actions/sequenceStoryboard";
 import { pushShotStoryboardImageToInvoke, pushSequenceStoryboardImageToInvoke } from "@/actions/invoke";
 import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
+import InvokeSyncBanner from "@/components/invoke/InvokeSyncBanner";
+import InvokeSyncButton from "@/components/invoke/InvokeSyncButton";
 import { refImageUrl } from "@/lib/refImageUrl";
 import { compileShotPrompt } from "@/lib/prompts/compileShotPrompt";
 import { getReferenceImageRoleLabel } from "@/lib/referenceImageRoles";
@@ -397,6 +399,10 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
   const invokePushed = sp(resolvedSearchParams["invokePushed"]) === "1";
   const invokeBoardName = sp(resolvedSearchParams["invokeBoardName"]);
   const invokeUrl = sp(resolvedSearchParams["invokeUrl"]);
+  // INVOKE.SYNC.1 — same "shared by both storyboards on this page" split.
+  const invokeSyncImported = sp(resolvedSearchParams["invokeSyncImported"]);
+  const invokeSyncHref = sp(resolvedSearchParams["invokeSyncHref"]);
+  const invokeSyncError = sp(resolvedSearchParams["invokeSyncError"]);
 
   // Selection made in Storyboard Assets — transported into each Shot's
   // "Generate"/"Regenerate" link so ShotGenerationPanel can filter its
@@ -453,6 +459,8 @@ export default async function StoryboardPage({ params, searchParams }: Props) {
       {invokePushed && invokeBoardName && invokeUrl && (
         <InvokePushedBanner boardName={invokeBoardName} invokeUrl={invokeUrl} />
       )}
+      <InvokeSyncBanner importedMessage={invokeSyncImported} importedHref={invokeSyncHref} error={invokeSyncError} />
+      <InvokeSyncButton returnTo={storyboardReturnTo} />
 
       <SectionLabel label="Storyboard" />
       <div className="mb-3">

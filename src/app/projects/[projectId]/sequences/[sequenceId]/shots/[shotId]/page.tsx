@@ -25,6 +25,8 @@ import { assignAssetToShot, removeAssetFromShot } from "@/actions/shotAssets";
 import { deleteShotReferenceImage, setShotStoryboardThumbnail } from "@/actions/shotReferenceImages";
 import { pushShotReferenceImageToInvoke } from "@/actions/invoke";
 import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
+import InvokeSyncBanner from "@/components/invoke/InvokeSyncBanner";
+import InvokeSyncButton from "@/components/invoke/InvokeSyncButton";
 import { createShotReferenceVideo, deleteShotReferenceVideo } from "@/actions/shotReferenceVideos";
 import { addReferenceVideoToShotVideos } from "@/actions/shotVideoReferenceBridge";
 import { isEligibleShotTargetDuration } from "@/lib/shotReferenceVideos/videoValidation";
@@ -116,6 +118,9 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
   const invokePushed = sp("invokePushed");
   const invokeBoardName = sp("invokeBoardName");
   const invokeUrl = sp("invokeUrl");
+  const invokeSyncImported = sp("invokeSyncImported");
+  const invokeSyncHref = sp("invokeSyncHref");
+  const invokeSyncError = sp("invokeSyncError");
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -948,6 +953,8 @@ export default async function ShotDetailPage({ params, searchParams }: Props) {
             reachable, but doesn't compete with Narrative Context/Casting/
             prompt surfaces for default visual weight. */}
         <SectionLabel label="References" />
+        <InvokeSyncBanner importedMessage={invokeSyncImported} importedHref={invokeSyncHref} error={invokeSyncError} />
+        <InvokeSyncButton returnTo={`/projects/${pid}/sequences/${sid}/shots/${shid}`} />
 
         <Collapsible label={`Reference Images${refImages.length > 0 ? ` (${refImages.length})` : ""}`}>
           <Card title="Reference Images">

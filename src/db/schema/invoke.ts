@@ -84,3 +84,44 @@ export const invokePushedImages = sqliteTable(
 );
 
 export type InvokePushedImage = typeof invokePushedImages.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// INVOKE.SYNC.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §5.3, ticket §1.4. What MikAI
+// has already imported FROM a board, so a repeated sync (a second focus
+// event, a concurrent tab) never re-imports the same Invoke image twice. Not
+// a "direction" column on `invoke_pushed_images` (ticket §1.4): a pushed
+// image and an imported image are not the same fact, and the same
+// `image_name` can legitimately appear in both tables for the same board (an
+// image MikAI pushed, then separately re-saved into the same board by the
+// author in Invoke, is a real re-import candidate the moment it stops being
+// literally the pushed image — `invoke_pushed_images` already excludes it by
+// itself; this table's own job is only "already brought back once").
+//
+// The unique constraint on `imageName` carries the idempotence (ticket §1.4,
+// same precedent as `invoke_pushed_images` above:
+// `generation_job_outputs_job_index_unique`), not an application-level
+// check: two concurrent syncs racing to import the same Invoke image can
+// both attempt the insert, but only one commits.
+// ---------------------------------------------------------------------------
+
+export const invokeImportedImages = sqliteTable(
+  "invoke_imported_images",
+  {
+    id: int("id").primaryKey({ autoIncrement: true }),
+    invokeBoardId: int("invoke_board_id")
+      .notNull()
+      .references(() => invokeBoards.id, { onDelete: "cascade" }),
+    /** InvokeAI's `image_name` for the imported image — unique: a given Invoke image is only ever imported once. */
+    imageName: text("image_name").notNull(),
+    /** Which MikAI table received the row: one of the four destination tables in ticket §1.3 (`shot_reference_images`, `asset_reference_images`, `storyboard_images`, `sequence_storyboard_images`). */
+    destinationTable: text("destination_table").notNull(),
+    /** The id of the row created in `destinationTable`. */
+    destinationId: int("destination_id").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => [unique("invoke_imported_images_image_name_unique").on(table.imageName)]
+);
+
+export type InvokeImportedImage = typeof invokeImportedImages.$inferSelect;

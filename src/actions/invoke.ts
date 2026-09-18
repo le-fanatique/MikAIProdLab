@@ -9,10 +9,12 @@ import {
   assetReferenceImages,
   storyboardImages,
   sequenceStoryboardImages,
+  invokeBoards,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { pushImageToInvokeBoard } from "@/lib/invoke/invokePush";
+import { syncInvokeBoard, type InvokeSyncOwnerType } from "@/lib/invoke/invokeSync";
 
 // INVOKE.PUSH.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §5.1, ticket §1.5. Two
 // entry points, one per owner kind this lot supports (shot, asset — lot 3
@@ -245,4 +247,121 @@ export async function pushAssetReferenceImageToInvoke(formData: FormData): Promi
   redirect(
     `${returnTo}${sep}invokePushed=1&invokeBoardName=${encodeURIComponent(result.boardName)}&invokeUrl=${encodeURIComponent(result.invokeUrl)}`
   );
+}
+
+// ---------------------------------------------------------------------------
+// INVOKE.SYNC.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §5.3, ticket §1.1. The single
+// server action both trigger paths call: an automatic client component
+// (mount + `visibilitychange`/`focus`, debounced) and a plain
+// `<form action={syncInvokeBoards}>` button that keeps working with no
+// JavaScript (ticket §1.1 — a real requirement at the author's own remote
+// setup, `docs/PROJECT_STATE.md`, section `INVOKE.PUSH.2`). No owner id is
+// trusted here: every board this reads was itself only ever created by an
+// already-verified push (`pushImageToInvokeBoard`'s `resolveOrCreateBoard`),
+// so a board row stands in for the ownership check every other action in
+// this file does explicitly.
+// ---------------------------------------------------------------------------
+
+async function resolveInvokeSyncEntity(
+  ownerType: InvokeSyncOwnerType,
+  ownerId: number
+): Promise<{ label: string; href: string } | null> {
+  if (ownerType === "asset") {
+    const [asset] = await db.select().from(assets).where(eq(assets.id, ownerId));
+    if (!asset) return null;
+    return { label: `Asset ${asset.name}`, href: `/projects/${asset.projectId}/assets/${asset.id}` };
+  }
+
+  // "shot" and "shot_storyboard" share the same owning Shot; only the
+  // returned label/link differ, matching `buildInvokeBoardName`'s own split.
+  if (ownerType === "shot" || ownerType === "shot_storyboard") {
+    const [shot] = await db.select().from(shots).where(eq(shots.id, ownerId));
+    if (!shot) return null;
+    const [sequence] = await db.select().from(sequences).where(eq(sequences.id, shot.sequenceId));
+    if (!sequence) return null;
+    const shotLabel = shot.shotCode?.trim() || `#${shot.id}`;
+    if (ownerType === "shot") {
+      return {
+        label: `Shot ${shotLabel}`,
+        href: `/projects/${sequence.projectId}/sequences/${sequence.id}/shots/${shot.id}`,
+      };
+    }
+    return {
+      label: `Shot ${shotLabel} storyboard`,
+      href: `/projects/${sequence.projectId}/storyboard?sequenceId=${sequence.id}`,
+    };
+  }
+
+  // "sequence_storyboard"
+  const [sequence] = await db.select().from(sequences).where(eq(sequences.id, ownerId));
+  if (!sequence) return null;
+  const sequenceLabel = sequence.sequenceCode?.trim() || `#${sequence.id}`;
+  return {
+    label: `Sequence ${sequenceLabel} storyboard`,
+    href: `/projects/${sequence.projectId}/storyboard?sequenceId=${sequence.id}`,
+  };
+}
+
+/**
+ * Syncs every linked Invoke board in parallel (ticket §1.2 — a bare count
+ * poll per board, no list/download/write unless a board's total moved) and
+ * imports whatever changed. Redirects with a message ONLY when there is
+ * something to show — an import or an error; the common case (nothing
+ * changed on any board) returns normally, producing no visible change at all
+ * (ticket §1.5: "rien du tout quand rien n'a changé").
+ */
+export async function syncInvokeBoards(formData: FormData): Promise<void> {
+  const returnTo = (formData.get("returnTo") as string | null)?.trim() || "/";
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}invokeSyncError=${encodeURIComponent(msg)}`);
+  }
+
+  const boards = await db.select().from(invokeBoards);
+
+  const outcomes = await Promise.all(
+    boards.map(async (board) => ({
+      board,
+      result: await syncInvokeBoard({
+        invokeBoardId: board.id,
+        ownerType: board.ownerType,
+        ownerId: board.ownerId,
+        boardName: board.boardName,
+      }),
+    }))
+  );
+
+  const errors: string[] = [];
+  const imports: { label: string; href: string; count: number }[] = [];
+
+  for (const { board, result } of outcomes) {
+    if (!result.ok) {
+      errors.push(`"${board.boardName}": ${result.error}`);
+      continue;
+    }
+    if (result.changed && result.imported > 0) {
+      const entity = await resolveInvokeSyncEntity(board.ownerType, board.ownerId);
+      imports.push({
+        label: entity?.label ?? board.boardName,
+        href: entity?.href ?? returnTo,
+        count: result.imported,
+      });
+    }
+  }
+
+  if (errors.length > 0) errRedirect(errors.join(" "));
+
+  if (imports.length === 0) return; // Nothing changed — no redirect, no visible noise.
+
+  const message = imports
+    .map((entry) => `Imported ${entry.count} image${entry.count === 1 ? "" : "s"} from Invoke into ${entry.label}`)
+    .join(". ");
+  // Several boards can change in the same pass; the link points at the
+  // first one. Ticket §1.5 only spells out the single-entity message —
+  // inferred for the multi-board case, noted in the executor report.
+  const href = imports[0].href;
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${sep}invokeSyncImported=${encodeURIComponent(message)}&invokeSyncHref=${encodeURIComponent(href)}`);
 }

@@ -17,6 +17,8 @@ import { deleteAsset } from "@/actions/assets";
 import { deleteAssetReferenceImage, setAssetReferenceImageApproval } from "@/actions/assetReferenceImages";
 import { pushAssetReferenceImageToInvoke } from "@/actions/invoke";
 import InvokePushedBanner from "@/components/invoke/InvokePushedBanner";
+import InvokeSyncBanner from "@/components/invoke/InvokeSyncBanner";
+import InvokeSyncButton from "@/components/invoke/InvokeSyncButton";
 import { getWorkflowDefaults } from "@/lib/workflowDefaults";
 import { getLLMSettings } from "@/lib/settings";
 import AssetDescriptionEnhancePanel, { AssetNotesEnhancePanel } from "@/components/llmWorkspace/AssetDescriptionEnhancePanel";
@@ -91,6 +93,12 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
   const invokePushed = singleParam(resolvedSearchParams["invokePushed"]);
   const invokeBoardName = singleParam(resolvedSearchParams["invokeBoardName"]);
   const invokeUrl = singleParam(resolvedSearchParams["invokeUrl"]);
+
+  // INVOKE.SYNC.1 — the return path's own banner, same single-string
+  // extraction convention as the push banner above.
+  const invokeSyncImported = singleParam(resolvedSearchParams["invokeSyncImported"]);
+  const invokeSyncHref = singleParam(resolvedSearchParams["invokeSyncHref"]);
+  const invokeSyncError = singleParam(resolvedSearchParams["invokeSyncError"]);
 
   const rawGeneration = resolvedSearchParams["generation"];
   const generationOpen =
@@ -532,6 +540,8 @@ export default async function AssetDetailPage({ params, searchParams }: Props) {
 
       {/* ── References ────────────────────────────────────── */}
       <SectionLabel label="References" />
+      <InvokeSyncBanner importedMessage={invokeSyncImported} importedHref={invokeSyncHref} error={invokeSyncError} />
+      <InvokeSyncButton returnTo={`/projects/${pid}/assets/${aid}`} />
       {invokeError && (
         <div className="mb-4 rounded border border-[#cf7b6b]/30 bg-[#cf7b6b]/5 px-4 py-3">
           <p className="text-sm text-[#cf7b6b]">{invokeError}</p>

@@ -90,6 +90,34 @@ export function buildInvokeUploadUrl(baseUrl: string, args: { boardId: string })
   return `${baseUrl}/api/v1/images/upload?${params.toString()}`;
 }
 
+// INVOKE.SYNC.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §5.3, ticket §1.2. Same
+// `GET /api/v1/images/?board_id=…` route as the board gallery uses
+// (`images.py`, `list_image_dtos`), with `limit=0` for the count-only poll
+// (`{"limit":0,"offset":0,"total":N,"items":[]}`, verified against the
+// author's own Invoke 6.14.0) and `limit=MAX_PAGE_SIZE` (1000,
+// `pagination.py`) to actually list a board's images once its total has
+// moved. A board past 1000 images is out of scope for this ticket — see the
+// executor report.
+export const INVOKE_IMAGES_LIST_MAX_PAGE_SIZE = 1000;
+
+export function buildInvokeImagesPageUrl(
+  baseUrl: string,
+  args: { boardId: string; limit: number }
+): string {
+  const params = new URLSearchParams({
+    board_id: args.boardId,
+    is_intermediate: "false",
+    limit: String(args.limit),
+    offset: "0",
+  });
+  return `${baseUrl}/api/v1/images/?${params.toString()}`;
+}
+
+/** `GET /api/v1/images/i/{image_name}/full` (`images.py`, `get_image_full`). */
+export function buildInvokeImageFullUrl(baseUrl: string, imageName: string): string {
+  return `${baseUrl}/api/v1/images/i/${encodeURIComponent(imageName)}/full`;
+}
+
 export function buildInvokeWorkflowsCreateUrl(baseUrl: string): string {
   return `${baseUrl}/api/v1/workflows/`;
 }
@@ -138,6 +166,14 @@ export function parseInvokeImageDto(json: unknown): { imageName: string } {
     throw new Error(`InvokeAI image upload response missing "image_name": ${JSON.stringify(json).slice(0, 200)}`);
   }
   return { imageName: json["image_name"] };
+}
+
+/** The paginated `/images/` response shape (`OffsetPaginatedResults[ImageDTO]`): only `total` and each item's `image_name` are read — every other ImageDTO field is ignored by this ticket. */
+export function parseInvokeImagesPage(json: unknown): { total: number; items: { imageName: string }[] } {
+  if (!isRecord(json) || typeof json["total"] !== "number" || !Array.isArray(json["items"])) {
+    throw new Error(`InvokeAI /images/ (list) response missing "total"/"items": ${JSON.stringify(json).slice(0, 200)}`);
+  }
+  return { total: json["total"], items: json["items"].map((entry) => parseInvokeImageDto(entry)) };
 }
 
 export function parseInvokeWorkflowRecordDto(json: unknown): { workflowId: string } {
@@ -261,6 +297,63 @@ export async function uploadInvokeImage(args: UploadInvokeImageArgs): Promise<{ 
   }
 
   return parseInvokeImageDto(await response.json());
+}
+
+// ---------------------------------------------------------------------------
+// getInvokeBoardImageCount / listInvokeBoardImages / downloadInvokeImageBytes
+// ---------------------------------------------------------------------------
+
+function isInvokeBoardNotFoundError(status: number, excerpt: string): boolean {
+  // `list_image_dtos` (images.py) does not itself validate `board_id` against
+  // the boards table — a deleted board's id simply matches zero images, a
+  // 200 with `total: 0`, not a 404. The only realistic 404 on this route is a
+  // malformed request; treated as "board gone" per ticket §1.5/spec §6 so a
+  // stale `invoke_boards` row does not sync forever against nothing.
+  return status === 404 || /not found/i.test(excerpt);
+}
+
+/** `GET /api/v1/images/?board_id=…&limit=0&is_intermediate=false` (ticket §1.2) — the count-only poll: no `items`, so no image is ever listed or downloaded when nothing changed. */
+export async function getInvokeBoardImageCount(boardId: string): Promise<number> {
+  const baseUrl = await getConfiguredInvokeBaseUrl();
+  const response = await fetch(buildInvokeImagesPageUrl(baseUrl, { boardId, limit: 0 }));
+  if (!response.ok) {
+    const excerpt = await readResponseText(response);
+    if (isInvokeBoardNotFoundError(response.status, excerpt)) {
+      throw new Error(`InvokeAI board "${boardId}" was not found (responded ${response.status}).`);
+    }
+    throw new Error(`InvokeAI /images/ (count) responded ${response.status}: ${excerpt}`);
+  }
+  return parseInvokeImagesPage(await response.json()).total;
+}
+
+/** `GET /api/v1/images/?board_id=…&limit=1000&is_intermediate=false` — only called once the count-only poll above has found a change (ticket §1.2). */
+export async function listInvokeBoardImages(boardId: string): Promise<{ imageName: string }[]> {
+  const baseUrl = await getConfiguredInvokeBaseUrl();
+  const response = await fetch(
+    buildInvokeImagesPageUrl(baseUrl, { boardId, limit: INVOKE_IMAGES_LIST_MAX_PAGE_SIZE })
+  );
+  if (!response.ok) {
+    const excerpt = await readResponseText(response);
+    if (isInvokeBoardNotFoundError(response.status, excerpt)) {
+      throw new Error(`InvokeAI board "${boardId}" was not found (responded ${response.status}).`);
+    }
+    throw new Error(`InvokeAI /images/ (list) responded ${response.status}: ${excerpt}`);
+  }
+  return parseInvokeImagesPage(await response.json()).items;
+}
+
+/** `GET /api/v1/images/i/{image_name}/full` (`images.py`, `get_image_full`). */
+export async function downloadInvokeImageBytes(imageName: string): Promise<Buffer> {
+  const baseUrl = await getConfiguredInvokeBaseUrl();
+  const response = await fetch(buildInvokeImageFullUrl(baseUrl, imageName));
+  if (!response.ok) {
+    const excerpt = await readResponseText(response);
+    if (isInvokeBoardNotFoundError(response.status, excerpt)) {
+      throw new Error(`InvokeAI image "${imageName}" was not found (responded ${response.status}).`);
+    }
+    throw new Error(`InvokeAI /images/i/${imageName}/full responded ${response.status}: ${excerpt}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
 }
 
 // ---------------------------------------------------------------------------

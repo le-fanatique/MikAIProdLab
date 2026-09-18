@@ -437,3 +437,64 @@ export async function readProject({ db, schema }: TempDb, projectId: number) {
   const [row] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
   return row;
 }
+
+// ---------------------------------------------------------------------------
+// INVOKE.SYNC.1 — invoke_boards / invoke_pushed_images / invoke_imported_images
+// builders, same "insert only NOT NULL columns plus whatever the caller wants
+// to observe" convention as every builder above.
+// ---------------------------------------------------------------------------
+
+export async function insertInvokeBoard(
+  { db, schema }: TempDb,
+  values: { ownerType: "shot" | "asset" | "shot_storyboard" | "sequence_storyboard"; ownerId: number } & Partial<
+    typeof schema.invokeBoards.$inferInsert
+  >
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.invokeBoards)
+    .values({ boardId: `board-${values.ownerType}-${values.ownerId}`, boardName: "Test board", ...values })
+    .returning({ id: schema.invokeBoards.id });
+  return row.id;
+}
+
+export async function insertInvokePushedImage(
+  { db, schema }: TempDb,
+  invokeBoardId: number,
+  values: Partial<typeof schema.invokePushedImages.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.invokePushedImages)
+    .values({ invokeBoardId, imageName: "pushed.png", sourceImagePath: "uploads/reference-images/fixture.jpg", ...values })
+    .returning({ id: schema.invokePushedImages.id });
+  return row.id;
+}
+
+export async function insertInvokeImportedImage(
+  { db, schema }: TempDb,
+  invokeBoardId: number,
+  values: Partial<typeof schema.invokeImportedImages.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.invokeImportedImages)
+    .values({
+      invokeBoardId,
+      imageName: "imported.png",
+      destinationTable: "shot_reference_images",
+      destinationId: 1,
+      ...values,
+    })
+    .returning({ id: schema.invokeImportedImages.id });
+  return row.id;
+}
+
+export async function readInvokeBoard({ db, schema }: TempDb, invokeBoardId: number) {
+  const [row] = await db.select().from(schema.invokeBoards).where(eq(schema.invokeBoards.id, invokeBoardId));
+  return row;
+}
+
+export async function readInvokeImportedImages({ db, schema }: TempDb, invokeBoardId: number) {
+  return db
+    .select()
+    .from(schema.invokeImportedImages)
+    .where(eq(schema.invokeImportedImages.invokeBoardId, invokeBoardId));
+}

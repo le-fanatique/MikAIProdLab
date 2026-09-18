@@ -6,6 +6,8 @@ import {
   buildInvokeBoardsListUrl,
   buildInvokeCreateBoardUrl,
   buildInvokeUploadUrl,
+  buildInvokeImagesPageUrl,
+  buildInvokeImageFullUrl,
   buildInvokeWorkflowsCreateUrl,
   buildInvokeWorkflowsUpdateUrl,
   parseInvokeAppVersion,
@@ -13,6 +15,7 @@ import {
   parseInvokeBoardDto,
   parseInvokeBoardDtoList,
   parseInvokeImageDto,
+  parseInvokeImagesPage,
   parseInvokeWorkflowRecordDto,
 } from "@/lib/invoke/invokeServerClient";
 
@@ -63,6 +66,24 @@ describe("Invoke request URL builders", () => {
     expect(url).toBe(
       "http://127.0.0.1:9090/api/v1/images/upload?image_category=user&is_intermediate=false&board_id=abc-123"
     );
+  });
+
+  it("builds the images count-only page URL with limit=0 and is_intermediate=false (ticket §1.2)", () => {
+    const url = buildInvokeImagesPageUrl(base, { boardId: "b1", limit: 0 });
+    expect(url).toBe(
+      "http://127.0.0.1:9090/api/v1/images/?board_id=b1&is_intermediate=false&limit=0&offset=0"
+    );
+  });
+
+  it("builds the images list page URL with the requested limit", () => {
+    const url = buildInvokeImagesPageUrl(base, { boardId: "b1", limit: 1000 });
+    expect(url).toBe(
+      "http://127.0.0.1:9090/api/v1/images/?board_id=b1&is_intermediate=false&limit=1000&offset=0"
+    );
+  });
+
+  it("builds the image full-file URL", () => {
+    expect(buildInvokeImageFullUrl(base, "abc.png")).toBe("http://127.0.0.1:9090/api/v1/images/i/abc.png/full");
   });
 
   it("builds the workflows create URL", () => {
@@ -121,6 +142,26 @@ describe("Invoke response parsers", () => {
 
   it("throws on a malformed image DTO", () => {
     expect(() => parseInvokeImageDto({})).toThrow(/image_name/);
+  });
+
+  it("parses the images page response — count-only shape (no items)", () => {
+    expect(parseInvokeImagesPage({ limit: 0, offset: 0, total: 3, items: [] })).toEqual({ total: 3, items: [] });
+  });
+
+  it("parses the images page response — full listing", () => {
+    expect(
+      parseInvokeImagesPage({
+        limit: 1000,
+        offset: 0,
+        total: 2,
+        items: [{ image_name: "a.png" }, { image_name: "b.png" }],
+      })
+    ).toEqual({ total: 2, items: [{ imageName: "a.png" }, { imageName: "b.png" }] });
+  });
+
+  it("throws on a malformed images page response", () => {
+    expect(() => parseInvokeImagesPage({ items: [] })).toThrow(/total.*items/);
+    expect(() => parseInvokeImagesPage({ total: 1 })).toThrow(/total.*items/);
   });
 
   it("parses a workflow record DTO", () => {
