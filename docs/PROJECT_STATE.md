@@ -2,6 +2,63 @@
 
 Last updated: 2026-09-18
 
+## `INVOKE.STYLE.1` — les cinq tables d'images sont couvertes
+
+Livré le 2026-09-18 (`8737fba`), aucune migration, aucune dépendance.
+`project_style_reference_images` était la cinquième et dernière table d'images
+du dépôt ; l'aller-retour MikAI ⇄ InvokeAI couvre désormais tout ce qui porte
+une image — références d'asset et de shot, brouillons de storyboard de shot et
+de séquence, références de style de projet.
+
+Le ticket n'a ajouté qu'un cas à des mécanismes existants. C'est le signe que
+l'extraction faite en `INVOKE.PUSH.1` tenait : cinq propriétaires, un seul
+client HTTP, une seule résolution de board, une seule synchronisation.
+
+**Une image qui revient d'une retouche arrive non approuvée.**
+`approvedForAnalysis` et `approvedForGeneration` restent à `false` : ces deux
+drapeaux commandent l'analyse de style et la génération, et les mettre à vrai
+ferait entrer une image dans le pipeline sans décision de l'auteur. Revenir
+n'est pas être approuvé.
+
+**Le bouton de push est un `<form action={...}>` alors que l'écran voisin
+supprime par `onClick`.** Il a fallu l'extraire du formulaire de sauvegarde —
+un `<form>` ne peut pas en contenir un autre. C'est la troisième fois que la
+contrainte d'hydratation décide d'une conception, et sa cause est maintenant
+mesurée (section suivante).
+
+Suite 2206 → 2216. Aller-retour exercé contre l'InvokeAI 6.14.0 de l'auteur sur
+une référence jetable, créée puis supprimée des deux côtés.
+
+Dette signalée, non corrigée : `ProjectStyleWorkspace.tsx` porte 14 erreurs lint
+`react-hooks/preserve-manual-memoization` préexistantes, vérifiées identiques
+avant toute modification.
+
+## Pourquoi les écrans se figent derrière un tunnel — cause mesurée le 2026-09-18
+
+Trois tickets de suite ont dû contourner une hydratation qui échoue à distance.
+La cause a été mesurée, et elle n'est pas dans MikAI :
+
+- à travers le tunnel, **le serveur livre tout correctement** : HTML `200`, et
+  un chunk JS de 746 569 octets identique à celui servi en local ;
+- mais le navigateur refuse les ressources du domaine du tunnel —
+  `net::ERR_BLOCKED_BY_CLIENT`, le code d'un blocage par extension ou suite de
+  sécurité. Reproduit dans un Chromium piloté sur la machine de l'auteur, où la
+  navigation vers le domaine est bloquée d'emblée.
+
+Chez l'auteur le blocage est partiel : le HTML passe, les chunks non. React ne
+s'hydrate jamais, donc **tout handler React est mort**, tandis que le rendu
+serveur et les `<form action={serverAction}>` continuent de fonctionner.
+
+Les domaines `trycloudflare.com` sont éphémères et massivement utilisés pour du
+phishing ; les suites de sécurité les filtrent. Les vraies réponses, par ordre :
+**Tailscale** (nom d'hôte stable, réseau privé — et supprime au passage
+l'exposition publique d'InvokeAI), un tunnel Cloudflare nommé sur un domaine
+propre, ou une exception dans l'antivirus.
+
+**La règle de conception reste vraie quelle que soit la cause** : tout mécanisme
+qui porte une donnée garde un chemin qui fonctionne sans JavaScript. Elle a
+sauvé le push et la synchronisation ; personne n'a inventorié les autres écrans.
+
 ## `INVOKE.SYNC.1` — l'aller-retour est bouclé
 
 Livré le 2026-09-18 (`ebc5b67`), migration `0069` appliquée (une table,

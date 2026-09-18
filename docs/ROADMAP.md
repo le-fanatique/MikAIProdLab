@@ -32,6 +32,11 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 le déroulé sur la machine Ubuntu et la validation manuelle de `P0.3`, que
 seul l'auteur peut faire. Voir plus bas.
 
+**`INVOKE.STYLE.1` — CLOS le 2026-09-18**, un commit `8737fba`, aucune
+migration. Les références de style de projet rejoignent l'aller-retour : les
+**cinq** tables d'images du dépôt sont désormais couvertes, le chantier Invoke
+est complet. Suite 2206 → 2216.
+
 **`INVOKE.SYNC.1` — CLOS le 2026-09-18**, un commit `ebc5b67`, migration `0069`
 appliquée. L'aller-retour MikAI ⇄ InvokeAI est complet : une image retouchée
 dans Invoke revient dans la table de son entité, par comptage seul puis import
