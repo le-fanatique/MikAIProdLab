@@ -84,7 +84,7 @@ vide. Le message d'erreur, lui, ne dit rien de tout cela, et les journaux non
 plus.
 
 Symptôme voisin, même origine : après un redémarrage propre, le dossier
-présent dans `outputs	ensors` porte le nom du nouveau serveur, et les
+présent dans `outputs\tensors` porte le nom du nouveau serveur, et les
 orphelins ont disparu. C'est la vérification la plus rapide.
 
 ### 3.2 `tasklist | find` échoue en silence quand Git est dans le PATH
