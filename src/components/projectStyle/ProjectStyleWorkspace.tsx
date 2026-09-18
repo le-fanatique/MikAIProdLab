@@ -612,6 +612,17 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
     return compileStyleSnapshot(snapshot);
   }, [directionBrief, worldGeneral, worldNegative, visualGeneral, visualNegative, sections, rules]);
 
+  // INVOKE.STYLE.1 follow-up, 2026-09-18 — the `useState` setters below are
+  // listed in every dependency array of this component on purpose. Their
+  // identity is stable, so listing them changes nothing at runtime; what it
+  // changes is that `react-hooks/preserve-manual-memoization` stops refusing
+  // to compile this file. It refused on 14 callbacks, which meant React
+  // Compiler skipped the whole component: the manual memoization was not
+  // preserved because the inferred dependencies (the setters) did not match
+  // the declared ones. Listing them is the smallest correction; removing the
+  // manual `useCallback`s entirely would be the other answer, and it is a
+  // refactor this repository cannot prove — no DOM test harness
+  // (`mikai-method` §5).
   const handleSaveDraft = useCallback(async () => {
     setSubmitting(true);
     setError(null);
@@ -631,7 +642,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
     } else {
       setError(result.error);
     }
-  }, [projectId, revision, directionBrief, worldGeneral, worldNegative, visualGeneral, visualNegative]);
+  }, [projectId, revision, directionBrief, worldGeneral, worldNegative, visualGeneral, visualNegative, setRevision, setHasDraft, setSubmitting, setError]);
 
   const handleAddSection = useCallback(
     async (pillar: StylePillar, heading: string, content: string): Promise<boolean> => {
@@ -652,7 +663,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
       setError(result.error);
       return false;
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSections, setHasDraft, setSubmitting, setError]
   );
 
   const handleUpdateSection = useCallback(
@@ -670,7 +681,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
       setError(result.error);
       return false;
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSections, setSubmitting, setError]
   );
 
   const handleDeleteSection = useCallback(
@@ -687,7 +698,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         setError(result.error);
       }
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSections, setSubmitting, setError]
   );
 
   const handleReorderSection = useCallback(
@@ -718,7 +729,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         setError(result.error);
       }
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSections, setSubmitting, setError]
   );
 
   const handleAddRule = useCallback(
@@ -761,7 +772,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
       setError(result.error);
       return { ok: false, error: result.error };
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setHasDraft, setSubmitting, setError]
   );
 
   const handleUpdateRule = useCallback(
@@ -805,7 +816,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
       setError(result.error);
       return false;
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSubmitting, setError]
   );
 
   const handleToggleRule = useCallback(
@@ -822,7 +833,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         setError(result.error);
       }
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSubmitting, setError]
   );
 
   const handleDeleteRule = useCallback(
@@ -839,7 +850,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         setError(result.error);
       }
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSubmitting, setError]
   );
 
   const handleReorderRule = useCallback(
@@ -866,7 +877,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
         setError(result.error);
       }
     },
-    [projectId, revision]
+    [projectId, revision, setRevision, setSubmitting, setError]
   );
 
   const handleEditActive = useCallback(async () => {
