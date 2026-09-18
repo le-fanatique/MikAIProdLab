@@ -12,6 +12,7 @@ import {
   assetReferenceImages,
   storyboardImages,
   sequenceStoryboardImages,
+  projectStyleReferenceImages,
 } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { selectInvokeImagesToImport } from "@/lib/invoke/invokeImportDecision";
@@ -32,7 +33,7 @@ import {
 // on a bare id, but a board row is not a bare id).
 // ---------------------------------------------------------------------------
 
-export type InvokeSyncOwnerType = "shot" | "asset" | "shot_storyboard" | "sequence_storyboard";
+export type InvokeSyncOwnerType = "shot" | "asset" | "shot_storyboard" | "sequence_storyboard" | "project_style";
 
 const ATTACHABLE_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const DEFAULT_EXT = ".png";
@@ -60,6 +61,12 @@ function destinationFolder(ownerType: InvokeSyncOwnerType, ownerId: number): { s
       return { subfolder: `uploads/storyboard-images/shot-${ownerId}`, destinationTable: "storyboard_images" };
     case "sequence_storyboard":
       return { subfolder: `uploads/sequence-storyboard-images/sequence-${ownerId}`, destinationTable: "sequence_storyboard_images" };
+    case "project_style":
+      // INVOKE.STYLE.1 — ticket §1.1's table, the same folder
+      // uploadReferenceImage.ts (REFERENCE_IMAGES_ROOT) already writes to for
+      // an author-uploaded reference. Not sourced from that constant here:
+      // this mapping stands on its own, same reasoning as the other cases.
+      return { subfolder: `uploads/project-style/references/project-${ownerId}`, destinationTable: "project_style_reference_images" };
   }
 }
 
@@ -170,7 +177,7 @@ export async function importInvokeImageIntoDestination(
           .returning({ id: storyboardImages.id })
           .all();
         insertedId = row.id;
-      } else {
+      } else if (args.ownerType === "sequence_storyboard") {
         const [row] = tx
           .insert(sequenceStoryboardImages)
           .values({
@@ -183,6 +190,24 @@ export async function importInvokeImageIntoDestination(
             referencesSnapshot: null,
           })
           .returning({ id: sequenceStoryboardImages.id })
+          .all();
+        insertedId = row.id;
+      } else {
+        // args.ownerType === "project_style" — ticket §1.3: an image that
+        // returns from a retouch is never approved by the mere fact of
+        // coming back, so both approval flags are written false, exactly
+        // like a freshly-uploaded reference before the author reviews it.
+        const [row] = tx
+          .insert(projectStyleReferenceImages)
+          .values({
+            projectId: args.ownerId,
+            imagePath: destRelative,
+            sourceFilename: null,
+            label: "From Invoke",
+            approvedForAnalysis: false,
+            approvedForGeneration: false,
+          })
+          .returning({ id: projectStyleReferenceImages.id })
           .all();
         insertedId = row.id;
       }

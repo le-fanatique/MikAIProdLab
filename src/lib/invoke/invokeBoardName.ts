@@ -21,7 +21,14 @@ export type InvokeBoardNameInput =
   // distinct addresses (see src/db/schema/invoke.ts's `ownerType` comment),
   // so this is its own variant, not a flag on the `"shot"` one above.
   | { ownerType: "shot_storyboard"; id: number; shotCode: string | null; title: string }
-  | { ownerType: "sequence_storyboard"; id: number; sequenceCode: string | null; title: string };
+  | { ownerType: "sequence_storyboard"; id: number; sequenceCode: string | null; title: string }
+  // INVOKE.STYLE.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §8 lot 3: the project
+  // itself is the owner (one board per project, ownerId = the project's
+  // id), so this variant carries the project's name only — no id in the
+  // displayed name, per the ticket's exact naming rule (uniqueness is still
+  // carried by invoke_boards' own (ownerType, ownerId) unique constraint,
+  // never by this string).
+  | { ownerType: "project_style"; id: number; projectName: string };
 
 function truncateToLimit(prefix: string, tail: string): string {
   const full = `${prefix}${tail}`;
@@ -54,6 +61,10 @@ export function buildInvokeBoardName(input: InvokeBoardNameInput): string {
   if (input.ownerType === "sequence_storyboard") {
     const sequenceLabel = input.sequenceCode?.trim() || `#${input.id}`;
     return truncateToLimit(`MikAI · Sequence ${sequenceLabel} storyboard · `, input.title.trim());
+  }
+
+  if (input.ownerType === "project_style") {
+    return truncateToLimit(`MikAI · Project style · `, input.projectName.trim());
   }
 
   return truncateToLimit(`MikAI · Asset ${input.id} · `, input.name.trim());

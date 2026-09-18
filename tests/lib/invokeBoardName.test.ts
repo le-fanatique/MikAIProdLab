@@ -88,4 +88,27 @@ describe("buildInvokeBoardName", () => {
       buildInvokeBoardName({ ownerType: "sequence_storyboard", id: 3, sequenceCode: null, title: "Chase" })
     ).toBe("MikAI · Sequence #3 storyboard · Chase");
   });
+
+  // INVOKE.STYLE.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §8 lot 3: the project
+  // itself is the owner, so the board name carries the project's name only
+  // (no id in the string, unlike every other owner type above).
+  it("builds a project style board name using the project name, with no id in the string", () => {
+    expect(buildInvokeBoardName({ ownerType: "project_style", id: 999201, projectName: "Space Corsair Demo" })).toBe(
+      "MikAI · Project style · Space Corsair Demo"
+    );
+  });
+
+  it("trims surrounding whitespace from the project name", () => {
+    expect(buildInvokeBoardName({ ownerType: "project_style", id: 1, projectName: "  Space Corsair Demo  " })).toBe(
+      "MikAI · Project style · Space Corsair Demo"
+    );
+  });
+
+  it("truncates a project name so long the board name would exceed InvokeAI's 300-char limit", () => {
+    const projectName = "x".repeat(400);
+    const result = buildInvokeBoardName({ ownerType: "project_style", id: 1, projectName });
+    expect(result.length).toBeLessThanOrEqual(300);
+    expect(result.startsWith("MikAI · Project style · ")).toBe(true);
+    expect(result.endsWith("…")).toBe(true);
+  });
 });

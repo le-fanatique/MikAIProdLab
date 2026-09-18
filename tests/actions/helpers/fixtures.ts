@@ -446,9 +446,10 @@ export async function readProject({ db, schema }: TempDb, projectId: number) {
 
 export async function insertInvokeBoard(
   { db, schema }: TempDb,
-  values: { ownerType: "shot" | "asset" | "shot_storyboard" | "sequence_storyboard"; ownerId: number } & Partial<
-    typeof schema.invokeBoards.$inferInsert
-  >
+  values: {
+    ownerType: "shot" | "asset" | "shot_storyboard" | "sequence_storyboard" | "project_style";
+    ownerId: number;
+  } & Partial<typeof schema.invokeBoards.$inferInsert>
 ): Promise<number> {
   const [row] = await db
     .insert(schema.invokeBoards)
@@ -497,4 +498,33 @@ export async function readInvokeImportedImages({ db, schema }: TempDb, invokeBoa
     .select()
     .from(schema.invokeImportedImages)
     .where(eq(schema.invokeImportedImages.invokeBoardId, invokeBoardId));
+}
+
+// ---------------------------------------------------------------------------
+// INVOKE.STYLE.1 — project_style_reference_images builder/reader, same
+// "insert only NOT NULL columns plus whatever the caller wants to observe"
+// convention as every builder above.
+// ---------------------------------------------------------------------------
+
+export async function insertProjectStyleReferenceImage(
+  { db, schema }: TempDb,
+  projectId: number,
+  values: Partial<typeof schema.projectStyleReferenceImages.$inferInsert> = {}
+): Promise<number> {
+  const [row] = await db
+    .insert(schema.projectStyleReferenceImages)
+    .values({
+      projectId,
+      imagePath: "uploads/project-style/references/fixture.png",
+      ...values,
+    })
+    .returning({ id: schema.projectStyleReferenceImages.id });
+  return row.id;
+}
+
+export async function readProjectStyleReferenceImages({ db, schema }: TempDb, projectId: number) {
+  return db
+    .select()
+    .from(schema.projectStyleReferenceImages)
+    .where(eq(schema.projectStyleReferenceImages.projectId, projectId));
 }

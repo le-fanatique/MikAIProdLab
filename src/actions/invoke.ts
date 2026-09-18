@@ -2,6 +2,7 @@
 
 import { db } from "@/db";
 import {
+  projects,
   sequences,
   shots,
   assets,
@@ -10,6 +11,7 @@ import {
   storyboardImages,
   sequenceStoryboardImages,
   invokeBoards,
+  projectStyleReferenceImages,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
@@ -249,6 +251,59 @@ export async function pushAssetReferenceImageToInvoke(formData: FormData): Promi
   );
 }
 
+// INVOKE.STYLE.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §8 lot 3. The fifth and
+// last owner kind: a Project's own Style reference board
+// (`project_style_reference_images`), owned by the project itself. Same
+// ownership-chain verification discipline as every action above — never on
+// a bare id.
+export async function pushProjectStyleReferenceImageToInvoke(formData: FormData): Promise<void> {
+  const projectId = parseInt(formData.get("projectId") as string, 10);
+  const referenceId = parseInt(formData.get("referenceId") as string, 10);
+  const returnTo = (formData.get("returnTo") as string | null)?.trim() || `/projects/${projectId}/style`;
+
+  function errRedirect(msg: string): never {
+    const sep = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${sep}invokeError=${encodeURIComponent(msg)}`);
+  }
+
+  if (
+    !Number.isInteger(projectId) || projectId <= 0 ||
+    !Number.isInteger(referenceId) || referenceId <= 0
+  ) {
+    errRedirect("Invalid request.");
+  }
+
+  const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+  if (!project) errRedirect("Project not found.");
+
+  const [image] = await db
+    .select()
+    .from(projectStyleReferenceImages)
+    .where(eq(projectStyleReferenceImages.id, referenceId));
+  if (!image) errRedirect("Reference image not found.");
+  if (image.projectId !== projectId) errRedirect("Reference image does not belong to this project.");
+
+  const result = await pushImageToInvokeBoard({
+    ownerType: "project_style",
+    ownerId: projectId,
+    boardNameInput: { ownerType: "project_style", id: projectId, projectName: project.name },
+    imagePath: image.imagePath,
+    metadata: {
+      mikai_project_id: projectId,
+      mikai_owner_type: "project_style",
+      mikai_owner_id: projectId,
+      mikai_source_image_path: image.imagePath,
+    },
+  });
+
+  if (!result.ok) errRedirect(result.error);
+
+  const sep = returnTo.includes("?") ? "&" : "?";
+  redirect(
+    `${returnTo}${sep}invokePushed=1&invokeBoardName=${encodeURIComponent(result.boardName)}&invokeUrl=${encodeURIComponent(result.invokeUrl)}`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // INVOKE.SYNC.1 — docs/INVOKE_ROUNDTRIP_SPEC.md §5.3, ticket §1.1. The single
 // server action both trigger paths call: an automatic client component
@@ -290,6 +345,12 @@ async function resolveInvokeSyncEntity(
       label: `Shot ${shotLabel} storyboard`,
       href: `/projects/${sequence.projectId}/storyboard?sequenceId=${sequence.id}`,
     };
+  }
+
+  if (ownerType === "project_style") {
+    const [project] = await db.select().from(projects).where(eq(projects.id, ownerId));
+    if (!project) return null;
+    return { label: `Project style · ${project.name}`, href: `/projects/${project.id}/style` };
   }
 
   // "sequence_storyboard"

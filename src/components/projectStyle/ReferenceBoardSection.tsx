@@ -370,12 +370,18 @@ function UploadPanel({
 function EditPanel({
   view,
   projectId,
+  pushToInvokeAction,
   onSaved,
   onDeleted,
   onCancel,
 }: {
   view: ProjectStyleReferenceView;
   projectId: number;
+  // INVOKE.STYLE.1 — §1.2: the "Push to Invoke" button lives next to the
+  // deletion path, and must stay a `<form action={...}>` (never an
+  // `onClick`), the only thing that keeps working when the remote author's
+  // client bundle never hydrates.
+  pushToInvokeAction: (formData: FormData) => Promise<void>;
   onSaved: (view: ProjectStyleReferenceView) => void;
   onDeleted: () => void;
   onCancel: () => void;
@@ -460,8 +466,12 @@ function EditPanel({
   };
 
   return (
-    <form onSubmit={handleSave} className="rounded border border-[#243449] bg-[#101a26] p-3 flex flex-col gap-2">
+    <div className="rounded border border-[#243449] bg-[#101a26] p-3 flex flex-col gap-2">
       {error && <p className="text-xs text-[#cf7b6b]" role="alert">{error}</p>}
+      {/* Not nested inside the Save form below — a `<form>` cannot contain
+          another `<form>`, and the Push-to-Invoke form (§1.2) must stay a
+          real `<form action={...}>` of its own. */}
+      <form onSubmit={handleSave} className="flex flex-col gap-2">
       <label className="text-[10px] text-[#6e767d]">
         <span className="inline-flex items-center gap-1">Label <FieldTooltip text={REFERENCE_FIELD_HELP.label} /></span>
         <input value={label} onChange={(e) => setLabel(e.target.value)} className={smallInputClass + " mt-0.5"} />
@@ -531,6 +541,22 @@ function EditPanel({
         <button type="button" className={smallButtonClass} onClick={onCancel}>
           Cancel
         </button>
+      </div>
+      </form>
+      {/* INVOKE.STYLE.1 §1.2 — Push to Invoke, next to the deletion path. A
+          real `<form action={...}>`, never an `onClick`: the only thing that
+          still works when the author's client bundle fails to hydrate
+          remotely (measured cause, docs/INVOKE_ROUNDTRIP_SPEC.md /
+          .agents/supervised_task.md). */}
+      <div className="flex items-center gap-2 pt-1.5 border-t border-[#2c3035]">
+        <form action={pushToInvokeAction}>
+          <input type="hidden" name="projectId" value={projectId} />
+          <input type="hidden" name="referenceId" value={view.reference.id} />
+          <input type="hidden" name="returnTo" value={`/projects/${projectId}/style`} />
+          <button type="submit" className={smallButtonClass + " text-[#5b93d6]"}>
+            Push to Invoke
+          </button>
+        </form>
         {confirmingDelete ? (
           <div className="flex items-center gap-1 ml-auto">
             <span className="text-[10px] text-[#c9a24b]">Delete?</span>
@@ -547,7 +573,7 @@ function EditPanel({
           </button>
         )}
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -556,11 +582,13 @@ function EditPanel({
 function ReferenceCard({
   view,
   projectId,
+  pushToInvokeAction,
   onUpdated,
   onDeleted,
 }: {
   view: ProjectStyleReferenceView;
   projectId: number;
+  pushToInvokeAction: (formData: FormData) => Promise<void>;
   onUpdated: (v: ProjectStyleReferenceView) => void;
   onDeleted: () => void;
 }) {
@@ -575,6 +603,7 @@ function ReferenceCard({
       <EditPanel
         view={view}
         projectId={projectId}
+        pushToInvokeAction={pushToInvokeAction}
         onSaved={(v) => { onUpdated(v); setEditing(false); }}
         onDeleted={onDeleted}
         onCancel={() => setEditing(false)}
@@ -663,12 +692,18 @@ function ReferenceCard({
 export default function ReferenceBoardSection({
   projectId,
   references,
+  pushToInvokeAction,
   onReferenceAdded,
   onReferenceUpdated,
   onReferenceDeleted,
 }: {
   projectId: number;
   references: ProjectStyleReferenceView[];
+  // INVOKE.STYLE.1 — the "Push to Invoke" server action, supplied by the
+  // caller (ProjectStyleWorkspace) so this file never imports "use server"
+  // code directly; same pattern as every other Server-Action-as-prop in this
+  // repository (e.g. ReferenceImagesPanel's `pushToInvoke.action`).
+  pushToInvokeAction: (formData: FormData) => Promise<void>;
   onReferenceAdded: (view: ProjectStyleReferenceView) => void;
   onReferenceUpdated: (view: ProjectStyleReferenceView) => void;
   onReferenceDeleted: (referenceId: number) => void;
@@ -741,6 +776,7 @@ export default function ReferenceBoardSection({
               key={v.reference.id}
               view={v}
               projectId={projectId}
+              pushToInvokeAction={pushToInvokeAction}
               onUpdated={onReferenceUpdated}
               onDeleted={() => onReferenceDeleted(v.reference.id)}
             />

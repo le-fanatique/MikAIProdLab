@@ -15,10 +15,12 @@ import { sql } from "drizzle-orm";
 // (`sequence_storyboard_images`) each get their own board, distinct from the
 // shot's own board: the return address is what decides which table a pushed
 // image re-imports into in lot 2 (docs/INVOKE_ROUNDTRIP_SPEC.md §7 decision
-// 6). This column carries no `CHECK` constraint in SQLite (Drizzle's
-// `{ enum: [...] }` is TypeScript-only), so widening it is not a migration —
-// verified against drizzle/0068_loving_adam_warlock.sql before this comment
-// was written.
+// 6). INVOKE.STYLE.1 widens it once more to "project_style" — a Project's
+// own Style reference board (`project_style_reference_images`), owned by the
+// project itself rather than by a shot/asset/sequence. This column carries
+// no `CHECK` constraint in SQLite (Drizzle's `{ enum: [...] }` is
+// TypeScript-only), so widening it is not a migration — verified against
+// drizzle/0068_loving_adam_warlock.sql before this comment was written.
 // ---------------------------------------------------------------------------
 
 export const invokeBoards = sqliteTable(
@@ -26,7 +28,7 @@ export const invokeBoards = sqliteTable(
   {
     id: int("id").primaryKey({ autoIncrement: true }),
     ownerType: text("owner_type", {
-      enum: ["shot", "asset", "shot_storyboard", "sequence_storyboard"],
+      enum: ["shot", "asset", "shot_storyboard", "sequence_storyboard", "project_style"],
     }).notNull(),
     ownerId: int("owner_id").notNull(),
     /** InvokeAI's own board id (its `board_id`, a string, never MikAI's `id`). */

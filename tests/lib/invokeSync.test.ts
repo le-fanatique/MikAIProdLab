@@ -14,6 +14,7 @@ import {
   readInvokeImportedImages,
   readShotReferenceImages,
   readStoryboardImagesByShot,
+  readProjectStyleReferenceImages,
 } from "../actions/helpers/fixtures";
 
 // ---------------------------------------------------------------------------
@@ -60,6 +61,9 @@ function trackShotDir(shotId: number, kind: "reference-images" | "storyboard-ima
 }
 function trackAssetDir(assetId: number): void {
   writtenDirs.push(path.join(process.cwd(), "public", "uploads", "reference-images", `asset-${assetId}`));
+}
+function trackProjectStyleDir(projectId: number): void {
+  writtenDirs.push(path.join(process.cwd(), "public", "uploads", "project-style", "references", `project-${projectId}`));
 }
 
 describe("importInvokeImageIntoDestination", () => {
@@ -122,6 +126,89 @@ describe("importInvokeImageIntoDestination", () => {
     expect(drafts[0].status).toBe("draft");
     expect(drafts[0].jobId).toBeNull();
     expect(drafts[0].promptSnapshot).toBeNull();
+  });
+
+  it("writes the file and the destination row (project style reference), both approval flags false (ticket §1.3)", async () => {
+    const projectId = await insertProject(ctx);
+    trackProjectStyleDir(projectId);
+    const boardId = await insertInvokeBoard(ctx, { ownerType: "project_style", ownerId: projectId });
+
+    const result = await importInvokeImageIntoDestination({
+      invokeBoardId: boardId,
+      ownerType: "project_style",
+      ownerId: projectId,
+      imageName: "retouched-style.png",
+      bytes: Buffer.from("style-bytes"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.alreadyImported) throw new Error("expected a fresh import");
+
+    expect(result.destinationTable).toBe("project_style_reference_images");
+
+    const fileBytes = await fs.readFile(path.join(process.cwd(), "public", result.imagePath));
+    expect(fileBytes.toString()).toBe("style-bytes");
+
+    const refs = await readProjectStyleReferenceImages(ctx, projectId);
+    expect(refs).toHaveLength(1);
+    expect(refs[0].imagePath).toBe(result.imagePath);
+    expect(refs[0].label).toBe("From Invoke");
+    // Ticket §1.3 — never approved by the mere fact of coming back from Invoke.
+    expect(refs[0].approvedForAnalysis).toBe(false);
+    expect(refs[0].approvedForGeneration).toBe(false);
+
+    const imported = await readInvokeImportedImages(ctx, boardId);
+    expect(imported).toHaveLength(1);
+    expect(imported[0].destinationTable).toBe("project_style_reference_images");
+    expect(imported[0].destinationId).toBe(refs[0].id);
+  });
+
+  it("idempotence (project style reference): importing the same image_name twice inserts exactly one row and leaves exactly one file", async () => {
+    const projectId = await insertProject(ctx);
+    trackProjectStyleDir(projectId);
+    const boardId = await insertInvokeBoard(ctx, { ownerType: "project_style", ownerId: projectId });
+
+    const args = {
+      invokeBoardId: boardId,
+      ownerType: "project_style" as const,
+      ownerId: projectId,
+      imageName: "race-style.png",
+      bytes: Buffer.from("race-style-bytes"),
+    };
+
+    const first = await importInvokeImageIntoDestination(args);
+    const second = await importInvokeImageIntoDestination(args);
+
+    expect(first.ok && !first.alreadyImported).toBe(true);
+    expect(second.ok && second.alreadyImported).toBe(true);
+
+    const imported = await readInvokeImportedImages(ctx, boardId);
+    expect(imported).toHaveLength(1);
+
+    const refs = await readProjectStyleReferenceImages(ctx, projectId);
+    expect(refs).toHaveLength(1);
+
+    const dir = path.join(process.cwd(), "public", "uploads", "project-style", "references", `project-${projectId}`);
+    const filesOnDisk = await fs.readdir(dir);
+    expect(filesOnDisk).toHaveLength(1);
+  });
+
+  it("failure path (project style reference): a destination insert failure deletes the file it just wrote (ticket §1.3)", async () => {
+    trackProjectStyleDir(999999); // never created — an orphan file here would be the bug this test catches.
+
+    const result = await importInvokeImageIntoDestination({
+      invokeBoardId: 1, // no invoke_boards row with this id either — belt and suspenders on the FK failure.
+      ownerType: "project_style",
+      ownerId: 999999, // no such project — the destination insert must violate the FK and roll back.
+      imageName: "will-fail-style.png",
+      bytes: Buffer.from("orphan-style-bytes"),
+    });
+
+    expect(result.ok).toBe(false);
+
+    const dir = path.join(process.cwd(), "public", "uploads", "project-style", "references", "project-999999");
+    const filesOnDisk = await fs.readdir(dir).catch(() => []);
+    expect(filesOnDisk).toHaveLength(0);
   });
 
   it("idempotence: importing the same image_name twice inserts exactly one row and leaves exactly one file (real SQLite, ticket §3)", async () => {

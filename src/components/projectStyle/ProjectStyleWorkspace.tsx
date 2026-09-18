@@ -46,6 +46,7 @@ import type {
   StyleRuleStatus,
 } from "@/lib/projectStyle/styleSnapshot";
 import type { ProjectStyleInfluenceView } from "@/actions/projectStyleInfluences";
+import { pushProjectStyleReferenceImageToInvoke } from "@/actions/invoke";
 import ReferenceBoardSection from "@/components/projectStyle/ReferenceBoardSection";
 import InfluenceSection from "@/components/projectStyle/InfluenceSection";
 import ReferenceAnalysisWorkspace from "@/components/projectStyle/referenceAnalysis/ReferenceAnalysisWorkspace";
@@ -1084,6 +1085,7 @@ export default function ProjectStyleWorkspace({ projectId, initialDraft, initial
       <ReferenceBoardSection
         projectId={projectId}
         references={references}
+        pushToInvokeAction={pushProjectStyleReferenceImageToInvoke}
         onReferenceAdded={handleReferenceAdded}
         onReferenceUpdated={handleReferenceUpdated}
         onReferenceDeleted={handleReferenceDeleted}
