@@ -70,6 +70,23 @@ La corrélation temporelle accusait le tunnel ; le coupable était un lanceur
 sans garde. **Un lanceur doit tester le port avant de démarrer un service**,
 pas son propre souvenir de l'avoir démarré.
 
+**Et tuer le doublon ne suffit pas — il faut redémarrer Invoke.** Le détail qui
+a coûté une heure, le 2026-09-19 : InvokeAI crée **un dossier de tenseurs par
+démarrage du serveur, pas un par rendu**. Le serveur garde ce chemin pour toute
+sa vie. Une fois le dossier supprimé par le nettoyage de démarrage d'une
+seconde instance, le serveur survivant est condamné : **chaque rendu échoue,
+avec toujours le même nom `tmpXXXXXXXX`**, y compris sur une génération
+entièrement neuve.
+
+C'est ce nom identique qui donne le diagnostic. Un nom qui se répète ne
+désigne pas un rendu qui échoue — il désigne un serveur qui pointe dans le
+vide. Le message d'erreur, lui, ne dit rien de tout cela, et les journaux non
+plus.
+
+Symptôme voisin, même origine : après un redémarrage propre, le dossier
+présent dans `outputs	ensors` porte le nom du nouveau serveur, et les
+orphelins ont disparu. C'est la vérification la plus rapide.
+
 ### 3.2 `tasklist | find` échoue en silence quand Git est dans le PATH
 
 `find` résout alors vers la version Unix, qui ne comprend pas `/i` :
