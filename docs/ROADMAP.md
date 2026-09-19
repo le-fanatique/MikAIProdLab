@@ -27,15 +27,20 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**`UX.NOJS.AUDIT.1` est en cours** — voir `.agents/supervised_task.md`.
-Inventaire des écrans dont une opération d'écriture dépend d'un handler React,
-donc morte quand le bundle client ne s'hydrate pas. Trois tickets d'affilée ont
-contourné ce fait au cas par cas ; l'usage distant est désormais réel et
-validé, donc il faut savoir ce qui reste figé. Le livrable est un document,
-`docs/NOJS_AUDIT.md`, pas du code. Autre chantier ouvert : `P1` de
-`DEVOPS.LINUX.PORT.1` —
-le déroulé sur la machine Ubuntu et la validation manuelle de `P0.3`, que
-seul l'auteur peut faire. Voir plus bas.
+**Aucun ticket n'est en cours.** `UX.NOJS.AUDIT.1` est clos (2026-09-19,
+`2d7b51c`) — l'inventaire vit dans `docs/NOJS_AUDIT.md`. **Ce document est une
+matière à décision, pas une file de travaux** : il nomme huit contrôles et
+propose une correction pour chacun, « ne rien faire » compris, et c'est
+l'auteur qui choisit lesquels deviennent des tickets. Les quatre bloquantes,
+par ordre de coût si elles restent en l'état : la configuration de `/settings`
+(aucun chemin d'écriture utilisable sans JavaScript, mesuré), les trois champs
+Asset Bible du détail Asset (seul point d'écriture de l'application), Publier /
+Approuver sur Sequence Detail et Editorial, et la personnalisation de thème.
+
+Chantier ouvert par ailleurs : `P1` de `DEVOPS.LINUX.PORT.1` — le déroulé sur
+la machine Ubuntu et la validation manuelle de `P0.3`, que seul l'auteur peut
+faire. Voir plus bas. Sa section 7 a gagné le 2026-09-19 les trois dettes que
+le nettoyage des lanceurs Windows (`5fea3b5`) laisse à solder côté Linux.
 
 **Accès distant — EN SERVICE ET VALIDÉ le 2026-09-19** depuis le poste Linux
 d'entreprise, sans droits d'installation. Tunnel Cloudflare nommé sur

@@ -1,6 +1,89 @@
 # MikAI Project State
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
+
+## `UX.NOJS.AUDIT.1` — ce qui est réellement perdu sans JavaScript
+
+Clos le 2026-09-19 (`2d7b51c`), aucune migration, aucun fichier de `src/`
+touché. Le livrable est `docs/NOJS_AUDIT.md`. Trois tickets d'affilée avaient
+contourné l'hydratation au cas par cas, sur des écrans que l'auteur avait
+nommés ; personne n'avait regardé les autres.
+
+**Huit contrôles retenus sur 92 fichiers portant un `onClick`**, par un filtre
+à trois conditions cumulatives — écriture ou appel coûteux, chemin unique par
+handler React, aucun autre chemin sur l'écran. Le tri est le produit du
+ticket : un `onClick` qui ouvre un repli ou change d'onglet n'est pas en
+danger.
+
+**`/settings` n'a aucun chemin d'écriture utilisable sans JavaScript.** Mesuré,
+pas déduit : huit onglets, tous des `<button>` sans `href` ; huit panneaux,
+**un seul visible** ; trois formulaires servis, **un seul** portant une Server
+Action — et celui-là est invisible, son onglet étant masqué. La seule exception
+est `/settings?defaultsSaved=1`, URL qu'aucun lien de l'application ne produit.
+
+**Les trois champs Asset Bible n'ont aucun second chemin.**
+`visualIdentity`, `usageRules`, `forbiddenVariations` sont absents de la page
+`/edit`, et les trois autres panneaux qui les écrivent
+(`AssetBibleEnhancePanel`, `AssetAlignmentPanel`, `AssetAlignmentBatchPanel`)
+sont tous `onSubmit`/`onClick` sans `action=`.
+
+**Ce que la vérification navigateur a démenti.** Le document avançait qu'un
+réordonnancement par glisser-déposer « n'a par nature aucun équivalent
+non-JS ». Faux : l'Editorial sert un « Save Order » de type `submit` dans un
+`<form action>` portant `orderedIds`. La supposition se trouvait dans la
+section dont le rôle est précisément d'éviter d'en faire.
+
+**Trois corrections du superviseur, écrites dans le document lui-même** et pas
+seulement dans la revue, pour qu'un lecteur de l'audit n'ait pas besoin de la
+revue pour éviter le piège : `NomenclatureSettingsForm` était exempté à tort
+alors qu'il n'a ni `action` ni attribut `name` sur ses champs (sans JavaScript
+il ne échoue pas, il soumet un corps vide) ; `ResearchProviderSettingsForm`
+manquait entièrement ; et l'entrée sur Publier se prouvait par un `grep` sur un
+fichier de page, qui ignore les formulaires des composants enfants — l'écran
+en sert quatre. La conclusion survivait, la preuve non.
+
+**Une exemption fausse coûte plus cher qu'une entrée manquante** : le ticket
+suivant saute ce qui est exempté, alors qu'il relit ce qui est borné. C'est
+pourquoi la section « ce qui n'a pas été regardé » est le bon endroit pour
+l'incertitude, et une parenthèse « pas concerné » le mauvais.
+
+Suite 2216, inchangée — ce qu'un audit doit prouver.
+
+## Lanceurs Windows — un seul orchestrateur, trois modes
+
+Livré le 2026-09-19 (`5fea3b5`), hors ticket, à la demande de l'auteur. Aucune
+migration. `scripts/start-stack.mjs` sert `dev`, `local` et `remote` ; les
+`.bat` de la racine sont des enveloppes de deux lignes. Chaque mode ajoute
+InvokeAI, et le tunnel Cloudflare en `remote`, par-dessus la paire MikAI +
+OpenReel.
+
+**`start.bat` est supprimé, et c'est son propre défaut qui l'a montré.** Il
+appelait `mikai-deploy start` sans aucune garde ; le clean-start de
+`run-prod-lab` arrête ce qui écoute déjà sur 3000 avant de reconstruire. En le
+lançant pour le tester, il a tué le serveur de dev en cours
+(`Stopping previous MikAI instance (PID 9348)`). `start.sh` a la même forme et
+reste intact par décision de l'auteur : il change au portage Linux.
+
+**Un `.bat` doit rester en ASCII.** `cmd` lit le fichier en codepage OEM, pas
+en UTF-8 : un tiret cadratin dans un `rem` produit
+`'m' n'est pas reconnu en tant que commande interne ou externe`. `start.bat`
+portait ce défaut depuis l'origine.
+
+**Un script Node ne lit pas `.env.local`** — Next.js le charge, un script brut
+non. Les quatre variables du lanceur auraient été documentées sans rien faire.
+La lecture est donc explicite, avec une précédence elle aussi explicite : une
+vraie variable d'environnement l'emporte sur le fichier, pour qu'un override
+tienne le temps d'un lancement.
+
+Les gardes reprennent `checkPortFree`, déjà exporté par
+`scripts/mikai-deploy.mjs`. Les cicatrices de `docs/REMOTE_ACCESS_SETUP.md`
+sont conservées telles quelles : sonde non concluante comptée comme occupée,
+détection de processus par `Get-CimInstance` et jamais `tasklist | find`, garde
+« `next build` déjà en cours ».
+
+Non prouvé : le lancement réel d'InvokeAI et du tunnel. Les deux tournaient à
+chaque essai, donc `launchInOwnWindow` n'a jamais été exécuté. Se vérifiera à
+froid.
 
 ## `INVOKE.STYLE.1` — les cinq tables d'images sont couvertes
 
