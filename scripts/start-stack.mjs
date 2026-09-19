@@ -109,22 +109,39 @@ async function portOccupied(host, port) {
 }
 
 /**
- * True when a running process's name or command line matches `pattern`.
+ * True when a LIVE process whose executable is `exeName` has a command line
+ * matching `cmdPattern`.
+ *
+ * Both halves are required, and that is the whole point. A first version
+ * matched the command line alone, and the cold start of 2026-09-19 showed what
+ * that costs: a service's own `cmd /k <service> ...` wrapper window survives
+ * the service it launched, so a DEAD tunnel and a DEAD MikAI build each still
+ * had a shell whose command line named them. Both guards concluded "already
+ * running" and started nothing at all. Worse for the tunnel: the author runs a
+ * second, unrelated `cloudflared tunnel --url http://localhost:7001`, which
+ * matched too — so the MikAI tunnel would never have started on this machine.
+ *
+ * Pinning the executable name excludes the `cmd.exe` wrappers; pinning the
+ * command line excludes another instance of the same executable doing an
+ * unrelated job.
  *
  * Deliberately not `tasklist | find`: on a machine with Git in the PATH, `find`
  * resolves to the Unix one, the detection fails in silence, and a second
  * service starts. Observed 2026-09-19 while testing start-remote.bat itself
  * (docs/REMOTE_ACCESS_SETUP.md section 3.2).
  */
-function processRunning(pattern) {
+function processRunning(exeName, cmdPattern) {
   if (process.platform === "win32") {
     const script =
       "if (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | " +
-      `Where-Object { $_.Name -match ${quoteForPowerShell(pattern)} -or ` +
-      `$_.CommandLine -match ${quoteForPowerShell(pattern)} }) { exit 0 } else { exit 1 }`;
+      `Where-Object { $_.Name -eq ${quoteForPowerShell(exeName)} -and ` +
+      `$_.CommandLine -match ${quoteForPowerShell(cmdPattern)} }) { exit 0 } else { exit 1 }`;
     return spawnSync("powershell", ["-NoProfile", "-Command", script], { stdio: "ignore" }).status === 0;
   }
-  return spawnSync("pgrep", ["-f", pattern], { stdio: "ignore" }).status === 0;
+  // Same two-part test: -x pins the executable, -f matches the full command line.
+  const exe = exeName.replace(/\.exe$/i, "");
+  const res = spawnSync("pgrep", ["-x", exe, "-f", cmdPattern], { encoding: "utf8" });
+  return res.status === 0;
 }
 
 /** Single-quoted PowerShell literal; the only escape inside one is a doubled quote. */
@@ -132,18 +149,60 @@ function quoteForPowerShell(value) {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+/** Escapes a value so it matches literally inside a .NET/POSIX regex. */
+function escapeForRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // ---------------------------------------------------------------------------
 // Launching
 // ---------------------------------------------------------------------------
 
-/** Opens `command` in its own console window, detached from this one. */
-function launchInOwnWindow(title, command, args, cwd) {
-  const child = spawn("cmd", ["/c", "start", title, "cmd", "/k", command, ...args], {
-    cwd,
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+/**
+ * Opens `command` in its own console window, which survives this process.
+ *
+ * Goes through PowerShell's `Start-Process` because it is the only form that
+ * was measured to work, on 2026-09-19, during the first cold start. Five
+ * others were tried and all failed silently — a window with the right title
+ * appeared and nothing ran inside it, which is the worst possible failure for
+ * a launcher:
+ *
+ * - `spawn("cmd", ["/c", "start", …], { detached: true, stdio: "ignore" })`,
+ *   the original: the outer `cmd` stayed alive with no child at all. With no
+ *   console of its own it cannot hand one to `start`;
+ * - the same without `detached`, and the same with `stdio: "inherit"`: same
+ *   result;
+ * - `spawn("cmd", ["/k", batch], { detached: true, stdio: "ignore" })`, no
+ *   `start` at all: the child died instantly. On Windows Node's `detached`
+ *   means DETACHED_PROCESS — explicitly *no* console — so `cmd /k` has
+ *   nothing to attach to;
+ * - the same through `windowsVerbatimArguments` with a quoted title: nothing
+ *   spawned.
+ *
+ * The window carries no custom title. A first fix set one with `cmd`'s `title`
+ * command, chained as `title X&&command`, and that silently swallowed the
+ * service: `title` takes the whole rest of the line as the title text, `&&`
+ * included, so nothing after it ever ran. The window opened, correctly named,
+ * and empty. `cmd` names the window after the command it is running, which
+ * tells the windows apart well enough and cannot fail this way.
+ */
+function launchInOwnWindow(command, args, cwd) {
+  // Resolve a command that is a file in `cwd` to its absolute path. Passing
+  // `-WorkingDirectory` to Start-Process does NOT make `cmd` look there for
+  // the command: measured on 2026-09-19, `invoke.bat` in F:\AI\Invoke came
+  // back as "'invoke.bat' n'est pas reconnu en tant que commande interne ou
+  // externe". A command found on PATH (cloudflared) worked throughout, which
+  // is exactly why the failure hit one service and not the other.
+  const local = path.join(cwd, command);
+  const resolved = fs.existsSync(local) ? `"${local}"` : command;
+  const inner = [resolved, ...args].join(" ");
+  const script =
+    `Start-Process -FilePath 'cmd.exe' -ArgumentList '/k',${quoteForPowerShell(inner)} ` +
+    `-WorkingDirectory ${quoteForPowerShell(cwd)}`;
+  const res = spawnSync("powershell", ["-NoProfile", "-Command", script], { stdio: "ignore" });
+  if (res.status !== 0) {
+    throw new Error(`Could not open a window for "${command}" (Start-Process exited ${res.status}).`);
+  }
 }
 
 /** Runs the MikAI + OpenReel pair in THIS window; resolves with its exit code. */
@@ -178,16 +237,18 @@ async function startInvoke(step) {
     return;
   }
   log(step, "InvokeAI ...");
-  launchInOwnWindow("InvokeAI", "invoke.bat", [], INVOKE_DIR);
+  launchInOwnWindow("invoke.bat", [], INVOKE_DIR);
 }
 
 function startTunnel(step) {
-  if (processRunning("cloudflared")) {
-    log(step, "Tunnel already active — nothing to restart.");
+  // This tunnel, not any tunnel: the author runs a second cloudflared on an
+  // unrelated URL, and it must not suppress this one.
+  if (processRunning("cloudflared.exe", `tunnel\\s+run\\s+${escapeForRegex(TUNNEL_NAME)}`)) {
+    log(step, `Tunnel "${TUNNEL_NAME}" already active — nothing to restart.`);
     return;
   }
   log(step, `Cloudflare tunnel "${TUNNEL_NAME}" ...`);
-  launchInOwnWindow("Cloudflare Tunnel", "cloudflared", ["tunnel", "run", TUNNEL_NAME], repoRoot);
+  launchInOwnWindow("cloudflared", ["tunnel", "run", TUNNEL_NAME], repoRoot);
 }
 
 async function startPair(step, mode) {
@@ -197,7 +258,9 @@ async function startPair(step, mode) {
   }
   // Two simultaneous `next build` block each other ("Another next build
   // process is already running") and then NO server starts at all.
-  if (processRunning("mikai-deploy|run-prod-lab|next build")) {
+  // node.exe only: a leftover `cmd /k node scripts\mikai-deploy.mjs start`
+  // window outlives the node it started, and used to be read as a live build.
+  if (processRunning("node.exe", "mikai-deploy|run-prod-lab|next build")) {
     log(step, "A MikAI sequence is already running (building) — nothing to restart.");
     log(step, "Let it finish: MikAI first, OpenReel second.");
     return 0;

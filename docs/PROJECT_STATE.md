@@ -81,9 +81,42 @@ sont conservées telles quelles : sonde non concluante comptée comme occupée,
 détection de processus par `Get-CimInstance` et jamais `tasklist | find`, garde
 « `next build` déjà en cours ».
 
-Non prouvé : le lancement réel d'InvokeAI et du tunnel. Les deux tournaient à
-chaque essai, donc `launchInOwnWindow` n'a jamais été exécuté. Se vérifiera à
-froid.
+**Le démarrage à froid a été fait le 2026-09-19, et il a trouvé quatre défauts
+dans ce qui venait d'être poussé.** « Non prouvé » était trop doux :
+`launchInOwnWindow` ne fonctionnait pas du tout.
+
+- **Une fenêtre `cmd /k <service>` survit au service qu'elle a lancé.** Les
+  gardes cherchaient le motif dans n'importe quelle ligne de commande, donc
+  quatre coquilles vides faisaient conclure « déjà actif » et rien ne
+  démarrait, en annonçant que tout allait bien. Pire : l'auteur fait tourner un
+  second `cloudflared tunnel --url http://localhost:7001`, sans rapport, qui
+  correspondait aussi — le tunnel MikAI n'aurait jamais démarré sur cette
+  machine. La garde teste désormais **le nom de l'exécutable et la ligne de
+  commande**, et pour le tunnel exige `tunnel run <nom>` précisément ;
+- **`detached: true` sous Windows veut dire DETACHED_PROCESS, donc aucune
+  console.** `cmd /k` n'a rien où s'attacher et meurt aussitôt ; sans console
+  le `cmd /c` extérieur ne peut pas non plus en fournir une à `start`, et reste
+  bloqué sans enfant. Cinq formes ont été essayées, toutes muettes. Seul
+  `Start-Process` de PowerShell fonctionne, et les cinq échecs sont consignés
+  dans l'en-tête de la fonction pour qu'on ne les retente pas ;
+- **le builtin `title` prend toute la fin de ligne comme titre**, `&&`
+  compris : titrer par `title X&&commande` ouvrait une fenêtre correctement
+  nommée où rien ne tournait. Le titre a été abandonné ;
+- **`-WorkingDirectory` n'est pas appliqué au résolveur de commandes de
+  `cmd`** : `'invoke.bat' n'est pas reconnu en tant que commande interne ou
+  externe`. C'est pourquoi le défaut frappait InvokeAI et pas le tunnel —
+  `cloudflared` est dans le `PATH`, `invoke.bat` non. Le chemin est résolu en
+  absolu côté Node.
+
+Le test décisif s'est fait **avec les fenêtres pièges en place**, puisque
+c'était justement l'état qui mettait les gardes en défaut.
+
+Vu au passage, et sans rapport avec le lanceur : **le build de production
+échoue par intermittence** sur le prérendu de `/_not-found`
+(`TypeError: Cannot read properties of null (reading 'useContext')`), puis
+passe sans rien changer. `run-prod-lab` se comporte correctement dans ce cas —
+`Build failed` puis `Not starting any server`, aucun serveur démarré sur une
+sortie périmée.
 
 ## `INVOKE.STYLE.1` — les cinq tables d'images sont couvertes
 
