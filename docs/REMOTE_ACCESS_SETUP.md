@@ -1,7 +1,11 @@
 # Accès distant à MikAI — installation en service, 2026-09-18/19
 
-**Statut : en service.** Ce document décrit une installation qui tourne, pas un
-projet. Il existe parce que trois jours de développement ont été décidés par
+**Statut : en service et validée.** L'auteur a ouvert MikAI depuis le poste
+Linux d'entreprise, sans droits d'installation, le 2026-09-19 : authentification
+Cloudflare Access, application utilisable, interactivité rétablie. Le problème
+qui a ouvert ce chantier — des écrans figés derrière un tunnel — est clos.
+
+Ce document décrit une installation qui tourne, pas un projet. Il existe parce que trois jours de développement ont été décidés par
 des contraintes réseau, et que rien de tout cela n'est déductible du code.
 
 Le lanceur correspondant, `start-remote.bat`, est **volontairement non suivi

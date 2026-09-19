@@ -59,6 +59,13 @@ propre, ou une exception dans l'antivirus.
 qui porte une donnée garde un chemin qui fonctionne sans JavaScript. Elle a
 sauvé le push et la synchronisation ; personne n'a inventorié les autres écrans.
 
+**Clos le 2026-09-19.** L'auteur a ouvert MikAI depuis le poste Linux
+d'entreprise, sans droits d'installation : Cloudflare Access authentifie,
+l'application fonctionne, l'interactivité est revenue. L'installation retenue —
+tunnel Cloudflare nommé sur un domaine propre, trois hôtes derrière Access — est
+décrite dans `docs/REMOTE_ACCESS_SETUP.md`, avec les trois pièges d'exploitation
+qu'elle a coûtés.
+
 ## `INVOKE.SYNC.1` — l'aller-retour est bouclé
 
 Livré le 2026-09-18 (`ebc5b67`), migration `0069` appliquée (une table,
