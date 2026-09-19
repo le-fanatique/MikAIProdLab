@@ -27,10 +27,21 @@ Pitch -> Story -> Outline -> Sequences -> Shots -> Assets
 
 ## 1. En cours
 
-**Aucun ticket de code en cours.** Le seul chantier ouvert est `P1` de
+**`UX.NOJS.AUDIT.1` est en cours** — voir `.agents/supervised_task.md`.
+Inventaire des écrans dont une opération d'écriture dépend d'un handler React,
+donc morte quand le bundle client ne s'hydrate pas. Trois tickets d'affilée ont
+contourné ce fait au cas par cas ; l'usage distant est désormais réel et
+validé, donc il faut savoir ce qui reste figé. Le livrable est un document,
+`docs/NOJS_AUDIT.md`, pas du code. Autre chantier ouvert : `P1` de
 `DEVOPS.LINUX.PORT.1` —
 le déroulé sur la machine Ubuntu et la validation manuelle de `P0.3`, que
 seul l'auteur peut faire. Voir plus bas.
+
+**Accès distant — EN SERVICE ET VALIDÉ le 2026-09-19** depuis le poste Linux
+d'entreprise, sans droits d'installation. Tunnel Cloudflare nommé sur
+`creativeprodlab.org`, trois hôtes derrière Access. Installation, pièges
+d'exploitation et règles : `docs/REMOTE_ACCESS_SETUP.md`. Le bureau distant
+reste spécifié et mis de côté (`docs/REMOTE_DESKTOP_GUACAMOLE_SPEC.md`).
 
 **`INVOKE.STYLE.1` — CLOS le 2026-09-18**, un commit `8737fba`, aucune
 migration. Les références de style de projet rejoignent l'aller-retour : les
