@@ -209,7 +209,6 @@ manually cloning/locating/syncing it yourself. All three exist as thin
 ```bash
 # Windows
 install.bat
-start.bat
 update.bat
 
 # Linux / macOS
@@ -217,6 +216,11 @@ update.bat
 ./start.sh
 ./update.sh
 ```
+
+On Windows, starting is done by the three stack launchers below rather than by
+a `start.bat`: each one also handles InvokeAI, which `npm run prod:all` does
+not know about. The Linux equivalents are not written yet, so `./start.sh`
+remains the Linux entry point for the MikAI + OpenReel pair alone.
 
 - **`install`** — requires Git, Node 22, npm ≥10; acquires the exact pnpm
   version the pinned sidecar release itself declares (its `package.json`
@@ -242,6 +246,35 @@ update.bat
   reinstalls/rebuilds, migrates, and moves the sidecar to exactly the newly
   pinned commit. The sidecar is never updated independently of MikAI's own
   committed pin.
+
+### Starting the full stack (Windows)
+
+`install`/`update` above know nothing about InvokeAI or the Cloudflare tunnel.
+`scripts/start-stack.mjs` does, and the three `.bat` files at the repo root are
+two-line wrappers around it:
+
+| Launcher | MikAI | OpenReel | InvokeAI | Tunnel |
+|---|---|---|---|---|
+| `start-dev.bat` | dev | yes | yes | no |
+| `start-local.bat` | production | yes | yes | no |
+| `start-remote.bat` | production | yes | yes | yes |
+
+Dev mode is **local only**. For remote use MikAI runs in production, never
+`dev`: dev opens the `/_next/webpack-hmr` WebSocket that corporate proxies cut,
+and serves hundreds of unminified chunks (`docs/REMOTE_ACCESS_SETUP.md` §4).
+
+Each service is probed before it is started, and started only if it is absent.
+An **inconclusive** probe counts as occupied, never as "probably free" — a
+second InvokeAI instance wipes the first one's tensor folder and the survivor
+then fails at every render until it is restarted (§3.1 of the same document).
+
+InvokeAI and the tunnel each get their own window; closing one stops that
+service. The MikAI + OpenReel pair runs in the launcher's own window, so
+Ctrl+C there stops the pair.
+
+Machine-specific values are environment overrides, documented in
+`.env.local.example`: `INVOKE_DIR`, `INVOKE_PORT`, `TUNNEL_NAME`,
+`REMOTE_DOMAIN`.
 
 **CORS boundary**: the sidecar talks to MikAI's editorial routes
 cross-origin. The built-in allowlist only covers the local sidecar origin on
@@ -269,7 +302,8 @@ pnpm version (never a hardcoded one) for its own `dev`/`build`/`preview`.
 | `npm run build` | Production build |
 | `npm run start` | Production server |
 | `npm run mikai:install` | Same as `install.bat`/`install.sh` |
-| `npm run mikai:start` | Same as `start.bat`/`start.sh` |
+| `npm run mikai:start` | MikAI + OpenReel pair, production; same as `./start.sh` |
+| `node scripts/start-stack.mjs <dev\|local\|remote>` | Windows: the above **plus InvokeAI**, plus the tunnel in `remote` |
 | `npm run mikai:update` | Same as `update.bat`/`update.sh` |
 
 ## Features

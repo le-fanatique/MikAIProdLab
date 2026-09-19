@@ -2,8 +2,12 @@
 // ---------------------------------------------------------------------------
 // Single cross-platform orchestrator for `install`/`update`/`start`
 // (DEVOPS.MIKAI.ONE_COMMAND.INSTALL.1). install.bat/.sh, update.bat/.sh, and
-// start.bat/.sh are thin wrappers around this module so Windows and Linux
-// cannot drift. Every side-effecting command (git/npm/pnpm/backup/migrate)
+// start.sh are thin wrappers around this module so Windows and Linux cannot
+// drift. On Windows `start` is reached through scripts/start-stack.mjs, which
+// adds InvokeAI and the Cloudflare tunnel on top; start.bat was removed on
+// 2026-09-19 because it started the pair with no guard at all, killing a
+// running instance on port 3000. Every side-effecting command
+// (git/npm/pnpm/backup/migrate)
 // goes through the injectable `run(cmd, args, opts)` so the required
 // command-order proof can substitute a fake runner without touching a real
 // filesystem/process. Every orchestrator function is exported and safe to

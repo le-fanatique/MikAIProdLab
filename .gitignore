@@ -125,9 +125,10 @@ next-env.d.ts
 # changed under us.
 .claude/skills/sd25-pe/
 
-# Lanceur d'accès distant, propre à la machine de l'auteur : il code en dur le
-# dossier d'InvokeAI, le nom du tunnel Cloudflare et le domaine. `start.bat`,
-# `install.bat` et `update.bat` sont génériques et restent suivis ; celui-ci ne
-# l'est pas. Ce qu'il a appris est consigné dans docs/REMOTE_ACCESS_SETUP.md,
-# qui, lui, est suivi.
-/start-remote.bat
+# `start-remote.bat` a été ignoré ici jusqu'au 2026-09-19, parce qu'il codait
+# en dur le dossier d'InvokeAI, le nom du tunnel Cloudflare et le domaine. Ce
+# n'est plus vrai : sa logique vit dans scripts/start-stack.mjs, où ces quatre
+# valeurs sont des variables d'environnement lues depuis .env.local
+# (INVOKE_DIR, INVOKE_PORT, TUNNEL_NAME, REMOTE_DOMAIN, documentées dans
+# .env.local.example). Le lanceur est donc générique, et suivi comme
+# `install.bat` et `update.bat`.

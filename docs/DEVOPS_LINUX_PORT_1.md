@@ -226,3 +226,87 @@ npx tsc --noEmit
 npm run test
 ./doctor.sh
 ```
+
+## 7. Ce qui a changé côté Windows depuis P0 — à porter pendant P1
+
+Écrit le 2026-09-19, hors ticket, pendant que P1 attendait l'auteur. Les
+lanceurs Windows ont été nettoyés, et cela laisse **trois dettes à solder du
+côté Linux**, pas une. Rien de ce qui suit n'a été fait sur Linux : c'est
+l'inventaire à traiter au moment du portage, pas un état des lieux.
+
+### 7.1 `start.bat` a été supprimé, `start.sh` ne l'est pas
+
+`start.bat` appelait `mikai-deploy start` **sans aucune garde**. Le clean-start
+de `run-prod-lab` arrête ce qui écoute déjà sur `3000` avant de reconstruire :
+un double-clic de trop tuait l'instance en cours. Constaté en le lançant, le
+2026-09-19.
+
+`start.sh` a exactement la même forme et donc le même défaut. Il a été laissé
+intact **par décision de l'auteur** : il change au moment du portage, pas
+avant. La paire `start.bat` / `start.sh` est donc asymétrique jusque-là — état
+délibéré, à ne pas « corriger » en recréant `start.bat`.
+
+### 7.2 Trois lanceurs de pile Windows, sans équivalent Linux
+
+`scripts/start-stack.mjs` ajoute InvokeAI, et le tunnel Cloudflare en mode
+`remote`, par-dessus la paire MikAI + OpenReel que `mikai-deploy` connaît déjà.
+Trois `.bat` de deux lignes l'enveloppent : `start-dev.bat`, `start-local.bat`,
+`start-remote.bat`.
+
+Le module est en Node précisément pour que le portage soit l'écriture de trois
+`.sh` de deux lignes, et non une réécriture — même raison que
+`scripts/mikai-deploy.mjs`. **Mais il refuse de démarrer hors Windows**, et
+c'est volontaire :
+
+```
+[start-stack] Windows only for now — the Linux wrappers are not written yet.
+```
+
+Ce qui reste à écrire pour Linux, et qui n'est pas cosmétique :
+
+- **`launchInOwnWindow`** n'a de sens que sous Windows (`cmd /c start`). Sous
+  Linux il n'y a pas de notion universelle de « sa propre fenêtre » : selon la
+  machine c'est un émulateur de terminal, une unité `systemd --user`, ou un
+  `nohup` avec un fichier de log. **C'est une décision de l'auteur, pas un
+  détail d'implémentation** — le choix détermine comment on arrête un service ;
+- **`processRunning`** a déjà sa branche `pgrep -f`, jamais exécutée ;
+- **InvokeAI** est cherché par `INVOKE_DIR/invoke.bat`. L'entrée Linux n'est
+  pas le même fichier, et le dossier non plus ;
+- **`where cloudflared`** est à remplacer par `command -v`.
+
+Les quatre valeurs propres à la machine — `INVOKE_DIR`, `INVOKE_PORT`,
+`TUNNEL_NAME`, `REMOTE_DOMAIN` — sont déjà des variables d'environnement lues
+depuis `.env.local`, documentées dans `.env.local.example`. Elles n'ont rien de
+spécifique à Windows et se reprennent telles quelles.
+
+### 7.3 La paire `start-dev` a divergé
+
+`start-dev.ps1` et `start-dev.sh` sont les jumeaux nommés par
+`docs/DEVOPS_LINUX_PORT_1_AUDIT.md` §2, dont le principe est qu'ils ne
+divergent pas. Ils divergent :
+
+| | lit `.nvmrc` | source nvm | mode git |
+| --- | --- | --- | --- |
+| `start-dev.sh` | oui | oui | `100755` |
+| `start-dev.ps1` | non | sans objet — chemins en dur | `100644` |
+
+`.nvmrc` contient `22`. Le jumeau Linux l'honore, le jumeau Windows l'ignore.
+
+`start-dev.ps1` porte en plus la seule des trois copies du bloc de résolution
+NVM (`setup-windows.ps1`, `doctor.ps1`, `start-dev.ps1`) qui ne garde pas
+contre la chaîne vide : `NVM_SYMLINK` vide fait lever `GetFullPath("")`. Vérifié
+le 2026-09-19 — **PowerShell affiche l'erreur puis poursuit la boucle et trouve
+quand même Node**, donc c'est une erreur rouge au démarrage, pas un blocage. Et
+le bloc ne s'exécute que si `node` manque déjà au `PATH`, ce qui n'arrive pas
+sur la machine de l'auteur, qui n'utilise pas NVM.
+
+Sur Linux, en revanche, **nvm n'est pas optionnel** : la §1 de ce document
+installe Node par nvm, et `nvm` est une fonction shell, pas un binaire. Un
+script lancé hors shell interactif n'a pas de `node`. C'est ce que
+`start-dev.sh` traite, et c'est la raison pour laquelle la paire existe.
+
+`start-dev.ps1` a donc été **conservé**, alors qu'il paraissait redondant avec
+`start-dev.bat`. Casser une paire juste avant que son côté Linux soit exercé
+pour la première fois sur du vrai matériel est le mauvais moment. La question
+« garde-t-on deux `start-dev` par système ? » se tranche pendant P1, avec les
+deux côtés sous les yeux.
